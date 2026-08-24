@@ -1,4 +1,9 @@
 # FastAPI/uvicorn app. Bound to 127.0.0.1 only -- nginx is the public-facing edge.
+# Port 8010 (not 8000) -- this instance already runs another API on 8000
+# (/home/ubuntu/llm-env, unrelated to this project) plus other services on
+# 8001/11434. This unit does not depend on a DB tunnel service: on this box
+# the tunnel to 106.51.80.81 is already running ad hoc on 127.0.0.1:5435 and
+# is intentionally left alone rather than replaced with a managed unit.
 #
 # Install:
 #   sudo cp gemini-brain-api.service /etc/systemd/system/
@@ -7,8 +12,7 @@
 
 [Unit]
 Description=Gemini Brain FastAPI service
-After=network.target gemini-brain-db-tunnel.service
-Wants=gemini-brain-db-tunnel.service
+After=network.target
 
 [Service]
 Type=simple
@@ -16,7 +20,7 @@ User=geminibrain
 WorkingDirectory=/opt/gemini-brain
 EnvironmentFile=/opt/gemini-brain/.env
 ExecStart=/opt/gemini-brain/venv/bin/uvicorn gemini_brain.api.app:app \
-    --host 127.0.0.1 --port 8000 --app-dir /opt/gemini-brain/src
+    --host 127.0.0.1 --port 8010 --app-dir /opt/gemini-brain/src
 Restart=always
 RestartSec=3
 

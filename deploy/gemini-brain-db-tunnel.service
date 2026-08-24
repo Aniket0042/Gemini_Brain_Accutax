@@ -2,6 +2,13 @@
 # mirroring the local `ssh -L 5435:localhost:5432 root@106.51.80.81 -p 7676` workflow.
 # The DB's Postgres port is never exposed publicly — only reachable through this tunnel.
 #
+# NOT CURRENTLY USED on the shared EC2 box: an equivalent tunnel is already
+# running there ad hoc on 127.0.0.1:5435 and was intentionally left in place
+# rather than replaced with this managed unit. Kept here as a reference/
+# fallback in case that ad hoc tunnel is ever retired and a real systemd-
+# managed one is wanted instead (would also need its own SSH keypair
+# generated and added to 106.51.80.81's authorized_keys first).
+#
 # Install:
 #   sudo cp gemini-brain-db-tunnel.service /etc/systemd/system/
 #   sudo systemctl daemon-reload
