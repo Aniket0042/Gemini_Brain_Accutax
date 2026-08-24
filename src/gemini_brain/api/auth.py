@@ -133,6 +133,21 @@ ORGANIZATION_DIRECTORY: list[dict[str, Any]] = [
 ]
 
 
+# Tokens we've personally seen returned by a successful upstream Accutax
+# login. We can't verify their signature (Accutax signs with its own secret,
+# not ours), so a token is only trusted on later requests if it's in here --
+# i.e. we ourselves witnessed it being issued after a real password check.
+# Bounded to avoid unbounded growth; oldest entries are evicted first.
+_TRUSTED_UPSTREAM_TOKENS: dict[str, dict[str, Any]] = {}
+_MAX_TRUSTED_TOKENS = 5000
+
+
+def _remember_trusted_token(token: str, claims: dict[str, Any]) -> None:
+    if len(_TRUSTED_UPSTREAM_TOKENS) >= _MAX_TRUSTED_TOKENS:
+        _TRUSTED_UPSTREAM_TOKENS.pop(next(iter(_TRUSTED_UPSTREAM_TOKENS)))
+    _TRUSTED_UPSTREAM_TOKENS[token] = claims
+
+
 def authenticate_with_accutax_api(email: str, password: str) -> dict[str, Any] | None:
     """Attempt upstream authentication via Accutax Backend API.
     
@@ -166,6 +181,12 @@ def authenticate_with_accutax_api(email: str, password: str) -> dict[str, Any] |
                 user_email = claims.get("email") or email
                 allowed_orgs = get_user_allowed_orgs(user_id)
                 logger.info("Successfully authenticated with upstream Accutax API for %s (userId=%d)", user_email, user_id)
+                _remember_trusted_token(token, {
+                    "sub": str(user_id),
+                    "userId": user_id,
+                    "email": user_email,
+                    "allowed_org_ids": allowed_orgs,
+                })
                 return {
                     "access_token": token,
                     "user_id": user_id,
@@ -178,29 +199,26 @@ def authenticate_with_accutax_api(email: str, password: str) -> dict[str, Any] |
 
 
 def decode_access_token(token: str) -> dict[str, Any]:
-    """Decode and validate a JWT access token, extracting user ID and claims."""
-    if not token or token.startswith("mock-") or token.startswith("test-"):
-        return {"sub": "1", "userId": 1, "email": "mock@test.com", "allowed_org_ids": [1, 27, 25, 154, 28]}
+    """Decode and validate a JWT access token, extracting user ID and claims.
+
+    Raises HTTPException(401) for any token we cannot establish is genuine --
+    either signed with our own JWT_SECRET, or one we ourselves saw returned by
+    a successful upstream Accutax login (see _TRUSTED_UPSTREAM_TOKENS).
+    """
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing access token")
+
     try:
-        payload = jwt.decode(
-            token,
-            get_jwt_secret(),
-            algorithms=[settings.jwt_algorithm],
-        )
-        return payload
+        return jwt.decode(token, get_jwt_secret(), algorithms=[settings.jwt_algorithm])
     except Exception as e:
-        # Fallback decode for expired tokens or upstream Accutax backend tokens
-        logger.info("Soft-decoding token claims (reason: %s)", e)
-        try:
-            payload = jwt.decode(token, options={"verify_signature": False, "verify_exp": False})
-            sub = str(payload.get("userId") or payload.get("user_id") or payload.get("sub") or "18")
-            payload["sub"] = sub
-            if "allowed_org_ids" not in payload:
-                user_id = int(sub) if sub.isdigit() else 18
-                payload["allowed_org_ids"] = get_user_allowed_orgs(user_id)
-            return payload
-        except Exception:
-            return {"sub": "18", "userId": 18, "email": "demo@accutax.ai", "allowed_org_ids": [27, 25, 154, 28]}
+        # Not signed with our own secret -- only legitimate if it's a token we
+        # ourselves saw an upstream Accutax login return. Anything else is
+        # rejected outright: we must never trust claims from an unverifiable token.
+        cached = _TRUSTED_UPSTREAM_TOKENS.get(token)
+        if cached is not None:
+            return dict(cached)
+        logger.warning("Rejected access token that failed verification (reason: %s)", e)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired access token") from e
 
 
 def init_auth_db(db_name: str = "") -> None:
@@ -451,13 +469,13 @@ class CurrentUser:
 
 
 def get_current_user(token: str | None = Depends(oauth2_scheme)) -> CurrentUser:
-    """FastAPI Dependency: Validates bearer JWT if provided, or returns unconstrained demo user if omitted."""
+    """FastAPI Dependency: Validates the bearer JWT. Requires authentication -- no
+    unauthenticated request may access tenant financial data."""
     if not token:
-        return CurrentUser(
-            user_id=18,
-            email="demo@accutax.ai",
-            allowed_org_ids=[27, 25, 154, 28],
-            raw_token="",
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
         )
     payload = decode_access_token(token)
     user_id_str = payload.get("sub") or str(payload.get("userId") or "18")
@@ -470,8 +488,13 @@ def get_current_user(token: str | None = Depends(oauth2_scheme)) -> CurrentUser:
         ) from e
 
     email = payload.get("email", "")
-    allowed_org_ids = payload.get("allowed_org_ids")
-    if allowed_org_ids is None or len(allowed_org_ids) == 0:
+    # Only fall back to a looked-up org list when the token never carried the
+    # claim at all. A token with allowed_org_ids explicitly set to [] means
+    # this user genuinely has no assigned organizations -- that must not be
+    # silently upgraded to a default org list.
+    if "allowed_org_ids" in payload:
+        allowed_org_ids = payload.get("allowed_org_ids") or []
+    else:
         allowed_org_ids = get_user_allowed_orgs(user_id)
 
     return CurrentUser(
