@@ -37,13 +37,8 @@ logger = logging.getLogger("gemini_brain.sql_fallback.sql_engine")
 
 def _get_coordinator_pipeline() -> Tuple[Any, Any, Any, Any, Any, Any, Any]:
     """Helper to lazily import production coordinator pipeline components."""
-    # Ensure original monolith directory is on sys.path if running outside host workspace
-    host_path = r"C:\Users\acer\Desktop\query-parser-bedrock_clean\query-parser-bedrock_clean"
-    if host_path not in sys.path and os.path.exists(host_path):
-        sys.path.insert(0, host_path)
-
     try:
-        from agents.coordinator_agent import (
+        from gemini_brain.agents.coordinator_agent import (
             _build_system_prompt,
             TOOL_DEFINITIONS,
             AGENT_HANDLERS,

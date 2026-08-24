@@ -1,0 +1,6218 @@
+{
+  "account_type": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "code",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "value",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "audit_logs": [
+    {
+      "column": "is_critical",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_successful",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "version",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "parent_audit_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "retry_count",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "response_time",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "status_code",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "entity_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "new_values",
+      "data_type": "json",
+      "nullable": "YES"
+    },
+    {
+      "column": "tags",
+      "data_type": "json",
+      "nullable": "YES"
+    },
+    {
+      "column": "metadata",
+      "data_type": "json",
+      "nullable": "YES"
+    },
+    {
+      "column": "old_values",
+      "data_type": "json",
+      "nullable": "YES"
+    },
+    {
+      "column": "changed_fields",
+      "data_type": "json",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "action_type",
+      "data_type": "USER-DEFINED",
+      "nullable": "NO"
+    },
+    {
+      "column": "entity_type",
+      "data_type": "USER-DEFINED",
+      "nullable": "NO"
+    },
+    {
+      "column": "stack_trace",
+      "data_type": "text",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "entity_name",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "module_name",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "description",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "ip_address",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "user_agent",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "session_id",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "request_id",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "url",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "http_method",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "error_message",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "severity",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "category",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "source",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "client_type",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "correlation_id",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "user_name",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "audit_trails": [
+    {
+      "column": "version",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "transaction_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "contact_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "account_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "new_values",
+      "data_type": "json",
+      "nullable": "YES"
+    },
+    {
+      "column": "old_values",
+      "data_type": "json",
+      "nullable": "YES"
+    },
+    {
+      "column": "changed_fields",
+      "data_type": "json",
+      "nullable": "YES"
+    },
+    {
+      "column": "transaction_date",
+      "data_type": "date",
+      "nullable": "YES"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "credit_amount",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "debit_amount",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "amount",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "action_type",
+      "data_type": "USER-DEFINED",
+      "nullable": "NO"
+    },
+    {
+      "column": "transaction_type",
+      "data_type": "USER-DEFINED",
+      "nullable": "NO"
+    },
+    {
+      "column": "description",
+      "data_type": "text",
+      "nullable": "YES"
+    },
+    {
+      "column": "user_agent",
+      "data_type": "text",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "user_name",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "transaction_number",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "journal_id",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "journal_reference",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "source_document",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "contact_name",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "account_code",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "account_name",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "currency",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "status",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "ip_address",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "bank_accounts": [
+    {
+      "column": "is_feeds_active",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_direct_paypal",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_beta_feed",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_bank_connectivity_failure",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_active",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "mfa_required",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_system_account",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_primary_account",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_paypal_account",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_feeds_subscribed",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "version",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "statement_suggestion_count",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "total_unprinted_checks",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "uncategorized_transactions",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "consent_info",
+      "data_type": "json",
+      "nullable": "YES"
+    },
+    {
+      "column": "opening_bank_balance",
+      "data_type": "double precision",
+      "nullable": "YES"
+    },
+    {
+      "column": "bank_balance",
+      "data_type": "double precision",
+      "nullable": "YES"
+    },
+    {
+      "column": "balance",
+      "data_type": "double precision",
+      "nullable": "YES"
+    },
+    {
+      "column": "bcy_balance",
+      "data_type": "double precision",
+      "nullable": "YES"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "bank_account_hashId",
+      "data_type": "uuid",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "account_code",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "account_name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "account_number",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "account_sub_type",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "account_type",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "balance_formatted",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "bank_balance_formatted",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "bank_name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "bcy_balance_formatted",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "connectivity_failure_eta",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "connectivity_failure_msg",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "currency_code",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "currency_id",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "feed_status",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "feeds_last_refresh_date",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "feeds_last_refresh_date_formatted",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "partner_bank_source",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "partner_bank_source_formatted",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "refresh_status_code",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "routing_number",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "service_id",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "site_type",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "description",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "bank_transaction_matches": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "bank_transaction_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "source_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "version",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "amount",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "source_type",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "currency",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "bank_transaction_rules": [
+    {
+      "column": "is_active",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "version",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "criteria",
+      "data_type": "json",
+      "nullable": "YES"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "rule_name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "bank_name",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "apply_to",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "match_criteria",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "record_as",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "account_id",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "reference_number",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "bank_transactions": [
+    {
+      "column": "is_excluded_by_system",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_feed",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_offsetaccount_matched",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_paid_via_print_check",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_rule_exist",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_auto_categorized",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "price_precision",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "chart_account_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "version",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "rule_details",
+      "data_type": "json",
+      "nullable": "YES"
+    },
+    {
+      "column": "gross_amount",
+      "data_type": "double precision",
+      "nullable": "YES"
+    },
+    {
+      "column": "bank_charges",
+      "data_type": "double precision",
+      "nullable": "YES"
+    },
+    {
+      "column": "amount",
+      "data_type": "double precision",
+      "nullable": "YES"
+    },
+    {
+      "column": "date",
+      "data_type": "date",
+      "nullable": "YES"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "status",
+      "data_type": "USER-DEFINED",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "account_id",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "account_name",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "account_type",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "amount_formatted",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "bank_charges_formatted",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "currency_code",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "currency_id",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "currency_symbol",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "customer_id",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "date_formatted",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "debit_or_credit",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "description",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "direct_feed_transaction_status",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "exclude_description",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "feed_source",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "gross_amount_formatted",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "imported_transaction_id",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "offset_account_code",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "offset_account_name",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "payee",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "payroll_tax_group_formatted",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "reconcile_status",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "reconcile_status_formatted",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "reference_number",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "source",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "statement_running_balance",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "status_formatted",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "transaction_id",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "transaction_type",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "transaction_type_formatted",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "transaction_hash_id",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "category",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "currency",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "expense_account",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_type",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "vendor",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_treatment",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "customer",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "attachment_name",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "reconciliation_id",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "chart_account_code",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "chart_account_name",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "branches": [
+    {
+      "column": "is_active",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "address",
+      "data_type": "text",
+      "nullable": "YES"
+    },
+    {
+      "column": "branch_name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "branch_code",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "city",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "state",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "country",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "postal_code",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "phone",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "email",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "chart_of_accounts": [
+    {
+      "column": "show_for_expense_claims",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "enable_for_payments",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "allow_posting",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "is_system_account",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "is_active",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "version",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "parent_account_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "balance",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "account_code",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "account_name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "account_type",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "account_sub_type",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "description",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "currency",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "cash_flow_type",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "city_type": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "code",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "value",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "collaborators": [
+    {
+      "column": "approved_by_user_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "accepted_by_user_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "role_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "account_type_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "accepted",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "invite_expires_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "invited_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "accepted_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "approved_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "status",
+      "data_type": "USER-DEFINED",
+      "nullable": "NO"
+    },
+    {
+      "column": "name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "email",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "invite_token",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "generated_password",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "contact_custom_field_definitions": [
+    {
+      "column": "is_required",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "is_active",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "display_order",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp with time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp with time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "options",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "entity_scope",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "field_key",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "label",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "data_type",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "contact_custom_field_values": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "contact_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "field_definition_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "value_date",
+      "data_type": "date",
+      "nullable": "YES"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp with time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp with time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "value_number",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "value_json",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "value_text",
+      "data_type": "text",
+      "nullable": "YES"
+    }
+  ],
+  "contact_remarks": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "contact_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp with time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "body",
+      "data_type": "text",
+      "nullable": "NO"
+    }
+  ],
+  "contact_reporting_tags": [
+    {
+      "column": "contact_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "tag_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    }
+  ],
+  "contact_type": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "code",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "value",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "contacts": [
+    {
+      "column": "is_deleted",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "portal_access",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "country_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "province_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "contact_type_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "billing_country_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "billing_province_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "shipping_country_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "shipping_province_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "image_url",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "email",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "phone_number",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "trn_number",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "city",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "address",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "po_box",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "website",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "bank_name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "account_holder_name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "account_number",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "intermediary_bank",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "swift_code",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "salutation",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "last_name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "work_phone",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_treatment",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "place_supply",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "currency",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "opening_balance",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "payment_terms",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "portal_language",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "doc_added",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "department",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "designation",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "facebook",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "twitter",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "skype",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "iban",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "billing_attention",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "billing_city",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "billing_state",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "billing_address1",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "billing_address2",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "billing_phone",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "billing_fax",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "shipping_attention",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "shipping_city",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "shipping_state",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "shipping_address1",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "shipping_address2",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "shipping_phone",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "shipping_fax",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "cost_centers": [
+    {
+      "column": "is_active",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "costcenter_name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "country_type": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "code",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "value",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "country_code",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "currency_type": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "code",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "value",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "customer_payment": [
+    {
+      "column": "is_posted_to_accounting",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "customer_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "payment_type_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "bank_account_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "journal_entry_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "posted_by",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "account_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "metadata",
+      "data_type": "json",
+      "nullable": "YES"
+    },
+    {
+      "column": "date",
+      "data_type": "date",
+      "nullable": "NO"
+    },
+    {
+      "column": "posted_to_accounting_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "updated_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "amount",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "amount_refunded",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "payment_type",
+      "data_type": "USER-DEFINED",
+      "nullable": "NO"
+    },
+    {
+      "column": "status",
+      "data_type": "USER-DEFINED",
+      "nullable": "NO"
+    },
+    {
+      "column": "invoice_ids",
+      "data_type": "text",
+      "nullable": "YES"
+    },
+    {
+      "column": "additional_notes",
+      "data_type": "text",
+      "nullable": "YES"
+    },
+    {
+      "column": "credit_note_ids",
+      "data_type": "text",
+      "nullable": "YES"
+    },
+    {
+      "column": "payment_number",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "currency",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "reference",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "customer_payment_items": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "payment_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "invoice_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "amount_applied",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "notes",
+      "data_type": "text",
+      "nullable": "YES"
+    }
+  ],
+  "delivery_note_lines": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "invoice_line_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "item_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "delivery_note_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "quantity_ordered",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "quantity_shipped",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "quantity_delivered",
+      "data_type": "numeric",
+      "nullable": "YES"
+    }
+  ],
+  "delivery_notes": [
+    {
+      "column": "created_by",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "warehouse_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "invoice_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "shipped_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "delivered_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "delivery_number",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "status",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "document_embeddings": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "document_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "page_number",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp with time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "embedding",
+      "data_type": "USER-DEFINED",
+      "nullable": "NO"
+    },
+    {
+      "column": "content_text",
+      "data_type": "text",
+      "nullable": "NO"
+    }
+  ],
+  "document_templates": [
+    {
+      "column": "is_default",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_by",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_by",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "config",
+      "data_type": "jsonb",
+      "nullable": "NO"
+    },
+    {
+      "column": "name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "type",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "documents": [
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "folder",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "type",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "url",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_date",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "storage_backend",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "storage_key",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "exchange_rates": [
+    {
+      "column": "is_active",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "effective_date",
+      "data_type": "date",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "rate",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "base_currency",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "target_currency",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "expense": [
+    {
+      "column": "project_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_posted_to_accounting",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "is_draft",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "expense_category_type_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "contact_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "status_type_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "payment_type_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "journal_entry_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "posted_by",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "warehouse_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "voided_by",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "reversal_journal_entry_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "branch_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "account_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "voided_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "posted_to_accounting_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "amount_paid",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "void_reason",
+      "data_type": "text",
+      "nullable": "YES"
+    },
+    {
+      "column": "expense_type",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "additional_notes",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "terms_and_conditions",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "receipt_number",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "reception_date",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "due_date",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "purchase_order",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "expense_attachments": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "expense_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "attachment_url",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "expense_category_type": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "code",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "value",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "expense_items": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "expense_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "items_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "account_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_rate_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "cost_center_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "quantity",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_amount",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "discount_amount",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "discount_percent",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "line_amount",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "unit_cost",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "description",
+      "data_type": "text",
+      "nullable": "YES"
+    }
+  ],
+  "income": [
+    {
+      "column": "never_expires",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "is_draft",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "is_finalised",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_posted_to_accounting",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "is_recurring",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "reversal_journal_entry_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "voided_by",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "warehouse_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "project_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "reference_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "posted_by",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "branch_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "account_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "fulfilled_by",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "status_type_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "contact_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "journal_entry_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "payment_type_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "repeat_frequency_type_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "next_invoice_date",
+      "data_type": "date",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "posted_to_accounting_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "voided_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "fulfilled_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "finalised_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "last_generated_at",
+      "data_type": "timestamp with time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "amount_paid",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "amount_due",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "income_type",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "start_date",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "end_date",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "invoice_date",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "due_date",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "additional_notes",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "terms_and_conditions",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "invoice_number",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "fulfillment_status",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "purchase_order",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "reference",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "void_reason",
+      "data_type": "text",
+      "nullable": "YES"
+    },
+    {
+      "column": "generation_idempotency_key",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "income_attachments": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "income_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "attachment_url",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "income_items": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "income_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "items_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "account_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_rate_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "cost_center_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "unit_price",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "discount_percent",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "line_amount",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_amount",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "discount_amount",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "quantity",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "description",
+      "data_type": "text",
+      "nullable": "YES"
+    }
+  ],
+  "industry_type": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "code",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "value",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "inventory_adjustment_lines": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "adjustment_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "item_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "movement_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "physical_quantity",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "difference_quantity",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "unit_cost",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "total_value",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "system_quantity",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "notes",
+      "data_type": "text",
+      "nullable": "YES"
+    }
+  ],
+  "inventory_adjustments": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "warehouse_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "journal_entry_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "approved_by",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "posted_by",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "voided_by",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "reversal_journal_entry_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_by",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_by",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "adjustment_date",
+      "data_type": "date",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "voided_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "posted_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "approved_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "void_reason",
+      "data_type": "text",
+      "nullable": "YES"
+    },
+    {
+      "column": "reason",
+      "data_type": "text",
+      "nullable": "NO"
+    },
+    {
+      "column": "adjustment_number",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "adjustment_type",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "status",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "inventory_config": [
+    {
+      "column": "allow_negative_stock",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "auto_release_orphaned_reservations",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "track_negative_stock",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "orphan_release_after_hours",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    }
+  ],
+  "inventory_fifo_layers": [
+    {
+      "column": "is_fully_consumed",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "item_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "warehouse_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "ledger_entry_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "reference_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "received_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "unit_cost",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "quantity_remaining",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "quantity_received",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "reference_type",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "inventory_ledger": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "item_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "warehouse_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "movement_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "reference_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "transaction_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "average_cost",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "balance_value",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "balance_quantity",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "total_value",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "unit_cost",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "quantity_out",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "quantity_in",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "reference_type",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "reference_number",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "inventory_movements": [
+    {
+      "column": "is_reversed",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "reversed_by_movement_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_by",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "reference_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "warehouse_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "item_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "unit_cost",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "total_value",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "quantity",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "movement_type",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "from_state",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "to_state",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "reference_type",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "reference_number",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "notes",
+      "data_type": "text",
+      "nullable": "YES"
+    },
+    {
+      "column": "reversal_reason",
+      "data_type": "text",
+      "nullable": "YES"
+    }
+  ],
+  "inventory_quantities": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "item_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "warehouse_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "quantity_on_hand",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "quantity_damaged",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "quantity_in_transit",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "quantity_on_hold",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "quantity_reserved",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "quantity_available",
+      "data_type": "numeric",
+      "nullable": "YES"
+    }
+  ],
+  "inventory_transfer_lines": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "transfer_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "item_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "unit_cost",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "quantity_shipped",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "quantity_received",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "notes",
+      "data_type": "text",
+      "nullable": "YES"
+    }
+  ],
+  "inventory_transfers": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "from_warehouse_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "to_warehouse_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "shipped_by",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "received_by",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "voided_by",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_by",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_by",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "transfer_date",
+      "data_type": "date",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "voided_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "received_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "shipped_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "void_reason",
+      "data_type": "text",
+      "nullable": "YES"
+    },
+    {
+      "column": "notes",
+      "data_type": "text",
+      "nullable": "YES"
+    },
+    {
+      "column": "transfer_number",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "status",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "invoice_history": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "invoice_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "changes",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "description",
+      "data_type": "text",
+      "nullable": "YES"
+    },
+    {
+      "column": "action",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "user_name",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "user_email",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "ip_address",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "invoice_setting": [
+    {
+      "column": "due_date_days_after",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "next_invoice_number",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "custom_columns",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "account_number",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "bank_name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "fullname",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "iban_number",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "invoice_logo",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "invoice_language",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "layout",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "theme_color",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "invoice_prefix",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "invoice_suffix",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "item_type": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "code",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "value",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "items": [
+    {
+      "column": "is_tracked_inventory",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_active",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_inclusive",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "has_transactions",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "warehouse_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "default_warehouse_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "revenue_tax_rate_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "purchase_tax_rate_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "pricing_type_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "surcharge_type_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "item_type_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "inventory_value",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "reorder_level",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "reorder_quantity",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "unit_cost",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "quantity_reserved",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "additional_landing_cost",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "unit_price",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "average_unit_cost",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "quantity_on_hand",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_authority_metadata",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "number",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "description",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "cost",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "currency",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "sku",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "unit_of_measure",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "friendly_name",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "photo",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "expense_account_id",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "revenue_account_id",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "inventory_account_id",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "cogs_account_id",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "account_id",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "purchase_description",
+      "data_type": "text",
+      "nullable": "YES"
+    },
+    {
+      "column": "sales_description",
+      "data_type": "text",
+      "nullable": "YES"
+    },
+    {
+      "column": "attachments",
+      "data_type": "ARRAY",
+      "nullable": "YES"
+    }
+  ],
+  "job_failures": [
+    {
+      "column": "alert_sent",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "attempts_made",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "failed_at",
+      "data_type": "timestamp with time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "job_data",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "queue",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "job_id",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "job_name",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "error_message",
+      "data_type": "text",
+      "nullable": "YES"
+    },
+    {
+      "column": "stack_trace",
+      "data_type": "text",
+      "nullable": "YES"
+    }
+  ],
+  "journal_entries": [
+    {
+      "column": "is_reversal",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_posted",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "source_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "posted_by",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "reversed_entry_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "transaction_date",
+      "data_type": "date",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "posted_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "total_debit",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "total_credit",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "source_type",
+      "data_type": "USER-DEFINED",
+      "nullable": "NO"
+    },
+    {
+      "column": "description",
+      "data_type": "text",
+      "nullable": "YES"
+    },
+    {
+      "column": "reversal_reason",
+      "data_type": "text",
+      "nullable": "YES"
+    },
+    {
+      "column": "journal_number",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "reference_number",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "journal_entry_lines": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "journal_entry_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "account_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "line_order",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "debit_amount",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "credit_amount",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "description",
+      "data_type": "text",
+      "nullable": "YES"
+    },
+    {
+      "column": "account_code",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "account_name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "langchain_pg_collection": [
+    {
+      "column": "cmetadata",
+      "data_type": "json",
+      "nullable": "YES"
+    },
+    {
+      "column": "uuid",
+      "data_type": "uuid",
+      "nullable": "NO"
+    },
+    {
+      "column": "name",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "langchain_pg_embedding": [
+    {
+      "column": "cmetadata",
+      "data_type": "json",
+      "nullable": "YES"
+    },
+    {
+      "column": "uuid",
+      "data_type": "uuid",
+      "nullable": "NO"
+    },
+    {
+      "column": "collection_id",
+      "data_type": "uuid",
+      "nullable": "YES"
+    },
+    {
+      "column": "embedding",
+      "data_type": "USER-DEFINED",
+      "nullable": "YES"
+    },
+    {
+      "column": "document",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "custom_id",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "migrations": [
+    {
+      "column": "timestamp",
+      "data_type": "bigint",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "model_arena_chat_messages": [
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp with time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "role",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "content",
+      "data_type": "text",
+      "nullable": "NO"
+    }
+  ],
+  "model_arena_chat_sessions": [
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp with time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "conversation_state",
+      "data_type": "jsonb",
+      "nullable": "NO"
+    }
+  ],
+  "model_arena_query_logs": [
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "queried_at",
+      "data_type": "timestamp with time zone",
+      "nullable": "YES"
+    }
+  ],
+  "organization_email_preferences": [
+    {
+      "column": "copy_organization_on_emails",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "send_receipt_emails",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "send_payment_reminders",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "send_invoice_emails",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_by",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "reply_to_email",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "organizations": [
+    {
+      "column": "vat_registeration",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "trn_registeration",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "country_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "gb_storage",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "industry_type_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "company_type",
+      "data_type": "USER-DEFINED",
+      "nullable": "NO"
+    },
+    {
+      "column": "name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "image_url",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "currency",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "postal_code",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "language",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "timezone",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "vat_registeration_number",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "vat_giban_number",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "vat_registeration_date",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "trn_registeration_number",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "trn_giban_number",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "trn_label",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "emirate",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "city",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "address",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "address2",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "po_box",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "otp_verifications": [
+    {
+      "column": "is_verified",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "attempts",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "email",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "otp",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "expires_at",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "payment_type": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "code",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "value",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "pricing_type": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "code",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "value",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "projects": [
+    {
+      "column": "is_active",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "project_name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "province_type": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "code",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "value",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "rag_document_embeddings": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "metadata",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "embedding",
+      "data_type": "USER-DEFINED",
+      "nullable": "YES"
+    },
+    {
+      "column": "source_type",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "document_content",
+      "data_type": "text",
+      "nullable": "NO"
+    }
+  ],
+  "reconciliations": [
+    {
+      "column": "is_last_reconcile",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "can_change_to_draft",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "version",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "documents",
+      "data_type": "json",
+      "nullable": "YES"
+    },
+    {
+      "column": "closing_balances",
+      "data_type": "double precision",
+      "nullable": "YES"
+    },
+    {
+      "column": "opening_balances",
+      "data_type": "double precision",
+      "nullable": "YES"
+    },
+    {
+      "column": "end_date",
+      "data_type": "date",
+      "nullable": "YES"
+    },
+    {
+      "column": "start_date",
+      "data_type": "date",
+      "nullable": "YES"
+    },
+    {
+      "column": "date",
+      "data_type": "date",
+      "nullable": "YES"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "account_id",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "closing_balances_formatted",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "date_formatted",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "end_date_formatted",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "opening_balances_formatted",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "reconciliation_id",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "start_date_formatted",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "status",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "status_formatted",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "repeat_frequency_type": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "code",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "value",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "reporting_tag_definitions": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp with time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp with time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "color",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "role_type": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "code",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "value",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "roles": [
+    {
+      "column": "is_accountant",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "is_system",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "permissions",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "description",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "status_type": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "code",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "value",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "sub_contacts": [
+    {
+      "column": "is_deleted",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "contact_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "contact_type_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "last_name",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "image_url",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "email",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "work_phone",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "phone_number",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "designation",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "department",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "organization_name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "salutation",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "supplier_payment_items": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "payment_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "bill_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "amount_applied",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "notes",
+      "data_type": "text",
+      "nullable": "YES"
+    }
+  ],
+  "supplier_payments": [
+    {
+      "column": "is_posted_to_accounting",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "journal_entry_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "posted_by",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "payment_type_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "bank_account_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "supplier_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "metadata",
+      "data_type": "json",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "posted_to_accounting_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "amount",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "additional_notes",
+      "data_type": "text",
+      "nullable": "YES"
+    },
+    {
+      "column": "bill_ids",
+      "data_type": "text",
+      "nullable": "YES"
+    },
+    {
+      "column": "payment_number",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "date",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "currency",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "reference",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "status",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "surcharge_type": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "code",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "value",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "tax_adjustments": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "tax_calculation_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "tax_entry_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "updated_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "difference_amount",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "adjusted_tax_amount",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "original_tax_amount",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "metadata",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "adjustment_type",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "reason",
+      "data_type": "text",
+      "nullable": "NO"
+    }
+  ],
+  "tax_calculations": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "transaction_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "vat_config_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "customer_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "vendor_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "country_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "state_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "transaction_date",
+      "data_type": "date",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_point_date",
+      "data_type": "date",
+      "nullable": "YES"
+    },
+    {
+      "column": "updated_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "exchange_rate",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_inclusive_amount",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_exclusive_amount",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "total_amount",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "total_tax_amount",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "subtotal_amount",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "metadata",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_breakdown",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_entries",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "line_items",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "transaction_type",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "transaction_number",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "status",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "currency_code",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "tax_entries": [
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "tax_calculation_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "tax_rate_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "line_item_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "updated_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "compound_tax_amount",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "non_recoverable_amount",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "recoverable_amount",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "gross_amount",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "tax_amount",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "net_amount",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "tax_rate_percentage",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "metadata",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "entry_type",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_type",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_authority",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_code",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "description",
+      "data_type": "text",
+      "nullable": "YES"
+    }
+  ],
+  "tax_rates": [
+    {
+      "column": "is_compound_tax",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_recoverable",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_active",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_default",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_primary",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "country_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "state_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "effective_from",
+      "data_type": "date",
+      "nullable": "YES"
+    },
+    {
+      "column": "effective_to",
+      "data_type": "date",
+      "nullable": "YES"
+    },
+    {
+      "column": "updated_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_rate",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "custom_fields",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "tax_code",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "rate_type",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_type",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_authority",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "description",
+      "data_type": "text",
+      "nullable": "YES"
+    }
+  ],
+  "tax_rule_conditions": [
+    {
+      "column": "sort_order",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_rule_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "updated_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "value_array",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "value",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "condition_type",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "field_name",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "operator",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "tax_rule_groups": [
+    {
+      "column": "is_active",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "updated_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "rule_ids",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "metadata",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "combination_logic",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "description",
+      "data_type": "text",
+      "nullable": "YES"
+    }
+  ],
+  "tax_rules": [
+    {
+      "column": "is_system_rule",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_active",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "state_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "country_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "vat_config_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "priority",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_rate_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "effective_to",
+      "data_type": "date",
+      "nullable": "YES"
+    },
+    {
+      "column": "effective_from",
+      "data_type": "date",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "updated_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "metadata",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "conditions",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "action_params",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "rule_code",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "condition_type",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "action_type",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "description",
+      "data_type": "text",
+      "nullable": "YES"
+    }
+  ],
+  "transaction_categories": [
+    {
+      "column": "version",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "NO"
+    },
+    {
+      "column": "categoryHashId",
+      "data_type": "uuid",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "updated_by",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "description",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "users": [
+    {
+      "column": "is_super_admin",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "email_verified",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "mfa_enabled",
+      "data_type": "boolean",
+      "nullable": "NO"
+    },
+    {
+      "column": "role_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "email",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "image_url",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "phone_number",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "eid_number",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "license_number",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "password",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "token",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "mfa_secret",
+      "data_type": "character varying",
+      "nullable": "NO"
+    }
+  ],
+  "vat_configs": [
+    {
+      "column": "has_partial_recovery",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "has_recoverable_vat",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_compound_vat",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_active",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "is_main_vat_config",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "state_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "country_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "effective_date",
+      "data_type": "date",
+      "nullable": "YES"
+    },
+    {
+      "column": "vat_registration_date",
+      "data_type": "date",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "updated_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "threshold_amount",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "threshold_limit",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "default_vat_rate",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "flat_rate_percentage",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "exempt_supplies",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "reverse_charge",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "custom_settings",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "recovery_rates",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "penalties_config",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "vat_returns_config",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "vat_registration_number",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "scheme_type",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "filing_frequency",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "country_name",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "country_code",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "currency_code",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "vat_name",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "vat_type",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_authority",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "tax_authority_url",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "vat_returns": [
+    {
+      "column": "vat_config_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "user_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "period_start",
+      "data_type": "date",
+      "nullable": "NO"
+    },
+    {
+      "column": "paid_date",
+      "data_type": "date",
+      "nullable": "YES"
+    },
+    {
+      "column": "submitted_date",
+      "data_type": "date",
+      "nullable": "YES"
+    },
+    {
+      "column": "due_date",
+      "data_type": "date",
+      "nullable": "YES"
+    },
+    {
+      "column": "period_end",
+      "data_type": "date",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "updated_date",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "total_input_vat",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "total_output_vat",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "net_vat_payable",
+      "data_type": "numeric",
+      "nullable": "NO"
+    },
+    {
+      "column": "recoverable_vat",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "non_recoverable_vat",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "exempt_supplies",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "total_supplies",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "total_purchases",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "total_exports",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "total_imports",
+      "data_type": "numeric",
+      "nullable": "YES"
+    },
+    {
+      "column": "line_items",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "additional_info",
+      "data_type": "jsonb",
+      "nullable": "YES"
+    },
+    {
+      "column": "status",
+      "data_type": "character varying",
+      "nullable": "YES"
+    }
+  ],
+  "warehouses": [
+    {
+      "column": "is_active",
+      "data_type": "boolean",
+      "nullable": "YES"
+    },
+    {
+      "column": "updated_by",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "created_by",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "default_inventory_asset_account_id",
+      "data_type": "integer",
+      "nullable": "YES"
+    },
+    {
+      "column": "organization_id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "data_type": "integer",
+      "nullable": "NO"
+    },
+    {
+      "column": "created_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "updated_at",
+      "data_type": "timestamp without time zone",
+      "nullable": "YES"
+    },
+    {
+      "column": "warehouse_name",
+      "data_type": "character varying",
+      "nullable": "NO"
+    },
+    {
+      "column": "warehouse_code",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "valuation_method",
+      "data_type": "character varying",
+      "nullable": "YES"
+    },
+    {
+      "column": "location",
+      "data_type": "text",
+      "nullable": "YES"
+    }
+  ]
+}
