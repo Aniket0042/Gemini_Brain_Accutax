@@ -49,10 +49,20 @@ echo "==> Installing system packages"
 apt-get update
 apt-get install -y python3 python3-venv python3-pip curl git ca-certificates
 
-if ! command -v node >/dev/null 2>&1; then
-  echo "==> Installing Node.js 20.x"
-  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-  apt-get install -y nodejs
+NODE_BIN="$(command -v node || true)"
+NODE_MAJOR="$([[ -n "$NODE_BIN" ]] && "$NODE_BIN" -e 'console.log(process.versions.node.split(".")[0])' || echo 0)"
+if [[ "$NODE_MAJOR" -lt 18 ]]; then
+  # Don't touch the system-wide node (this box's default is v12, and other
+  # services here may depend on it) -- install an isolated Node 20 just for
+  # building this project's UI.
+  echo "==> System node is too old (or missing) for Vite -- installing an isolated Node 20 at /opt/gemini-brain-node20"
+  if [[ ! -x /opt/gemini-brain-node20/bin/node ]]; then
+    curl -fsSL https://nodejs.org/dist/v20.18.1/node-v20.18.1-linux-x64.tar.xz -o /tmp/node20.tar.xz
+    mkdir -p /opt/gemini-brain-node20
+    tar -xf /tmp/node20.tar.xz -C /opt/gemini-brain-node20 --strip-components=1
+    rm -f /tmp/node20.tar.xz
+  fi
+  NODE_BIN="/opt/gemini-brain-node20/bin/node"
 fi
 
 echo "==> Creating system user '$APP_USER'"
@@ -72,10 +82,11 @@ if [[ ! -f "$APP_DIR/.env" ]]; then
   sudo -u "$APP_USER" cp "$APP_DIR/.env.example" "$APP_DIR/.env"
 fi
 
-echo "==> Building UI"
+echo "==> Building UI (using $NODE_BIN)"
+NODE_DIR="$(dirname "$NODE_BIN")"
 cd "$APP_DIR/ui"
-sudo -u "$APP_USER" npm ci
-sudo -u "$APP_USER" npm run build
+sudo -u "$APP_USER" env PATH="$NODE_DIR:$PATH" npm ci
+sudo -u "$APP_USER" env PATH="$NODE_DIR:$PATH" npm run build
 cd "$APP_DIR"
 
 echo "==> Installing systemd unit (API only -- DB tunnel is left as the existing ad hoc process)"
