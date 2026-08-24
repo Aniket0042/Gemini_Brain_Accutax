@@ -1,0 +1,24 @@
+# FastAPI/uvicorn app. Bound to 127.0.0.1 only -- nginx is the public-facing edge.
+#
+# Install:
+#   sudo cp gemini-brain-api.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now gemini-brain-api
+
+[Unit]
+Description=Gemini Brain FastAPI service
+After=network.target gemini-brain-db-tunnel.service
+Wants=gemini-brain-db-tunnel.service
+
+[Service]
+Type=simple
+User=geminibrain
+WorkingDirectory=/opt/gemini-brain
+EnvironmentFile=/opt/gemini-brain/.env
+ExecStart=/opt/gemini-brain/venv/bin/uvicorn gemini_brain.api.app:app \
+    --host 127.0.0.1 --port 8000 --app-dir /opt/gemini-brain/src
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

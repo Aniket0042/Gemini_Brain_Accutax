@@ -206,7 +206,7 @@ class TestTenantIsolationAPI:
 
     def test_no_org_user_query_rejected(self, app_client, mock_brain_runner):
         """No-org user (allowed_org_ids=[]) is rejected regardless of parameters."""
-        token = create_access_token(user_id=103, email="user_no_org@example.com", allowed_org_ids=[])
+        token = create_access_token(user_id=999, email="no_org@example.com", allowed_org_ids=[])
         headers = {"Authorization": f"Bearer {token}"}
 
         response = app_client.post(

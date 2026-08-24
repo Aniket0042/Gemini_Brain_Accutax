@@ -3,6 +3,10 @@
 *.env
 !.env.example
 
+# Scratch/debug scripts -- contain real credentials used against live systems
+scratch/
+toke.py
+
 # Dependencies
 node_modules/
 ui/node_modules/

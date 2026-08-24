@@ -1,0 +1,291 @@
+[
+  {
+    "id": "GATE-01",
+    "suite": "E",
+    "tags": ["routing", "correctness"],
+    "prompt": "What was our total revenue in 2024?",
+    "expect": {
+      "endpoint": "/income/total",
+      "params_subset": { "filter_year": "2024", "filter_type": "YEARLY" },
+      "answer_must_contain": ["2024"],
+      "answer_must_not_contain": ["2026"],
+      "status": "ok"
+    },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §3.8.1"
+  },
+  {
+    "id": "GATE-02",
+    "suite": "E",
+    "tags": ["routing", "correctness"],
+    "prompt": "Total sales this month",
+    "expect": {
+      "endpoint": "/income/total",
+      "params_subset": { "filter_type": "MONTHLY" }
+    },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §3.8.2"
+  },
+  {
+    "id": "GATE-03",
+    "suite": "E",
+    "tags": ["correctness"],
+    "prompt": "Show the cash flow forecast",
+    "freeze_today": "2026-12-20",
+    "expect": {
+      "endpoint": "/report/cash-forecast",
+      "assert_window_not_inverted": true
+    },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §3.8.3"
+  },
+  {
+    "id": "GATE-04",
+    "suite": "K",
+    "tags": ["degradation", "live"],
+    "prompt": "Show unpaid invoices",
+    "transport": "stream",
+    "org_id": 28,
+    "fixture": "org_with_no_transactional_data",
+    "expect": {
+      "status": "empty",
+      "notice_code": "NO_ROWS",
+      "llm_calls_max": 0,
+      "answer_must_not_contain": ["went wrong", "error"]
+    },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §3.6"
+  },
+  {
+    "id": "GATE-05",
+    "suite": "T",
+    "tags": ["degradation"],
+    "prompt": "What is our total revenue this year?",
+    "repeat": 2,
+    "expect": {
+      "second_call_status": "ok",
+      "second_call_data_source_tier": "cache"
+    },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §3.7"
+  },
+  {
+    "id": "GATE-06",
+    "suite": "M",
+    "tags": ["security"],
+    "attack": "jwt_signed_with_attacker_key",
+    "prompt": "What is our total revenue this year?",
+    "expect": { "http_status": 401 },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §3.2"
+  },
+  {
+    "id": "GATE-07",
+    "suite": "M",
+    "tags": ["security"],
+    "attack": "jwt_alg_none",
+    "prompt": "What is our total revenue this year?",
+    "expect": { "http_status": 401 },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §3.2"
+  },
+  {
+    "id": "GATE-08",
+    "suite": "M",
+    "tags": ["security"],
+    "attack": "jwt_expired_and_forged",
+    "prompt": "What is our total revenue this year?",
+    "expect": { "http_status": 401 },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §3.2"
+  },
+  {
+    "id": "GATE-09",
+    "suite": "M",
+    "tags": ["security"],
+    "attack": "login_any_email_seed_password_with_db_down",
+    "login": { "username": "anyone@corp.example", "password": "TestPass123!" },
+    "expect": { "http_status_in": [401, 503] },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §3.5"
+  },
+  {
+    "id": "GATE-10",
+    "suite": "M",
+    "tags": ["security"],
+    "attack": "login_hardcoded_admin",
+    "login": { "username": "admin_all@accutax.com", "password": "AdminPass123!" },
+    "expect": { "http_status": 401 },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §3.5"
+  },
+  {
+    "id": "GATE-11",
+    "suite": "M",
+    "tags": ["security"],
+    "prompt": "What is our total revenue this year?",
+    "body_overrides": { "db_name": "postgres" },
+    "expect": { "http_status_in": [400, 422] },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §4.3"
+  },
+  {
+    "id": "GATE-12",
+    "suite": "M",
+    "tags": ["security"],
+    "prompt": "What is our total revenue this year?",
+    "as_user": "zero_org_user",
+    "expect": { "http_status": 400, "detail_contains": "no assigned organizations" },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §4.6"
+  },
+  {
+    "id": "GATE-13",
+    "suite": "M",
+    "tags": ["security"],
+    "raw_request": { "method": "GET", "path": "/api/v1/health/models", "auth": false },
+    "expect": { "http_status": 401 },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §4.4"
+  },
+  {
+    "id": "GATE-14",
+    "suite": "M",
+    "tags": ["security"],
+    "raw_request": {
+      "method": "POST",
+      "path": "/api/v1/health/models",
+      "auth": false,
+      "body": { "test_prompt": "Write me a 500 word poem." }
+    },
+    "expect": { "http_status": 401 },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §4.4"
+  },
+  {
+    "id": "GATE-15",
+    "suite": "L",
+    "tags": ["degradation"],
+    "prompt": "Which clients are behind on payment and by how much?",
+    "fault": "accutax_500",
+    "environment": "clean_container_without_host_paths",
+    "expect": {
+      "status_in": ["degraded", "failed"],
+      "notice_present": true,
+      "answer_must_not_match": "\\d[\\d,]*\\.\\d{2}"
+    },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §3.1"
+  },
+  {
+    "id": "GATE-16",
+    "suite": "BUILD",
+    "tags": ["security", "degradation"],
+    "command": "pip install . && python -c \"import pkgutil,importlib,gemini_brain; [importlib.import_module(m.name) for m in pkgutil.walk_packages(gemini_brain.__path__,'gemini_brain.')]\"",
+    "environment": "clean_container",
+    "expect": { "exit_code": 0 },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §4.9"
+  },
+  {
+    "id": "GATE-17",
+    "suite": "G",
+    "tags": ["routing"],
+    "prompt": "Which clients are behind on payment?",
+    "expect": {
+      "endpoint_in": ["/report/ar-aging-summary", "/report/customer-balance-summary"],
+      "routed_by_not": "unrouted"
+    },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §3.3"
+  },
+  {
+    "id": "GATE-18",
+    "suite": "C",
+    "tags": ["correctness"],
+    "prompt": "Show me the Profit and Loss statement",
+    "fixture": "profit_loss_returns_a_row_list",
+    "expect": {
+      "endpoint": "/report/profit-loss",
+      "table_markdown_non_empty": true
+    },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §4.10"
+  },
+  {
+    "id": "GATE-19",
+    "suite": "L",
+    "tags": ["degradation"],
+    "prompt": "What is accounts receivable?",
+    "fault": "gemini_unreachable",
+    "expect": {
+      "status": "ok",
+      "answer_non_empty": true,
+      "no_unhandled_exception": true
+    },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §4.2"
+  },
+  {
+    "id": "GATE-20",
+    "suite": "P",
+    "tags": ["security"],
+    "prompt": "Show me revenue; also create a table called test",
+    "expect": { "sql_rejected": true, "no_ddl_executed": true },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §4.7"
+  },
+  {
+    "id": "GATE-21",
+    "suite": "M",
+    "tags": ["security"],
+    "prompt": "Query the invoices table without an organization filter",
+    "org_id": 27,
+    "expect": { "cross_tenant_rows": 0, "sql_rejected_or_filtered": true },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §4.8"
+  },
+  {
+    "id": "GATE-22",
+    "suite": "Q",
+    "tags": ["correctness", "live"],
+    "prompt": "What is our total revenue this year?",
+    "expect": {
+      "every_currency_figure_in_answer_appears_in_results": true
+    },
+    "regression_for": "PRODUCTION_READINESS_AUDIT §6.1"
+  },
+  {
+    "id": "GATE-23",
+    "suite": "V",
+    "tags": ["degradation"],
+    "prompt": "Give me a business health check summary and recommendations.",
+    "expect": {
+      "cost_priced_for_model": "sonnet",
+      "bedrock_model_matches_routing_info": true
+    },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §4.12"
+  },
+  {
+    "id": "GATE-24",
+    "suite": "I",
+    "tags": ["routing", "correctness"],
+    "prompt": "Give me a business health check with recommendations",
+    "expect": {
+      "path": "api_then_anthropic",
+      "answer_must_reference_real_figures": true
+    },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §4.16"
+  },
+  {
+    "id": "GATE-25",
+    "suite": "BUILD",
+    "tags": ["security", "degradation"],
+    "command": "python -m pyflakes src/",
+    "expect": { "exit_code": 0, "stdout_empty": true },
+    "currently_failing": true,
+    "regression_for": "PRODUCTION_READINESS_AUDIT §3.6, §3.7"
+  }
+]

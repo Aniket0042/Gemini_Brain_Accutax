@@ -36,12 +36,16 @@ export const fetchQueryResponse = async (payload, token = '') => {
     body: JSON.stringify(payload),
   });
 
+  const responseData = await response.json().catch(() => null);
+
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new Error(errorData.detail || `Server returned status ${response.status}`);
+    if (responseData && responseData.notice) {
+      return responseData;
+    }
+    throw new Error((responseData && responseData.detail) || `Server returned status ${response.status}`);
   }
 
-  return await response.json();
+  return responseData;
 };
 
 export const fetchModelHealth = async (token = '') => {
@@ -81,6 +85,15 @@ export const streamQueryResponse = (payload, onChunk, onError, onComplete, token
   })
     .then(async (response) => {
       if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem('gemini_brain_user');
+        }
+        const errorData = await response.json().catch(() => null);
+        if (errorData && errorData.notice) {
+          onChunk({ final_result: errorData });
+          if (onComplete) onComplete();
+          return;
+        }
         const errorText = await response.text().catch(() => response.statusText);
         throw new Error(`Streaming failed (${response.status}): ${errorText}`);
       }
@@ -94,17 +107,24 @@ export const streamQueryResponse = (payload, onChunk, onError, onComplete, token
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n\n');
-        buffer = lines.pop() || '';
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() || '';
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (trimmed.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(trimmed.replace('data: ', ''));
-              onChunk(data);
-            } catch (e) {
-              console.warn('Could not parse SSE chunk:', trimmed);
+        for (const part of parts) {
+          const lines = part.split('\n');
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('data: ')) {
+              const jsonStr = trimmed.slice(6);
+              if (jsonStr === '[DONE]') {
+                continue;
+              }
+              try {
+                const data = JSON.parse(jsonStr);
+                onChunk(data);
+              } catch (e) {
+                console.warn('Could not parse SSE chunk:', jsonStr);
+              }
             }
           }
         }
@@ -119,3 +139,22 @@ export const streamQueryResponse = (payload, onChunk, onError, onComplete, token
 
   return controller;
 };
+
+export const fetchTenants = async (token = '') => {
+  const headers = { 'Accept': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch('/api/v1/tenants', {
+    method: 'GET',
+    headers,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch accessible tenants: ${response.statusText}`);
+  }
+
+  return await response.json();
+};
+

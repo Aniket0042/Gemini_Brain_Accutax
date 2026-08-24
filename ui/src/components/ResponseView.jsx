@@ -1,200 +1,274 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { 
-  Sparkles, ShieldAlert, Cpu, Database, Code2, DollarSign, 
-  Clock, Layers, ChevronDown, ChevronUp, Zap, Copy, Edit3 
+  Sparkles, ShieldAlert, Code2, Layers, 
+  ChevronDown, ChevronUp, Copy, Check, 
+  RotateCw, Clock, DollarSign, Database, Server
 } from 'lucide-react';
+import { NoticeCard } from './NoticeCard';
 
 /**
- * StreamingMarkdown — Real-time token/text streaming component (typewriter effect)
- * Renders progressive text word-by-word with a glowing blinking cursor animation.
+ * Custom components for ReactMarkdown to ensure wide tables and elements are cleanly scrollable.
  */
-const StreamingMarkdown = ({ content, speed = 10 }) => {
-  const [displayedText, setDisplayedText] = useState('');
-  const [isDone, setIsDone] = useState(false);
+const customMarkdownComponents = {
+  table: ({ node, ...props }) => (
+    <div className="markdown-table-wrapper">
+      <table {...props} />
+    </div>
+  ),
+};
+
+/**
+ * PacedMarkdownStream — Streams text smoothly word-by-word at natural reading speed
+ * with an active glowing cursor at the leading edge.
+ */
+const PacedMarkdownStream = ({ text, isStreaming }) => {
+  const [revealedLength, setRevealedLength] = useState(0);
+  const targetTextRef = useRef(text || '');
 
   useEffect(() => {
-    if (!content) return;
+    targetTextRef.current = text || '';
+  }, [text]);
 
-    setDisplayedText('');
-    setIsDone(false);
-
-    let currentIndex = 0;
-    const totalLength = content.length;
+  useEffect(() => {
+    if (!text) {
+      setRevealedLength(0);
+      return;
+    }
 
     const timer = setInterval(() => {
-      currentIndex += Math.min(2, totalLength - currentIndex);
-      setDisplayedText(content.slice(0, currentIndex));
+      const target = targetTextRef.current;
+      setRevealedLength((current) => {
+        if (current >= target.length) {
+          return current;
+        }
 
-      if (currentIndex >= totalLength) {
-        setIsDone(true);
-        clearInterval(timer);
-      }
-    }, speed);
+        // Find next word/newline boundary (relaxed single-word pacing)
+        const remaining = target.length - current;
+        const wordsToAdvance = remaining > 350 ? 2 : 1;
+        let nextIdx = current;
+
+        for (let i = 0; i < wordsToAdvance; i++) {
+          const nextSpace = target.indexOf(' ', nextIdx + 1);
+          const nextNewline = target.indexOf('\n', nextIdx + 1);
+          let candidate = -1;
+          if (nextSpace !== -1 && nextNewline !== -1) {
+            candidate = Math.min(nextSpace, nextNewline);
+          } else {
+            candidate = Math.max(nextSpace, nextNewline);
+          }
+
+          if (candidate !== -1 && candidate < target.length) {
+            nextIdx = candidate + 1;
+          } else {
+            nextIdx = target.length;
+            break;
+          }
+        }
+
+        return nextIdx;
+      });
+    }, 55); // 55ms per word: relaxed, comfortable, smooth reading pace
 
     return () => clearInterval(timer);
-  }, [content, speed]);
+  }, [text]);
 
-  const handleSkip = () => {
-    setDisplayedText(content);
-    setIsDone(true);
-  };
+  const isStillPacing = revealedLength < (text || '').length;
+  const showCursor = isStreaming || isStillPacing;
+  const currentSlice = text ? text.slice(0, revealedLength) : '';
 
   return (
-    <div style={styles.streamingContainer}>
-      {!isDone && (
-        <div style={styles.streamingToolbar}>
-          <div style={styles.streamingIndicator}>
-            <Zap size={13} color="#818cf8" className="pulse-animation" />
-            <span style={styles.streamingTextBadge}>Streaming Response Live...</span>
-          </div>
-          <button type="button" style={styles.skipBtn} onClick={handleSkip}>
-            Skip to End ⏩
-          </button>
-        </div>
-      )}
-      <div style={styles.answerBox} className="markdown-body">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-          {displayedText}
-        </ReactMarkdown>
-        {!isDone && <span className="streaming-cursor" />}
-      </div>
+    <div className="markdown-body" style={styles.markdownWrapper}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={customMarkdownComponents}>
+        {currentSlice || text}
+      </ReactMarkdown>
+      {showCursor && <span className="streaming-cursor" />}
     </div>
   );
 };
 
 /**
- * AssistantResponseCard — Renders individual assistant response with its own accordion state.
+ * AssistantResponseCard — Renders individual assistant response in clean unboxed ChatGPT/Gemini style.
  */
-const AssistantResponseCard = ({ responseData, isStreamingMsg, activeTenant }) => {
+const AssistantResponseCard = ({ 
+  msg, 
+  userQuery, 
+  onRegenerate, 
+  activeTenant 
+}) => {
+  const [copied, setCopied] = useState(false);
   const [showSql, setShowSql] = useState(false);
   const [showTrace, setShowTrace] = useState(false);
 
-  if (!responseData) return null;
+  const responseData = msg.responseData;
+  const isStreaming = msg.isStreaming;
+  const notice = responseData?.notice || msg.notice;
+  const rawContent = responseData?.answer || msg.streamingText || '';
+  const content = rawContent.trim();
+  const tableMarkdown = msg.tableData || responseData?.table_markdown;
+  const isSecurityError = Boolean(!notice && (responseData?.error || (responseData?.answer && responseData.answer.startsWith('Error:'))));
+  const isError = Boolean(msg.isError || isSecurityError || responseData?.status === 'failed');
 
-  const isError = Boolean(responseData.error || responseData.answer?.startsWith('Error'));
-  const routing = responseData.routing_info;
-  const tokenUsage = responseData.token_usage;
+  const tokenUsage = responseData?.token_usage;
+  const totalTokens = tokenUsage ? (tokenUsage.input_tokens || 0) + (tokenUsage.output_tokens || 0) : 0;
+  const elapsedSeconds = tokenUsage?.elapsed_seconds ?? responseData?.elapsed_seconds;
+  const costUsd = tokenUsage?.cost_usd;
 
-  const getPathBadge = (path) => {
-    switch (path) {
-      case 'gemini_direct':
-        return { label: 'Gemini 2.5 Flash Direct', badgeClass: 'badge-cyan', icon: Cpu };
-      case 'api_then_anthropic':
-        return { label: 'REST API + Claude Bedrock', badgeClass: 'badge-amber', icon: Sparkles };
-      case 'db_fallback':
-        return { label: 'SQL Fallback Engine', badgeClass: 'badge-emerald', icon: Database };
-      default:
-        return { label: path || 'Orchestrated', badgeClass: 'badge-primary', icon: Cpu };
-    }
+  const handleCopy = () => {
+    if (!content) return;
+    navigator.clipboard.writeText(content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
-  const pathConfig = getPathBadge(routing?.path);
-  const PathIcon = pathConfig.icon;
-
   return (
-    <div style={styles.assistantCard} className="glass-panel">
-      {/* Response Header & Metadata Badges */}
-      <div style={styles.metaHeader}>
-        <div style={styles.badgeGroup}>
-          <span className={`badge ${pathConfig.badgeClass}`}>
-            <PathIcon size={13} />
-            {pathConfig.label}
+    <div style={styles.assistantRow}>
+      {/* Notice Card for Empty / Partial / Degraded / Denied / Error states */}
+      {notice && (
+        <NoticeCard
+          notice={notice}
+          onRetry={() => onRegenerate && onRegenerate(userQuery)}
+          onSuggestionClick={(sug) => onRegenerate && onRegenerate(sug)}
+        />
+      )}
+
+      {/* Data Source Indicator Pill */}
+      {!isStreaming && responseData?.data_source && (
+        <div className="data-source-pill">
+          <span className="source-label">Source:</span>
+          <span className={`source-tag tag-${responseData.data_source.tier}`}>
+            {responseData.data_source.tier === 'live_api' ? '⚡ Live API' :
+             responseData.data_source.tier === 'cache' ? '💾 Cache' :
+             responseData.data_source.tier === 'sql_function' ? '📊 Stored Function' :
+             '🔍 SQL Fallback'}
           </span>
-
-          {routing?.type_label && (
-            <span className="badge badge-primary">
-              Type {routing.type}: {routing.type_label}
-            </span>
-          )}
-
-          {activeTenant?.organization_id && (
-            <span className="badge badge-emerald">
-              Tenant Org #{activeTenant.organization_id}
-            </span>
+          {responseData.data_source.endpoint && (
+            <span className="source-endpoint">{responseData.data_source.endpoint}</span>
           )}
         </div>
+      )}
 
-        {/* Token & Cost Metrics */}
-        {tokenUsage && (
-          <div style={styles.metricsGroup}>
-            <span style={styles.metricItem} title="Total tokens processed">
-              <Layers size={13} color="#818cf8" />
-              <span>{tokenUsage.input_tokens + tokenUsage.output_tokens} tokens</span>
-            </span>
-            <span style={styles.metricItem} title="Estimated cost in USD">
-              <DollarSign size={13} color="#10b981" />
-              <span>${tokenUsage.cost_usd.toFixed(5)}</span>
-            </span>
-            <span style={styles.metricItem} title="Execution time">
-              <Clock size={13} color="#f59e0b" />
-              <span>{tokenUsage.elapsed_seconds}s</span>
-            </span>
+      {/* Immediate Data Table (rendered before or alongside narration) */}
+      {tableMarkdown && (
+        <div className="data-table-container">
+          <div className="markdown-body" style={styles.markdownWrapper}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={customMarkdownComponents}>
+              {tableMarkdown}
+            </ReactMarkdown>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Security Error Banner or Answer content */}
-      {isError ? (
+      {/* Security Error Banner or Paced Streaming Markdown Content */}
+      {isSecurityError ? (
         <div style={styles.errorBox}>
           <div style={styles.errorHeader}>
             <ShieldAlert size={20} color="#f43f5e" />
             <div>
-              <h4 style={styles.errorTitle}>Tenant Security Isolation Boundary Triggered</h4>
+              <h4 style={styles.errorTitle}>Security Isolation Boundary Notice</h4>
               <p style={styles.errorSub}>{responseData.error || responseData.answer}</p>
             </div>
           </div>
         </div>
+      ) : content ? (
+        <PacedMarkdownStream text={content} isStreaming={isStreaming} />
       ) : (
-        /* If currently streaming, use StreamingMarkdown, otherwise use static Markdown */
-        isStreamingMsg ? (
-          <StreamingMarkdown content={responseData.answer} />
-        ) : (
-          <div className="markdown-body" style={styles.answerBox}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {responseData.answer}
-            </ReactMarkdown>
+        !notice && !tableMarkdown && (
+          <div style={styles.emptyNotice}>
+            <span>No response generated. Please try again.</span>
           </div>
         )
       )}
 
-      {/* SQL Query Inspector Accordion */}
-      {responseData.sql && (
-        <div style={styles.sqlInspector}>
-          <button style={styles.inspectorToggle} onClick={() => setShowSql(!showSql)}>
-            <div style={styles.inspectorTitle}>
-              <Code2 size={15} color="#10b981" />
-              <span>Executed SQL Query Inspector</span>
+      {/* Technical Metadata & SQL Accordions (Subtle & Non-Intrusive) */}
+      {!isStreaming && (responseData?.sql || (responseData?.agent_trace && responseData.agent_trace.length > 0)) && (
+        <div style={styles.inspectorsRow}>
+          {responseData.sql && (
+            <div style={styles.sqlInspector}>
+              <button style={styles.inspectorToggle} onClick={() => setShowSql(!showSql)}>
+                <div style={styles.inspectorTitle}>
+                  <Code2 size={13} color="#10b981" />
+                  <span>Executed SQL Query</span>
+                </div>
+                {showSql ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              </button>
+              {showSql && (
+                <pre style={styles.sqlCodeBlock}>
+                  <code>{responseData.sql}</code>
+                </pre>
+              )}
             </div>
-            {showSql ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-          </button>
-          {showSql && (
-            <pre style={styles.sqlCodeBlock}>
-              <code>{responseData.sql}</code>
-            </pre>
+          )}
+
+          {responseData.agent_trace && responseData.agent_trace.length > 0 && (
+            <div style={styles.traceInspector}>
+              <button style={styles.inspectorToggle} onClick={() => setShowTrace(!showTrace)}>
+                <div style={styles.inspectorTitle}>
+                  <Layers size={13} color="#06b6d4" />
+                  <span>Trace ({responseData.agent_trace.length} steps)</span>
+                </div>
+                {showTrace ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              </button>
+              {showTrace && (
+                <div style={styles.traceContent}>
+                  {responseData.agent_trace.map((step, idx) => (
+                    <div key={idx} style={styles.traceStepItem}>
+                      <span className="badge badge-cyan">{step.agent || step.task || step.step || 'Step'}</span>
+                      <span style={styles.traceStepText}>{JSON.stringify(step)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
 
-      {/* Agent Trace Log Inspector */}
-      {responseData.agent_trace && responseData.agent_trace.length > 0 && (
-        <div style={styles.traceInspector}>
-          <button style={styles.inspectorToggle} onClick={() => setShowTrace(!showTrace)}>
-            <div style={styles.inspectorTitle}>
-              <Layers size={15} color="#06b6d4" />
-              <span>Agent Execution Trace ({responseData.agent_trace.length} steps)</span>
-            </div>
-            {showTrace ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-          </button>
-          {showTrace && (
-            <div style={styles.traceContent}>
-              {responseData.agent_trace.map((step, idx) => (
-                <div key={idx} style={styles.traceStepItem}>
-                  <span className="badge badge-cyan">{step.agent || step.task || 'Step'}</span>
-                  <span style={styles.traceStepText}>{JSON.stringify(step)}</span>
-                </div>
-              ))}
+      {/* ChatGPT / Gemini Style Bottom Action Buttons & Metrics */}
+      {!isStreaming && content && !isError && (
+        <div style={styles.actionToolbar}>
+          <div style={styles.actionLeft}>
+            <button 
+              style={{ ...styles.actionBtn, ...(copied ? styles.actionBtnActive : {}) }} 
+              onClick={handleCopy} 
+              title={copied ? "Copied to clipboard!" : "Copy response"}
+            >
+              {copied ? <Check size={15} color="#10b981" /> : <Copy size={15} />}
+            </button>
+
+            {onRegenerate && userQuery && (
+              <button 
+                style={styles.actionBtn} 
+                onClick={() => onRegenerate(userQuery)} 
+                title="Regenerate response"
+              >
+                <RotateCw size={15} />
+              </button>
+            )}
+          </div>
+
+          {/* Clean Subtle Token Count & Latency Metrics */}
+          {tokenUsage && (
+            <div style={styles.metricsBar}>
+              {totalTokens > 0 && (
+                <span style={styles.metricPill} title="Total tokens processed">
+                  <Layers size={11} color="#818cf8" />
+                  <span>{totalTokens.toLocaleString()} tokens</span>
+                </span>
+              )}
+              {elapsedSeconds !== undefined && elapsedSeconds !== null && (
+                <span style={styles.metricPill} title="Response generation latency">
+                  <Clock size={11} color="#f59e0b" />
+                  <span>{elapsedSeconds}s</span>
+                </span>
+              )}
+              {costUsd !== undefined && costUsd !== null && costUsd > 0 && (
+                <span style={styles.metricPill} title="Estimated cost">
+                  <DollarSign size={11} color="#10b981" />
+                  <span>${costUsd.toFixed(5)}</span>
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -204,9 +278,9 @@ const AssistantResponseCard = ({ responseData, isStreamingMsg, activeTenant }) =
 };
 
 /**
- * ResponseView — Renders full conversation list sequentially.
+ * ResponseView — Renders full conversation list sequentially in clean ChatGPT/Gemini layout.
  */
-export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant }) => {
+export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant, onRegenerate }) => {
   if (!conversation || conversation.length === 0) return null;
 
   return (
@@ -220,67 +294,37 @@ export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant
               <div style={styles.userBubble}>
                 {msg.content}
               </div>
-              <div style={styles.bubbleActions}>
-                <button 
-                  style={styles.bubbleActionBtn} 
-                  onClick={() => navigator.clipboard.writeText(msg.content)} 
-                  title="Copy prompt"
-                >
-                  <Copy size={12} />
-                </button>
-                <button style={styles.bubbleActionBtn} title="Edit prompt">
-                  <Edit3 size={12} />
-                </button>
-              </div>
             </div>
           );
         }
 
         // Assistant Turn
+        const isStreaming = msg.isStreaming;
         const responseData = msg.responseData;
-        const isStreamingMsg = msg.isStreaming;
+        const streamingText = msg.streamingText;
+        const hasContent = Boolean((responseData?.answer || streamingText || '').trim());
 
-        // If it is the active loading placeholder without data yet, show Gemini Loader
-        if (isStreamingMsg && !responseData) {
+        // Prior user prompt for regeneration
+        const prevUserTurn = idx > 0 && conversation[idx - 1].role === 'user' ? conversation[idx - 1].content : '';
+
+        // If loading and no text accumulated yet: Show ONLY Icon + Dynamic Text + 3-dots animation
+        if (isStreaming && !hasContent) {
           const latestLog = streamLogs && streamLogs.length > 0 ? streamLogs[streamLogs.length - 1] : null;
-          return (
-            <div key={idx} style={styles.loadingCard} className="glass-panel">
-              <div style={styles.loadingHeader}>
-                <div style={styles.geminiIconBox}>
-                  <Sparkles size={24} color="#818cf8" className="gemini-sparkle-spin" />
-                </div>
+          const statusText = msg.latestStatus || latestLog?.status || 'Understanding request';
 
-                <div style={styles.loadingTitleGroup}>
-                  <div style={styles.titleWithDots}>
-                    <h3 style={styles.loadingTitle}>
-                      {latestLog?.status || 'Orchestrating AI Financial Query'}
-                    </h3>
-                    <div className="gemini-dots">
-                      <span className="gemini-dot" />
-                      <span className="gemini-dot" />
-                      <span className="gemini-dot" />
-                    </div>
-                  </div>
-                  <p style={styles.loadingSub}>Routing between Google Gemini 2.5 & Anthropic Claude Bedrock</p>
+          return (
+            <div key={idx} style={styles.minimalLoaderContainer}>
+              <div style={styles.loaderIconBox}>
+                <Sparkles size={18} color="#818cf8" className="gemini-sparkle-spin" />
+              </div>
+              <div style={styles.loaderTextGroup}>
+                <span style={styles.loaderStatusText}>{statusText}</span>
+                <div className="gemini-dots">
+                  <span className="gemini-dot" />
+                  <span className="gemini-dot" />
+                  <span className="gemini-dot" />
                 </div>
               </div>
-
-              <div className="gemini-shimmer-bar" />
-
-              {streamLogs && streamLogs.length > 0 && (
-                <div style={styles.streamLogBox}>
-                  <div style={styles.streamLogHeader}>
-                    <Layers size={14} color="#06b6d4" />
-                    <span>Real-Time SSE Execution Pipeline</span>
-                  </div>
-                  {streamLogs.map((log, lIdx) => (
-                    <div key={lIdx} style={styles.streamItem}>
-                      <span className="badge badge-cyan">{log.type || 'status'}</span>
-                      <span style={styles.streamText}>{log.status || JSON.stringify(log)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           );
         }
@@ -288,8 +332,9 @@ export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant
         return (
           <AssistantResponseCard 
             key={idx}
-            responseData={responseData}
-            isStreamingMsg={isStreamingMsg}
+            msg={msg}
+            userQuery={prevUserTurn}
+            onRegenerate={onRegenerate}
             activeTenant={activeTenant}
           />
         );
@@ -302,187 +347,183 @@ const styles = {
   conversationList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '24px',
+    gap: '28px',
     paddingBottom: '40px',
+    width: '100%',
   },
   userMsgWrapper: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'flex-end',
-    marginBottom: '8px',
+    marginBottom: '4px',
     maxWidth: '100%',
   },
   userBubble: {
-    padding: '10px 16px',
-    borderRadius: '16px 16px 4px 16px',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    padding: '11px 18px',
+    borderRadius: '20px 20px 4px 20px',
+    backgroundColor: 'rgba(255, 255, 255, 0.07)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
     color: '#ffffff',
-    fontSize: '0.925rem',
+    fontSize: '0.95rem',
     fontWeight: 500,
-    lineHeight: '1.4',
+    lineHeight: '1.5',
     textAlign: 'left',
     maxWidth: '75%',
     wordBreak: 'break-word',
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
   },
-  bubbleActions: {
+  assistantRow: {
+    width: '100%',
+    maxWidth: '100%',
     display: 'flex',
-    gap: '8px',
-    marginTop: '6px',
-    paddingRight: '4px',
+    flexDirection: 'column',
+    gap: '12px',
+    textAlign: 'left',
+    padding: '4px 0 16px',
   },
-  bubbleActionBtn: {
-    background: 'none',
-    border: 'none',
-    color: '#9ca3af',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '4px',
-    borderRadius: '4px',
-    transition: 'all 0.2s ease',
-    '&:hover': {
-      backgroundColor: 'rgba(255, 255, 255, 0.08)',
-      color: '#ffffff',
-    },
+  markdownWrapper: {
+    width: '100%',
+    maxWidth: '100%',
+    color: '#f3f4f6',
+    fontSize: '0.975rem',
+    lineHeight: '1.75',
   },
-  assistantCard: {
-    padding: '24px',
-    marginBottom: '8px',
-  },
-  loadingCard: {
-    padding: '24px',
-    marginBottom: '8px',
-  },
-  loadingHeader: {
+  minimalLoaderContainer: {
     display: 'flex',
     alignItems: 'center',
-    gap: '16px',
+    gap: '12px',
+    padding: '8px 0',
+    width: '100%',
   },
-  geminiIconBox: {
-    width: '46px',
-    height: '46px',
-    borderRadius: '14px',
-    backgroundColor: 'rgba(99, 102, 241, 0.14)',
-    border: '1px solid rgba(99, 102, 241, 0.3)',
+  loaderIconBox: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '10px',
+    backgroundColor: 'rgba(99, 102, 241, 0.12)',
+    border: '1px solid rgba(99, 102, 241, 0.25)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-    boxShadow: '0 0 20px rgba(99, 102, 241, 0.25)',
   },
-  loadingTitleGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    textAlign: 'left',
-  },
-  titleWithDots: {
+  loaderTextGroup: {
     display: 'flex',
     alignItems: 'center',
+    gap: '4px',
   },
-  loadingTitle: {
-    fontSize: '1.05rem',
-    fontWeight: 700,
-    color: '#f3f4f6',
-  },
-  loadingSub: {
-    fontSize: '0.8rem',
-    color: '#9ca3af',
-    marginTop: '2px',
-  },
-  streamLogBox: {
-    marginTop: '16px',
-    padding: '14px',
-    borderRadius: '10px',
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-  },
-  streamLogHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    fontSize: '0.8rem',
+  loaderStatusText: {
+    fontSize: '0.95rem',
     fontWeight: 600,
-    color: '#9ca3af',
-    marginBottom: '10px',
+    color: '#f3f4f6',
+    letterSpacing: '-0.01em',
   },
-  streamItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    fontSize: '0.85rem',
-    marginBottom: '6px',
-  },
-  streamText: {
-    color: '#e5e7eb',
-  },
-  metaHeader: {
+  actionToolbar: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: '16px',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-    marginBottom: '18px',
-    flexWrap: 'wrap',
     gap: '12px',
-  },
-  badgeGroup: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
+    marginTop: '6px',
     flexWrap: 'wrap',
   },
-  metricsGroup: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '14px',
-  },
-  metricItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '5px',
-    fontSize: '0.8rem',
-    color: '#9ca3af',
-    fontWeight: 500,
-  },
-  streamingContainer: {
-    position: 'relative',
-  },
-  streamingToolbar: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: '10px',
-    padding: '6px 12px',
-    borderRadius: '8px',
-    backgroundColor: 'rgba(99, 102, 241, 0.08)',
-    border: '1px solid rgba(99, 102, 241, 0.2)',
-  },
-  streamingIndicator: {
+  actionLeft: {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
   },
-  streamingTextBadge: {
-    fontSize: '0.78rem',
-    fontWeight: 600,
-    color: '#a5b4fc',
+  actionBtn: {
+    background: 'transparent',
+    border: 'none',
+    color: '#9ca3af',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '6px 8px',
+    borderRadius: '6px',
+    transition: 'all 0.15s ease',
   },
-  skipBtn: {
+  actionBtnActive: {
+    color: '#818cf8',
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+  },
+  metricsBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+  },
+  metricPill: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    fontSize: '0.75rem',
+    color: '#6b7280',
+    fontWeight: 500,
+  },
+  inspectorsRow: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    marginTop: '8px',
+  },
+  sqlInspector: {
+    borderRadius: '8px',
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    border: '1px solid rgba(16, 185, 129, 0.15)',
+    overflow: 'hidden',
+  },
+  traceInspector: {
+    borderRadius: '8px',
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    border: '1px solid rgba(6, 182, 212, 0.15)',
+    overflow: 'hidden',
+  },
+  inspectorToggle: {
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '8px 12px',
     background: 'none',
     border: 'none',
     color: '#9ca3af',
-    fontSize: '0.75rem',
     cursor: 'pointer',
+    fontSize: '0.78rem',
     fontWeight: 600,
   },
-  answerBox: {
-    padding: '4px 0',
+  inspectorTitle: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  sqlCodeBlock: {
+    padding: '12px 14px',
+    backgroundColor: '#0a0d14',
+    color: '#10b981',
+    fontFamily: 'var(--font-mono)',
+    fontSize: '0.8rem',
+    overflowX: 'auto',
+    borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+  },
+  traceContent: {
+    padding: '10px 14px',
+    borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+  },
+  traceStepItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '0.75rem',
+  },
+  traceStepText: {
+    fontFamily: 'var(--font-mono)',
+    color: '#9ca3af',
   },
   errorBox: {
-    padding: '16px',
-    borderRadius: '12px',
+    padding: '14px 16px',
+    borderRadius: '10px',
     backgroundColor: 'rgba(244, 63, 94, 0.08)',
     border: '1px solid rgba(244, 63, 94, 0.25)',
   },
@@ -493,70 +534,18 @@ const styles = {
   },
   errorTitle: {
     color: '#f43f5e',
-    fontSize: '1rem',
-    marginBottom: '4px',
+    fontSize: '0.95rem',
+    marginBottom: '2px',
   },
   errorSub: {
     color: '#e5e7eb',
-    fontSize: '0.875rem',
-    fontFamily: 'var(--font-mono)',
-  },
-  sqlInspector: {
-    marginTop: '16px',
-    borderRadius: '10px',
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    border: '1px solid rgba(16, 185, 129, 0.2)',
-    overflow: 'hidden',
-  },
-  traceInspector: {
-    marginTop: '12px',
-    borderRadius: '10px',
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    border: '1px solid rgba(6, 182, 212, 0.2)',
-    overflow: 'hidden',
-  },
-  inspectorToggle: {
-    width: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '12px 16px',
-    background: 'none',
-    border: 'none',
-    color: '#d1d5db',
-    cursor: 'pointer',
     fontSize: '0.85rem',
-    fontWeight: 600,
-  },
-  inspectorTitle: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  sqlCodeBlock: {
-    padding: '14px',
-    backgroundColor: '#0a0d14',
-    color: '#10b981',
     fontFamily: 'var(--font-mono)',
-    fontSize: '0.825rem',
-    overflowX: 'auto',
-    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
   },
-  traceContent: {
-    padding: '12px 16px',
-    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  traceStepItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    fontSize: '0.8rem',
-  },
-  traceStepText: {
-    fontFamily: 'var(--font-mono)',
-    color: '#9ca3af',
+  emptyNotice: {
+    color: '#6b7280',
+    fontSize: '0.875rem',
+    fontStyle: 'italic',
+    padding: '4px 0',
   },
 };

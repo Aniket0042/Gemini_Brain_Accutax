@@ -44,6 +44,11 @@ class QueryRequest(BaseModel):
         description="Optional model override for model arena comparison.",
         examples=[None],
     )
+    narrate: bool = Field(
+        default=True,
+        description="Whether to generate natural language narration with Claude or return raw JSON immediately.",
+        examples=[True],
+    )
 
 
 class TokenUsageSchema(BaseModel):
@@ -64,6 +69,24 @@ class RoutingInfoSchema(BaseModel):
     bedrock_model: Optional[str] = Field(default=None)
 
 
+class NoticeSchema(BaseModel):
+    kind: str
+    code: str
+    title: str
+    message: str
+    suggestions: List[str] = Field(default_factory=list)
+    retryable: bool = False
+    request_id: str = ""
+
+
+class DataSourceSchema(BaseModel):
+    tier: str = ""
+    endpoint: Optional[str] = None
+    row_count: int = 0
+    truncated: bool = False
+    as_of: Optional[str] = None
+
+
 class QueryResponse(BaseModel):
     """Complete response payload for a Gemini Brain query."""
 
@@ -71,11 +94,17 @@ class QueryResponse(BaseModel):
     sql: Optional[str] = Field(default=None, description="SQL query executed (if DB fallback path).")
     results: List[Any] = Field(default_factory=list, description="Raw structured results list.")
     error: Optional[str] = Field(default=None, description="Error message if processing failed.")
+    status: str = Field(default="ok", description="ok | empty | partial | degraded | failed")
+    notice: Optional[NoticeSchema] = Field(default=None, description="Structured user-safe notice.")
+    data_source: Optional[DataSourceSchema] = Field(default=None, description="Data provenance tier and endpoint.")
+    table_markdown: Optional[str] = Field(default=None, description="Pre-rendered deterministic table.")
+    request_id: str = Field(default="", description="Correlation request ID.")
     pii_redacted: bool = Field(default=False, description="Whether PII entities were detected and redacted from the query.")
     pii_redactions: Dict[str, int] = Field(default_factory=dict, description="Counts of redacted PII entity types.")
     token_usage: TokenUsageSchema = Field(..., description="Token and cost metrics.")
     agent_trace: List[Dict[str, Any]] = Field(default_factory=list, description="Step-by-step execution trace.")
     routing_info: Optional[RoutingInfoSchema] = Field(default=None, description="Routing classification metadata.")
+    query_trace: Optional[Dict[str, Any]] = Field(default=None, description="Detailed per-stage latency trace metrics.")
 
 
 class HealthResponse(BaseModel):
@@ -134,5 +163,29 @@ class TokenResponse(BaseModel):
     user_id: int = Field(..., description="Authenticated user ID.")
     email: str = Field(..., description="Authenticated user email.")
     allowed_org_ids: List[int] = Field(default_factory=list, description="Allowed tenant organization IDs.")
+    tenants: List[Dict[str, Any]] = Field(default_factory=list, description="Metadata list of accessible tenant organizations.")
+
+
+class TenantInfo(BaseModel):
+    """Metadata describing a single selectable tenant organization in the UI."""
+
+    id: int = Field(..., description="Organization ID.")
+    name: str = Field(..., description="Full canonical organization name.")
+    display_name: str = Field(..., description="User-friendly display name.")
+    tag: str = Field(default="", description="Specialty / capability tag.")
+    badge_color: str = Field(default="emerald", description="UI badge accent color.")
+    industry: str = Field(default="", description="Company industry.")
+    currency: str = Field(default="AED", description="Operating currency.")
+    description: str = Field(default="", description="Summary of key data & strengths in database.")
+
+
+class TenantListResponse(BaseModel):
+    """Response returned when fetching accessible tenant organizations."""
+
+    status: str = Field(default="success", description="Status code.")
+    user_id: int = Field(..., description="Authenticated user ID.")
+    email: str = Field(..., description="Authenticated user email.")
+    tenants: List[TenantInfo] = Field(default_factory=list, description="List of accessible tenants.")
+
 
 

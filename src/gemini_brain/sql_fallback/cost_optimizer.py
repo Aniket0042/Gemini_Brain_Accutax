@@ -56,8 +56,13 @@ def select_tools(complexity: str, question: str, all_tools: List[Dict[str, Any]]
     return [t for t in all_tools if t["toolSpec"]["name"] in needed]
 
 
-def compact_tool_result(agent_result: Dict[str, Any], task: str) -> str:
+def compact_tool_result(agent_result: Any, task: str) -> str:
     """Convert a finance_agent result dict to a compact, LLM-readable string."""
+    if isinstance(agent_result, list):
+        agent_result = {"results": agent_result}
+    elif not isinstance(agent_result, dict):
+        return str(agent_result)
+
     parts: List[str] = []
 
     period = agent_result.get("period", "")

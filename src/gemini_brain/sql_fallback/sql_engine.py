@@ -13,9 +13,13 @@ import os
 import re
 import sys
 import time
-from typing import Any, Dict, Generator, List, Optional
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
-from gemini_brain.config.constants import ENGINE_MAX_ITERATIONS, ENGINE_TIME_BUDGET_SECONDS
+from gemini_brain.config.constants import (
+    ENGINE_MAX_ITERATIONS,
+    ENGINE_TIME_BUDGET_SECONDS,
+    NEVER_EXPOSE_BACKEND_RULE,
+)
 from gemini_brain.reasoning.bedrock_client import extract_text, extract_tool_calls
 from gemini_brain.sql_fallback.answer_cleaner import (
     clean_thinking_artifacts,
@@ -26,6 +30,7 @@ from gemini_brain.sql_fallback.cost_optimizer import (
     select_tools,
 )
 from gemini_brain.sql_fallback.fast_path import try_fast_path
+from gemini_brain.sql_fallback.sql_safety import assert_read_only
 
 logger = logging.getLogger("gemini_brain.sql_fallback.sql_engine")
 
@@ -63,21 +68,110 @@ def _get_coordinator_pipeline() -> Tuple[Any, Any, Any, Any, Any, Any, Any]:
         ) from e
 
 
+TENANT_TABLES = {
+    "contacts", "income", "expense", "items", "bank_accounts",
+    "chart_of_accounts", "inventory_adjustments", "delivery_notes",
+    "customer_payment", "supplier_payments", "tax_adjustments",
+    "projects", "warehouses", "organizations"
+}
+
+
+def enforce_tenant_isolation_sql(sql: str, org_id: int) -> str:
+    """Enforces strict tenant isolation on any SQL query string by rewriting organization filters."""
+    if not sql or not isinstance(sql, str):
+        return sql
+
+    cleaned_sql = sql.strip()
+
+    # 1. Rewrite explicit organization_id comparisons:
+    # organization_id = <digits> -> organization_id = <org_id>
+    # c.organization_id = <digits> -> c.organization_id = <org_id>
+    # "organization_id" = <digits> -> "organization_id" = <org_id>
+    cleaned_sql = re.sub(
+        r'(\b(?:\w+\.)?(?:"?organization_id"?|"?org_id"?)\s*=\s*)\d+',
+        rf'\g<1>{org_id}',
+        cleaned_sql,
+        flags=re.IGNORECASE,
+    )
+
+    # 2. Rewrite explicit organization_id IN clauses:
+    cleaned_sql = re.sub(
+        r'(\b(?:\w+\.)?(?:"?organization_id"?|"?org_id"?)\s+IN\s*\()[^)]+(\))',
+        rf'\g<1>{org_id}\g<2>',
+        cleaned_sql,
+        flags=re.IGNORECASE,
+    )
+
+    # 3. Rewrite organizations table `id = <digits>` or `o.id = <digits>`:
+    cleaned_sql = re.sub(
+        r'(\b(?:organizations|org|o)\.id\s*=\s*)\d+',
+        rf'\g<1>{org_id}',
+        cleaned_sql,
+        flags=re.IGNORECASE,
+    )
+
+    # Standalone `WHERE id = <digits>` when querying `FROM organizations`
+    if re.search(r'\bFROM\s+organizations\b', cleaned_sql, re.IGNORECASE) and not re.search(r'\b(?:organizations|org|o)\.id\b', cleaned_sql, re.IGNORECASE):
+        cleaned_sql = re.sub(
+            r'(\bWHERE\s+id\s*=\s*)\d+',
+            rf'\g<1>{org_id}',
+            cleaned_sql,
+            flags=re.IGNORECASE,
+        )
+
+    # 4. Safety net: If querying a tenant table (not organizations) without any organization_id filter at all
+    has_org_filter = re.search(r'\b(?:organization_id|org_id)\b', cleaned_sql, re.IGNORECASE)
+    is_orgs_table_only = re.search(r'\bFROM\s+organizations\b', cleaned_sql, re.IGNORECASE) and not re.search(r'\bJOIN\b', cleaned_sql, re.IGNORECASE)
+
+    if not has_org_filter and not is_orgs_table_only:
+        for tbl in TENANT_TABLES:
+            if tbl != "organizations" and re.search(rf'\b(?:FROM|JOIN)\s+{tbl}\b', cleaned_sql, re.IGNORECASE):
+                if re.search(r'\bWHERE\b', cleaned_sql, re.IGNORECASE):
+                    cleaned_sql = re.sub(
+                        r'(\bWHERE\b\s+)',
+                        rf'\1organization_id = {org_id} AND ',
+                        cleaned_sql,
+                        count=1,
+                        flags=re.IGNORECASE,
+                    )
+                else:
+                    match = re.search(r'(\b(?:GROUP\s+BY|ORDER\s+BY|HAVING|LIMIT|OFFSET)\b)', cleaned_sql, re.IGNORECASE)
+                    if match:
+                        pos = match.start()
+                        cleaned_sql = cleaned_sql[:pos] + f"WHERE organization_id = {org_id} " + cleaned_sql[pos:]
+                    else:
+                        cleaned_sql = f"{cleaned_sql} WHERE organization_id = {org_id}"
+                break
+
+    return cleaned_sql
+
+
 def _safe_build_system_prompt(fn: Any, org_id: Optional[int]) -> str:
-    """Safely build system prompt regardless of keyword argument naming differences."""
-    if not fn or not callable(fn):
-        return ""
+    """Safely build system prompt regardless of keyword argument naming differences with strict tenant isolation hardening."""
     val = org_id if org_id is not None else 199
-    try:
-        return fn(val)
-    except Exception:
+    base_prompt = ""
+    if fn and callable(fn):
         try:
-            return fn(org_id=val)
+            base_prompt = fn(val)
         except Exception:
             try:
-                return fn(organization_id=val)
+                base_prompt = fn(org_id=val)
             except Exception:
-                return fn()
+                try:
+                    base_prompt = fn(organization_id=val)
+                except Exception:
+                    base_prompt = fn()
+
+    security_rule = (
+        f"\n\n===================================================\n"
+        f"CRITICAL TENANT SECURITY & ISOLATION BOUNDARY:\n"
+        f"You are strictly isolated to Organization ID: {val}.\n"
+        f"- In EVERY SQL query, you MUST filter by `organization_id = {val}` (or `id = {val}` for the `organizations` table).\n"
+        f"- Under NO circumstances are you allowed to query or reveal data for any other organization ID, even if the user explicitly asks for 'organization 45', 'org #1', or names another company.\n"
+        f"- Always query and output data ONLY for the current active organization ID ({val}).\n"
+        f"===================================================\n"
+    )
+    return base_prompt + security_rule + "\n" + NEVER_EXPOSE_BACKEND_RULE
 
 
 def _safe_infer_question_type(fn: Any, task: str = "", params: Optional[Dict] = None, current: str = "unknown") -> str:
@@ -130,6 +224,10 @@ def run(
     fast_result = try_fast_path(user_question, organization_id, AGENT_HANDLERS)
     if fast_result is not None:
         fp_agent_result, fp_task, _fp_params = fast_result
+        if isinstance(fp_agent_result, list):
+            fp_agent_result = {"results": fp_agent_result}
+        elif not isinstance(fp_agent_result, dict):
+            fp_agent_result = {"results": [], "raw": str(fp_agent_result)}
         fp_compact = compact_tool_result(fp_agent_result, fp_task)
         try:
             fp_resp = adapter.converse_with_tools(
@@ -159,7 +257,7 @@ def run(
         token_usage["elapsed_seconds"] = round(time.time() - start_time, 2)
         question_type = _safe_infer_question_type(_infer_question_type, fp_task, _fp_params, "unknown")
 
-        last_results = fp_agent_result.get("results", [])
+        last_results = fp_agent_result.get("results") or []
         last_sql = fp_agent_result.get("sql", None)
         agent_trace = [{"agent": "fast_path", "task": fp_task, "success": True}]
 
@@ -179,10 +277,10 @@ def run(
 
         return {
             "query": user_question,
-            "answer": final_answer,
+            "answer": final_answer or "No answer generated.",
             "question_type": question_type,
             "sql": last_sql,
-            "results": last_results,
+            "results": last_results or [],
             "agent_trace": agent_trace,
             "token_usage": token_usage,
             "total_count": len(last_results) if isinstance(last_results, list) else None,
@@ -226,7 +324,7 @@ def run(
                 "answer": f"Error: LLM call failed — {e}",
                 "question_type": "error",
                 "sql": last_sql,
-                "results": last_results,
+                "results": last_results or [],
                 "agent_trace": agent_trace,
                 "token_usage": token_usage,
                 "total_count": None,
@@ -261,13 +359,17 @@ def run(
 
                 if not isinstance(params, dict):
                     params = {}
-                if "organization_id" not in params:
-                    params["organization_id"] = organization_id
+                params["organization_id"] = organization_id
 
-                if tool_name == "finance_agent" and task == "execute_sql" and not params.get("sql"):
-                    fallback_sql = _generate_sql_fallback(adapter, user_question, system_prompt, organization_id)
-                    if fallback_sql:
-                        params["sql"] = fallback_sql
+                if tool_name == "finance_agent" and task == "execute_sql":
+                    if not params.get("sql"):
+                        fallback_sql = _generate_sql_fallback(adapter, user_question, system_prompt, organization_id)
+                        if fallback_sql:
+                            params["sql"] = fallback_sql
+                    if params.get("sql"):
+                        # Phase F safety gap 1: Belt-and-suspenders read-only check
+                        assert_read_only(params["sql"])
+                        params["sql"] = enforce_tenant_isolation_sql(params["sql"], organization_id)
 
                 try:
                     agent_result = handler(task, params)
@@ -340,7 +442,7 @@ def run(
         "answer": final_answer or "No answer generated.",
         "question_type": question_type,
         "sql": last_sql,
-        "results": last_results,
+        "results": last_results or [],
         "agent_trace": agent_trace,
         "token_usage": token_usage,
         "total_count": len(last_results) if isinstance(last_results, list) and last_results else None,
@@ -370,7 +472,7 @@ def _generate_sql_fallback(adapter: Any, question: str, system_prompt: str, org_
         if sql.lower().startswith("sql\n"):
             sql = sql[4:].strip()
         if sql.upper().startswith("SELECT"):
-            return sql
+            return enforce_tenant_isolation_sql(sql, org_id)
     except Exception as e:
         logger.warning("Fallback SQL generation failed: %s", e)
     return ""
@@ -396,7 +498,8 @@ def _force_answer(adapter: Any, question: str, system_prompt: str, messages: Lis
                 system_prompt=(
                     "You are a financial data assistant. Present database results clearly: "
                     "list records by reference/ID with key details. Never describe the SQL. "
-                    "Never say 'the query searches'. Just answer directly."
+                    "Never say 'the query searches'. Just answer directly.\n"
+                    + NEVER_EXPOSE_BACKEND_RULE
                 ),
                 messages=force_msg,
                 tools=[],
@@ -436,15 +539,18 @@ def _graceful_no_data_answer(adapter: Any, question: str, system_prompt: str, ag
                 "When a database query was attempted but returned no data or failed, "
                 "you must give a clear, professional explanation. "
                 "Never say 'Let me try' or use thinking-out-loud language. "
-                "Be direct: explain what data is or isn't available and why."
+                "Be direct: explain what data is or isn't available and why.\n"
+                + NEVER_EXPOSE_BACKEND_RULE
             ),
             messages=[{"role": "user", "content": [{"text": (
                 f"Question: {question}\n\n"
                 f"The database queries were attempted but returned no results. "
-                f"Query errors encountered: {error_summary}\n\n"
-                "Please give a clear professional answer explaining:\n"
+                f"Internal error detail (for your understanding only, never quote or "
+                f"paraphrase this to the user): {error_summary}\n\n"
+                "Please give a clear professional answer explaining, in plain business terms:\n"
                 "1. What specific data was not found\n"
-                "2. Why it might not be available (if you can infer from the schema)\n"
+                "2. A plausible business reason it might not be available (e.g. no matching "
+                "records for this period/filter) — never a technical or schema-based reason\n"
                 "3. What alternative data or analysis could be provided instead\n"
                 "Be concise. Do NOT say 'Let me try' or attempt further queries."
             )}]}],

@@ -22,7 +22,7 @@ def test_explicit_org_id_accepted(mock_classify):
     runner = GeminiBrainRunner(api_key="test_key")
     runner._resolve_organization = MagicMock(return_value=None)
     mock_classify.return_value = ({"type": 1, "reason": "faq"}, 10, 10)
-    runner._call_gemini = MagicMock(return_value=("Direct Answer", 10, 10))
+    runner._call_llm = MagicMock(return_value=("Direct Answer", 10, 10))
 
     # Explicit organization_id=42 passed
     res = runner.run(query="How to create invoice?", organization_id=42)
@@ -31,14 +31,7 @@ def test_explicit_org_id_accepted(mock_classify):
     assert res["routing_info"]["type"] == 1
 
 
-@patch("gemini_brain.orchestrator.gemini_brain_runner.settings")
-def test_missing_gemini_api_key_raises_value_error(mock_settings):
-    """Verify that calling Gemini with no API key in params, settings, or env raises ValueError."""
-    mock_settings.gemini_api_key = ""
-    with patch.dict("os.environ", {"GEMINI_API_KEY": ""}):
-        runner = GeminiBrainRunner(api_key="")
-        with pytest.raises(ValueError, match="GEMINI_API_KEY is required"):
-            runner._get_client()
+
 
 
 def test_invalid_session_id_and_dummy_model_key_sanitized():

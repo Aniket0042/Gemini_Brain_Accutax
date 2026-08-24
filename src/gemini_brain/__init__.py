@@ -7,8 +7,15 @@ Accutax REST API as the source of truth for live financial data.
 """
 from __future__ import annotations
 
-from gemini_brain.config.settings import settings
-from gemini_brain.orchestrator.gemini_brain_runner import GeminiBrainRunner
-
 __version__ = "0.1.0"
 __all__ = ["GeminiBrainRunner", "settings"]
+
+
+def __getattr__(name: str):
+    if name == "settings":
+        from gemini_brain.config.settings import settings
+        return settings
+    if name == "GeminiBrainRunner":
+        from gemini_brain.orchestrator.gemini_brain_runner import GeminiBrainRunner
+        return GeminiBrainRunner
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

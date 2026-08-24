@@ -11,13 +11,16 @@ from typing import Dict, Optional
 from gemini_brain.config.settings import settings
 
 
+from gemini_brain.router.rules import ROUTING_RULES
+
+
 def keyword_endpoint_fallback(
     query: str,
     org_id: int,
     today: datetime.date,
     user_id: str = "",
 ) -> Optional[Dict]:
-    """Hardcoded keyword fallback mapping for endpoints Gemini fails to select.
+    """Declarative keyword fallback mapping derived from unified ROUTING_RULES.
 
     Parameters
     ----------
@@ -40,82 +43,60 @@ def keyword_endpoint_fallback(
     td = today.isoformat()
     uid = user_id or settings.accutax_user_id
 
-    # Cash forecast / projection
-    if any(
-        k in q
-        for k in [
-            "cash forecast",
-            "forecast cash",
-            "cash flow forecast",
-            "cash projection",
-            "projected cash",
-            "next.*month.*cash",
-            "forecast.*cash",
-            "cash.*next",
-        ]
-    ):
-        return {
-            "endpoint": "/report/cash-forecast",
-            "method": "GET",
-            "path_params": {},
-            "query_params": {
-                "organization_id": str(org_id),
-                "start_date": td,
-                "end_date": today.replace(
-                    year=today.year, month=min(today.month + 3, 12), day=1
-                ).isoformat(),
-            },
-            "reason": "keyword_fallback",
-        }
+    for r in ROUTING_RULES:
+        if not r.keyword_triggers:
+            continue
 
-    # Total income / sales
-    if any(
-        k in q
-        for k in [
-            "total sales",
-            "total revenue",
-            "total income",
-            "how much.*income",
-            "how much.*revenue",
-            "how much.*sales",
-        ]
-    ):
-        return {
-            "endpoint": "/income/total",
-            "method": "GET",
-            "path_params": {},
-            "query_params": {
-                "user_id": str(uid),
-                "filter_year": y_str,
-                "filter_type": "YEARLY",
-                "organization_id": str(org_id),
-            },
-            "reason": "keyword_fallback",
-        }
-
-    # Total expenses
-    if any(
-        k in q
-        for k in [
-            "total expenses",
-            "total expense",
-            "total spending",
-            "total bills",
-            "how much.*expense",
-            "how much.*spend",
-        ]
-    ):
-        return {
-            "endpoint": "/expense/total",
-            "method": "GET",
-            "path_params": {},
-            "query_params": {
-                "user_id": str(uid),
-                "filter_year": y_str,
-                "filter_type": "YEARLY",
-                "organization_id": str(org_id),
-            },
-            "reason": "keyword_fallback",
-        }
+        if any(k in q for k in r.keyword_triggers):
+            if r.endpoint == "/report/cash-forecast":
+                return {
+                    "endpoint": "/report/cash-forecast",
+                    "method": "GET",
+                    "path_params": {},
+                    "query_params": {
+                        "organization_id": str(org_id),
+                        "start_date": td,
+                        "end_date": today.replace(
+                            year=today.year, month=min(today.month + 3, 12), day=1
+                        ).isoformat(),
+                    },
+                    "reason": "keyword_fallback",
+                }
+            elif r.endpoint in ("/income/total", "/expense/total"):
+                return {
+                    "endpoint": r.endpoint,
+                    "method": "GET",
+                    "path_params": {},
+                    "query_params": {
+                        "user_id": str(uid),
+                        "filter_year": y_str,
+                        "filter_type": "YEARLY",
+                        "organization_id": str(org_id),
+                    },
+                    "reason": "keyword_fallback",
+                }
+            elif r.endpoint in ("/report/profit-loss", "/report/balance-sheet", "/report/cash-flow"):
+                return {
+                    "endpoint": r.endpoint,
+                    "method": "GET",
+                    "path_params": {},
+                    "query_params": {
+                        "organization_id": str(org_id),
+                        "start_date": f"{y_str}-01-01",
+                        "end_date": td,
+                    },
+                    "reason": "keyword_fallback",
+                }
+            else:
+                return {
+                    "endpoint": r.endpoint,
+                    "method": "GET",
+                    "path_params": {},
+                    "query_params": {
+                        "organization_id": str(org_id),
+                    },
+                    "reason": "keyword_fallback",
+                }
 
     return None
+

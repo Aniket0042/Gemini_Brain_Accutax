@@ -5,23 +5,55 @@ import { QueryInput } from './components/QueryInput';
 import { ResponseView } from './components/ResponseView';
 import { TenantLoginModal } from './components/TenantLoginModal';
 import { ModelHealthModal } from './components/ModelHealthModal';
-import { fetchQueryResponse, streamQueryResponse } from './services/api';
+import { fetchQueryResponse, streamQueryResponse, fetchTenants } from './services/api';
 import { Sparkles, Trash2 } from 'lucide-react';
 
-const ORG_NAME_MAP = {
-  69: 'Accutax LLC (Primary Tenant)',
-  27: 'Manufacturing Corp (Secondary Tenant)',
-  18: 'TechSolutions Inc (Enterprise Tenant)',
-  14: 'Organization #14',
-  44: 'Global Logistics (Multi Tenant)',
-};
+const DEFAULT_ORGANIZATIONS = [
+  {
+    id: 27,
+    organization_id: 27,
+    name: 'Professional & Consulting Services_User1_Org4',
+    display_name: 'Professional & Consulting Services',
+    tag: 'Financials & GL Leader',
+    badge_color: '#10b981',
+    description: 'Deepest General Ledger, 12.9k invoices (AED 94M), 98.7% posted, P&L, balance sheets, and top customers.',
+  },
+  {
+    id: 25,
+    organization_id: 25,
+    name: 'Construction & Real Estate_User1_Org2',
+    display_name: 'Construction & Real Estate (VAT & Payments)',
+    tag: 'VAT & Supplier Payments',
+    badge_color: '#a855f7',
+    description: 'Sole holder of VAT/tax data in DB (AED 5.65M VAT) and 1,786 supplier payments.',
+  },
+  {
+    id: 154,
+    organization_id: 154,
+    name: 'Healthcare & Pharmaceuticals_User12_Org1',
+    display_name: 'Healthcare & Pharmaceuticals',
+    tag: 'Full Modules & Audit',
+    badge_color: '#6366f1',
+    description: 'Balanced financial records with 12.7k audit trail rows and 2.9k invoice history records.',
+  },
+  {
+    id: 28,
+    organization_id: 28,
+    name: 'Construction & Real Estate_User1_Org5',
+    display_name: 'Construction & Real Estate (Secondary)',
+    tag: 'Clean Secondary Tenant',
+    badge_color: '#f59e0b',
+    description: '5.9k invoices (AED 44.8M), 4.7k bills, 98.4% GL linkage — ideal for multi-tenant isolation testing.',
+  },
+];
 
 export default function App() {
   // Current Authenticated User & Token State
   const [currentUser, setCurrentUser] = useState(null);
 
   // Active Tenant Context State
-  const [activeTenant, setActiveTenant] = useState(null);
+  const [activeTenant, setActiveTenant] = useState(DEFAULT_ORGANIZATIONS[0]);
+  const [availableTenants, setAvailableTenants] = useState(DEFAULT_ORGANIZATIONS);
 
   // UI Modals State
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -46,7 +78,7 @@ export default function App() {
       try {
         const parsed = JSON.parse(savedUser);
         setCurrentUser(parsed);
-        initTenantFromUser(parsed);
+        loadUserTenants(parsed.access_token, parsed);
       } catch (e) {
         localStorage.removeItem('gemini_brain_user');
       }
@@ -60,16 +92,59 @@ export default function App() {
     }
   }, [responseData, isLoading, streamLogs, conversation]);
 
+  // Load accessible tenants from API
+  const loadUserTenants = async (token, user) => {
+    try {
+      const data = await fetchTenants(token);
+      if (data && data.tenants && data.tenants.length > 0) {
+        setAvailableTenants(data.tenants);
+        const savedOrgId = localStorage.getItem('gemini_brain_active_org');
+        const matched = data.tenants.find((t) => String(t.id || t.organization_id) === String(savedOrgId)) || data.tenants[0];
+        setActiveTenant({
+          ...matched,
+          organization_id: matched.id || matched.organization_id,
+          user_id: user?.user_id || 18,
+          db_name: 'accutax_bk_1_5',
+        });
+        return;
+      }
+    } catch (e) {
+      console.warn('Could not load tenants from API, using default list:', e);
+    }
+    initTenantFromUser(user);
+  };
+
   // Helper to initialize active tenant from logged in user claims
   const initTenantFromUser = (user) => {
-    const allowed = user.allowed_org_ids || [];
-    const firstOrgId = allowed.length > 0 ? allowed[0] : 69;
+    const allowed = user?.allowed_org_ids || [];
+    const savedOrgId = localStorage.getItem('gemini_brain_active_org');
+    let selected = null;
+    if (savedOrgId) {
+      selected = DEFAULT_ORGANIZATIONS.find((o) => String(o.id) === String(savedOrgId));
+    }
+    if (!selected) {
+      const firstOrgId = allowed.length > 0 ? allowed[0] : 27;
+      selected = DEFAULT_ORGANIZATIONS.find((o) => o.id === firstOrgId) || DEFAULT_ORGANIZATIONS[0];
+    }
     setActiveTenant({
-      organization_id: firstOrgId,
-      org_name: ORG_NAME_MAP[firstOrgId] || `Tenant Organization #${firstOrgId}`,
-      user_id: user.user_id,
+      ...selected,
+      organization_id: selected.id || selected.organization_id,
+      user_id: user?.user_id || 18,
       db_name: 'accutax_bk_1_5',
     });
+  };
+
+  // Handle Switch Tenant from Dropdown
+  const handleSelectTenant = (tenantObj) => {
+    const orgId = tenantObj.id || tenantObj.organization_id;
+    const fullTenant = {
+      ...tenantObj,
+      organization_id: orgId,
+      user_id: currentUser?.user_id || 18,
+      db_name: 'accutax_bk_1_5',
+    };
+    setActiveTenant(fullTenant);
+    localStorage.setItem('gemini_brain_active_org', String(orgId));
   };
 
   // Handle successful login
@@ -83,7 +158,21 @@ export default function App() {
 
     localStorage.setItem('gemini_brain_user', JSON.stringify(userSession));
     setCurrentUser(userSession);
-    initTenantFromUser(userSession);
+
+    if (authResponse.tenants && authResponse.tenants.length > 0) {
+      setAvailableTenants(authResponse.tenants);
+      const firstT = authResponse.tenants[0];
+      const fullT = {
+        ...firstT,
+        organization_id: firstT.id || firstT.organization_id,
+        user_id: userSession.user_id,
+        db_name: 'accutax_bk_1_5',
+      };
+      setActiveTenant(fullT);
+      localStorage.setItem('gemini_brain_active_org', String(fullT.organization_id));
+    } else {
+      initTenantFromUser(userSession);
+    }
   };
 
   // Handle Logout
@@ -112,7 +201,13 @@ export default function App() {
 
     // 1. Add User Turn & Assistant Loading Placeholder to conversation
     const userTurn = { role: 'user', content: queryText };
-    const assistantTurn = { role: 'assistant', isStreaming: true, responseData: null };
+    const assistantTurn = { 
+      role: 'assistant', 
+      isStreaming: true, 
+      streamingText: '',
+      latestStatus: 'Understanding request',
+      responseData: null 
+    };
     setConversation((prev) => [...prev, userTurn, assistantTurn]);
 
     const payload = {
@@ -130,7 +225,48 @@ export default function App() {
       streamQueryResponse(
         payload,
         (chunk) => {
-          if (chunk.final_result) {
+          if (chunk.type === 'data_table' || chunk.table) {
+            const tableMarkdown = chunk.table || '';
+            setConversation((prev) => {
+              const updated = [...prev];
+              const lastIdx = updated.length - 1;
+              if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+                updated[lastIdx] = {
+                  ...updated[lastIdx],
+                  tableData: tableMarkdown,
+                  latestStatus: chunk.status || 'Data table loaded',
+                };
+              }
+              return updated;
+            });
+          } else if (chunk.type === 'notice' || chunk.notice) {
+            const noticeObj = chunk.notice;
+            setConversation((prev) => {
+              const updated = [...prev];
+              const lastIdx = updated.length - 1;
+              if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+                updated[lastIdx] = {
+                  ...updated[lastIdx],
+                  notice: noticeObj,
+                };
+              }
+              return updated;
+            });
+          } else if (chunk.token || chunk.type === 'token') {
+            const tokenStr = chunk.token || '';
+            setConversation((prev) => {
+              const updated = [...prev];
+              const lastIdx = updated.length - 1;
+              if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+                updated[lastIdx] = {
+                  ...updated[lastIdx],
+                  streamingText: (updated[lastIdx].streamingText || '') + tokenStr,
+                  latestStatus: chunk.status || updated[lastIdx].latestStatus,
+                };
+              }
+              return updated;
+            });
+          } else if (chunk.final_result) {
             setConversation((prev) => {
               const updated = [...prev];
               const lastIdx = updated.length - 1;
@@ -138,19 +274,47 @@ export default function App() {
                 updated[lastIdx] = {
                   ...updated[lastIdx],
                   responseData: chunk.final_result,
+                  notice: chunk.final_result.notice || updated[lastIdx].notice,
+                  tableData: chunk.final_result.table_markdown || updated[lastIdx].tableData,
+                  streamingText: chunk.final_result.answer || updated[lastIdx].streamingText,
+                  isStreaming: false,
                 };
               }
               return updated;
             });
             setResponseData(chunk.final_result);
+          } else if (chunk.status) {
+            setConversation((prev) => {
+              const updated = [...prev];
+              const lastIdx = updated.length - 1;
+              if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+                updated[lastIdx] = {
+                  ...updated[lastIdx],
+                  latestStatus: chunk.status,
+                };
+              }
+              return updated;
+            });
+            setStreamLogs((prev) => [...prev, chunk]);
           } else {
             setStreamLogs((prev) => [...prev, chunk]);
           }
         },
         (errMessage) => {
+          const fallbackNotice = {
+            kind: 'failed',
+            code: 'INTERNAL_ERROR',
+            title: 'Request Failed',
+            message: errMessage,
+            suggestions: ['Try rephrasing your question', 'Try again in a moment'],
+            retryable: true,
+          };
           const errorRes = {
-            answer: `Error: ${errMessage}`,
+            answer: errMessage,
             error: errMessage,
+            status: 'failed',
+            notice: fallbackNotice,
+            results: [],
             token_usage: { input_tokens: 0, output_tokens: 0, llm_calls: 0, cost_usd: 0, elapsed_seconds: 0 },
             agent_trace: [],
           };
@@ -161,6 +325,8 @@ export default function App() {
               updated[lastIdx] = {
                 ...updated[lastIdx],
                 responseData: errorRes,
+                notice: fallbackNotice,
+                streamingText: errorRes.answer,
                 isStreaming: false,
               };
             }
@@ -185,7 +351,8 @@ export default function App() {
         },
         token
       );
-    } else {
+    }
+ else {
       // Synchronous API Call
       try {
         const res = await fetchQueryResponse(payload, token);
@@ -196,6 +363,7 @@ export default function App() {
             updated[lastIdx] = {
               ...updated[lastIdx],
               responseData: res,
+              streamingText: res.answer,
               isStreaming: false,
             };
           }
@@ -216,6 +384,7 @@ export default function App() {
             updated[lastIdx] = {
               ...updated[lastIdx],
               responseData: errorRes,
+              streamingText: errorRes.answer,
               isStreaming: false,
             };
           }
@@ -241,8 +410,9 @@ export default function App() {
       {/* Top Header Navigation */}
       <Header
         tenant={activeTenant}
+        availableTenants={availableTenants}
         currentUser={currentUser}
-        onOpenAuthModal={() => setShowAuthModal(true)}
+        onSelectTenant={handleSelectTenant}
         onOpenHealthModal={() => setShowHealthModal(true)}
         onLogout={handleLogout}
       />
@@ -292,6 +462,7 @@ export default function App() {
                 isLoading={isLoading}
                 streamLogs={streamLogs}
                 activeTenant={activeTenant}
+                onRegenerate={handleSubmitQuery}
               />
             </div>
           )}

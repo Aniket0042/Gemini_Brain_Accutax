@@ -1,9 +1,11 @@
 """
 endpoint_selector.py — Gemini-driven API endpoint selection.
 
-Extracted from gemini_brain_adapter.py lines 71-110 (_API_SELECTOR_SYSTEM)
-and lines 190-225 (_select_endpoint).
-Uses verbatim prompt template, compact API_CATALOG, keyword fallback, and param normalization.
+Phase 1 optimization:
+- Restructured prompt for prefix caching ({catalog} and static rules at top, dynamic date/org/user at bottom).
+- Removed redundant question interpolation from system prompt (passed cleanly as user content).
+- Max tokens set to 200 (was 400).
+- Exception handler distinguishes transient router failures from no-match and triggers keyword fallback.
 """
 from __future__ import annotations
 
@@ -15,21 +17,16 @@ from gemini_brain.config.api_catalog import API_CATALOG
 from gemini_brain.config.settings import settings
 from gemini_brain.endpoints.keyword_fallback import keyword_endpoint_fallback
 from gemini_brain.endpoints.param_normalizer import normalize_endpoint_params
+from gemini_brain.observability.metrics import METRICS
 
 logger = logging.getLogger("gemini_brain.endpoints.endpoint_selector")
 
-# ── Verbatim System Prompt ───────────────────────────────────────────────────
+# ── Prefix-Cached System Prompt Template (Static blocks at top) ───────────────
 API_SELECTOR_SYSTEM_PROMPT: str = """You are an API endpoint selector for Accutax, a cloud-based accounting system.
 Select the BEST REST API endpoint for the user question and build its query parameters.
 Return ONLY valid JSON — no markdown, no explanation.
 
-TODAY: {today}
-ORG_ID: {org_id}
-USER_ID: {user_id}
-MONTH_START: {month_start}
-YEAR_START: {year_start}
-QUARTER_START: {quarter_start}
-
+API CATALOG:
 {catalog}
 
 QUICK REFERENCE — use these exact endpoints for these query types:
@@ -55,20 +52,31 @@ RULES:
 - CRITICAL for /income/total and /expense/total: params MUST be user_id="{user_id}" (snake_case string), filter_year="2026" (4-digit year as string), filter_type="YEARLY". Do NOT use start_date, end_date, or userId for these endpoints.
 - If no endpoint fits, return {{"endpoint": null, "reason": "no_api_match"}}
 
-USER QUESTION: {question}
+DYNAMIC CONTEXT:
+TODAY: {today}
+ORG_ID: {org_id}
+USER_ID: {user_id}
+MONTH_START: {month_start}
+YEAR_START: {year_start}
+QUARTER_START: {quarter_start}
 
 Return JSON:
 {{"endpoint": "/path/to/endpoint", "method": "GET", "path_params": {{}}, "query_params": {{"key": "value"}}, "reason": "..."}}"""
+
+
+from gemini_brain.router.llm_router import select_endpoint_structured
 
 
 def select_endpoint(
     query: str,
     org_id: int,
     call_gemini: Callable[[str, str, int], Tuple[str, int, int]],
-    parse_json: Callable[[str, Dict], Dict],
+    parse_json: Optional[Callable[[str, Dict], Dict]] = None,
     user_id: str = "",
+    session_state: Optional[Dict[str, Any]] = None,
+    feedback: Optional[str] = None,
 ) -> Tuple[Optional[Dict], int, int]:
-    """Select the best REST API endpoint for query using Gemini 2.5 Flash.
+    """Select the best REST API endpoint for query using Gemini Structured Function Calling.
 
     Parameters
     ----------
@@ -78,10 +86,14 @@ def select_endpoint(
         Organization ID.
     call_gemini : callable
         ``(system, user_text, max_tokens) -> (text, input_tokens, output_tokens)``
-    parse_json : callable
-        ``(text, default_dict) -> dict``
+    parse_json : callable, optional
+        Legacy parser (retained for backward compatibility).
     user_id : str
         Default user ID string.
+    session_state : Optional[Dict[str, Any]]
+        Active session conversation context.
+    feedback : Optional[str]
+        Diagnostic feedback from a failed previous attempt for self-correction.
 
     Returns
     -------
@@ -90,33 +102,39 @@ def select_endpoint(
     """
     uid = user_id or settings.accutax_user_id
     today = datetime.date.today()
-    m_start = today.replace(day=1)
-    y_start = today.replace(month=1, day=1)
-    q_month = ((today.month - 1) // 3) * 3 + 1
-    q_start = today.replace(month=q_month, day=1)
-
-    prompt = API_SELECTOR_SYSTEM_PROMPT.format(
-        today=today.isoformat(),
-        org_id=org_id,
-        user_id=uid,
-        month_start=m_start.isoformat(),
-        year_start=y_start.isoformat(),
-        quarter_start=q_start.isoformat(),
-        catalog=API_CATALOG,
-        question=query,
-    )
 
     try:
-        text, ri, ro = call_gemini(prompt, query, max_tokens=400)
-        sel = parse_json(text, {"endpoint": None})
-        if not sel.get("endpoint"):
-            # Keyword fallback for endpoints Gemini frequently misses
-            sel = keyword_endpoint_fallback(query, org_id, today, user_id=uid)
-            if not sel:
-                return None, ri, ro
+        sel, ri, ro = select_endpoint_structured(
+            query=query,
+            org_id=org_id,
+            call_gemini=call_gemini,
+            user_id=uid,
+            session_state=session_state,
+            feedback=feedback,
+        )
+
+        if not sel or not sel.get("endpoint"):
+            # Keyword fallback for edge cases
+            kw_sel = keyword_endpoint_fallback(query, org_id, today, user_id=uid)
+            if kw_sel:
+                sel = normalize_endpoint_params(kw_sel, org_id, today, user_id=uid)
+                logger.info("GeminiBrain keyword fallback selected endpoint: %s", sel.get("endpoint"))
+                return sel, ri, ro
+            return None, ri, ro
+
         sel = normalize_endpoint_params(sel, org_id, today, user_id=uid)
-        logger.info("GeminiBrain selected endpoint: %s", sel["endpoint"])
+        logger.info("GeminiBrain structured router selected endpoint: %s (tool=%s)", sel.get("endpoint"), sel.get("tool_name"))
         return sel, ri, ro
+
     except Exception as e:
-        logger.warning("Endpoint selection failed: %s", e)
+        logger.warning(
+            "structured endpoint selection transient failure: %s", e, extra={"query": query}
+        )
+        METRICS.router_transient_failures.inc()
+        sel = keyword_endpoint_fallback(query, org_id, today, user_id=uid)
+        if sel:
+            sel = normalize_endpoint_params(sel, org_id, today, user_id=uid)
+            logger.info("GeminiBrain emergency fallback selected endpoint: %s", sel["endpoint"])
+            return sel, 0, 0
         return None, 0, 0
+

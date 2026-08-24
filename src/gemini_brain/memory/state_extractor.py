@@ -56,32 +56,47 @@ def update_conversation_state_hybrid_by_session(
     for entry in agent_trace:
         if not isinstance(entry, dict):
             continue
-        params = entry.get("params", {})
-        if not isinstance(params, dict):
-            continue
 
-        bank = params.get("bank_account") or params.get("bank_name")
-        if bank:
-            state["bank_account"] = bank
+        endpoint = entry.get("endpoint")
+        if endpoint and endpoint.startswith("/"):
+            state["last_executed_task"] = endpoint
             heuristic_updated = True
 
-        contact = (
-            params.get("customer") or params.get("vendor") or params.get("contact")
-        )
-        if contact:
-            state["contact_name"] = contact
-            heuristic_updated = True
+        params = entry.get("params", {}) or entry.get("query_params", {})
+        if isinstance(params, dict):
+            bank = params.get("bank_account") or params.get("bank_name")
+            if bank:
+                state["bank_account"] = str(bank)
+                heuristic_updated = True
 
-        filters = params.get("filters", {})
-        if isinstance(filters, dict):
-            year = filters.get("year")
+            contact = (
+                params.get("customer") or params.get("vendor") or params.get("contact") or params.get("customer_name")
+            )
+            if contact:
+                state["contact_name"] = str(contact)
+                heuristic_updated = True
+
+            year = params.get("filter_year") or params.get("year")
+            if not year and params.get("start_date"):
+                # e.g. "2026-01-01" -> 2026
+                dt_str = str(params["start_date"])
+                if len(dt_str) >= 4 and dt_str[:4].isdigit():
+                    year = dt_str[:4]
+
             if year:
                 state["active_year"] = str(year)
                 heuristic_updated = True
-            c = filters.get("customer") or filters.get("vendor")
-            if c:
-                state["contact_name"] = c
-                heuristic_updated = True
+
+            filters = params.get("filters", {})
+            if isinstance(filters, dict):
+                f_year = filters.get("year")
+                if f_year:
+                    state["active_year"] = str(f_year)
+                    heuristic_updated = True
+                c = filters.get("customer") or filters.get("vendor")
+                if c:
+                    state["contact_name"] = str(c)
+                    heuristic_updated = True
 
         task = entry.get("task")
         if task and task != "execute_sql":

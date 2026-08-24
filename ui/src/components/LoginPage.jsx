@@ -1,41 +1,10 @@
 import React, { useState } from 'react';
-import { Brain, Lock, Mail, ShieldCheck, Sparkles, AlertCircle, ArrowRight, Eye, EyeOff, Building2 } from 'lucide-react';
+import { Brain, Lock, Mail, Sparkles, AlertCircle, ArrowRight, Eye, EyeOff, Building2, ShieldCheck } from 'lucide-react';
 import { loginUser } from '../services/api';
 
-const DEMO_ACCOUNTS = [
-  {
-    role: '🏢 Single-Tenant User',
-    email: 'user_single@example.com',
-    password: 'TestPass123!',
-    assignedOrgs: [14],
-    desc: 'Access strictly restricted to Org #14',
-  },
-  {
-    role: '🏬 Multi-Tenant User',
-    email: 'user_multi@example.com',
-    password: 'TestPass123!',
-    assignedOrgs: [14, 44],
-    desc: 'Authorized to switch between Org #14 & Org #44',
-  },
-  {
-    role: '👑 Admin User',
-    email: 'admin@accutax.com',
-    password: 'TestPass123!',
-    assignedOrgs: [69, 27, 18, 14, 44],
-    desc: 'Full access across all organization tenants',
-  },
-  {
-    role: '🚫 Restricted / Zero-Org User',
-    email: 'user_no_org@example.com',
-    password: 'TestPass123!',
-    assignedOrgs: [],
-    desc: 'Demonstrates security isolation blocking queries',
-  },
-];
-
 export const LoginPage = ({ onLoginSuccess }) => {
-  const [email, setEmail] = useState('admin@accutax.com');
-  const [password, setPassword] = useState('TestPass123!');
+  const [email, setEmail] = useState('genthird456@gmail.com');
+  const [password, setPassword] = useState('Password123$$');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -57,9 +26,9 @@ export const LoginPage = ({ onLoginSuccess }) => {
     }
   };
 
-  const handleAutofillDemo = (account) => {
-    setEmail(account.email);
-    setPassword(account.password);
+  const handleQuickFill = (demoEmail, demoPass) => {
+    setEmail(demoEmail);
+    setPassword(demoPass);
     setError(null);
   };
 
@@ -72,7 +41,7 @@ export const LoginPage = ({ onLoginSuccess }) => {
             <Brain size={32} color="#818cf8" />
           </div>
           <h2 style={styles.brandTitle}>Gemini Brain</h2>
-          <p style={styles.brandSubtitle}>Production Multi-Tenant AI Financial Control Portal</p>
+          <p style={styles.brandSubtitle}>AI Financial Orchestration & Multi-Tenant Portal</p>
         </div>
 
         {/* Error Alert Banner */}
@@ -86,7 +55,7 @@ export const LoginPage = ({ onLoginSuccess }) => {
         {/* Login Form */}
         <form onSubmit={handleSubmit} style={styles.form}>
           <div style={styles.inputGroup}>
-            <label style={styles.label}>Corporate Email Address</label>
+            <label style={styles.label}>Email Address</label>
             <div style={styles.inputWrapper}>
               <Mail size={18} color="#9ca3af" style={styles.inputIcon} />
               <input
@@ -126,41 +95,47 @@ export const LoginPage = ({ onLoginSuccess }) => {
             {isLoading ? (
               <>
                 <Sparkles size={18} className="pulse-animation" />
-                <span>Authenticating JWT & Tenant Claims...</span>
+                <span>Authenticating with Accutax API...</span>
               </>
             ) : (
               <>
-                <span>Sign In to Tenant Portal</span>
+                <span>Sign In to Portal</span>
                 <ArrowRight size={18} />
               </>
             )}
           </button>
         </form>
 
-        {/* Quick Pre-Seeded Accounts Selector */}
-        <div style={styles.demoSection}>
-          <div style={styles.demoHeader}>
-            <ShieldCheck size={14} color="#10b981" />
-            <span>Pre-Seeded Multi-Tenant Demo Accounts</span>
-          </div>
-
-          <div style={styles.demoGrid}>
-            {DEMO_ACCOUNTS.map((acc, idx) => (
-              <div
-                key={idx}
-                style={styles.demoChip}
-                onClick={() => handleAutofillDemo(acc)}
-                title={acc.desc}
-              >
-                <div style={styles.demoChipTop}>
-                  <span style={styles.demoRole}>{acc.role}</span>
-                  <span className={acc.assignedOrgs.length > 0 ? "badge badge-emerald" : "badge badge-rose"}>
-                    {acc.assignedOrgs.length > 0 ? `${acc.assignedOrgs.length} Org(s)` : 'No Orgs'}
-                  </span>
-                </div>
-                <span style={styles.demoEmail}>{acc.email}</span>
+        {/* Quick Demo Credentials */}
+        <div style={styles.quickFillSection}>
+          <p style={styles.quickFillTitle}>
+            <Building2 size={13} color="#818cf8" />
+            <span>Preconfigured Multi-Tenant Accounts</span>
+          </p>
+          <div style={styles.quickFillGrid}>
+            <button
+              type="button"
+              style={styles.quickFillBtn}
+              onClick={() => handleQuickFill('genthird456@gmail.com', 'Password123$$')}
+            >
+              <div style={styles.quickFillBtnHeader}>
+                <span style={styles.quickFillEmail}>genthird456@gmail.com</span>
+                <span style={styles.quickFillBadge}>Accutax Live</span>
               </div>
-            ))}
+              <span style={styles.quickFillDesc}>All 4 Orgs (27, 25, 154, 28)</span>
+            </button>
+
+            <button
+              type="button"
+              style={styles.quickFillBtn}
+              onClick={() => handleQuickFill('admin_all@accutax.com', 'AdminPass123!')}
+            >
+              <div style={styles.quickFillBtnHeader}>
+                <span style={styles.quickFillEmail}>admin_all@accutax.com</span>
+                <span style={styles.quickFillBadge}>Admin</span>
+              </div>
+              <span style={styles.quickFillDesc}>Full Admin Tenant Access</span>
+            </button>
           </div>
         </div>
       </div>
@@ -182,13 +157,17 @@ const styles = {
     maxWidth: '460px',
     padding: '36px',
     borderRadius: '20px',
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    backdropFilter: 'blur(20px)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)',
   },
   brandHeader: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     textAlign: 'center',
-    marginBottom: '28px',
+    marginBottom: '24px',
   },
   brandIconBox: {
     width: '56px',
@@ -205,6 +184,7 @@ const styles = {
   brandTitle: {
     fontSize: '1.75rem',
     fontWeight: 700,
+    color: '#ffffff',
     marginBottom: '4px',
   },
   brandSubtitle: {
@@ -226,7 +206,7 @@ const styles = {
   form: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '18px',
+    gap: '16px',
   },
   inputGroup: {
     display: 'flex',
@@ -250,14 +230,14 @@ const styles = {
   },
   input: {
     width: '100%',
-    padding: '12px 14px 12px 42px',
+    padding: '12px 42px 12px 42px',
     borderRadius: '10px',
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    border: '1px solid rgba(255, 255, 255, 0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
     color: '#ffffff',
-    fontSize: '0.925rem',
+    fontSize: '0.9rem',
     outline: 'none',
-    transition: 'border-color 0.2s ease',
+    transition: 'border-color 0.2s',
   },
   eyeBtn: {
     position: 'absolute',
@@ -265,60 +245,81 @@ const styles = {
     background: 'none',
     border: 'none',
     cursor: 'pointer',
+    padding: '4px',
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   submitBtn: {
-    width: '100%',
-    padding: '12px',
-    fontSize: '0.95rem',
-    marginTop: '6px',
-  },
-  demoSection: {
-    marginTop: '28px',
-    paddingTop: '20px',
-    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-  },
-  demoHeader: {
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: '8px',
-    fontSize: '0.78rem',
+    padding: '12px 20px',
+    borderRadius: '10px',
+    backgroundColor: '#6366f1',
+    border: 'none',
+    color: '#ffffff',
+    fontSize: '0.95rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+    marginTop: '6px',
+    boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)',
+    transition: 'all 0.2s',
+  },
+  quickFillSection: {
+    marginTop: '24px',
+    paddingTop: '18px',
+    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+  },
+  quickFillTitle: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontSize: '0.75rem',
     fontWeight: 600,
     color: '#9ca3af',
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
-    marginBottom: '12px',
+    marginBottom: '10px',
   },
-  demoGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '10px',
-  },
-  demoChip: {
-    padding: '10px 12px',
-    borderRadius: '10px',
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
+  quickFillGrid: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
+    gap: '8px',
   },
-  demoChipTop: {
+  quickFillBtn: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    padding: '8px 12px',
+    borderRadius: '8px',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    textAlign: 'left',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  },
+  quickFillBtnHeader: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  demoRole: {
+  quickFillEmail: {
     fontSize: '0.78rem',
     fontWeight: 600,
-    color: '#e5e7eb',
+    color: '#e2e8f0',
   },
-  demoEmail: {
-    fontSize: '0.725rem',
-    color: '#9ca3af',
-    fontFamily: 'var(--font-mono)',
+  quickFillBadge: {
+    fontSize: '0.65rem',
+    fontWeight: 600,
+    color: '#818cf8',
+    backgroundColor: 'rgba(99, 102, 241, 0.15)',
+    padding: '1px 6px',
+    borderRadius: '4px',
+  },
+  quickFillDesc: {
+    fontSize: '0.7rem',
+    color: '#94a3b8',
   },
 };

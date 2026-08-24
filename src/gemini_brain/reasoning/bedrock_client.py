@@ -7,11 +7,12 @@ supports Bedrock prompt caching (cachePoint), and handles cross-region inference
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import threading
 import time
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Generator, List, Optional, Union
 
 import boto3
 from botocore.exceptions import ClientError
@@ -72,6 +73,44 @@ def extract_text(response: Dict[str, Any]) -> str:
     """Pull all text blocks from a Bedrock Converse response dict."""
     content = response.get("output", {}).get("message", {}).get("content", [])
     return "\n".join(b["text"] for b in content if "text" in b)
+
+
+def _extract_text_with_passthrough_fallback(content: List[Dict[str, Any]]) -> str:
+    """Pull text blocks from Converse content, falling back to whatever tool
+    call the model made if it answered via `toolUse` instead of plain text.
+
+    Cross-region model IDs always carry PASS_THROUGH_TOOL_CONFIG (see
+    _call() below) even though its description tells the model never to call
+    it. Claude sometimes calls it anyway — especially for JSON-shaped answers
+    like intent classification — and puts the real answer in `input.note`
+    instead of a text block, which the plain text-block join otherwise misses
+    entirely (empty string despite real output tokens spent).
+
+    A second, related case: when the system prompt itself documents a catalog
+    of real tool names (e.g. the endpoint router's tool list), Claude can call
+    `toolUse` with one of *those* names and real parameters — e.g.
+    {"name": "purchases_by_vendor", "input": {"period": "2025"}} — even though
+    only "passthrough" was actually declared via toolConfig. That's a better
+    answer than the passthrough note, not a malformed one: re-serialize it as
+    {"name":..., "parameters":...} JSON, the exact shape callers like
+    parse_function_call() already know how to parse.
+    """
+    text = "\n".join(b["text"] for b in content if "text" in b)
+    if text:
+        return text
+    for b in content:
+        tool_use = b.get("toolUse")
+        if not tool_use:
+            continue
+        name = tool_use.get("name")
+        tool_input = tool_use.get("input") or {}
+        if name == "passthrough":
+            note = tool_input.get("note")
+            if note:
+                return str(note)
+            continue
+        return json.dumps({"name": name, "parameters": tool_input})
+    return text
 
 
 # ── BedrockAdapter class ─────────────────────────────────────────────────────
@@ -147,7 +186,7 @@ class BedrockAdapter:
             resp = client.converse(**kwargs)
             self._track_usage(resp.get("usage", {}))
             content = resp.get("output", {}).get("message", {}).get("content", [])
-            return "\n".join(b["text"] for b in content if "text" in b)
+            return _extract_text_with_passthrough_fallback(content)
 
         try:
             return retry_with_backoff(_call)
@@ -160,6 +199,49 @@ class BedrockAdapter:
                 system[:] = [{"text": plain}]
                 return retry_with_backoff(_call)
             raise
+
+    def converse_stream(
+        self,
+        system_prompt: Union[str, List[Dict[str, Any]]],
+        messages: List[Dict[str, Any]],
+        temperature: float = 0.0,
+        max_tokens: int = settings.bedrock_max_tokens,
+    ) -> Generator[str, None, None]:
+        """Stream text tokens using Bedrock converse_stream API."""
+        system = self._build_system_array(system_prompt)
+        client = get_bedrock_client()
+        kwargs: Dict[str, Any] = dict(
+            modelId=self.model_id,
+            system=system,
+            messages=messages,
+            inferenceConfig={"maxTokens": max_tokens, "temperature": temperature},
+        )
+        if any(self.model_id.startswith(p) for p in CROSS_REGION_PREFIXES):
+            kwargs["toolConfig"] = PASS_THROUGH_TOOL_CONFIG
+
+        try:
+            resp = client.converse_stream(**kwargs)
+        except Exception as e:
+            err = str(e).lower()
+            if "cachepoint" in err or "cache_point" in err or "prompt caching" in err:
+                BedrockAdapter._cache_point_enabled = False
+                logger.warning("Prompt caching not supported for %s — disabling", self.model_id)
+                plain = system_prompt if isinstance(system_prompt, str) else ""
+                kwargs["system"] = [{"text": plain}]
+                resp = client.converse_stream(**kwargs)
+            else:
+                raise
+
+        stream = resp.get("stream")
+        if stream:
+            for event in stream:
+                if "contentBlockDelta" in event:
+                    delta = event["contentBlockDelta"].get("delta", {})
+                    if "text" in delta:
+                        yield delta["text"]
+                elif "metadata" in event:
+                    usage = event["metadata"].get("usage", {})
+                    self._track_usage(usage)
 
     def converse_with_tools(
         self,

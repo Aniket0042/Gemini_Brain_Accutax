@@ -1,0 +1,802 @@
+[
+  {
+    "id": "Q01",
+    "query": "What is our total revenue this year?",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/income/total",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {"filter_type": "YEARLY"}
+  },
+  {
+    "id": "Q02",
+    "query": "total sales 2026",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/income/total",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {"filter_type": "YEARLY", "filter_year": "2026"}
+  },
+  {
+    "id": "Q03",
+    "query": "How much income did we generate this month?",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/income/total",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {"filter_type": "MONTHLY"}
+  },
+  {
+    "id": "Q04",
+    "query": "Total expenses for 2026",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/expense/total",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {"filter_year": "2026"}
+  },
+  {
+    "id": "Q05",
+    "query": "Total spending this quarter",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/expense/total",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q06",
+    "query": "Show Profit and Loss statement for this year",
+    "expected_intent": 3,
+    "category": "Financial Report",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/report/profit-loss",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q07",
+    "query": "P&L statement for 2026",
+    "expected_intent": 3,
+    "category": "Financial Report",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/report/profit-loss",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q08",
+    "query": "Show Balance Sheet as of today",
+    "expected_intent": 3,
+    "category": "Financial Report",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/report/balance-sheet",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q09",
+    "query": "Cash flow statement for this year",
+    "expected_intent": 3,
+    "category": "Financial Report",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/report/cash-flow",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q10",
+    "query": "Expected cash flow projection for next month",
+    "expected_intent": 5,
+    "category": "Forecast",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/report/cash-forecast",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {"months": 6}
+  },
+  {
+    "id": "Q11",
+    "query": "Who owes us overdue invoices aging report",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/report/ar-aging-summary",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q12",
+    "query": "Show customer balance summary",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/report/customer-balance-summary",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q13",
+    "query": "List top customers by revenue",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/report/sales-by-customer",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q14",
+    "query": "Show expenses by category for this year",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/report/expense-by-category",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q15",
+    "query": "What is our current bank balance?",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/bank/manual/accounts",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q16",
+    "query": "Show all uncategorized bank transactions",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/bank/manual/unassigned-transactions",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q17",
+    "query": "How are we doing? Give me a business health check",
+    "expected_intent": 7,
+    "category": "Strategic Advice",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/report/profit-loss",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q18",
+    "query": "List all recent invoices",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/income/list",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q19",
+    "query": "Show all vendor bills",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/expense/list",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q20",
+    "query": "Show all our products and items",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/item/list",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q21",
+    "query": "Show project expenses rollup",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "fn_project_expense_rollup",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q22",
+    "query": "Show inventory movement history",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "fn_inventory_movement",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q23",
+    "query": "Show general ledger profitability by account",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "fn_gl_profitability",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q24",
+    "query": "How much money did our business make in 2026?",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "/income/total",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {"filter_type": "YEARLY", "filter_year": "2026"}
+  },
+  {
+    "id": "Q25",
+    "query": "What are our overall expenditures for this quarter?",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "/expense/total",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q26",
+    "query": "Give me the net earnings breakdown for the current period",
+    "expected_intent": 3,
+    "category": "Financial Report",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "/report/profit-loss",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q27",
+    "query": "What is our company net worth and asset breakdown?",
+    "expected_intent": 3,
+    "category": "Financial Report",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "/report/balance-sheet",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q28",
+    "query": "How much liquidity do we have in our bank accounts?",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "/bank/manual/accounts",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q29",
+    "query": "Which clients have the biggest unpaid balances?",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "/report/customer-balance-summary",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q30",
+    "query": "Who are our highest grossing buyers?",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "/report/sales-by-customer",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q31",
+    "query": "Show me our spending distribution across departments",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "/report/expense-by-category",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q32",
+    "query": "Fetch the full chart of accounts hierarchy",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "/chart-of-accounts",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q33",
+    "query": "Show general ledger postings for the cash account",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "/accounting/general-ledger",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q34",
+    "query": "List journal entries recorded last month",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "/accounting/journal-entries",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q35",
+    "query": "Who made deletions in the system recently?",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "/audit-logs",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q36",
+    "query": "Show our corporate branches",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "/branches",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q37",
+    "query": "List all active cost centers",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "/cost-centers",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q38",
+    "query": "Show active projects in the organization",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "/projects/list",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q39",
+    "query": "Find contact details for Acme Corp",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "/contact/find",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {"search": "Acme Corp"}
+  },
+  {
+    "id": "Q40",
+    "query": "Search for invoice INV-2026-001",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "/income/find",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {"search": "INV-2026-001"}
+  },
+  {
+    "id": "Q41",
+    "query": "totel revnue 2026",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "typo",
+    "expected_endpoint_or_task": "/income/total",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {"filter_year": "2026"}
+  },
+  {
+    "id": "Q42",
+    "query": "show profitt and losss statment",
+    "expected_intent": 3,
+    "category": "Financial Report",
+    "query_type": "typo",
+    "expected_endpoint_or_task": "/report/profit-loss",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q43",
+    "query": "balnce shet as of today",
+    "expected_intent": 3,
+    "category": "Financial Report",
+    "query_type": "typo",
+    "expected_endpoint_or_task": "/report/balance-sheet",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q44",
+    "query": "list all unpad invoiices",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "typo",
+    "expected_endpoint_or_task": "/income/list",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q45",
+    "query": "show expediture brakdown by categry",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "typo",
+    "expected_endpoint_or_task": "/report/expense-by-category",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q46",
+    "query": "what is accounts receivable aging?",
+    "expected_intent": 6,
+    "category": "Concept",
+    "query_type": "concept_guard",
+    "expected_endpoint_or_task": "gemini_direct",
+    "expected_layer": "left_path",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q47",
+    "query": "What is the difference between accrual and cash basis accounting?",
+    "expected_intent": 6,
+    "category": "Concept",
+    "query_type": "concept_guard",
+    "expected_endpoint_or_task": "gemini_direct",
+    "expected_layer": "left_path",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q48",
+    "query": "Explain what a credit note is and when to issue one",
+    "expected_intent": 6,
+    "category": "Concept",
+    "query_type": "concept_guard",
+    "expected_endpoint_or_task": "gemini_direct",
+    "expected_layer": "left_path",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q49",
+    "query": "Define accounts payable and its impact on working capital",
+    "expected_intent": 6,
+    "category": "Concept",
+    "query_type": "concept_guard",
+    "expected_endpoint_or_task": "gemini_direct",
+    "expected_layer": "left_path",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q50",
+    "query": "What is VAT and TRN registration requirement?",
+    "expected_intent": 6,
+    "category": "Concept",
+    "query_type": "concept_guard",
+    "expected_endpoint_or_task": "gemini_direct",
+    "expected_layer": "left_path",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q51",
+    "query": "How do I create a recurring invoice in Accutax?",
+    "expected_intent": 1,
+    "category": "FAQ/Guidance",
+    "query_type": "left_path",
+    "expected_endpoint_or_task": "gemini_direct",
+    "expected_layer": "left_path",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q52",
+    "query": "How do I record a journal entry with multiple tax lines?",
+    "expected_intent": 1,
+    "category": "FAQ/Guidance",
+    "query_type": "left_path",
+    "expected_endpoint_or_task": "gemini_direct",
+    "expected_layer": "left_path",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q53",
+    "query": "Where can I view bank reconciliation settings in the app?",
+    "expected_intent": 2,
+    "category": "FAQ/Guidance",
+    "query_type": "left_path",
+    "expected_endpoint_or_task": "gemini_direct",
+    "expected_layer": "left_path",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q54",
+    "query": "Where is the VAT audit report located in navigation?",
+    "expected_intent": 2,
+    "category": "FAQ/Guidance",
+    "query_type": "left_path",
+    "expected_endpoint_or_task": "gemini_direct",
+    "expected_layer": "left_path",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q55",
+    "query": "Give me strategic advice on improving our gross margins for next quarter",
+    "expected_intent": 7,
+    "category": "Strategic Advice",
+    "query_type": "left_path",
+    "expected_endpoint_or_task": "gemini_direct",
+    "expected_layer": "left_path",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q56",
+    "query": "Compare our monthly revenue growth against operating expense growth for Q1 vs Q2",
+    "expected_intent": 4,
+    "category": "Compound/Analytics",
+    "query_type": "compound",
+    "expected_endpoint_or_task": "dashboard_overview",
+    "expected_layer": "layer3_sql",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q57",
+    "query": "Show total sales for customer Acme from 2026-01-01 to 2026-06-30",
+    "expected_intent": 4,
+    "category": "Compound/Analytics",
+    "query_type": "compound",
+    "expected_endpoint_or_task": "/income/list",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {"start_date": "2026-01-01", "end_date": "2026-06-30"}
+  },
+  {
+    "id": "Q58",
+    "query": "List all vendor bills with status PENDING and total over 5000",
+    "expected_intent": 4,
+    "category": "Compound/Analytics",
+    "query_type": "compound",
+    "expected_endpoint_or_task": "/expense/list",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {"status": "PENDING"}
+  },
+  {
+    "id": "Q59",
+    "query": "What about Q2?",
+    "expected_intent": 3,
+    "category": "Follow-up",
+    "query_type": "follow_up",
+    "expected_endpoint_or_task": "/report/profit-loss",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q60",
+    "query": "And how does that compare to last year?",
+    "expected_intent": 3,
+    "category": "Follow-up",
+    "query_type": "follow_up",
+    "expected_endpoint_or_task": "/report/profit-loss",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q61",
+    "query": "Show dashboard web metrics for year 2026",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/dashboard/web/v3",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {"year": "2026"}
+  },
+  {
+    "id": "Q62",
+    "query": "List customer payment transactions",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/income/customer-payment/list",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q63",
+    "query": "Show supplier payments list",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/expense/supplier-payment/list",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q64",
+    "query": "Show bank categorization rules",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/bank/rules",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q65",
+    "query": "List all contacts of type customer",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/contact/list",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {"contact_type_id": 4}
+  },
+  {
+    "id": "Q66",
+    "query": "List all vendor contacts",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/contact/list",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {"contact_type_id": 5}
+  },
+  {
+    "id": "Q67",
+    "query": "Show chart of accounts with type breakdown",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/chart-of-accounts/list",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q68",
+    "query": "Show audit trail logs for this month",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/audit-trails",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q69",
+    "query": "What currencies are supported in Accutax?",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/currency/supported",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q70",
+    "query": "Find specific bill number BILL-2026-889",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "/expense/find",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {"search": "BILL-2026-889"}
+  },
+  {
+    "id": "Q71",
+    "query": "What is our projected cash runway for the next 6 months?",
+    "expected_intent": 5,
+    "category": "Forecast",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "/report/cash-forecast",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {"months": 6}
+  },
+  {
+    "id": "Q72",
+    "query": "Show trial balance report for year end 2026",
+    "expected_intent": 3,
+    "category": "Financial Report",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "/report/trial-balance",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q73",
+    "query": "Who are our top suppliers by purchase volume?",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "top_vendors",
+    "expected_layer": "layer3_sql",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q74",
+    "query": "Analyze unpaid bills and overdue supplier payments",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "ap_aging",
+    "expected_layer": "layer3_sql",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q75",
+    "query": "show me total billings in Q1 2026",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "synonym",
+    "expected_endpoint_or_task": "/income/total",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {"filter_type": "QUARTERLY"}
+  },
+  {
+    "id": "Q76",
+    "query": "shw bank acount balances",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "typo",
+    "expected_endpoint_or_task": "/bank/manual/accounts",
+    "expected_layer": "layer2_llm_api",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q77",
+    "query": "how to add a new tax rate in settings",
+    "expected_intent": 1,
+    "category": "FAQ/Guidance",
+    "query_type": "left_path",
+    "expected_endpoint_or_task": "gemini_direct",
+    "expected_layer": "left_path",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q78",
+    "query": "where do I configure multi currency exchange rates",
+    "expected_intent": 2,
+    "category": "FAQ/Guidance",
+    "query_type": "left_path",
+    "expected_endpoint_or_task": "gemini_direct",
+    "expected_layer": "left_path",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q79",
+    "query": "what is depreciation expense and how is it calculated?",
+    "expected_intent": 6,
+    "category": "Concept",
+    "query_type": "concept_guard",
+    "expected_endpoint_or_task": "gemini_direct",
+    "expected_layer": "left_path",
+    "expected_params_subset": {}
+  },
+  {
+    "id": "Q80",
+    "query": "What are our total customer balances as of today?",
+    "expected_intent": 4,
+    "category": "Data Lookup",
+    "query_type": "canonical",
+    "expected_endpoint_or_task": "/report/customer-balance-summary",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {}
+  }
+]

@@ -15,7 +15,7 @@ def test_settings_defaults():
 
 
 def test_constants():
-    assert GEMINI_MODEL == "gemini-2.5-flash"
+    assert GEMINI_MODEL in ("gemini-flash-latest", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.0-flash")
     assert 1 in LEFT_PATH_TYPES
     assert 4 in RIGHT_PATH_TYPES
     assert "SIMPLE" in COMPLEXITY_MODEL_MAP

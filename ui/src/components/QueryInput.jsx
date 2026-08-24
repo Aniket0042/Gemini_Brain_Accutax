@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Send, Sparkles, Radio, HelpCircle, FileText, BarChart3, BookOpen, TrendingUp, Plus } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Send, Sparkles, Radio } from 'lucide-react';
 
 const PRESET_QUERIES = [
   { label: '📊 Revenue 2026', query: 'What is our total revenue this year?' },
@@ -11,30 +11,74 @@ const PRESET_QUERIES = [
 
 export const QueryInput = ({ onSubmitQuery, isLoading, isStreaming, setIsStreaming, variant = 'compact' }) => {
   const [prompt, setPrompt] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
+  const textareaRef = useRef(null);
+
+  const isHero = variant === 'hero';
+  const maxHeight = isHero ? 240 : 200;
+  const minHeight = isHero ? 44 : 24;
+
+  // Auto-expand textarea height based on content
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    // Reset height to auto to accurately measure scrollHeight
+    textarea.style.height = 'auto';
+    const scrollHeight = textarea.scrollHeight;
+    const newHeight = Math.max(minHeight, Math.min(scrollHeight, maxHeight));
+
+    textarea.style.height = `${newHeight}px`;
+    textarea.style.overflowY = scrollHeight > maxHeight ? 'auto' : 'hidden';
+  }, [prompt, isHero, maxHeight, minHeight]);
 
   const handleSubmit = (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!prompt.trim() || isLoading) return;
     onSubmitQuery(prompt);
     setPrompt('');
+    if (textareaRef.current) {
+      textareaRef.current.style.height = `${minHeight}px`;
+    }
   };
 
   const handleChipClick = (presetQuery) => {
     if (isLoading) return;
-    onSubmitQuery(presetQuery);
-    setPrompt('');
+    setPrompt(presetQuery);
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
   };
-
-  const isHero = variant === 'hero';
 
   return (
     <div style={isHero ? styles.heroWrapper : styles.compactWrapper}>
       <form onSubmit={handleSubmit} style={styles.form}>
-        <div style={{ ...styles.inputPill, ...(isHero ? styles.heroPill : {}) }}>
+        <div
+          style={{
+            ...styles.inputPill,
+            ...(isHero ? styles.heroPill : {}),
+            borderColor: isFocused ? 'rgba(129, 140, 248, 0.5)' : 'rgba(255, 255, 255, 0.12)',
+            boxShadow: isFocused
+              ? isHero
+                ? '0 12px 36px rgba(0, 0, 0, 0.4), 0 0 24px rgba(99, 102, 241, 0.25)'
+                : '0 0 16px rgba(99, 102, 241, 0.2)'
+              : isHero
+              ? '0 12px 36px rgba(0, 0, 0, 0.4), 0 0 20px rgba(99, 102, 241, 0.1)'
+              : 'none',
+          }}
+        >
           <textarea
-            rows={isHero ? 2 : 1}
-            placeholder={isHero ? "Ask any financial question (e.g. 'What is our total revenue this year?')..." : "Write a message..."}
+            ref={textareaRef}
+            className="query-textarea"
+            rows={1}
+            placeholder={
+              isHero
+                ? "Ask any financial question (e.g. 'What is our total revenue this year?')..."
+                : "Ask a financial question... (Shift + Enter for new line)"
+            }
             value={prompt}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -42,13 +86,23 @@ export const QueryInput = ({ onSubmitQuery, isLoading, isStreaming, setIsStreami
                 handleSubmit(e);
               }
             }}
-            style={styles.textarea}
+            style={{
+              ...styles.textarea,
+              minHeight: `${minHeight}px`,
+              maxHeight: `${maxHeight}px`,
+            }}
           />
 
           <div style={styles.rightActions}>
-            <div style={styles.streamBadge} onClick={() => setIsStreaming(!isStreaming)} title="Toggle live SSE streaming">
+            <div
+              style={styles.streamBadge}
+              onClick={() => setIsStreaming(!isStreaming)}
+              title="Toggle live SSE streaming"
+            >
               <Radio size={13} color={isStreaming ? '#10b981' : '#9ca3af'} />
-              <span style={styles.modelName}>{isStreaming ? 'Gemini 2.5 • Stream' : 'Sync Mode'}</span>
+              <span style={styles.modelName}>
+                {isStreaming ? 'Gemini 2.5 • Stream' : 'Sync Mode'}
+              </span>
             </div>
 
             <button
@@ -60,6 +114,7 @@ export const QueryInput = ({ onSubmitQuery, isLoading, isStreaming, setIsStreami
                 cursor: prompt.trim() && !isLoading ? 'pointer' : 'not-allowed',
               }}
               disabled={isLoading || !prompt.trim()}
+              title={prompt.trim() ? 'Send Message (Enter)' : 'Enter your question'}
             >
               {isLoading ? (
                 <Sparkles size={16} color="#ffffff" className="pulse-animation" />
@@ -111,30 +166,18 @@ const styles = {
   },
   inputPill: {
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     gap: '12px',
-    padding: '8px 12px 8px 14px',
-    borderRadius: '20px',
+    padding: '10px 14px',
+    borderRadius: '22px',
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     border: '1px solid rgba(255, 255, 255, 0.12)',
     backdropFilter: 'blur(16px)',
-    transition: 'all 0.2s ease',
+    transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
   },
   heroPill: {
-    padding: '14px 16px',
-    borderRadius: '24px',
-    boxShadow: '0 12px 36px rgba(0, 0, 0, 0.4), 0 0 20px rgba(99, 102, 241, 0.1)',
-  },
-  plusBtn: {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '4px',
-    borderRadius: '50%',
-    transition: 'background 0.2s ease',
+    padding: '14px 18px',
+    borderRadius: '26px',
   },
   textarea: {
     flex: '1',
@@ -145,25 +188,30 @@ const styles = {
     fontSize: '0.95rem',
     fontFamily: 'inherit',
     resize: 'none',
-    lineHeight: '1.4',
+    lineHeight: '1.5',
     padding: '4px 0',
+    overflowY: 'hidden',
+    boxSizing: 'border-box',
+    transition: 'height 0.08s ease-out',
   },
   rightActions: {
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
     flexShrink: 0,
+    paddingBottom: '2px',
   },
   streamBadge: {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
-    padding: '4px 10px',
+    padding: '5px 10px',
     borderRadius: '12px',
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     border: '1px solid rgba(255, 255, 255, 0.08)',
     cursor: 'pointer',
     userSelect: 'none',
+    transition: 'background 0.2s ease, border-color 0.2s ease',
   },
   modelName: {
     fontSize: '0.75rem',
@@ -179,6 +227,7 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     transition: 'all 0.2s ease',
+    flexShrink: 0,
   },
   heroChipsRow: {
     display: 'flex',
@@ -207,3 +256,4 @@ const styles = {
     transition: 'all 0.2s ease',
   },
 };
+

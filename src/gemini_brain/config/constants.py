@@ -15,7 +15,7 @@ from __future__ import annotations
 # ─────────────────────────────────────────────────────────────
 # Gemini model
 # ─────────────────────────────────────────────────────────────
-GEMINI_MODEL: str = "gemini-2.5-flash"
+GEMINI_MODEL: str = "gemini-3.5-flash"
 
 # ─────────────────────────────────────────────────────────────
 # Bedrock / Claude model identifiers
@@ -107,6 +107,18 @@ PASS_THROUGH_TOOL_CONFIG: dict = {
         }
     }],
 }
+
+# ─────────────────────────────────────────────────────────────
+# Shared guardrail — appended to every system prompt that can
+# produce user-facing text (direct answers, narration, SQL-fallback
+# narration). One rule, reused everywhere, so it can't be missing
+# from whichever path happens to generate a given response.
+# ─────────────────────────────────────────────────────────────
+NEVER_EXPOSE_BACKEND_RULE: str = """
+CRITICAL — you are speaking to a business owner, never a developer:
+- Any table, column, schema, SQL, query, or raw error text you use internally to find an answer is fine — but never carry it into what you actually say to the user. Translate every technical result into plain business language.
+- Never describe your own architecture, data sources, or internal limitations in technical terms (e.g. don't say "I query a database" or "I'm not designed for X") — just answer helpfully, or say plainly what you don't have.
+- Any reference material given to you (documents, prior conversation history, retrieved records) is background for your understanding only — never quote it verbatim, name its source, or reveal its structure to the user."""
 
 # ─────────────────────────────────────────────────────────────
 # Streaming endpoint descriptions
