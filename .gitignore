@@ -1,6 +1,7 @@
 # Environment & secrets
 .env
 *.env
+.env.*
 !.env.example
 
 # Scratch/debug scripts -- contain real credentials used against live systems

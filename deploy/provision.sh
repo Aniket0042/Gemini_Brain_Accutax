@@ -70,7 +70,18 @@ if ! id "$APP_USER" >/dev/null 2>&1; then
   useradd --system --create-home --shell /usr/sbin/nologin "$APP_USER"
 fi
 
-chown -R "$APP_USER:$APP_USER" "$APP_DIR"
+# The repo directory must stay owned by whoever runs `git pull` here
+# (typically the login user, e.g. `ubuntu`) -- a full chown to $APP_USER
+# breaks `.git` permissions for that user. Instead, add $APP_USER to the
+# repo owner's group and share access via group perms.
+REPO_OWNER="$(stat -c '%U' "$APP_DIR")"
+if [[ "$REPO_OWNER" != "root" && "$REPO_OWNER" != "$APP_USER" ]]; then
+  usermod -aG "$REPO_OWNER" "$APP_USER"
+  chgrp -R "$REPO_OWNER" "$APP_DIR"
+  chmod -R g+rwX "$APP_DIR"
+else
+  chown -R "$APP_USER:$APP_USER" "$APP_DIR"
+fi
 
 echo "==> Building Python venv"
 sudo -u "$APP_USER" python3 -m venv "$APP_DIR/venv"
