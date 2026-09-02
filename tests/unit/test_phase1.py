@@ -5,7 +5,8 @@ Tests:
 1. Pure function model selector (pick_model) for Haiku vs Sonnet routing.
 2. Prefix-cache restructured prompt formatting in endpoint_selector.
 3. 2000-token payload capping and truncation formatting in claude_reasoner.
-4. Fast zero-narration path (narrate=False).
+4. Narration-failure fallback to the formatted table (see test_orchestrator_outcomes.py
+   and test_phase3.py for full narration-always coverage).
 5. Thinking budget configuration parameter.
 """
 import pytest
@@ -82,8 +83,10 @@ def test_payload_truncation_notice():
 from gemini_brain.resilience.outcomes import Outcome, Retrieved
 
 
-def test_narrate_false_fast_path():
-    """Verify that narrate=False skips Bedrock reasoning call entirely."""
+def test_narration_failure_falls_back_to_formatted_table():
+    """Every answer is LLM-narrated; the formatted table is used only as a
+    fallback when Bedrock narration fails after retries -- never as a default
+    zero-LLM shortcut."""
     runner = GeminiBrainRunner(api_key="test-key")
 
     runner._enforce_tenant_isolation = MagicMock(return_value=27)
@@ -92,7 +95,7 @@ def test_narrate_false_fast_path():
     with patch("gemini_brain.orchestrator.gemini_brain_runner.classify_intent") as mock_classify, \
          patch("gemini_brain.orchestrator.gemini_brain_runner.select_endpoint") as mock_select, \
          patch("gemini_brain.api_client.accutax_client.call_api_resilient", return_value=Retrieved(Outcome.OK, payload={"total_sales": "15000.00"}, tier="live_api", endpoint="/income/total")), \
-         patch("gemini_brain.orchestrator.gemini_brain_runner.reason_over_data") as mock_reason:
+         patch("gemini_brain.orchestrator.gemini_brain_runner.reason_over_data", side_effect=Exception("bedrock down")) as mock_reason:
 
         mock_classify.return_value = ({"type": 4, "reason": "Data"}, 10, 10)
         mock_select.return_value = ({"endpoint": "/income/total", "path_params": {}, "query_params": {}}, 20, 20)
@@ -101,9 +104,9 @@ def test_narrate_false_fast_path():
             query="What is our total income?",
             organization_id=27,
             use_api=True,
-            narrate=False,
         )
 
         assert "Total Sales" in res["answer"] or "Metric" in res["answer"]
-        mock_reason.assert_not_called()
+        assert mock_reason.call_count == 2  # retried once before falling back to the table
+        assert res["status"] == "partial"
         assert "complexity_judge" not in (res.get("query_trace", {}).get("stages") or {})

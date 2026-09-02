@@ -3,7 +3,8 @@ registry.py — Central tool registry for Gemini Brain.
 
 Appendix A complete registration table:
 - Specifies ToolSpec definitions, descriptions, schemas, handlers, formatters, and flags.
-- Pure lookups (item_list, bank_accounts, etc.) have narrate=False.
+- Every tool's result is narrated by an LLM before it reaches the user (see
+  orchestrator/gemini_brain_runner.py) — there is no zero-LLM formatter-only path.
 - gemini_declarations() generates Gemini function declarations.
 """
 from __future__ import annotations
@@ -42,7 +43,6 @@ from gemini_brain.tools.schemas import (
     GLProfitabilityParams,
     GeneralLedgerParams,
     GeneralLedgerSummaryParams,
-    IncomeTotalParams,
     InventoryMovementParams,
     InvoiceFindParams,
     InvoiceListParams,
@@ -51,6 +51,10 @@ from gemini_brain.tools.schemas import (
     JournalEntriesParams,
     ProfitLossParams,
     ProfitLossWithAccountsParams,
+    ReportAsOfLimitParams,
+    ReportAsOfParams,
+    ReportPeriodLimitParams,
+    ReportPeriodParams,
     ProjectExpenseRollupParams,
     ProjectsListParams,
     PurchasesByItemParams,
@@ -76,7 +80,6 @@ class ToolSpec:
     endpoint: str
     params: Type[BaseModel]
     handler: Callable[..., Awaitable[Any]]
-    narrate: bool
     formatter: str
     intent: int
     cache_ttl: int = 300
@@ -99,7 +102,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/report/profit-loss",
         params=ProfitLossParams,
         handler=make_api_handler("/report/profit-loss"),
-        narrate=True,
         formatter="financial_statement",
         intent=3,
     ),
@@ -113,7 +115,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/report/balance-sheet",
         params=BalanceSheetParams,
         handler=make_api_handler("/report/balance-sheet"),
-        narrate=True,
         formatter="financial_statement",
         intent=3,
     ),
@@ -127,7 +128,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/report/cash-flow",
         params=CashFlowParams,
         handler=make_api_handler("/report/cash-flow"),
-        narrate=True,
         formatter="financial_statement",
         intent=3,
     ),
@@ -141,7 +141,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/report/cash-forecast",
         params=CashForecastParams,
         handler=make_api_handler("/report/cash-forecast"),
-        narrate=True,
         formatter="kv_summary",
         intent=5,
     ),
@@ -155,7 +154,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/report/ar-aging-summary",
         params=ArAgingParams,
         handler=make_api_handler("/report/ar-aging-summary"),
-        narrate=True,
         formatter="aging_buckets",
         intent=3,
     ),
@@ -169,7 +167,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/report/ap-aging-summary",
         params=ApAgingParams,
         handler=make_api_handler("/report/ap-aging-summary"),
-        narrate=True,
         formatter="aging_buckets",
         intent=3,
     ),
@@ -183,7 +180,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/report/customer-balance-summary",
         params=CustomerBalanceSummaryParams,
         handler=make_api_handler("/report/customer-balance-summary"),
-        narrate=True,
         formatter="row_table",
         intent=4,
     ),
@@ -197,7 +193,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/report/sales-by-customer",
         params=SalesByCustomerParams,
         handler=make_api_handler("/report/sales-by-customer"),
-        narrate=True,
         formatter="row_table",
         intent=4,
     ),
@@ -211,7 +206,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/report/expense-by-category",
         params=ExpenseByCategoryParams,
         handler=make_api_handler("/report/expense-by-category"),
-        narrate=True,
         formatter="row_table",
         intent=4,
     ),
@@ -226,21 +220,25 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/dashboard/web",
         params=DashboardOverviewParams,
         handler=make_api_handler("/dashboard/web"),
-        narrate=True,
         formatter="dashboard_overview",
         intent=7,
     ),
     "income_total": ToolSpec(
+        # Points at a direct DB report, not the REST /income/total endpoint.
+        # That endpoint was found to ignore organization_id — it returned the
+        # identical figure for every org tested, including ones that don't
+        # exist — because the REST backend and this database are separate
+        # systems with no data overlap for these tenants. There is no REST-side
+        # fix available, so this reads the subledger directly instead.
         name="income_total",
         description=(
             "Total aggregated sales, invoices revenue, and income total for a year or period. "
             "Use for: 'total sales this year', 'how much revenue in 2026', 'total income'. "
             "Do NOT use for listing itemized invoices (use invoice_list)."
         ),
-        endpoint="/income/total",
-        params=IncomeTotalParams,
-        handler=make_api_handler("/income/total"),
-        narrate=True,
+        endpoint="rpt_income_total",
+        params=ReportPeriodParams,
+        handler=_noop_handler,
         formatter="kv_summary",
         intent=4,
     ),
@@ -254,7 +252,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/expense/total",
         params=ExpenseTotalParams,
         handler=make_api_handler("/expense/total"),
-        narrate=True,
         formatter="kv_summary",
         intent=4,
     ),
@@ -268,7 +265,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/income/list",
         params=InvoiceListParams,
         handler=make_api_handler("/income/list"),
-        narrate=False,
         formatter="row_table",
         intent=4,
     ),
@@ -278,7 +274,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/income/find",
         params=InvoiceFindParams,
         handler=make_api_handler("/income/find"),
-        narrate=False,
         formatter="kv_summary",
         intent=4,
     ),
@@ -288,7 +283,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/expense/list_filter",
         params=BillListParams,
         handler=make_api_handler("/expense/list_filter"),
-        narrate=False,
         formatter="row_table",
         intent=4,
     ),
@@ -298,7 +292,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/expense/find",
         params=BillFindParams,
         handler=make_api_handler("/expense/find"),
-        narrate=False,
         formatter="kv_summary",
         intent=4,
     ),
@@ -308,7 +301,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/income/customer-payment/list",
         params=CustomerPaymentsParams,
         handler=make_api_handler("/income/customer-payment/list"),
-        narrate=True,
         formatter="row_table",
         intent=4,
     ),
@@ -318,7 +310,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/expense/supplier-payment/list",
         params=SupplierPaymentsParams,
         handler=make_api_handler("/expense/supplier-payment/list"),
-        narrate=True,
         formatter="row_table",
         intent=4,
     ),
@@ -328,7 +319,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/contact/find",
         params=ContactSearchParams,
         handler=make_api_handler("/contact/find"),
-        narrate=False,
         formatter="row_table",
         intent=4,
     ),
@@ -338,7 +328,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/contact/list",
         params=ContactCountParams,
         handler=make_api_handler("/contact/list"),
-        narrate=False,
         formatter="row_table",
         intent=4,
     ),
@@ -348,7 +337,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/item/list",
         params=ItemListParams,
         handler=make_api_handler("/item/list"),
-        narrate=False,
         formatter="row_table",
         intent=4,
     ),
@@ -358,7 +346,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/item/list",
         params=ItemSearchParams,
         handler=make_api_handler("/item/list"),
-        narrate=False,
         formatter="row_table",
         intent=4,
     ),
@@ -368,7 +355,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/bank/manual/accounts",
         params=BankAccountsParams,
         handler=make_api_handler("/bank/manual/accounts"),
-        narrate=False,
         formatter="row_table",
         intent=4,
     ),
@@ -378,7 +364,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/bank/transactions/uncategorized",
         params=UncategorizedTransactionsParams,
         handler=make_api_handler("/bank/transactions/uncategorized"),
-        narrate=False,
         formatter="row_table",
         intent=4,
     ),
@@ -388,7 +373,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/chart-of-accounts",
         params=ChartOfAccountsParams,
         handler=make_api_handler("/chart-of-accounts"),
-        narrate=False,
         formatter="account_tree",
         intent=4,
     ),
@@ -398,7 +382,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/accounting/journal-entries",
         params=JournalEntriesParams,
         handler=make_api_handler("/accounting/journal-entries"),
-        narrate=True,
         formatter="row_table",
         intent=4,
     ),
@@ -408,7 +391,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/accounting/general-ledger",
         params=GeneralLedgerParams,
         handler=make_api_handler("/accounting/general-ledger"),
-        narrate=True,
         formatter="row_table",
         intent=4,
     ),
@@ -418,7 +400,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/audit-logs",
         params=AuditLogsParams,
         handler=make_api_handler("/audit-logs"),
-        narrate=False,
         formatter="row_table",
         intent=4,
     ),
@@ -428,7 +409,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/projects/list",
         params=ProjectsListParams,
         handler=make_api_handler("/projects/list"),
-        narrate=False,
         formatter="row_table",
         intent=4,
     ),
@@ -442,7 +422,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="fn_project_expense_rollup",
         params=ProjectExpenseRollupParams,
         handler=make_sql_function_handler("fn_project_expense_rollup"),
-        narrate=True,
         formatter="project_expense_rollup",
         intent=4,
     ),
@@ -456,7 +435,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="fn_inventory_movement",
         params=InventoryMovementParams,
         handler=make_sql_function_handler("fn_inventory_movement"),
-        narrate=True,
         formatter="inventory_movement",
         intent=4,
     ),
@@ -470,9 +448,155 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="fn_gl_profitability",
         params=GLProfitabilityParams,
         handler=make_sql_function_handler("fn_gl_profitability"),
-        narrate=True,
         formatter="gl_profitability",
         intent=4,
+    ),
+    # ── Deterministic SQL reports ────────────────────────────────────────────
+    # Answer questions the REST catalog does not cover. Their `rpt_` endpoint is
+    # dispatched by the orchestrator to reports/engine.py rather than to HTTP,
+    # mirroring the existing `fn_` convention. handler is never invoked for these
+    # (retrieval dispatches on the endpoint), so it is the shared no-op.
+    "aged_receivables_detail": ToolSpec(
+        name="aged_receivables_detail",
+        description=(
+            "Invoice-level overdue receivables: every unpaid invoice with its customer, due date, "
+            "days overdue and outstanding amount. "
+            "Use for: 'which invoices are overdue', 'list overdue invoices by customer', "
+            "'aged receivables detail'. For bucket totals only, use ar_aging instead."
+        ),
+        endpoint="rpt_aged_receivables_detail",
+        params=ReportAsOfLimitParams,
+        handler=_noop_handler,
+        formatter="row_table",
+        intent=3,
+    ),
+    "aged_payables_detail": ToolSpec(
+        name="aged_payables_detail",
+        description=(
+            "Bill-level overdue payables: every unpaid bill with its vendor, due date, days overdue "
+            "and outstanding amount. "
+            "Use for: 'which bills are overdue', 'aged payables detail', 'what do we owe and to whom'."
+        ),
+        endpoint="rpt_aged_payables_detail",
+        params=ReportAsOfLimitParams,
+        handler=_noop_handler,
+        formatter="row_table",
+        intent=3,
+    ),
+    "bills_by_contact": ToolSpec(
+        name="bills_by_contact",
+        description=(
+            "Purchase totals, amount paid and outstanding balance grouped by vendor. "
+            "Use for: 'bills by vendor', 'how much do we owe each supplier', 'purchases per contact'."
+        ),
+        endpoint="rpt_bills_by_contact",
+        params=ReportPeriodLimitParams,
+        handler=_noop_handler,
+        formatter="row_table",
+        intent=3,
+    ),
+    "expenses_by_contact": ToolSpec(
+        name="expenses_by_contact",
+        description=(
+            "Expense spend grouped by contact, ranked by amount. "
+            "Use for: 'expenses by contact', 'who did we spend the most with'."
+        ),
+        endpoint="rpt_expenses_by_contact",
+        params=ReportPeriodLimitParams,
+        handler=_noop_handler,
+        formatter="row_table",
+        intent=3,
+    ),
+    "supplier_statement": ToolSpec(
+        name="supplier_statement",
+        description=(
+            "Statement of account across ALL suppliers, one row each: bills raised, total "
+            "purchased, total paid and balance due. Covers every supplier for the period — it "
+            "does not filter to a single named supplier, so use it for any supplier-statement "
+            "request even when one supplier is named, and report the relevant row. "
+            "Use for: 'supplier statement', 'supplier statement of account', "
+            "'statement of account for our vendors', 'supplier balances', 'what do we owe each supplier'."
+        ),
+        endpoint="rpt_supplier_statement",
+        params=ReportPeriodLimitParams,
+        handler=_noop_handler,
+        formatter="row_table",
+        intent=3,
+    ),
+    "profit_loss_by_project": ToolSpec(
+        name="profit_loss_by_project",
+        description=(
+            "Revenue segmented by project. "
+            "Use for: 'P&L by project', 'revenue per project', 'which projects earned the most'."
+        ),
+        endpoint="rpt_profit_loss_by_project",
+        params=ReportPeriodLimitParams,
+        handler=_noop_handler,
+        formatter="row_table",
+        intent=3,
+    ),
+    "profit_loss_by_cost_center": ToolSpec(
+        name="profit_loss_by_cost_center",
+        description=(
+            "Revenue segmented by cost centre. "
+            "Use for: 'P&L by cost center', 'revenue per cost centre', 'cost centre breakdown'."
+        ),
+        endpoint="rpt_profit_loss_by_cost_center",
+        params=ReportPeriodLimitParams,
+        handler=_noop_handler,
+        formatter="row_table",
+        intent=3,
+    ),
+    "sales_by_project": ToolSpec(
+        name="sales_by_project",
+        description=(
+            "Invoice count and total revenue per project. "
+            "Use for: 'sales by project', 'how many invoices per project'."
+        ),
+        endpoint="rpt_sales_by_project",
+        params=ReportPeriodLimitParams,
+        handler=_noop_handler,
+        formatter="row_table",
+        intent=3,
+    ),
+    "estimate_conversion": ToolSpec(
+        name="estimate_conversion",
+        description=(
+            "Estimate/quote conversion: how many estimates were raised, how many were accepted, "
+            "and the conversion rate. "
+            "Use for: 'estimate conversion rate', 'how many quotes did we win', 'quote win rate'."
+        ),
+        endpoint="rpt_estimate_conversion",
+        params=ReportPeriodParams,
+        handler=_noop_handler,
+        formatter="row_table",
+        intent=3,
+    ),
+    "vat_input_output": ToolSpec(
+        name="vat_input_output",
+        description=(
+            "Output VAT versus input VAT month by month, with net VAT payable. "
+            "Use for: 'VAT input and output', 'monthly VAT breakdown', 'how much VAT do we owe by month'. "
+            "For a single-period total, use vat_summary instead."
+        ),
+        endpoint="rpt_vat_input_output",
+        params=ReportPeriodParams,
+        handler=_noop_handler,
+        formatter="row_table",
+        intent=3,
+    ),
+    "vat_export_return": ToolSpec(
+        name="vat_export_return",
+        description=(
+            "The figures needed to file an FTA VAT return for a period: standard-rated sales and "
+            "purchases, output VAT, recoverable input VAT and net VAT payable. "
+            "Use for: 'VAT return', 'prepare my FTA return', 'VAT filing figures'."
+        ),
+        endpoint="rpt_vat_export_return",
+        params=ReportPeriodParams,
+        handler=_noop_handler,
+        formatter="kv_summary",
+        intent=3,
     ),
     "contact_list": ToolSpec(
         name="contact_list",
@@ -480,7 +604,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/contact/list",
         params=ContactListParams,
         handler=make_api_handler("/contact/list"),
-        narrate=False,
         formatter="row_table",
         intent=4,
     ),
@@ -490,7 +613,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/report/trial-balance",
         params=TrialBalanceParams,
         handler=make_api_handler("/report/trial-balance"),
-        narrate=True,
         formatter="financial_statement",
         intent=3,
     ),
@@ -500,7 +622,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/bank/rules",
         params=BankRulesParams,
         handler=make_api_handler("/bank/rules"),
-        narrate=False,
         formatter="row_table",
         intent=4,
     ),
@@ -510,7 +631,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/chart-of-accounts/list",
         params=ChartOfAccountsListParams,
         handler=make_api_handler("/chart-of-accounts/list"),
-        narrate=False,
         formatter="account_tree",
         intent=4,
     ),
@@ -520,7 +640,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/audit-trails",
         params=AuditTrailsParams,
         handler=make_api_handler("/audit-trails"),
-        narrate=False,
         formatter="row_table",
         intent=4,
     ),
@@ -530,7 +649,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/branches",
         params=BranchesParams,
         handler=make_api_handler("/branches"),
-        narrate=False,
         formatter="row_table",
         intent=4,
     ),
@@ -540,7 +658,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/cost-centers",
         params=CostCentersParams,
         handler=make_api_handler("/cost-centers"),
-        narrate=False,
         formatter="row_table",
         intent=4,
     ),
@@ -550,7 +667,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/currency/supported",
         params=SupportedCurrenciesParams,
         handler=make_api_handler("/currency/supported"),
-        narrate=False,
         formatter="row_table",
         intent=4,
     ),
@@ -560,7 +676,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/currency/exchange-rates",
         params=ExchangeRatesParams,
         handler=make_api_handler("/currency/exchange-rates"),
-        narrate=False,
         formatter="row_table",
         intent=4,
     ),
@@ -570,7 +685,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/report/aged-payables",
         params=VendorBalanceSummaryParams,
         handler=make_api_handler("/report/aged-payables"),
-        narrate=True,
         formatter="aging_buckets",
         intent=4,
     ),
@@ -580,7 +694,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/report/sales-by-items",
         params=SalesByItemParams,
         handler=make_api_handler("/report/sales-by-items"),
-        narrate=True,
         formatter="row_table",
         intent=4,
     ),
@@ -590,7 +703,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/report/purchases-by-vendor",
         params=PurchasesByVendorParams,
         handler=make_api_handler("/report/purchases-by-vendor"),
-        narrate=True,
         formatter="row_table",
         intent=4,
     ),
@@ -600,7 +712,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/report/purchases-by-item",
         params=PurchasesByItemParams,
         handler=make_api_handler("/report/purchases-by-item"),
-        narrate=True,
         formatter="row_table",
         intent=4,
     ),
@@ -610,7 +721,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/report/vat-summary",
         params=VatSummaryParams,
         handler=make_api_handler("/report/vat-summary"),
-        narrate=True,
         formatter="financial_statement",
         intent=3,
     ),
@@ -620,7 +730,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/report/tax-liability",
         params=TaxLiabilityParams,
         handler=make_api_handler("/report/tax-liability"),
-        narrate=True,
         formatter="financial_statement",
         intent=3,
     ),
@@ -630,7 +739,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/report/general-ledger-summary",
         params=GeneralLedgerSummaryParams,
         handler=make_api_handler("/report/general-ledger-summary"),
-        narrate=True,
         formatter="row_table",
         intent=3,
     ),
@@ -640,7 +748,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="/report/profit-loss-with-accounts",
         params=ProfitLossWithAccountsParams,
         handler=make_api_handler("/report/profit-loss-with-accounts"),
-        narrate=True,
         formatter="financial_statement",
         intent=3,
     ),
@@ -650,7 +757,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="",
         params=AnswerDirectlyParams,
         handler=_noop_handler,
-        narrate=True,
         formatter="",
         intent=1,
     ),
@@ -660,7 +766,6 @@ REGISTRY: Dict[str, ToolSpec] = {
         endpoint="",
         params=UnsupportedParams,
         handler=_noop_handler,
-        narrate=True,
         formatter="",
         intent=4,
     ),

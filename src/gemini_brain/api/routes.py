@@ -249,7 +249,6 @@ def run_query(
             session_id=payload.session_id,
             selected_model_key=payload.selected_model_key,
             allowed_org_ids=current_user.allowed_org_ids,
-            narrate=payload.narrate,
             auth_token=current_user.raw_token,
         )
         return QueryResponse(**normalize_envelope(result))
@@ -306,7 +305,6 @@ def stream_query(
                 session_id=payload.session_id,
                 selected_model_key=payload.selected_model_key,
                 allowed_org_ids=current_user.allowed_org_ids,
-                narrate=payload.narrate,
                 auth_token=current_user.raw_token,
             ):
                 if isinstance(chunk, dict) and "final_result" in chunk:

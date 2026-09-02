@@ -38,6 +38,11 @@ from gemini_brain.config.constants import (
 from gemini_brain.config.pricing import gemini_brain_cost
 from gemini_brain.config.settings import settings
 from gemini_brain.endpoints.endpoint_selector import select_endpoint
+from gemini_brain.endpoints.window_widener import (
+    describe_window,
+    plan_widenings,
+    widened_params,
+)
 from gemini_brain.memory.session_memory import (
     get_project_context_by_session,
     get_state_by_session,
@@ -83,7 +88,9 @@ logger = logging.getLogger("gemini_brain.orchestrator.runner")
 _EMPTY_RESULT_SQL_VERIFIERS = get_endpoint_sql_verifiers()
 
 
-def _verify_empty_via_sql(endpoint: Optional[str], organization_id: Optional[int]) -> Optional[Retrieved]:
+def _verify_empty_via_sql(
+    endpoint: Optional[str], organization_id: Optional[int], raw_query: str = ""
+) -> Optional[Retrieved]:
     """Cross-check a live API's EMPTY result against a cheap, direct SQL query.
 
     Only runs for endpoints with a known sql_task mapping (see
@@ -92,6 +99,10 @@ def _verify_empty_via_sql(endpoint: Optional[str], organization_id: Optional[int
     raises; returns None when verification can't run or the source data isn't
     reachable, in which case the caller should keep today's behavior (trust
     the EMPTY result as-is).
+
+    raw_query is passed through to the param builder so a "top N" count in
+    the user's own phrasing (e.g. "top 5 vendors") reaches ranked builders
+    like top_vendors/top_customers instead of silently defaulting to 10.
     """
     if not endpoint or organization_id is None:
         return None
@@ -100,7 +111,7 @@ def _verify_empty_via_sql(endpoint: Optional[str], organization_id: Optional[int
         return None
     sql_task, builder = verifier
     try:
-        params = builder(None, organization_id)
+        params = builder(raw_query, organization_id)
         from gemini_brain.sql_fallback.sql_engine import _get_coordinator_pipeline
         _, _, agent_handlers, *_ = _get_coordinator_pipeline()
         handler = agent_handlers.get("finance_agent")
@@ -283,7 +294,20 @@ class GeminiBrainRunner:
             logger.info("Result cache hit for %s (outcome=%s)", endpoint, res.outcome.value)
             return res
 
-        if endpoint.startswith("fn_"):
+        if endpoint.startswith("rpt_"):
+            # Deterministic SQL report — see reports/definitions.py. Same dispatch
+            # shape as fn_ below, but the report owns its own parameter handling
+            # rather than being squeezed into a fixed (org, from, to) signature.
+            from gemini_brain.reports.engine import run_report_safe
+
+            with trace.stage("sql_report", endpoint=endpoint):
+                res = run_report_safe(
+                    endpoint,
+                    sel.get("query_params", {}) or {},
+                    organization_id,
+                    db_name=db_name,
+                )
+        elif endpoint.startswith("fn_"):
             with trace.stage("sql_function_call", endpoint=endpoint):
                 qp = sel.get("query_params", {}) or {}
                 res = execute_sql_function_safe(
@@ -312,6 +336,99 @@ class GeminiBrainRunner:
             )
         return res
 
+    def _retry_widened(
+        self,
+        sel: Dict[str, Any],
+        organization_id: int,
+        db_name: str,
+        trace: Any,
+        auth_token: str = "",
+    ) -> Tuple[Optional[Retrieved], Optional[str]]:
+        """Re-run an empty date-scoped query over progressively longer look-backs.
+
+        Returns (retrieved, window_description) on the first attempt that finds
+        rows, or (None, None) when widening does not apply or every attempt is
+        still empty — in which case the caller keeps today's confirmed-zero answer.
+
+        Never raises: a failure here must degrade to the normal empty result, not
+        break a query that already had a valid (if unhelpful) answer.
+        """
+        query_params = sel.get("query_params") or {}
+        try:
+            plans = plan_widenings(query_params)
+        except Exception as e:
+            logger.warning("Window widening planning failed: %s", e)
+            return None, None
+
+        if not plans:
+            return None, None
+
+        for start, end in plans:
+            widened_sel = dict(sel)
+            widened_sel["query_params"] = widened_params(query_params, start, end)
+            description = describe_window(start, end)
+            logger.info(
+                "Empty result — retrying %s over %s (%s to %s)",
+                sel.get("endpoint"), description, start, end,
+            )
+            try:
+                with trace.stage("widened_retry", window=description):
+                    retried = self._retrieve(
+                        widened_sel, organization_id, db_name, trace, auth_token=auth_token
+                    )
+            except Exception as e:
+                logger.warning("Widened retry failed for %s: %s", sel.get("endpoint"), e)
+                return None, None
+
+            if retried.usable:
+                logger.info(
+                    "Widened retry RECOVERED %d row(s) over %s",
+                    getattr(retried, "row_count", 0), description,
+                )
+                sel["query_params"] = widened_sel["query_params"]
+                return retried, description
+
+        return None, None
+
+    def _narrate_or_fallback(
+        self,
+        *,
+        query: str,
+        data: Any,
+        endpoint: str,
+        fallback_text: str,
+        intent: int,
+        session_id: Optional[str],
+        selected_model_key: Optional[str],
+        get_project_context_by_session: Any,
+    ) -> Tuple[str, str, int, int, bool]:
+        """Narrate `data` via Bedrock. Every answer is LLM-narrated — there is no
+        zero-LLM formatter-only path. `fallback_text` (the deterministic formatted
+        table or notice) is used ONLY if narration fails twice in a row, so an
+        LLM outage degrades the response instead of failing the whole query.
+
+        Returns (answer, model_label, input_tokens, output_tokens, degraded).
+        """
+        last_exc: Optional[Exception] = None
+        for attempt in range(2):
+            try:
+                answer, label, bi_new, bo_new = reason_over_data(
+                    query=query,
+                    data=data,
+                    endpoint=endpoint or "",
+                    intent=intent,
+                    session_id=session_id,
+                    selected_model_key=selected_model_key,
+                    adapter_resolver=self.adapter_resolver,
+                    get_project_context_by_session=get_project_context_by_session,
+                )
+                return answer, label, bi_new, bo_new, False
+            except Exception as e:
+                last_exc = e
+                logger.warning("Narration attempt %d failed: %s", attempt + 1, e)
+        logger.error("Narration failed after retry, falling back to formatted table: %s", last_exc)
+        return fallback_text, "None (Narration Unavailable — Fallback Table)", 0, 0, True
+
     def _empty_result(
         self,
         *,
@@ -334,7 +451,10 @@ class GeminiBrainRunner:
         raw_query: str,
         organization_id: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """Zero rows is a confirmed answer, not a failure. No LLM call. Sub-second.
+        """Zero rows is a confirmed answer, not a failure — but it is still LLM-narrated
+        per policy (every answer goes through Bedrock). The narration payload is tiny
+        (0 rows) so this stays fast; it falls back to a deterministic sentence only if
+        narration itself fails twice (see _narrate_or_fallback).
 
         Before confirming, cross-checks endpoints we've caught being unreliable
         (see _verify_empty_via_sql / get_endpoint_sql_verifiers) against a cheap
@@ -342,10 +462,19 @@ class GeminiBrainRunner:
         skipped for them entirely, so this adds no cost on the common path.
         """
         endpoint = getattr(retrieved, "endpoint", "")
-        verified = _verify_empty_via_sql(endpoint, organization_id)
+        verified = _verify_empty_via_sql(endpoint, organization_id, raw_query)
         if verified is not None:
             formatted_table = render("row_table", verified.payload)
-            answer = f"Here's your {subject}."
+            answer, b_label, bi_new, bo_new, narration_degraded = self._narrate_or_fallback(
+                query=query,
+                data=verified.payload,
+                endpoint=endpoint,
+                fallback_text=f"Here's your {subject}.",
+                intent=qtype,
+                session_id=session_id,
+                selected_model_key=None,
+                get_project_context_by_session=get_project_context_by_session,
+            )
             rid = new_request_id()
             trace_summary = trace.emit()
             if session_id:
@@ -357,18 +486,18 @@ class GeminiBrainRunner:
                 "sql": None,
                 "results": verified.rows,
                 "error": None,
-                "status": "ok",
-                "notice": None,
+                "status": "partial" if narration_degraded else "ok",
+                "notice": notice_for("MODEL_UNAVAILABLE", subject=subject) if narration_degraded else None,
                 "data_source": verified.to_data_source(),
                 "table_markdown": formatted_table,
                 "request_id": rid,
                 "pii_redacted": is_redacted,
                 "pii_redactions": redaction_counts,
                 "token_usage": {
-                    "input_tokens": gi,
-                    "output_tokens": go,
-                    "llm_calls": llm_calls,
-                    "cost_usd": self._cost(gi, go, 0, 0, ""),
+                    "input_tokens": gi + bi_new,
+                    "output_tokens": go + bo_new,
+                    "llm_calls": llm_calls + (0 if narration_degraded else 1),
+                    "cost_usd": self._cost(gi, go, bi_new, bo_new, b_label),
                     "elapsed_seconds": round(time.time() - t0, 2),
                 },
                 "agent_trace": [
@@ -377,6 +506,8 @@ class GeminiBrainRunner:
                     {"step": "rest_api_call", "endpoint": endpoint, "status": "empty", "row_count": 0},
                     {"step": "empty_result_sql_verification", "status": "overridden",
                      "sql_task": verified.detail, "row_count": verified.row_count},
+                    {"step": "anthropic_reasoning", "model": b_label,
+                     "tokens_in": bi_new, "tokens_out": bo_new},
                 ],
                 "routing_info": {
                     "type": qtype, "type_label": type_lbl, "path": "api_then_anthropic",
@@ -385,14 +516,27 @@ class GeminiBrainRunner:
                 "query_trace": trace_summary,
             })
 
+        fallback_answer = (
+            f"I checked your {subject} and found no matching records.\n\n"
+            "This is a confirmed result from your books."
+        )
         try:
             from gemini_brain.formatting.empty_answer import build_empty_answer
-            answer = build_empty_answer(query, subject, retrieved)
+            fallback_answer = build_empty_answer(query, subject, retrieved)
         except Exception:
-            answer = (
-                f"I checked your {subject} and found no matching records.\n\n"
-                "This is a confirmed result from your books."
-            )
+            pass
+
+        empty_data = retrieved.payload if getattr(retrieved, "payload", None) is not None else []
+        answer, b_label, bi_new, bo_new, narration_degraded = self._narrate_or_fallback(
+            query=query,
+            data=empty_data,
+            endpoint=endpoint,
+            fallback_text=fallback_answer,
+            intent=qtype,
+            session_id=session_id,
+            selected_model_key=None,
+            get_project_context_by_session=get_project_context_by_session,
+        )
 
         rid = new_request_id()
         notice = notice_for("NO_ROWS", subject=subject, request_id=rid)
@@ -416,10 +560,10 @@ class GeminiBrainRunner:
             "pii_redacted": is_redacted,
             "pii_redactions": redaction_counts,
             "token_usage": {
-                "input_tokens": gi,
-                "output_tokens": go,
-                "llm_calls": llm_calls,
-                "cost_usd": self._cost(gi, go, 0, 0, ""),
+                "input_tokens": gi + bi_new,
+                "output_tokens": go + bo_new,
+                "llm_calls": llm_calls + (0 if narration_degraded else 1),
+                "cost_usd": self._cost(gi, go, bi_new, bo_new, b_label),
                 "elapsed_seconds": round(time.time() - t0, 2),
             },
             "agent_trace": [
@@ -436,7 +580,9 @@ class GeminiBrainRunner:
                     "status": "empty",
                     "row_count": 0,
                 },
-                {"step": "empty_result_handler", "status": "deterministic_answer"},
+                {"step": "empty_result_handler",
+                 "status": "narration_degraded" if narration_degraded else "narrated",
+                 "model": b_label},
             ],
             "routing_info": {
                 "type": qtype,
@@ -470,10 +616,21 @@ class GeminiBrainRunner:
     ) -> Dict[str, Any]:
         rid = new_request_id()
         notice = notice_for(code, subject=subject, request_id=rid)
+
+        answer, b_label, bi_new, bo_new, narration_degraded = self._narrate_or_fallback(
+            query=query,
+            data={"status": "unavailable", "detail": notice["message"]},
+            endpoint=getattr(retrieved, "endpoint", "") or "",
+            fallback_text=notice["message"],
+            intent=qtype,
+            session_id=session_id,
+            selected_model_key=None,
+            get_project_context_by_session=get_project_context_by_session,
+        )
         trace_summary = trace.emit()
 
         return normalize_envelope({
-            "answer": notice["message"],
+            "answer": answer,
             "sql": None,
             "results": [],
             "error": notice["code"],
@@ -485,10 +642,10 @@ class GeminiBrainRunner:
             "pii_redacted": is_redacted,
             "pii_redactions": redaction_counts,
             "token_usage": {
-                "input_tokens": gi,
-                "output_tokens": go,
-                "llm_calls": llm_calls,
-                "cost_usd": self._cost(gi, go, 0, 0, ""),
+                "input_tokens": gi + bi_new,
+                "output_tokens": go + bo_new,
+                "llm_calls": llm_calls + (0 if narration_degraded else 1),
+                "cost_usd": self._cost(gi, go, bi_new, bo_new, b_label),
                 "elapsed_seconds": round(time.time() - t0, 2),
             },
             "agent_trace": [
@@ -499,6 +656,8 @@ class GeminiBrainRunner:
                     "path": "api_then_anthropic",
                     "reason": reason,
                 },
+                {"step": "anthropic_reasoning", "model": b_label,
+                 "tokens_in": bi_new, "tokens_out": bo_new},
             ],
             "routing_info": {
                 "type": qtype,
@@ -527,6 +686,7 @@ class GeminiBrainRunner:
         session_id: Optional[str] = None,
         selected_model_key: Optional[str] = None,
         raw_query: Optional[str] = None,
+        intent: Optional[int] = None,
     ) -> Dict[str, Any]:
         adapter = BedrockAdapter(model_id=HAIKU45_ID, label="Claude Haiku 4.5")
         er = sql_engine.run(
@@ -536,6 +696,7 @@ class GeminiBrainRunner:
             user_id=user_id,
             session_id=session_id,
             raw_user_question=raw_query or query,
+            intent=intent,
             save_message_by_session=save_message_by_session,
             update_conversation_state_hybrid_by_session=update_conversation_state_hybrid_by_session,
             maybe_auto_title=lambda sid, q: maybe_auto_title(sid, q, self._call_llm),
@@ -552,9 +713,20 @@ class GeminiBrainRunner:
             if len(data_str) > 5000:
                 data_str = data_str[:5000] + "\n... (truncated)"
 
-            from gemini_brain.reasoning.claude_reasoner import ANALYST_SYSTEM_PROMPT
+            from gemini_brain.reasoning.claude_reasoner import (
+                classify_payload_shape,
+                narration_budget,
+            )
 
-            system = ANALYST_SYSTEM_PROMPT.format(today=datetime.date.today().isoformat())
+            # Same payload-conditional budget as the live-API narration path. This
+            # site previously paired the 120-word prompt with max_tokens=1500 — the
+            # room was there but the prompt forbade using it, so SQL-fallback rows
+            # were collapsed just as hard as everywhere else.
+            # No .format() on these prompts: they carry no placeholders, so the old
+            # call was a no-op that would raise the moment anyone added a brace.
+            system, narration_max_tokens = narration_budget(
+                classify_payload_shape(er.get("results"))
+            )
             if session_id:
                 project_context = get_project_context_by_session(session_id)
                 if project_context:
@@ -580,7 +752,7 @@ class GeminiBrainRunner:
                 system_prompt=system,
                 messages=[{"role": "user", "content": [{"text": user_msg}]}],
                 temperature=0.0,
-                max_tokens=1500,
+                max_tokens=narration_max_tokens,
             )
             cleaned = (answer or "").strip()
             er["answer"] = cleaned or er.get("answer") or ""
@@ -600,6 +772,7 @@ class GeminiBrainRunner:
         session_id: Optional[str] = None,
         selected_model_key: Optional[str] = None,
         raw_query: Optional[str] = None,
+        intent: Optional[int] = None,
     ) -> Generator[Dict[str, Any], None, None]:
         adapter = BedrockAdapter(model_id=HAIKU45_ID, label="Claude Haiku 4.5")
 
@@ -630,6 +803,7 @@ class GeminiBrainRunner:
             user_id=user_id,
             session_id=session_id,
             raw_user_question=raw_query or query,
+            intent=intent,
             save_message_by_session=save_message_by_session,
             update_conversation_state_hybrid_by_session=update_conversation_state_hybrid_by_session,
             maybe_auto_title=lambda sid, q: maybe_auto_title(sid, q, self._call_llm),
@@ -642,9 +816,20 @@ class GeminiBrainRunner:
             if len(data_str) > 5000:
                 data_str = data_str[:5000] + "\n... (truncated)"
 
-            from gemini_brain.reasoning.claude_reasoner import ANALYST_SYSTEM_PROMPT
+            from gemini_brain.reasoning.claude_reasoner import (
+                classify_payload_shape,
+                narration_budget,
+            )
 
-            system = ANALYST_SYSTEM_PROMPT.format(today=datetime.date.today().isoformat())
+            # Same payload-conditional budget as the live-API narration path. This
+            # site previously paired the 120-word prompt with max_tokens=1500 — the
+            # room was there but the prompt forbade using it, so SQL-fallback rows
+            # were collapsed just as hard as everywhere else.
+            # No .format() on these prompts: they carry no placeholders, so the old
+            # call was a no-op that would raise the moment anyone added a brace.
+            system, narration_max_tokens = narration_budget(
+                classify_payload_shape(er.get("results"))
+            )
             if session_id:
                 project_context = get_project_context_by_session(session_id)
                 if project_context:
@@ -671,7 +856,7 @@ class GeminiBrainRunner:
                 system_prompt=system,
                 messages=[{"role": "user", "content": [{"text": user_msg}]}],
                 temperature=0.0,
-                max_tokens=1500,
+                max_tokens=narration_max_tokens,
             )
             er["answer"] = answer.strip()
 
@@ -768,7 +953,6 @@ class GeminiBrainRunner:
         session_id: Optional[str] = None,
         selected_model_key: Optional[str] = None,
         allowed_org_ids: Optional[list[int]] = None,
-        narrate: bool = True,
         auth_token: str = "",
     ) -> Dict[str, Any]:
         """Run query through Gemini Brain pipeline synchronously.
@@ -1031,6 +1215,18 @@ class GeminiBrainRunner:
                     retrieved = retrieved_retry
                     logger.info("Phase E self-correction SUCCESS: recovered to endpoint=%s outcome=%s", retrieved.endpoint, retrieved.outcome.value)
 
+        # Stage 4: an empty recent window is usually a question worth re-asking over
+        # a longer look-back rather than a dead end. Runs before the usable/empty
+        # dispatch below, so a recovered result flows through the normal narration
+        # path and only picks up an extra notice.
+        widened_note: Optional[str] = None
+        if use_api and sel and retrieved.outcome is Outcome.EMPTY:
+            retrieved_widened, widened_note = self._retry_widened(
+                sel, organization_id, db_name, trace, auth_token=auth_token
+            )
+            if retrieved_widened is not None:
+                retrieved = retrieved_widened
+
         endpoint = retrieved.endpoint or None
         tool_spec = next((s for s in REGISTRY.values() if s.endpoint == endpoint), None)
         subject = _subject_for(endpoint, tool_spec, query)
@@ -1041,34 +1237,22 @@ class GeminiBrainRunner:
             results_payload = data if isinstance(data, list) else ([data] if isinstance(data, dict) else [])
             formatter_name = tool_spec.formatter if tool_spec else "row_table"
             formatted_table = render(formatter_name, data)
-            should_narrate = narrate and (tool_spec.narrate if tool_spec else True)
 
-            if not should_narrate:
-                # Phase 3: Zero-LLM Formatter Path for narrate=False tools
-                answer = formatted_table
-                b_label = "None (Zero-LLM Formatter)"
-                bi_new = bo_new = 0
-            else:
-                try:
-                    with trace.stage("bedrock_reasoning", intent=qtype):
-                        answer, b_label, bi_new, bo_new = reason_over_data(
-                            query=query,
-                            data=data,
-                            endpoint=endpoint,
-                            intent=qtype,
-                            session_id=session_id,
-                            selected_model_key=selected_model_key,
-                            adapter_resolver=self.adapter_resolver,
-                            get_project_context_by_session=get_project_context_by_session,
-                        )
-                    bi += int(bi_new or 0)
-                    bo += int(bo_new or 0)
-                    llm_calls += 1
-                except Exception as e:
-                    trace_summary = trace.emit()
-                    err_res = self._err(str(e), t0, gi, go, code=ErrorCode.MODEL_UNAVAILABLE, subject=subject)
-                    err_res["query_trace"] = trace_summary
-                    return err_res
+            with trace.stage("bedrock_reasoning", intent=qtype):
+                answer, b_label, bi_new, bo_new, narration_degraded = self._narrate_or_fallback(
+                    query=query,
+                    data=data,
+                    endpoint=endpoint or "",
+                    fallback_text=formatted_table,
+                    intent=qtype,
+                    session_id=session_id,
+                    selected_model_key=selected_model_key,
+                    get_project_context_by_session=get_project_context_by_session,
+                )
+            if not narration_degraded:
+                bi += int(bi_new or 0)
+                bo += int(bo_new or 0)
+                llm_calls += 1
 
             elapsed = round(time.time() - t0, 2)
             trace_events = []
@@ -1110,9 +1294,22 @@ class GeminiBrainRunner:
                     )
                     maybe_auto_title(session_id, query, self._call_llm)
 
-            if retrieved.outcome is Outcome.PARTIAL:
+            if widened_note:
+                # Say it in the answer itself, not only in the notice: an API
+                # consumer that ignores `notice` must still be told these numbers
+                # cover a different period than the one asked about.
+                answer = (
+                    f"There were no records for the period you asked about, so this "
+                    f"covers {widened_note} instead.\n\n{answer}"
+                )
+                status = "partial"
+                notice = notice_for("WIDENED_WINDOW", subject=subject)
+            elif retrieved.outcome is Outcome.PARTIAL:
                 status = "partial"
                 notice = notice_for("PARTIAL_DATA", subject=subject)
+            elif narration_degraded:
+                status = "partial"
+                notice = notice_for("MODEL_UNAVAILABLE", subject=subject)
             else:
                 status = "ok"
                 notice = None
@@ -1206,6 +1403,7 @@ class GeminiBrainRunner:
                     session_id=session_id,
                     selected_model_key=selected_model_key,
                     raw_query=raw_query,
+                    intent=qtype,
                 )
         except Exception as e:
             trace_summary = trace.emit()
@@ -1281,7 +1479,6 @@ class GeminiBrainRunner:
         session_id: Optional[str] = None,
         selected_model_key: Optional[str] = None,
         allowed_org_ids: Optional[list[int]] = None,
-        narrate: bool = True,
         auth_token: str = "",
     ) -> Generator[Dict[str, Any], None, None]:
         """Run query through Gemini Brain pipeline with streaming status updates.
@@ -1547,6 +1744,18 @@ class GeminiBrainRunner:
                     retrieved = retrieved_retry
                     logger.info("Phase E streaming self-correction SUCCESS: recovered to endpoint=%s outcome=%s", retrieved.endpoint, retrieved.outcome.value)
 
+        # Stage 4: an empty recent window is usually a question worth re-asking over
+        # a longer look-back rather than a dead end. Runs before the usable/empty
+        # dispatch below, so a recovered result flows through the normal narration
+        # path and only picks up an extra notice.
+        widened_note: Optional[str] = None
+        if use_api and sel and retrieved.outcome is Outcome.EMPTY:
+            retrieved_widened, widened_note = self._retry_widened(
+                sel, organization_id, db_name, trace, auth_token=auth_token
+            )
+            if retrieved_widened is not None:
+                retrieved = retrieved_widened
+
         endpoint = retrieved.endpoint or None
         tool_spec = next((s for s in REGISTRY.values() if s.endpoint == endpoint), None)
         subject = _subject_for(endpoint, tool_spec, query)
@@ -1565,26 +1774,30 @@ class GeminiBrainRunner:
                 "row_count": retrieved.row_count,
                 "truncated": retrieved.truncated,
             }
-            should_narrate = narrate and (tool_spec.narrate if tool_spec else True)
-
-            if not should_narrate:
-                # Zero-LLM instant response
-                answer = formatted_table
-                yield {"type": "token", "token": answer}
-                b_label = "None (Zero-LLM Formatter)"
-                bi_new = bo_new = 0
-            else:
-                yield {"status": "Analyzing financial figures", "type": "reasoning"}
+            yield {"status": "Analyzing financial figures", "type": "reasoning"}
+            answer = ""
+            # Stream the widened-window note ahead of the narration, so the caveat
+            # reaches the reader before the numbers do rather than after. It is also
+            # seeded into `answer` so the saved/returned text carries it too.
+            widened_prefix = ""
+            if widened_note:
+                widened_prefix = (
+                    f"There were no records for the period you asked about, so this "
+                    f"covers {widened_note} instead.\n\n"
+                )
+                yield {"type": "token", "token": widened_prefix, "status": "Generating response"}
+            b_label = "Claude Haiku 4.5"
+            bi_new = bo_new = 0
+            narration_degraded = False
+            last_exc: Optional[Exception] = None
+            for attempt in range(2):
+                full_chunks: list = []
                 try:
                     with trace.stage("bedrock_reasoning", intent=qtype):
-                        full_chunks = []
-                        answer = ""
-                        b_label = "Claude Haiku 4.5"
-                        bi_new = bo_new = 0
                         for chunk, meta in reason_over_data_stream(
                             query=query,
                             data=data,
-                            endpoint=endpoint,
+                            endpoint=endpoint or "",
                             intent=qtype,
                             session_id=session_id,
                             selected_model_key=selected_model_key,
@@ -1597,22 +1810,31 @@ class GeminiBrainRunner:
                             else:
                                 answer = chunk
                                 b_label, bi_new, bo_new = meta
-
                     bi += int(bi_new or 0)
                     bo += int(bo_new or 0)
                     llm_calls += 1
+                    last_exc = None
+                    break
                 except Exception as e:
-                    trace_summary = trace.emit()
-                    err_code = ErrorCode.MODEL_UNAVAILABLE
-                    err_notice = notice_for(err_code, subject=subject)
-                    yield {
-                        "type": "error",
-                        "notice": err_notice,
-                    }
-                    err_res = self._err(str(e), t0, gi, go, code=err_code, subject=subject)
-                    err_res["query_trace"] = trace_summary
-                    yield {"final_result": err_res}
-                    return
+                    last_exc = e
+                    logger.warning("Streaming narration attempt %d failed: %s", attempt + 1, e)
+                    if full_chunks:
+                        # Partial narration already streamed to the client -- keep it rather
+                        # than retrying, which would duplicate/conflict with what was sent.
+                        answer = "".join(full_chunks).strip()
+                        b_label = "Claude Haiku 4.5 (partial)"
+                        bi_new = bo_new = 0
+                        last_exc = None
+                        break
+
+            if last_exc is not None:
+                # Both attempts failed before any token streamed -- fall back to the table.
+                logger.error("Streaming narration failed after retry, falling back to formatted table: %s", last_exc)
+                answer = formatted_table
+                yield {"type": "token", "token": answer}
+                b_label = "None (Narration Unavailable — Fallback Table)"
+                bi_new = bo_new = 0
+                narration_degraded = True
 
             yield {"status": "Finalizing response", "type": "finalization"}
             elapsed = round(time.time() - t0, 2)
@@ -1648,9 +1870,19 @@ class GeminiBrainRunner:
                     )
                     maybe_auto_title(session_id, query, self._call_llm)
 
-            if retrieved.outcome is Outcome.PARTIAL:
+            if widened_prefix:
+                # The prefix was streamed to the client; make the persisted answer match.
+                answer = widened_prefix + answer
+                status = "partial"
+                notice = notice_for("WIDENED_WINDOW", subject=subject)
+                yield {"type": "notice", "notice": notice}
+            elif retrieved.outcome is Outcome.PARTIAL:
                 status = "partial"
                 notice = notice_for("PARTIAL_DATA", subject=subject)
+                yield {"type": "notice", "notice": notice}
+            elif narration_degraded:
+                status = "partial"
+                notice = notice_for("MODEL_UNAVAILABLE", subject=subject)
                 yield {"type": "notice", "notice": notice}
             else:
                 status = "ok"
@@ -1754,6 +1986,7 @@ class GeminiBrainRunner:
                 session_id=session_id,
                 selected_model_key=selected_model_key,
                 raw_query=raw_query,
+                intent=qtype,
             ):
                 if isinstance(chunk, dict) and "final_result" in chunk:
                     trace_summary = trace.emit()

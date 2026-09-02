@@ -338,7 +338,11 @@ TOOL_DEFINITIONS = [
                         "params": {
                             "type": "object",
                             "description": (
-                                "Task params. Common: {filters: {year, month, date_from, date_to, status, customer, vendor}, limit: N}. "
+                                "Task params. Common: {filters: {year, month, date_from, date_to, status, customer, vendor}, limit: N, "
+                                "sort_order: 'desc'|'asc'}. For ranked tasks (top_customers, top_vendors, expense_by_category, "
+                                "overdue_invoices, overdue_bills, customer_overdue_summary, unallocated_payments, vat_summary), "
+                                "set sort_order='asc' for 'bottom'/'lowest'/'least'/'worst'/'smallest' requests — default is 'desc' (top/highest). "
+                                "Always set limit to the exact count the user asked for (e.g. 'top 5' → limit: 5); default is 10-20 if unspecified. "
                                 "execute_sql: {sql: 'SELECT ...'}. "
                                 "count_records: {entity: 'invoice'|'expense'|'customer'|'vendor'|'item'|'journal_entry'}. "
                                 "get_invoice_details: {invoice_number}. "

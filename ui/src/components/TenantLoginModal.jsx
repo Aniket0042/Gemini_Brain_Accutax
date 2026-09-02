@@ -6,7 +6,7 @@ const TENANT_PRESETS = [
     organization_id: 69,
     org_name: 'Accutax LLC',
     user_id: 9,
-    db_name: 'accutax_bk_1_5',
+    db_name: 'accutax_bk_1_4',
     description: 'Primary Tenant — UAE Accounting & Invoicing',
   },
   {

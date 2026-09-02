@@ -15,6 +15,8 @@ import re
 from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple
 
 from gemini_brain.router.dates import Window
+from gemini_brain.utils.ranking import extract_direction_from_text
+from gemini_brain.utils.ranking import extract_limit_from_text as _extract_limit_from_query
 
 
 def _safe_int(m: Any, group: int, default: int = 10) -> int:
@@ -38,15 +40,23 @@ class RoutingRule:
 
 ROUTING_RULES: List[RoutingRule] = [
     RoutingRule(
+        # endpoint is a DB report (rpt_income_total), not the REST /income/total
+        # endpoint. That REST endpoint was found to ignore organization_id
+        # entirely -- it returned the identical total for every org tested,
+        # including ones that don't exist -- because the REST backend and this
+        # Postgres database are separate systems with no data overlap for these
+        # tenants. sql_task is unchanged: it independently feeds the SQL
+        # fallback tier's own direct-DB fast path (get_sql_fast_path_rules),
+        # which was already correct and untouched by this.
         name="income_total",
         patterns=[
             re.compile(r"\b(total (sales|revenue|income)|how much (income|revenue)|annual revenue|total invoiced amount)\b", re.IGNORECASE),
             re.compile(r"(?:total|annual)\s+(?:sales|revenue|income)|how\s+much\s+(?:sales|revenue|income)\s+did\s+we\s+make", re.IGNORECASE),
         ],
-        endpoint="/income/total",
+        endpoint="rpt_income_total",
         sql_task="get_invoice_total",
         intent=4,
-        quick_reference_hint="total sales / total revenue / total income / how much income → /income/total",
+        quick_reference_hint="total sales / total revenue / total income / how much income → rpt_income_total (direct DB read)",
         keyword_triggers=["total sales", "total revenue", "total income", "how much income", "how much revenue", "how much sales"],
     ),
     RoutingRule(
@@ -143,26 +153,34 @@ ROUTING_RULES: List[RoutingRule] = [
     RoutingRule(
         name="sales_by_customer",
         patterns=[
-            re.compile(r"\b(top customers?|sales by customer|highest grossing buyers?)\b", re.IGNORECASE),
-            re.compile(r"top\s+(\d+)\s+customers?", re.IGNORECASE),
+            re.compile(
+                r"\b(top|bottom|least|lowest|worst)\s+customers?\b|"
+                r"\bsales by customer\b|\bhighest grossing buyers?\b",
+                re.IGNORECASE,
+            ),
+            re.compile(r"(?:top|bottom|least|lowest|worst)\s+(\d+)\s+customers?", re.IGNORECASE),
         ],
         endpoint="/report/sales-by-customer",
         sql_task="top_customers",
         intent=4,
         quick_reference_hint="top customers / sales by customer → /report/sales-by-customer",
-        keyword_triggers=["top customers", "sales by customer", "best customers"],
+        keyword_triggers=["top customers", "bottom customers", "sales by customer", "best customers", "worst customers"],
     ),
     RoutingRule(
         name="top_vendors",
         patterns=[
-            re.compile(r"\b(top (vendors?|suppliers?)|purchases by vendor|top suppliers by purchase)\b", re.IGNORECASE),
-            re.compile(r"top\s+(\d+)\s+(?:vendors?|suppliers?)", re.IGNORECASE),
+            re.compile(
+                r"\b(?:top|bottom|least|lowest|worst)\s+(?:vendors?|suppliers?)\b|"
+                r"\bpurchases by vendor\b|\btop suppliers by purchase\b",
+                re.IGNORECASE,
+            ),
+            re.compile(r"(?:top|bottom|least|lowest|worst)\s+(\d+)\s+(?:vendors?|suppliers?)", re.IGNORECASE),
         ],
         endpoint="/report/purchases-by-vendor",
         sql_task="top_vendors",
         intent=4,
         quick_reference_hint="top vendors / purchases by supplier → /report/purchases-by-vendor",
-        keyword_triggers=["top vendors", "top suppliers", "purchases by vendor"],
+        keyword_triggers=["top vendors", "bottom vendors", "top suppliers", "purchases by vendor"],
     ),
     RoutingRule(
         name="expense_by_category",
@@ -335,7 +353,11 @@ def get_sql_fast_path_rules() -> List[Tuple[Pattern, str, Callable]]:
         elif r.name == "expense_total":
             builder = lambda m, oid: {"organization_id": oid, "filter_type": "YEARLY"}
         elif r.name in ("sales_by_customer", "top_vendors"):
-            builder = lambda m, oid: {"limit": _safe_int(m, 1, 10), "organization_id": oid}
+            builder = lambda m, oid: {
+                "limit": _safe_int(m, 1, 10),
+                "sort_order": "asc" if (m is not None and extract_direction_from_text(m.string)) else "desc",
+                "organization_id": oid,
+            }
         elif r.name == "cash_forecast":
             builder = lambda m, oid: {"months": 6, "organization_id": oid}
         elif r.name in ("invoice_list", "bill_list"):
@@ -394,7 +416,7 @@ _EXTRA_SQL_VERIFIERS: Dict[str, Tuple[str, Callable[[Any, int], Dict[str, Any]]]
         "SUM(ii.line_amount) AS total_sales "
         "FROM income_items ii JOIN items i ON i.id = ii.items_id "
         "JOIN income inc ON inc.id = ii.income_id "
-        f"WHERE inc.organization_id = '{int(oid)}' AND (ii.is_deleted IS NOT TRUE) "
+        f"WHERE inc.organization_id = '{int(oid)}' "
         "GROUP BY i.name ORDER BY total_sales DESC LIMIT 10"
     )}),
 }
@@ -425,7 +447,12 @@ def get_endpoint_sql_verifiers() -> Dict[str, Tuple[str, Callable[[Any, int], Di
         if r.name in ("income_total", "expense_total"):
             builder = lambda m, oid: {"organization_id": oid, "filter_type": "YEARLY"}
         elif r.name in ("sales_by_customer", "top_vendors"):
-            builder = lambda m, oid: {"limit": 10, "organization_id": oid}
+            patterns = r.patterns
+            builder = lambda q, oid, patterns=patterns: {
+                "limit": _extract_limit_from_query(q, patterns, 10),
+                "sort_order": "asc" if extract_direction_from_text(q) else "desc",
+                "organization_id": oid,
+            }
         elif r.name == "cash_forecast":
             builder = lambda m, oid: {"months": 6, "organization_id": oid}
         elif r.name in ("invoice_list", "bill_list"):

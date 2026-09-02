@@ -112,15 +112,15 @@ def _build_params_for_endpoint(
 ) -> Dict[str, Any]:
     params: Dict[str, Any] = {"organization_id": organization_id}
 
-    if endpoint in ("/income/total", "/expense/total"):
-        filter_year = str(window.date_to.year)
+    if endpoint == "/expense/total":
+        # filter_year/filter_type are derived from `window` by normalize_endpoint_params below.
+        # rpt_income_total is NOT here: it's a DB report taking start_date/end_date, same as
+        # the branch below, not the REST endpoint's filter_year/filter_type contract.
         params = {
             "organization_id": organization_id,
             "user_id": str(uid),
-            "filter_year": filter_year,
-            "filter_type": "YEARLY",
         }
-    elif endpoint in ("/report/profit-loss", "/report/cash-flow", "/report/sales-by-customer", "/report/expense-by-category"):
+    elif endpoint in ("rpt_income_total", "/report/profit-loss", "/report/cash-flow", "/report/sales-by-customer", "/report/expense-by-category"):
         params = {
             "organization_id": organization_id,
             "start_date": window.date_from.isoformat(),
@@ -185,7 +185,7 @@ def _build_params_for_endpoint(
         "path_params": {},
         "query_params": params,
     }
-    return normalize_endpoint_params(raw_sel, organization_id, today_date, user_id=uid)
+    return normalize_endpoint_params(raw_sel, organization_id, today_date, user_id=uid, window=window)
 
 
 def fast_route(

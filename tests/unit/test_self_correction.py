@@ -72,7 +72,6 @@ def test_runner_recovers_via_1_turn_self_correction():
             query="list items in catalog",
             organization_id=27,
             use_api=True,
-            narrate=False,
         )
 
         assert call_count == 2
@@ -134,7 +133,13 @@ def test_empty_and_denied_do_not_trigger_self_correction():
     with patch("gemini_brain.orchestrator.gemini_brain_runner.fast_route", return_value=None), \
          patch("gemini_brain.orchestrator.gemini_brain_runner.classify_intent", return_value=({"type": 4, "reason": "data_query"}, 10, 10)), \
          patch("gemini_brain.orchestrator.gemini_brain_runner.select_endpoint", side_effect=mock_select), \
-         patch.object(runner, "_retrieve", return_value=Retrieved(Outcome.EMPTY, endpoint="/income/list", reason="zero_rows")):
+         patch.object(runner, "_retrieve", return_value=Retrieved(Outcome.EMPTY, endpoint="/income/list", reason="zero_rows")), \
+         patch("gemini_brain.orchestrator.gemini_brain_runner._verify_empty_via_sql", return_value=None):
+        # _verify_empty_via_sql reaches a real DB connection outside of the
+        # mocked runner._retrieve above. With a live database configured (org 27
+        # genuinely has data in the current DB), that live cross-check can flip
+        # the EMPTY outcome this test is asserting on to OK -- unrelated to what
+        # this test checks (self-correction gating), so it's forced off here.
 
         res = runner.run(
             query="show invoices for unknown client",

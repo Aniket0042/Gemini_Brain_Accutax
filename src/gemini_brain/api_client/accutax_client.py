@@ -20,6 +20,7 @@ from typing import Any, Dict, Optional, Tuple
 
 import httpx
 
+from gemini_brain.auth.service_token import get_service_token
 from gemini_brain.config.settings import settings
 from gemini_brain.resilience.outcomes import Outcome, Retrieved, classify_payload
 
@@ -63,7 +64,7 @@ def get_async_client(base_url: str = "", auth_token: str = "") -> httpx.AsyncCli
     """Get or create singleton httpx.AsyncClient with connection pooling."""
     global _async_client
     b_url = base_url or settings.accutax_base_url
-    token = auth_token or active_auth_token.get() or settings.accutax_auth_token
+    token = auth_token or active_auth_token.get() or get_service_token()
 
     if _async_client is None or _async_client.is_closed:
         headers = {}
@@ -84,7 +85,7 @@ def get_sync_client(base_url: str = "", auth_token: str = "") -> httpx.Client:
     """Get or create singleton httpx.Client for synchronous calls."""
     global _sync_client
     b_url = base_url or settings.accutax_base_url
-    token = auth_token or active_auth_token.get() or settings.accutax_auth_token
+    token = auth_token or active_auth_token.get() or get_service_token()
 
     if _sync_client is None or _sync_client.is_closed:
         headers = {}
@@ -182,7 +183,7 @@ def call_api_resilient(
     clean_params = {k: v for k, v in query_params.items() if v is not None}
 
     headers = {}
-    token = auth_token or active_auth_token.get() or settings.accutax_auth_token
+    token = auth_token or active_auth_token.get() or get_service_token()
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
@@ -336,7 +337,7 @@ async def call_api_async(
     clean_params = {k: v for k, v in query_params.items() if v is not None}
 
     headers = {}
-    token = auth_token or active_auth_token.get() or settings.accutax_auth_token
+    token = auth_token or active_auth_token.get() or get_service_token()
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
@@ -371,7 +372,7 @@ def call_api(
     clean_params = {k: v for k, v in query_params.items() if v is not None}
 
     headers = {}
-    token = auth_token or active_auth_token.get() or settings.accutax_auth_token
+    token = auth_token or active_auth_token.get() or get_service_token()
     if token:
         headers["Authorization"] = f"Bearer {token}"
 

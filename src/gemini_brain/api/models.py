@@ -44,11 +44,6 @@ class QueryRequest(BaseModel):
         description="Optional model override for model arena comparison.",
         examples=[None],
     )
-    narrate: bool = Field(
-        default=True,
-        description="Whether to generate natural language narration with Claude or return raw JSON immediately.",
-        examples=[True],
-    )
 
 
 class TokenUsageSchema(BaseModel):

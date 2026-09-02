@@ -41,7 +41,27 @@ class GeminiBrainSettings(BaseSettings):
 
     # ── Accutax Backend API ────────────────────────────────────
     accutax_base_url: str = Field(default="http://13.127.157.108:8081")
-    accutax_auth_token: str = Field(default="")
+    accutax_auth_token: str = Field(
+        default="",
+        description=(
+            "Long-lived seed/fallback bearer token. Used only when no per-request "
+            "user token is available and no service account is configured — it is a "
+            "~24h JWT and goes stale. Prefer the service account fields below."
+        ),
+    )
+    accutax_service_email: str = Field(
+        default="",
+        description=(
+            "Service-account email. When set with accutax_service_password, "
+            "unattended API calls re-authenticate before expiry instead of relying "
+            "on the static accutax_auth_token. Never used in place of a real user "
+            "token — see auth/service_token.py."
+        ),
+    )
+    accutax_service_password: str = Field(
+        default="",
+        description="Service-account password. Supply via environment, never commit.",
+    )
     accutax_user_id: str = Field(
         default="18",
         description=(

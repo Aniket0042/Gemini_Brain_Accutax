@@ -403,14 +403,14 @@ def _task_check_field(table: str, column: str) -> Dict:
 KNOWN_JOINS = {
     # ── Income chain ──
     ("income", "contacts"):             "LEFT JOIN contacts c ON c.id = inc.contact_id",
-    ("income", "income_items"):         "JOIN income_items ii ON ii.income_id = inc.id AND ii.is_deleted = false",
+    ("income", "income_items"):         "JOIN income_items ii ON ii.income_id = inc.id",
     ("income_items", "items"):          "JOIN items i ON i.id = ii.items_id",
     ("income", "status_type"):          "LEFT JOIN status_type st ON st.id = inc.status_type_id",
     ("income", "projects"):             "LEFT JOIN projects prj ON prj.id = inc.project_id",
 
     # ── Expense chain ──
     ("expense", "contacts"):            "LEFT JOIN contacts c ON c.id = e.contact_id",
-    ("expense", "expense_items"):       "JOIN expense_items ei ON ei.expense_id = e.id AND ei.is_deleted = false",
+    ("expense", "expense_items"):       "JOIN expense_items ei ON ei.expense_id = e.id",
     ("expense_items", "items"):         "JOIN items i ON i.id = ei.items_id",
     ("expense", "status_type"):         "LEFT JOIN status_type st ON st.id = e.status_type_id",
     ("expense", "expense_category_type"): "LEFT JOIN expense_category_type ect ON ect.id = e.expense_category_type_id",
@@ -421,8 +421,8 @@ KNOWN_JOINS = {
 
     # ── Contact chain ──
     ("contacts", "contact_type"):       "LEFT JOIN contact_type ct ON ct.id = c.contact_type_id",
-    ("contacts", "income"):             "LEFT JOIN income inc ON inc.contact_id = c.id AND inc.is_deleted = false",
-    ("contacts", "expense"):            "LEFT JOIN expense e ON e.contact_id = c.id AND e.is_deleted = false",
+    ("contacts", "income"):             "LEFT JOIN income inc ON inc.contact_id = c.id",
+    ("contacts", "expense"):            "LEFT JOIN expense e ON e.contact_id = c.id",
 
     # ── Item chain ──
     ("items", "item_type"):             "LEFT JOIN item_type it ON it.id = itm.item_type_id",

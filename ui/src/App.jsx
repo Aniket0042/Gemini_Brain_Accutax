@@ -104,7 +104,7 @@ export default function App() {
           ...matched,
           organization_id: matched.id || matched.organization_id,
           user_id: user?.user_id || 18,
-          db_name: 'accutax_bk_1_5',
+          db_name: 'accutax_bk_1_4',
         });
         return;
       }
@@ -130,7 +130,7 @@ export default function App() {
       ...selected,
       organization_id: selected.id || selected.organization_id,
       user_id: user?.user_id || 18,
-      db_name: 'accutax_bk_1_5',
+      db_name: 'accutax_bk_1_4',
     });
   };
 
@@ -141,7 +141,7 @@ export default function App() {
       ...tenantObj,
       organization_id: orgId,
       user_id: currentUser?.user_id || 18,
-      db_name: 'accutax_bk_1_5',
+      db_name: 'accutax_bk_1_4',
     };
     setActiveTenant(fullTenant);
     localStorage.setItem('gemini_brain_active_org', String(orgId));
@@ -166,7 +166,7 @@ export default function App() {
         ...firstT,
         organization_id: firstT.id || firstT.organization_id,
         user_id: userSession.user_id,
-        db_name: 'accutax_bk_1_5',
+        db_name: 'accutax_bk_1_4',
       };
       setActiveTenant(fullT);
       localStorage.setItem('gemini_brain_active_org', String(fullT.organization_id));

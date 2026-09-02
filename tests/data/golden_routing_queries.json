@@ -5,9 +5,11 @@
     "expected_intent": 4,
     "category": "Data Lookup",
     "query_type": "canonical",
-    "expected_endpoint_or_task": "/income/total",
+    "expected_endpoint_or_task": "rpt_income_total",
     "expected_layer": "layer1_fast",
-    "expected_params_subset": {"filter_type": "YEARLY"}
+    "expected_params_subset": {
+      "organization_id": "27"
+    }
   },
   {
     "id": "Q02",
@@ -15,9 +17,12 @@
     "expected_intent": 4,
     "category": "Data Lookup",
     "query_type": "canonical",
-    "expected_endpoint_or_task": "/income/total",
+    "expected_endpoint_or_task": "rpt_income_total",
     "expected_layer": "layer1_fast",
-    "expected_params_subset": {"filter_type": "YEARLY", "filter_year": "2026"}
+    "expected_params_subset": {
+      "start_date": "2026-01-01",
+      "end_date": "2026-12-31"
+    }
   },
   {
     "id": "Q03",
@@ -25,9 +30,11 @@
     "expected_intent": 4,
     "category": "Data Lookup",
     "query_type": "canonical",
-    "expected_endpoint_or_task": "/income/total",
+    "expected_endpoint_or_task": "rpt_income_total",
     "expected_layer": "layer1_fast",
-    "expected_params_subset": {"filter_type": "MONTHLY"}
+    "expected_params_subset": {
+      "organization_id": "27"
+    }
   },
   {
     "id": "Q04",
@@ -37,7 +44,9 @@
     "query_type": "canonical",
     "expected_endpoint_or_task": "/expense/total",
     "expected_layer": "layer1_fast",
-    "expected_params_subset": {"filter_year": "2026"}
+    "expected_params_subset": {
+      "filter_year": "2026"
+    }
   },
   {
     "id": "Q05",
@@ -97,7 +106,9 @@
     "query_type": "canonical",
     "expected_endpoint_or_task": "/report/cash-forecast",
     "expected_layer": "layer1_fast",
-    "expected_params_subset": {"months": 6}
+    "expected_params_subset": {
+      "months": 6
+    }
   },
   {
     "id": "Q11",
@@ -235,9 +246,9 @@
     "expected_intent": 4,
     "category": "Data Lookup",
     "query_type": "synonym",
-    "expected_endpoint_or_task": "/income/total",
+    "expected_endpoint_or_task": "rpt_income_total",
     "expected_layer": "layer2_llm_api",
-    "expected_params_subset": {"filter_type": "YEARLY", "filter_year": "2026"}
+    "expected_params_subset": {}
   },
   {
     "id": "Q25",
@@ -387,7 +398,9 @@
     "query_type": "synonym",
     "expected_endpoint_or_task": "/contact/find",
     "expected_layer": "layer2_llm_api",
-    "expected_params_subset": {"search": "Acme Corp"}
+    "expected_params_subset": {
+      "search": "Acme Corp"
+    }
   },
   {
     "id": "Q40",
@@ -397,7 +410,9 @@
     "query_type": "synonym",
     "expected_endpoint_or_task": "/income/find",
     "expected_layer": "layer2_llm_api",
-    "expected_params_subset": {"search": "INV-2026-001"}
+    "expected_params_subset": {
+      "search": "INV-2026-001"
+    }
   },
   {
     "id": "Q41",
@@ -405,9 +420,9 @@
     "expected_intent": 4,
     "category": "Data Lookup",
     "query_type": "typo",
-    "expected_endpoint_or_task": "/income/total",
+    "expected_endpoint_or_task": "rpt_income_total",
     "expected_layer": "layer2_llm_api",
-    "expected_params_subset": {"filter_year": "2026"}
+    "expected_params_subset": {}
   },
   {
     "id": "Q42",
@@ -567,7 +582,10 @@
     "query_type": "compound",
     "expected_endpoint_or_task": "/income/list",
     "expected_layer": "layer2_llm_api",
-    "expected_params_subset": {"start_date": "2026-01-01", "end_date": "2026-06-30"}
+    "expected_params_subset": {
+      "start_date": "2026-01-01",
+      "end_date": "2026-06-30"
+    }
   },
   {
     "id": "Q58",
@@ -577,7 +595,9 @@
     "query_type": "compound",
     "expected_endpoint_or_task": "/expense/list",
     "expected_layer": "layer2_llm_api",
-    "expected_params_subset": {"status": "PENDING"}
+    "expected_params_subset": {
+      "status": "PENDING"
+    }
   },
   {
     "id": "Q59",
@@ -607,7 +627,9 @@
     "query_type": "canonical",
     "expected_endpoint_or_task": "/dashboard/web/v3",
     "expected_layer": "layer2_llm_api",
-    "expected_params_subset": {"year": "2026"}
+    "expected_params_subset": {
+      "year": "2026"
+    }
   },
   {
     "id": "Q62",
@@ -647,7 +669,9 @@
     "query_type": "canonical",
     "expected_endpoint_or_task": "/contact/list",
     "expected_layer": "layer2_llm_api",
-    "expected_params_subset": {"contact_type_id": 4}
+    "expected_params_subset": {
+      "contact_type_id": 4
+    }
   },
   {
     "id": "Q66",
@@ -657,7 +681,9 @@
     "query_type": "canonical",
     "expected_endpoint_or_task": "/contact/list",
     "expected_layer": "layer2_llm_api",
-    "expected_params_subset": {"contact_type_id": 5}
+    "expected_params_subset": {
+      "contact_type_id": 5
+    }
   },
   {
     "id": "Q67",
@@ -697,7 +723,9 @@
     "query_type": "synonym",
     "expected_endpoint_or_task": "/expense/find",
     "expected_layer": "layer2_llm_api",
-    "expected_params_subset": {"search": "BILL-2026-889"}
+    "expected_params_subset": {
+      "search": "BILL-2026-889"
+    }
   },
   {
     "id": "Q71",
@@ -707,7 +735,9 @@
     "query_type": "synonym",
     "expected_endpoint_or_task": "/report/cash-forecast",
     "expected_layer": "layer1_fast",
-    "expected_params_subset": {"months": 6}
+    "expected_params_subset": {
+      "months": 6
+    }
   },
   {
     "id": "Q72",
@@ -745,9 +775,9 @@
     "expected_intent": 4,
     "category": "Data Lookup",
     "query_type": "synonym",
-    "expected_endpoint_or_task": "/income/total",
+    "expected_endpoint_or_task": "rpt_income_total",
     "expected_layer": "layer2_llm_api",
-    "expected_params_subset": {"filter_type": "QUARTERLY"}
+    "expected_params_subset": {}
   },
   {
     "id": "Q76",
@@ -798,5 +828,95 @@
     "expected_endpoint_or_task": "/report/customer-balance-summary",
     "expected_layer": "layer1_fast",
     "expected_params_subset": {}
+  },
+  {
+    "id": "Q81",
+    "query": "top 5 customers overdue 90 days",
+    "expected_intent": 4,
+    "category": "Ranked Query",
+    "query_type": "ranked_count_and_direction",
+    "expected_endpoint_or_task": "rpt_aged_receivables_detail",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {
+      "limit": 5,
+      "sort_order": "desc"
+    }
+  },
+  {
+    "id": "Q82",
+    "query": "bottom 5 customers overdue 90 days",
+    "expected_intent": 4,
+    "category": "Ranked Query",
+    "query_type": "ranked_count_and_direction",
+    "expected_endpoint_or_task": "rpt_aged_receivables_detail",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {
+      "limit": 5,
+      "sort_order": "asc"
+    }
+  },
+  {
+    "id": "Q83",
+    "query": "top 5 vendors by spend",
+    "expected_intent": 4,
+    "category": "Ranked Query",
+    "query_type": "ranked_count_and_direction",
+    "expected_endpoint_or_task": "/report/purchases-by-vendor",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {
+      "limit": 5,
+      "sort_order": "desc"
+    }
+  },
+  {
+    "id": "Q84",
+    "query": "least 4 vendors by spend",
+    "expected_intent": 4,
+    "category": "Ranked Query",
+    "query_type": "ranked_count_and_direction",
+    "expected_endpoint_or_task": "/report/purchases-by-vendor",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {
+      "limit": 4,
+      "sort_order": "asc"
+    }
+  },
+  {
+    "id": "Q85",
+    "query": "bottom 3 expense categories this year",
+    "expected_intent": 4,
+    "category": "Ranked Query",
+    "query_type": "ranked_count_and_direction",
+    "expected_endpoint_or_task": "expense_by_category",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {
+      "limit": 3,
+      "sort_order": "asc"
+    }
+  },
+  {
+    "id": "Q86",
+    "query": "top 10 vendors by purchases",
+    "expected_intent": 4,
+    "category": "Ranked Query",
+    "query_type": "ranked_count_and_direction",
+    "expected_endpoint_or_task": "/report/purchases-by-vendor",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {
+      "limit": 10,
+      "sort_order": "desc"
+    }
+  },
+  {
+    "id": "Q87",
+    "query": "least profitable projects",
+    "expected_intent": 4,
+    "category": "Ranked Query",
+    "query_type": "ranked_count_and_direction",
+    "expected_endpoint_or_task": "rpt_profit_loss_by_project",
+    "expected_layer": "layer1_fast",
+    "expected_params_subset": {
+      "sort_order": "asc"
+    }
   }
 ]

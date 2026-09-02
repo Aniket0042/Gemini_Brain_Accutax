@@ -61,6 +61,18 @@ COMPLEXITY_PREVIEW_MAX_CHARS: int = 800
 #: Max number of items/list entries sent to Claude for reasoning.
 REASONING_MAX_ITEMS: int = 40
 
+#: A payload with at least this many rows (or a breakdown with this many entries)
+#: is narrated with the detailed prompt and budget instead of the 120-word one.
+#: Below it, a terse answer is the right answer — "revenue is AED X" needs no
+#: room to breathe, and the extra output tokens would be pure latency.
+NARRATION_TABULAR_MIN_ROWS: int = 3
+
+#: Output-token ceilings per payload shape. Output tokens dominate generation
+#: time, so these are the main latency lever in the narration stage — raise the
+#: tabular one only with a measurement to back it.
+NARRATION_MAX_TOKENS_SCALAR: int = 400
+NARRATION_MAX_TOKENS_TABULAR: int = 1200
+
 #: Max chars of serialised data sent to Claude for reasoning.
 REASONING_MAX_CHARS: int = 5000
 
@@ -76,6 +88,25 @@ SQL_TIMEOUT_MS: str = "20000"
 #: Engine tool-calling loop limits.
 ENGINE_MAX_ITERATIONS: int = 5
 ENGINE_TIME_BUDGET_SECONDS: int = 90
+
+#: Tool results older than the last exchange are truncated to this many characters
+#: before the next iteration. The full result was already read by the model on the
+#: turn it arrived; keeping it verbatim only re-sends it as input tokens on every
+#: subsequent iteration. Key aggregates survive because compact_tool_result puts
+#: PERIOD/SUMMARY first (see hoisting in sql_engine).
+ENGINE_TOOL_RESULT_TRUNCATE_CHARS: int = 600
+
+#: Number of trailing messages left untruncated — the current exchange the model
+#: is actively reasoning over.
+ENGINE_TRUNCATION_KEEP_RECENT: int = 2
+
+#: Extra wall-clock allowance, on top of ENGINE_TIME_BUDGET_SECONDS, for turning
+#: whatever the loop retrieved into a real answer after it exits without one.
+#: Deliberately small: recovery only ever runs on a query that already spent its
+#: whole budget, so an unbounded retry is how a 90s query becomes a 120s one.
+#: Past this deadline the engine stops calling the LLM and renders the rows it
+#: has with the deterministic formatter instead.
+ENGINE_RECOVERY_BUDGET_SECONDS: int = 8
 
 # ─────────────────────────────────────────────────────────────
 # Bedrock prompt-caching configuration

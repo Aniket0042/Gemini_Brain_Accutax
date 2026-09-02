@@ -11,13 +11,16 @@ from gemini_brain.router.fast_router import FastRouteResult, fast_route
 
 
 def test_fast_router_income_total():
+    """income_total resolves to a direct DB report, not the REST /income/total
+    endpoint -- that endpoint was found to ignore organization_id and return
+    the identical figure for every org, including ones that don't exist."""
     res = fast_route("What is our total revenue this year?", organization_id=27, user_id="18")
     assert res is not None
-    assert res.endpoint == "/income/total"
+    assert res.endpoint == "rpt_income_total"
     assert res.intent == 4
-    assert res.query_params["filter_type"] == "YEARLY"
-    assert res.query_params["user_id"] == "18"
-    assert "filter_year" in res.query_params
+    assert res.query_params["organization_id"] == 27
+    assert "start_date" in res.query_params
+    assert "end_date" in res.query_params
 
 
 def test_fast_router_expense_total():
@@ -76,14 +79,19 @@ def test_fast_router_unrecognized_returns_none():
 
 
 def test_fast_router_runner_integration_zero_gemini_calls():
-    """Verify that a fast-router hit executes with 0 LLM routing calls."""
+    """Verify that a fast-router hit executes with 0 LLM routing calls.
+
+    income_total is routed to a direct DB report (rpt_income_total), not REST --
+    see test_fast_router_income_total for why. run_report_safe is what
+    _retrieve() actually calls for rpt_ endpoints, so that's what's mocked here.
+    """
     runner = GeminiBrainRunner(api_key="test-key")
     runner._enforce_tenant_isolation = MagicMock(return_value=27)
     runner._call_llm = MagicMock()
 
     with patch("gemini_brain.orchestrator.gemini_brain_runner.classify_intent") as mock_classify, \
          patch("gemini_brain.orchestrator.gemini_brain_runner.select_endpoint") as mock_select, \
-         patch("gemini_brain.api_client.accutax_client.call_api_resilient", return_value=Retrieved(Outcome.OK, payload={"total_sales": "50000.00"}, row_count=1, endpoint="/income/total")) as mock_call_api, \
+         patch("gemini_brain.reports.engine.run_report_safe", return_value=Retrieved(Outcome.OK, payload={"summary": {"total_income": 50000.00}}, row_count=1, endpoint="rpt_income_total")) as mock_run_report, \
          patch("gemini_brain.orchestrator.gemini_brain_runner.reason_over_data", return_value=("Total sales is AED 50,000.00", "Claude Haiku 4.5", 10, 10)) as mock_reason:
 
         res = runner.run(
@@ -97,9 +105,9 @@ def test_fast_router_runner_integration_zero_gemini_calls():
         mock_select.assert_not_called()
         runner._call_llm.assert_not_called()
 
-        # REST API and Claude reasoning are executed directly
-        mock_call_api.assert_called_once()
+        # DB report and Claude reasoning are executed directly
+        mock_run_report.assert_called_once()
         mock_reason.assert_called_once()
 
         assert res["routing_info"]["path"] == "api_then_anthropic"
-        assert res["routing_info"]["api_endpoint"] == "/income/total"
+        assert res["routing_info"]["api_endpoint"] == "rpt_income_total"

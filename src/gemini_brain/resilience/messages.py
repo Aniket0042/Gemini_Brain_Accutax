@@ -18,6 +18,17 @@ NOTICES: Dict[str, Dict[str, Any]] = {
             "Confirm the entries were posted to this organization",
         ],
     },
+    "WIDENED_WINDOW": {
+        "kind": "partial",
+        "title": "Showing a longer period",
+        "message": (
+            "Nothing was recorded for the period you asked about, so this covers "
+            "{subject} over a longer window instead."
+        ),
+        "suggestions": [
+            "Ask for a specific period if you need it scoped differently",
+        ],
+    },
     "PARTIAL_DATA": {
         "kind": "partial",
         "title": "Showing a partial view",

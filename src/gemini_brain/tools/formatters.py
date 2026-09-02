@@ -2,7 +2,10 @@
 formatters.py — Deterministic markdown table/card renderers for Gemini Brain tools.
 
 Formats numbers as 'AED 1,234,567.00'.
-Provides fast, zero-LLM visual responses for narrate=False tools and table previews.
+Every tool result is narrated by an LLM before reaching the user (see
+orchestrator/gemini_brain_runner.py); this module's table is exposed alongside
+the narration as `table_markdown`, and is also the deterministic fallback used
+if narration itself fails.
 """
 from __future__ import annotations
 

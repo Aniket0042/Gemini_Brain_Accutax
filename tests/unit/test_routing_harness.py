@@ -13,9 +13,9 @@ from scripts.evaluate_routing_harness import (
 
 
 def test_golden_dataset_schema_and_size():
-    """Verify that golden dataset contains 80 items and each adheres to the required schema."""
+    """Verify that golden dataset contains 87 items and each adheres to the required schema."""
     dataset = load_golden_dataset()
-    assert len(dataset) == 80, f"Expected 80 queries, got {len(dataset)}"
+    assert len(dataset) == 87, f"Expected 87 queries, got {len(dataset)}"
 
     required_keys = {"id", "query", "expected_intent", "category", "query_type", "expected_endpoint_or_task", "expected_layer"}
     for idx, item in enumerate(dataset):
@@ -37,16 +37,24 @@ def test_percentile_calculation():
 
 
 def test_evaluate_query_fast_router():
-    """Test that evaluate_query correctly identifies a canonical fast router query."""
+    """Test that evaluate_query correctly identifies a canonical fast router query.
+
+    income_total resolves to a direct DB report (rpt_income_total), not REST
+    /income/total -- that endpoint was found to ignore organization_id and
+    return the identical figure for every org, including ones that don't exist.
+    organization_id is checked rather than start_date/end_date because "this
+    year" is relative to today's date and would drift; see golden_routing_queries.json
+    Q01/Q03 for the same reasoning applied to the real dataset.
+    """
     item = {
         "id": "Q_TEST_1",
         "query": "What is our total revenue this year?",
         "expected_intent": 4,
         "category": "Data Lookup",
         "query_type": "canonical",
-        "expected_endpoint_or_task": "/income/total",
+        "expected_endpoint_or_task": "rpt_income_total",
         "expected_layer": "layer1_fast",
-        "expected_params_subset": {"filter_type": "YEARLY"},
+        "expected_params_subset": {"organization_id": "27"},
     }
     res = evaluate_query(item, mode="offline")
     assert res["layer_matched"] == "layer1_fast"
@@ -83,7 +91,7 @@ def test_run_evaluation_offline_pipeline(tmp_path):
 
     metrics = run_evaluation(dataset, mode="offline", output_md=md_out, output_json=json_out)
 
-    assert metrics["summary"]["total_queries"] == 80
+    assert metrics["summary"]["total_queries"] == 87
     assert metrics["summary"]["layer1"]["hits"] >= 20
     assert metrics["summary"]["layer1"]["accuracy_on_hits_pct"] >= 85.0
     assert md_out.exists()

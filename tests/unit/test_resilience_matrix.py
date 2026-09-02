@@ -69,22 +69,24 @@ def test_scenario_2_live_api_empty_list(mock_intent, mock_sel):
     ))
     runner._db_fallback = MagicMock()
 
-    with patch("gemini_brain.orchestrator.gemini_brain_runner.reason_over_data") as mock_reason:
+    with patch("gemini_brain.orchestrator.gemini_brain_runner.reason_over_data", side_effect=Exception("bedrock down")) as mock_reason:
         res = runner.run("show overdue invoices", organization_id=1)
         assert res["status"] == "empty"
         assert res["notice"]["code"] == "NO_ROWS"
         assert res["notice"]["kind"] == "empty"
         assert res["results"] == []
         assert "no matching records" in res["answer"].lower()
-        # Confirmed zero LLM calls and zero DB fallback calls
-        assert mock_reason.call_count == 0
+        # Narration is attempted (with one retry) even for zero rows; this falls back
+        # to the deterministic answer above only because Bedrock is unavailable here.
+        assert mock_reason.call_count == 2
         assert runner._db_fallback.call_count == 0
 
 
 # ── Scenario 3: Live API returns 404 ─────────────────────────────────────────
+@patch("gemini_brain.orchestrator.gemini_brain_runner._verify_empty_via_sql", return_value=None)
 @patch("gemini_brain.orchestrator.gemini_brain_runner.select_endpoint")
 @patch("gemini_brain.orchestrator.gemini_brain_runner.classify_intent")
-def test_scenario_3_live_api_404_not_found(mock_intent, mock_sel):
+def test_scenario_3_live_api_404_not_found(mock_intent, mock_sel, mock_verify):
     mock_intent.return_value = ({"type": 4, "reason": "data query"}, 10, 5)
     mock_sel.return_value = ({"endpoint": "/report/ar-aging-summary", "path_params": {}, "query_params": {}}, 10, 5)
 
@@ -220,8 +222,10 @@ def test_scenario_8_bedrock_rate_limited(mock_reason, mock_intent, mock_sel):
     ))
 
     res = runner.run("list items", organization_id=1)
-    assert res["status"] in ("degraded", "failed")
+    # Bedrock outage degrades to the formatted table -- it does not fail the query
+    assert res["status"] == "partial"
     assert res["notice"]["code"] == "MODEL_UNAVAILABLE"
+    assert res["answer"]
 
 
 # ── Scenario 9: DB Connection Failure ─────────────────────────────────────────

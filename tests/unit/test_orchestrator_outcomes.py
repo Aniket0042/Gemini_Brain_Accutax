@@ -36,7 +36,10 @@ def test_empty_outcome_does_not_call_llm_or_sql_fallback(mock_intent, mock_sel):
     ))
     runner._db_fallback = MagicMock()
 
-    with patch("gemini_brain.orchestrator.gemini_brain_runner.reason_over_data") as mock_reason:
+    with patch(
+        "gemini_brain.orchestrator.gemini_brain_runner.reason_over_data",
+        return_value=("You have no overdue invoices right now.", "Claude Haiku 4.5", 10, 5),
+    ) as mock_reason:
         res = runner.run("show me overdue invoices", organization_id=1)
 
         assert res["status"] == "empty"
@@ -44,10 +47,40 @@ def test_empty_outcome_does_not_call_llm_or_sql_fallback(mock_intent, mock_sel):
         assert res["notice"]["kind"] == "empty"
         assert res["notice"]["code"] == "NO_ROWS"
         assert res["results"] == []
+        assert res["answer"] == "You have no overdue invoices right now."
+        assert runner._db_fallback.call_count == 0
+        # Zero rows is a confirmed answer, not a failure -- but it is still narrated.
+        assert mock_reason.call_count == 1
+
+
+@patch("gemini_brain.orchestrator.gemini_brain_runner.select_endpoint")
+@patch("gemini_brain.orchestrator.gemini_brain_runner.classify_intent")
+def test_empty_outcome_falls_back_to_deterministic_answer_if_narration_fails(mock_intent, mock_sel):
+    mock_intent.return_value = ({"type": 4, "reason": "fetch"}, 10, 5)
+    mock_sel.return_value = ({"endpoint": "/invoice/list", "path_params": {}, "query_params": {}}, 10, 5)
+
+    runner = _make_runner()
+    runner._retrieve = MagicMock(return_value=Retrieved(
+        Outcome.EMPTY,
+        tier="live_api",
+        endpoint="/invoice/list",
+        payload=[],
+        row_count=0,
+    ))
+    runner._db_fallback = MagicMock()
+
+    with patch(
+        "gemini_brain.orchestrator.gemini_brain_runner.reason_over_data",
+        side_effect=Exception("bedrock down"),
+    ):
+        res = runner.run("show me overdue invoices", organization_id=1)
+
+        assert res["status"] == "empty"
+        assert res["notice"]["code"] == "NO_ROWS"
+        assert res["results"] == []
         assert isinstance(res["answer"], str)
         assert len(res["answer"]) > 0
         assert runner._db_fallback.call_count == 0
-        assert mock_reason.call_count == 0
 
 
 @patch("gemini_brain.orchestrator.gemini_brain_runner.select_endpoint")

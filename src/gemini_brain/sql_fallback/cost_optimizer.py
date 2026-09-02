@@ -43,6 +43,43 @@ _TASK_TTL: Dict[str, int] = {
 _DEFAULT_TTL = 180
 
 
+#: Intents whose fallback queries are plain retrieval — the finance agent's typed
+#: tasks and free-form SQL cover them, so the schema and reasoning agents are dead
+#: weight in the tool definitions. See TYPE_LABELS in config/constants.py.
+_RETRIEVAL_INTENTS = frozenset({3, 4})  # Report Generation, Data Query
+
+#: Words that turn a retrieval question into an analytical one. Presence of any of
+#: these keeps the full tool set even on a retrieval intent.
+_ANALYTICAL_MARKERS = (
+    "forecast", "predict", "project", "trend", "growth", "compare", "comparison",
+    "versus", " vs ", "analyz", "analys", "recommend", "advice", "advise",
+    "should i", "should we", "risk", "health check", "insight", "why ",
+    "over time", "month over month", "year over year", "explain",
+)
+
+
+def resolve_complexity(question: str, intent: Optional[int] = None) -> str:
+    """Decide whether the engine needs its full tool set for this question.
+
+    Deliberately zero-cost: it reads an intent the router already computed rather
+    than spending an LLM call to classify (the reference implementation makes an
+    extra call here, which is the wrong trade in a latency path).
+
+    Biased toward COMPLEX on purpose. Pruning a tool the model turns out to need
+    costs an answer; carrying a tool it doesn't need costs a few hundred prompt
+    tokens. Only clear-cut retrieval questions get the reduced set, and an unknown
+    intent always keeps everything — so callers that don't pass one (tests,
+    scripts, direct use) behave exactly as before.
+    """
+    if intent not in _RETRIEVAL_INTENTS:
+        return "COMPLEX"
+
+    q = (question or "").lower()
+    if any(marker in q for marker in _ANALYTICAL_MARKERS):
+        return "COMPLEX"
+    return "SIMPLE"
+
+
 def select_tools(complexity: str, question: str, all_tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Return a pruned tool list based on classification tier and question content."""
     if complexity == "COMPLEX":

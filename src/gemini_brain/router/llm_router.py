@@ -31,6 +31,10 @@ Choose exactly one tool from the AVAILABLE TOOLS list below that best answers th
 
 For date ranges, pass the user's phrase verbatim as a `period` parameter: "this month", "last quarter", "last 6 months", "2025". Do not compute dates yourself.
 
+If the tool has a `limit` parameter and the user asks for a specific count ("top 5", "first 10", "5 customers"), set `limit` to that number. Otherwise omit it and the tool's default applies.
+
+If the tool has a `sort_order` parameter, set it to "asc" when the user asks for the bottom/lowest/least/smallest/worst (e.g. "bottom 5 customers", "least profitable projects"), or "desc" for top/highest/most/best (the default — you may omit it for these).
+
 Never supply an organization id or user id — the system injects those.
 
 If the question is about how to use the app, where to find a screen, or an accounting definition, choose answer_directly.
@@ -191,7 +195,6 @@ def select_endpoint_structured(
         "query_params": q_params,
         "tool_name": spec.name,
         "intent": spec.intent,
-        "narrate": spec.narrate,
         "formatter": spec.formatter,
     }
     return sel, tool_res.tokens_in, tool_res.tokens_out

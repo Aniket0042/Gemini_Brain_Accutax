@@ -17,6 +17,9 @@ from typing import Any, Callable, Dict, Generator, Optional, Tuple
 from gemini_brain.config.constants import (
     COMPLEXITY_MODEL_MAP,
     HAIKU45_ID,
+    NARRATION_MAX_TOKENS_SCALAR,
+    NARRATION_MAX_TOKENS_TABULAR,
+    NARRATION_TABULAR_MIN_ROWS,
     NEVER_EXPOSE_BACKEND_RULE,
     REASONING_MAX_CHARS,
     REASONING_MAX_ITEMS,
@@ -27,7 +30,15 @@ from gemini_brain.reasoning.model_selector import pick_model
 logger = logging.getLogger("gemini_brain.reasoning.claude_reasoner")
 
 # ── Narration System Prompt (Appendix B) ──────────────────────────────────────
-ANALYST_SYSTEM_PROMPT: str = """You are a financial analyst for Accutax, reporting to a business owner in the UAE.
+#: Rules that hold no matter how much room the answer gets. Kept in one place so
+#: the concise and detailed prompts below cannot drift apart — the accuracy rules
+#: in particular (never recompute, never infer a missing figure) are what keep
+#: narration trustworthy, and they are not negotiable at any length.
+#:
+#: NOTE: no literal { } braces anywhere in these prompts. gemini_brain_runner
+#: used to call .format() on ANALYST_SYSTEM_PROMPT; a brace here would have raised
+#: at runtime. Those calls are gone, but keep the constraint — it costs nothing.
+_ANALYST_CORE_RULES: str = """You are a financial analyst for Accutax, reporting to a business owner in the UAE.
 Currency is AED. VAT is 5%.
 
 The DATA block is authoritative and already fully aggregated by the system.
@@ -44,12 +55,89 @@ The DATA block is authoritative and already fully aggregated by the system.
   "the vendors array" or "the totals section") — you are talking to a business
   owner, not describing a schema. Translate every field into plain business
   language.
-- A table of this data is already displayed above your response. Do not reproduce it.
+- Format amounts as AED 1,234,567.00.
+"""
+
+#: For payloads that are one figure or a handful of fields. A terse answer is the
+#: correct answer here, and the word cap is a real latency lever.
+ANALYST_SYSTEM_PROMPT: str = _ANALYST_CORE_RULES + """- A table of this data is already displayed above your response. Do not reproduce it.
 - Open with the direct answer in one sentence.
 - Then at most three short bullets: what stands out, what changed, what to watch.
-- Format amounts as AED 1,234,567.00.
 - Maximum 120 words.
 """ + NEVER_EXPOSE_BACKEND_RULE
+
+#: For payloads with rows or groups. The 120-word cap collapses these into a
+#: single sentence — a ten-row ranking becomes "revenue was concentrated among a
+#: few customers", which is not an answer to the question that was asked. This
+#: prompt buys enough room to name what the user asked about, while still leaving
+#: the row-by-row detail to the table rendered alongside.
+ANALYST_SYSTEM_PROMPT_DETAILED: str = _ANALYST_CORE_RULES + """- A full table of this data is displayed above your response, so do not transcribe
+  it row by row. Your job is to make it legible, not to repeat it.
+- Open with the direct answer in one sentence.
+- Then name the groups, categories or buckets the question was about, each with
+  its figure. Never collapse a breakdown into a single total — if the user asked
+  which categories, which customers, or which months, they need those named.
+- For a long ranking, cover the leaders individually and characterise the rest in
+  one line (how much of the total they represent, whether the tail is even).
+- Close with what stands out and what to watch, in at most three short bullets.
+- Use markdown headers and bullets for structure. Do not build a markdown table.
+- Be complete but not padded. Stop when the question is answered — roughly 350
+  words is plenty, and shorter is better when the data is simple.
+""" + NEVER_EXPOSE_BACKEND_RULE
+
+
+#: Keys that conventionally hold the row collection in an Accutax payload.
+_ROW_KEYS = ("items", "results", "data", "rows", "records")
+
+
+def _is_breakdown(value: Any) -> bool:
+    """True when a nested value is a group breakdown rather than metadata.
+
+    A list of at least NARRATION_TABULAR_MIN_ROWS entries qualifies; so does a
+    dict of that many numeric values (monthly totals, aging buckets). A dict of
+    three strings is metadata and does not.
+    """
+    if isinstance(value, list):
+        return len(value) >= NARRATION_TABULAR_MIN_ROWS
+    if isinstance(value, dict) and len(value) >= NARRATION_TABULAR_MIN_ROWS:
+        numeric = sum(1 for v in value.values() if isinstance(v, (int, float)) and not isinstance(v, bool))
+        return numeric >= NARRATION_TABULAR_MIN_ROWS
+    return False
+
+
+def classify_payload_shape(data: Any) -> str:
+    """Return "tabular" or "scalar" — how much room this answer needs.
+
+    "tabular" means the payload carries rows or groups the user will expect named
+    individually (a ranking, a category breakdown, a month-by-month series).
+    "scalar" means one figure or a handful of fields, where a terse answer is the
+    better answer.
+
+    Errs toward "scalar": that keeps today's fast, cheap narration as the default,
+    so only payloads that clearly need the room pay for it.
+    """
+    if isinstance(data, list):
+        return "tabular" if len(data) >= NARRATION_TABULAR_MIN_ROWS else "scalar"
+
+    if isinstance(data, dict):
+        for key in _ROW_KEYS:
+            value = data.get(key)
+            if isinstance(value, list) and len(value) >= NARRATION_TABULAR_MIN_ROWS:
+                return "tabular"
+        # Reports rarely use a conventional row key — a P&L carries its monthly
+        # lines under its own name. Any nested breakdown counts.
+        for value in data.values():
+            if _is_breakdown(value):
+                return "tabular"
+
+    return "scalar"
+
+
+def narration_budget(shape: str) -> Tuple[str, int]:
+    """Map a payload shape to its (system_prompt, max_output_tokens)."""
+    if shape == "tabular":
+        return ANALYST_SYSTEM_PROMPT_DETAILED, NARRATION_MAX_TOKENS_TABULAR
+    return ANALYST_SYSTEM_PROMPT, NARRATION_MAX_TOKENS_SCALAR
 
 
 def _format_payload_and_system(
@@ -58,6 +146,7 @@ def _format_payload_and_system(
     endpoint: str,
     session_id: Optional[str] = None,
     get_project_context_by_session: Optional[Callable[[str], Optional[Dict]]] = None,
+    shape: Optional[str] = None,
 ) -> Tuple[str, str]:
     """Format and cap data payload to 2000 tokens with truncation notice if needed."""
     total_rows = 0
@@ -91,7 +180,7 @@ def _format_payload_and_system(
             trunc_note = "\n[payload truncated]"
         data_str += trunc_note
 
-    system = ANALYST_SYSTEM_PROMPT
+    system, _ = narration_budget(shape or classify_payload_shape(data))
 
     # Project context enrichment if session_id provided
     if session_id and get_project_context_by_session is not None:
@@ -142,19 +231,24 @@ def reason_over_data(
 
     logger.info("GeminiBrain → %s (intent=%s, endpoint=%s)", label, intent, endpoint)
 
+    shape = classify_payload_shape(data)
+    _, max_tokens = narration_budget(shape)
+    logger.info("Narration shape=%s budget=%d tokens (endpoint=%s)", shape, max_tokens, endpoint)
+
     system, user_msg = _format_payload_and_system(
         query=query,
         data=data,
         endpoint=endpoint,
         session_id=session_id,
         get_project_context_by_session=get_project_context_by_session,
+        shape=shape,
     )
 
     answer = adapter.converse(
         system_prompt=system,
         messages=[{"role": "user", "content": [{"text": user_msg}]}],
         temperature=0.0,
-        max_tokens=400,
+        max_tokens=max_tokens,
     )
     tu = adapter.get_token_usage()
     return (
@@ -197,12 +291,17 @@ def reason_over_data_stream(
 
     logger.info("GeminiBrain streaming → %s (intent=%s, endpoint=%s)", label, intent, endpoint)
 
+    shape = classify_payload_shape(data)
+    _, max_tokens = narration_budget(shape)
+    logger.info("Narration shape=%s budget=%d tokens (endpoint=%s)", shape, max_tokens, endpoint)
+
     system, user_msg = _format_payload_and_system(
         query=query,
         data=data,
         endpoint=endpoint,
         session_id=session_id,
         get_project_context_by_session=get_project_context_by_session,
+        shape=shape,
     )
 
     full_chunks = []
@@ -210,7 +309,7 @@ def reason_over_data_stream(
         system_prompt=system,
         messages=[{"role": "user", "content": [{"text": user_msg}]}],
         temperature=0.0,
-        max_tokens=400,
+        max_tokens=max_tokens,
     ):
         full_chunks.append(chunk)
         yield chunk, None

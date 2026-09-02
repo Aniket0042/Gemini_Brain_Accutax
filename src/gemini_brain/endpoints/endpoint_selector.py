@@ -49,7 +49,7 @@ RULES:
 - Date shortcuts: "this month"={month_start} to {today}, "this year"={year_start} to {today}, "this quarter"={quarter_start} to {today}
 - For /report/ar-aging-summary or /report/ap-aging-summary: use as_of_date={today}
 - For /report/customer-balance-summary: no date range needed
-- CRITICAL for /income/total and /expense/total: params MUST be user_id="{user_id}" (snake_case string), filter_year="2026" (4-digit year as string), filter_type="YEARLY". Do NOT use start_date, end_date, or userId for these endpoints.
+- CRITICAL for /income/total and /expense/total: params MUST be user_id="{user_id}" (snake_case string), filter_year=<4-digit year the question is actually about, as a string>, filter_type=one of "YEARLY" | "QUARTERLY" | "MONTHLY" matching the period asked about (e.g. "this month"/"last month"→MONTHLY, "this quarter"/"last quarter"/"Q2 2026"→QUARTERLY, "this year"/"2025"/a bare year/no period mentioned→YEARLY). Do NOT use start_date, end_date, or userId for these endpoints.
 - If no endpoint fits, return {{"endpoint": null, "reason": "no_api_match"}}
 
 DYNAMIC CONTEXT:

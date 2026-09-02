@@ -89,46 +89,59 @@ def create_access_token(
 
 
 # ── Organization Master Directory for Multi-Tenant Workspace ──────────────────
+# Re-pointed 2026-08-31: the previous four orgs (27/25/154/28) referenced a
+# Postgres instance ("accutax_bk_1_5") that is no longer reachable from the
+# configured SSH tunnel. These four were chosen from the *current* tunnel
+# target (accutax_bk_1_4) by measured data breadth across income, expense,
+# contacts, journal entries, cost centers and projects — see the survey run
+# 2026-08-31. All stats below are live counts from that database, not estimates.
+#
+# Known limitation: the live Accutax REST API (ACCUTAX_BASE_URL) has NO data
+# for any of these four orgs — only orgs 1 and 2 exist on both the REST
+# backend and this Postgres tunnel, and both are thin (~500-800 records).
+# Every query against these four orgs will fail the fast REST path, self-correct,
+# and answer from the SQL fallback tier instead (~5-6s per query, not ~1-2s).
+# That is a known, accepted tradeoff for demo data richness — not a bug.
 ORGANIZATION_DIRECTORY: list[dict[str, Any]] = [
     {
-        "id": 27,
-        "name": "Professional & Consulting Services_User1_Org4",
-        "display_name": "Professional & Consulting Services",
+        "id": 25,
+        "name": "Technology_User1_Org10",
+        "display_name": "Technology (Abu Dhabi)",
         "tag": "Financials & GL Leader",
         "badge_color": "emerald",
-        "industry": "Professional & Consulting Services",
+        "industry": "Technology",
         "currency": "AED",
-        "description": "Deepest General Ledger, 12.9k invoices (AED 94M), 98.7% posted, P&L, balance sheets, and top customers.",
+        "description": "Richest tenant in the portal: 26,488 invoices (AED 328M revenue), 11,985 bills, 24,460 journal entries, 100 customers.",
     },
     {
-        "id": 25,
-        "name": "Construction & Real Estate_User1_Org2",
-        "display_name": "Construction & Real Estate (VAT & Payments)",
-        "tag": "VAT & Supplier Payments",
+        "id": 20,
+        "name": "Agriculture_User1_Org5",
+        "display_name": "Agriculture (Abu Dhabi)",
+        "tag": "Broad Expense & Vendor Base",
         "badge_color": "purple",
-        "industry": "Construction & Real Estate",
+        "industry": "Agriculture",
         "currency": "AED",
-        "description": "Sole holder of VAT/tax data in DB (AED 5.65M VAT) and 1,786 supplier payments.",
+        "description": "21,501 invoices (AED 227M revenue), 11,953 bills, 24,438 journal entries across 100 customers.",
     },
     {
-        "id": 154,
-        "name": "Healthcare & Pharmaceuticals_User12_Org1",
-        "display_name": "Healthcare & Pharmaceuticals",
-        "tag": "Full Modules & Audit",
+        "id": 16,
+        "name": "Construction_User1_Org1",
+        "display_name": "Construction (Fujairah)",
+        "tag": "Full P&L & Cost Centers",
         "badge_color": "indigo",
-        "industry": "Healthcare & Pharmaceuticals",
+        "industry": "Construction",
         "currency": "AED",
-        "description": "Balanced financial records with 12.7k audit trail rows and 2.9k invoice history records.",
+        "description": "21,344 invoices (AED 237M revenue), 12,043 bills, 23,937 journal entries, 101 active customers.",
     },
     {
-        "id": 28,
-        "name": "Construction & Real Estate_User1_Org5",
-        "display_name": "Construction & Real Estate (Secondary)",
-        "tag": "Clean Secondary Tenant",
+        "id": 23,
+        "name": "Technology_User1_Org8",
+        "display_name": "Technology (Ajman)",
+        "tag": "Multi-Year Ledger",
         "badge_color": "amber",
-        "industry": "Construction & Real Estate",
+        "industry": "Technology",
         "currency": "AED",
-        "description": "5.9k invoices (AED 44.8M), 4.7k bills, 98.4% GL linkage — ideal for multi-tenant isolation testing.",
+        "description": "21,262 invoices (AED 241M revenue), 11,852 bills, 24,151 journal entries — data spans 2020 through May 2026.",
     },
 ]
 
@@ -343,19 +356,19 @@ _SEED_USER_MAP: dict[str, dict[str, Any]] = {
         "id": 9999,
         "email": "admin_all@accutax.com",
         "password": "AdminPass123!",
-        "allowed_org_ids": [27, 25, 154, 28],
+        "allowed_org_ids": [25, 20, 16, 23],
     },
     "testuser12@test.com": {
         "id": 18,
         "email": "testuser12@test.com",
         "password": "TestPass123!",
-        "allowed_org_ids": [27, 25, 154, 28],
+        "allowed_org_ids": [25, 20, 16, 23],
     },
     "genthird456@gmail.com": {
         "id": 18,
         "email": "genthird456@gmail.com",
         "password": "Password123$$",
-        "allowed_org_ids": [27, 25, 154, 28],
+        "allowed_org_ids": [25, 20, 16, 23],
     },
     "admin@accutax.com": {
         "id": 7483,

@@ -62,7 +62,7 @@ def keyword_endpoint_fallback(
                     },
                     "reason": "keyword_fallback",
                 }
-            elif r.endpoint in ("/income/total", "/expense/total"):
+            elif r.endpoint == "/expense/total":
                 return {
                     "endpoint": r.endpoint,
                     "method": "GET",
@@ -75,7 +75,7 @@ def keyword_endpoint_fallback(
                     },
                     "reason": "keyword_fallback",
                 }
-            elif r.endpoint in ("/report/profit-loss", "/report/balance-sheet", "/report/cash-flow"):
+            elif r.endpoint in ("rpt_income_total", "/report/profit-loss", "/report/balance-sheet", "/report/cash-flow"):
                 return {
                     "endpoint": r.endpoint,
                     "method": "GET",

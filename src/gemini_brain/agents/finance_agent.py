@@ -29,8 +29,82 @@ import datetime
 import uuid
 
 from gemini_brain.agents.executor import execute_sql
+from gemini_brain.utils.ranking import order_sql
+from gemini_brain.utils.ranking import resolve_direction as _direction
+from gemini_brain.utils.ranking import resolve_limit as _resolve_limit
 
 logger = logging.getLogger("agents.finance")
+
+
+# ──────────────────────────────────────────────
+# Tenant isolation safety net for free-form SQL
+# ──────────────────────────────────────────────
+# Every table in accutax_bk that carries an organization_id column. The
+# execute_sql task lets the LLM write arbitrary SQL, so this is a
+# defense-in-depth check on top of the structured tasks (which already
+# inject organization_id safely via _maybe_org/_org_frag): force any
+# organization_id literal in the generated SQL to match the verified
+# session org_id, and inject a filter if a tenant table is queried with
+# no org filter at all. Mirrors the equivalent hardening in Gemini_Brain's
+# sql_fallback/sql_engine.py.
+TENANT_TABLES = {
+    "audit_logs", "audit_trails", "bank_accounts", "bank_transaction_rules",
+    "bank_transactions", "branches", "chart_of_accounts", "contacts",
+    "cost_centers", "customer_overdue_summary", "customer_payment", "expense",
+    "income", "inventory_adjustments", "inventory_fifo_layers", "inventory_ledger",
+    "inventory_movements", "inventory_quantities", "inventory_transfers",
+    "journal_entries", "overdue_invoices", "projects", "reconciliations",
+    "sub_contacts", "supplier_payments", "warehouses",
+}
+
+
+def _enforce_tenant_isolation_sql(sql: str, organization_id) -> str:
+    """Best-effort regex hardening of LLM-generated SQL against the verified org_id."""
+    if organization_id is None:
+        return sql
+    try:
+        org_id = int(organization_id)
+    except (TypeError, ValueError):
+        return sql
+
+    # 1. Force-correct any organization_id literal to the verified value,
+    #    regardless of what the model wrote (catches wrong or spoofed values).
+    fixed = re.sub(
+        r'\borganization_id\s*=\s*\d+\b',
+        f'organization_id = {org_id}',
+        sql,
+        flags=re.IGNORECASE,
+    )
+
+    # 2. If a known tenant table is referenced with no organization_id filter
+    #    anywhere in the query, inject one (catches the filter being omitted
+    #    entirely).
+    has_org_filter = re.search(r'\borganization_id\s*=', fixed, re.IGNORECASE) is not None
+    touches_tenant_table = any(
+        re.search(rf'\b{re.escape(t)}\b', fixed, re.IGNORECASE) for t in TENANT_TABLES
+    )
+
+    if touches_tenant_table and not has_org_filter:
+        stripped = fixed.strip().rstrip(';')
+        if re.search(r'\bwhere\b', stripped, re.IGNORECASE):
+            stripped = re.sub(
+                r'\bWHERE\b',
+                f'WHERE organization_id = {org_id} AND',
+                stripped, count=1, flags=re.IGNORECASE,
+            )
+        else:
+            m = re.search(r'\b(GROUP BY|ORDER BY|LIMIT)\b', stripped, re.IGNORECASE)
+            if m:
+                stripped = stripped[:m.start()] + f'WHERE organization_id = {org_id} ' + stripped[m.start():]
+            else:
+                stripped += f' WHERE organization_id = {org_id}'
+        if stripped != fixed:
+            logger.warning("execute_sql: injected missing organization_id filter (org=%s)", org_id)
+        fixed = stripped
+
+    if fixed != sql:
+        logger.info("execute_sql: tenant-isolation rewrite applied (org=%s)", org_id)
+    return fixed
 
 
 # ──────────────────────────────────────────────
@@ -250,9 +324,15 @@ def _build_where(filters: Dict, entity: str = "income", params: Dict = None) -> 
     """Build WHERE clauses and joins from filter dict."""
     clauses = []
     joins = []
-    alias = "inc" if entity == "income" else "e"
+    if entity == "income":
+        alias = "inc"
+    elif entity in ("contact", "contacts", "customer", "vendor"):
+        alias = "c"
+    else:
+        alias = "e"
 
-    pass
+    if entity in ("contact", "contacts", "customer", "vendor"):
+        clauses.append(f"{alias}.is_deleted = false")
 
     _maybe_org(clauses, alias, params or {})
 
@@ -332,6 +412,9 @@ def _task_execute_sql(params: Dict) -> Dict:
     sql = params.get("sql", "")
     if not sql.strip():
         return {"error": "No SQL provided"}
+    # Tenant isolation safety net — see _enforce_tenant_isolation_sql for why
+    # this is needed even though the caller already passes a verified org_id.
+    sql = _enforce_tenant_isolation_sql(sql, params.get("organization_id"))
     # Safety: add LIMIT if not present to prevent massive result sets
     sql_stripped = sql.strip().rstrip(';')
     if 'limit' not in sql_stripped.lower().split(')')[-1]:
@@ -346,13 +429,13 @@ def _task_invoice_total(params: Dict) -> Dict:
 
     joins = [
         "JOIN income_items ii ON ii.income_id = inc.id",
-        "JOIN items i ON i.id = ii.items_id",
     ] + extra_joins
 
-    sql = f"""SELECT COALESCE(SUM({COST_EXPR}), 0) AS total
+    where_str = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    sql = f"""SELECT COALESCE(SUM(ii.line_amount), 0) AS total
 FROM income inc
 {chr(10).join(joins)}
-WHERE {' AND '.join(clauses)}"""
+{where_str}"""
     result = _run_sql(sql)
     if result["success"] and result["results"]:
         result["total"] = result["results"][0].get("total", 0)
@@ -366,13 +449,13 @@ def _task_expense_total(params: Dict) -> Dict:
 
     joins = [
         "JOIN expense_items ei ON ei.expense_id = e.id",
-        "JOIN items i ON i.id = ei.items_id",
     ] + extra_joins
 
-    sql = f"""SELECT COALESCE(SUM({COST_EXPR}), 0) AS total
+    where_str = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    sql = f"""SELECT COALESCE(SUM(ei.line_amount), 0) AS total
 FROM expense e
 {chr(10).join(joins)}
-WHERE {' AND '.join(clauses)}"""
+{where_str}"""
     result = _run_sql(sql)
     if result["success"] and result["results"]:
         result["total"] = result["results"][0].get("total", 0)
@@ -390,10 +473,11 @@ def _task_list_invoices(params: Dict) -> Dict:
         base_joins = []
     all_joins = base_joins + extra_joins
 
+    where_str = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     sql = f"""SELECT inc.invoice_date, inc.invoice_number, COALESCE(c.name, 'Unknown') AS customer
 FROM income inc
 {chr(10).join(all_joins)}
-WHERE {' AND '.join(clauses)}
+{where_str}
 ORDER BY inc.invoice_date DESC
 LIMIT {int(limit)}"""
     return _run_sql(sql)
@@ -410,18 +494,20 @@ def _task_list_expenses(params: Dict) -> Dict:
         base_joins = []
     all_joins = base_joins + extra_joins
 
+    where_str = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     sql = f"""SELECT e.reception_date, e.expense_type, COALESCE(c.name, 'Unknown') AS vendor, e.receipt_number
 FROM expense e
 {chr(10).join(all_joins)}
-WHERE {' AND '.join(clauses)}
+{where_str}
 ORDER BY e.reception_date DESC
 LIMIT {int(limit)}"""
     return _run_sql(sql)
 
 
 def _task_top_customers(params: Dict) -> Dict:
-    """Top N customers by total invoice revenue."""
-    n = params.get("limit", 10)
+    """Top (or bottom, via sort_order) N customers by total invoice revenue."""
+    n = _resolve_limit(params, default=10, ceiling=50)
+    order = order_sql(_direction(params, raw_query=params.get("query", "")))
     filters = params.get("filters", {})
     clauses = []
     _maybe_org(clauses, "inc", params)
@@ -433,23 +519,24 @@ def _task_top_customers(params: Dict) -> Dict:
     if filters.get("date_to"):
         clauses.append(f"CAST(inc.invoice_date AS DATE) <= '{filters['date_to']}'")
 
-    sql = f"""SELECT COALESCE(c.name, 'Unknown') AS customer,
+    where_str = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    sql = f"""SELECT COALESCE(c.name, c.organization_name, 'Unknown') AS customer,
        COUNT(DISTINCT inc.id) AS invoice_count,
-       SUM({COST_EXPR}) AS total_revenue
+       COALESCE(SUM(ii.line_amount), 0) AS total_revenue
 FROM income inc
 JOIN income_items ii ON ii.income_id = inc.id
-JOIN items i ON i.id = ii.items_id
 LEFT JOIN contacts c ON c.id = inc.contact_id
-WHERE {' AND '.join(clauses)}
-GROUP BY c.name
-ORDER BY total_revenue DESC
+{where_str}
+GROUP BY c.organization_name, c.name
+ORDER BY total_revenue {order}
 LIMIT {int(n)}"""
     return _run_sql(sql)
 
 
 def _task_top_vendors(params: Dict) -> Dict:
-    """Top N vendors by total expense spend."""
-    n = params.get("limit", 10)
+    """Top (or bottom, via sort_order) N vendors by total expense spend."""
+    n = _resolve_limit(params, default=10, ceiling=50)
+    order = order_sql(_direction(params, raw_query=params.get("query", "")))
     filters = params.get("filters", {})
     clauses = []
     _maybe_org(clauses, "e", params)
@@ -457,16 +544,16 @@ def _task_top_vendors(params: Dict) -> Dict:
     if filters.get("year"):
         clauses.append(f"EXTRACT(YEAR FROM CAST(e.reception_date AS DATE)) = {_safe_year(filters['year'])}")
 
-    sql = f"""SELECT COALESCE(c.name, 'Unknown') AS vendor,
+    where_str = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    sql = f"""SELECT COALESCE(c.name, c.organization_name, 'Unknown') AS vendor,
        COUNT(DISTINCT e.id) AS bill_count,
-       SUM({COST_EXPR}) AS total_spend
+       COALESCE(SUM(ei.line_amount), 0) AS total_spend
 FROM expense e
 JOIN expense_items ei ON ei.expense_id = e.id
-JOIN items i ON i.id = ei.items_id
 LEFT JOIN contacts c ON c.id = e.contact_id
-WHERE {' AND '.join(clauses)}
-GROUP BY c.name
-ORDER BY total_spend DESC
+{where_str}
+GROUP BY c.organization_name, c.name
+ORDER BY total_spend {order}
 LIMIT {int(n)}"""
     return _run_sql(sql)
 
@@ -511,7 +598,7 @@ def _task_count_records(params: Dict) -> Dict:
     except Exception:
         pass
 
-    if schema_ and table in schema_ and schema_[table]["has_is_deleted"]:
+    if schema_ and table in schema_ and schema_[table].get("has_is_deleted") and table in ("contacts", "sub_contacts"):
         clauses.append(f"{alias}.is_deleted = false")
 
     _maybe_org(clauses, alias, params)
@@ -543,13 +630,13 @@ def _task_invoice_details(params: Dict) -> Dict:
        c.email AS customer_email, c.phone_number AS customer_phone,
        COALESCE(st.value, 'Unknown') AS status,
        i.name AS item_name,
-       COALESCE(ii.line_amount, {COST_EXPR}) AS line_amount,
+       ii.line_amount AS line_amount,
        ii.quantity, ii.unit_price
 FROM income inc
 LEFT JOIN contacts c ON c.id = inc.contact_id
 LEFT JOIN status_type st ON st.id = inc.status_type_id
 JOIN income_items ii ON ii.income_id = inc.id
-JOIN items i ON i.id = ii.items_id
+LEFT JOIN items i ON i.id = ii.items_id
 WHERE inc.invoice_number = '{inv_num}'
 ORDER BY i.name"""
     result = _run_sql(sql)
@@ -577,39 +664,39 @@ def _task_aggregate_metric(params: Dict) -> Dict:
         clauses, extra_joins = _build_where(filters, "income", params)
         joins = [
             "JOIN income_items ii ON ii.income_id = inc.id",
-            "JOIN items i ON i.id = ii.items_id",
         ] + extra_joins
 
         if metric == "count":
             select = "COUNT(DISTINCT inc.id) AS value"
         elif metric == "avg":
-            select = f"AVG({COST_EXPR}) AS value"
+            select = "AVG(ii.line_amount) AS value"
         else:
-            select = f"COALESCE(SUM({COST_EXPR}), 0) AS value"
+            select = "COALESCE(SUM(ii.line_amount), 0) AS value"
 
+        where_str = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         sql = f"""SELECT {select}
 FROM income inc
 {chr(10).join(joins)}
-WHERE {' AND '.join(clauses)}"""
+{where_str}"""
 
     elif entity in ("expense", "bill"):
         clauses, extra_joins = _build_where(filters, "expense", params)
         joins = [
             "JOIN expense_items ei ON ei.expense_id = e.id",
-            "JOIN items i ON i.id = ei.items_id",
         ] + extra_joins
 
         if metric == "count":
             select = "COUNT(DISTINCT e.id) AS value"
         elif metric == "avg":
-            select = f"AVG({COST_EXPR}) AS value"
+            select = "AVG(ei.line_amount) AS value"
         else:
-            select = f"COALESCE(SUM({COST_EXPR}), 0) AS value"
+            select = "COALESCE(SUM(ei.line_amount), 0) AS value"
 
+        where_str = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         sql = f"""SELECT {select}
 FROM expense e
 {chr(10).join(joins)}
-WHERE {' AND '.join(clauses)}"""
+{where_str}"""
 
     else:
         return {"error": f"Unsupported entity for aggregate: {entity}"}
@@ -1060,13 +1147,13 @@ LIMIT {int(limit)}"""
 
 def _task_ar_aging(params: Dict) -> Dict:
     """
-    Accounts Receivable Aging — unpaid invoices grouped into aging buckets.
-    Buckets: Current (0-30), 31-60, 61-90, 91-120, 120+
+    Accounts Receivable Aging — unpaid invoices grouped into aging buckets based on due_date.
+    Uses status_type PENDING or PARTIAL_PAID.
     """
     sql = f"""SELECT COALESCE(c.name, 'Unknown') AS customer,
        inc.invoice_number, inc.invoice_date, inc.due_date,
        COALESCE(st.value, 'Unknown') AS status,
-       SUM({COST_EXPR}) AS amount,
+       COALESCE(SUM(ii.line_amount), 0) AS amount,
        CURRENT_DATE - CAST(inc.due_date AS DATE) AS days_overdue,
        CASE
            WHEN CURRENT_DATE - CAST(inc.due_date AS DATE) <= 0 THEN 'Current'
@@ -1078,10 +1165,9 @@ def _task_ar_aging(params: Dict) -> Dict:
        END AS aging_bucket
 FROM income inc
 JOIN income_items ii ON ii.income_id = inc.id
-JOIN items i ON i.id = ii.items_id
 LEFT JOIN contacts c ON c.id = inc.contact_id
 LEFT JOIN status_type st ON st.id = inc.status_type_id
-WHERE LOWER(COALESCE(st.value, '')) IN ('pending', 'partial_paid'){_org_frag("inc", params)}
+WHERE LOWER(COALESCE(st.value, '')) IN ('pending', 'partial_paid', 'partially_paid'){_org_frag("inc", params)}
 GROUP BY c.name, inc.invoice_number, inc.invoice_date, inc.due_date, st.value
 ORDER BY days_overdue DESC"""
 
@@ -1110,7 +1196,7 @@ def _task_ap_aging(params: Dict) -> Dict:
     sql = f"""SELECT COALESCE(c.name, 'Unknown') AS vendor,
        e.receipt_number, e.reception_date,
        COALESCE(st.value, 'Unknown') AS status,
-       SUM({COST_EXPR}) AS amount,
+       COALESCE(SUM(ei.line_amount), 0) AS amount,
        CURRENT_DATE - CAST(e.reception_date AS DATE) AS days_outstanding,
        CASE
            WHEN CURRENT_DATE - CAST(e.reception_date AS DATE) <= 30 THEN '0-30 days'
@@ -1121,11 +1207,10 @@ def _task_ap_aging(params: Dict) -> Dict:
        END AS aging_bucket
 FROM expense e
 JOIN expense_items ei ON ei.expense_id = e.id
-JOIN items i ON i.id = ei.items_id
 LEFT JOIN contacts c ON c.id = e.contact_id
 LEFT JOIN status_type st ON st.id = e.status_type_id
 WHERE e.reception_date IS NOT NULL AND e.reception_date <> ''
-  AND LOWER(COALESCE(st.value, '')) IN ('pending', 'partial_paid'){_org_frag("e", params)}
+  AND LOWER(COALESCE(st.value, '')) IN ('pending', 'partial_paid', 'partially_paid'){_org_frag("e", params)}
 GROUP BY c.name, e.receipt_number, e.reception_date, st.value
 ORDER BY days_outstanding DESC"""
 
@@ -1151,7 +1236,8 @@ def _task_overdue_invoices(params: Dict) -> Dict:
     Overdue invoices — invoices where due_date < CURRENT_DATE and status is PENDING.
     Does NOT rely on status_type = 'OVERDUE' which may not exist in the DB.
     """
-    limit = params.get("limit", 100)
+    limit = _resolve_limit(params, default=100, ceiling=500)
+    order = order_sql(_direction(params))
     customer_filter = ""
     if params.get("customer"):
         customer_filter = f"AND LOWER(c.name) LIKE '%{params['customer'].lower()}%'"
@@ -1159,18 +1245,17 @@ def _task_overdue_invoices(params: Dict) -> Dict:
     sql = f"""SELECT COALESCE(c.name, 'Unknown') AS customer,
        inc.invoice_number, inc.invoice_date, inc.due_date,
        COALESCE(st.value, 'Unknown') AS status,
-       SUM({COST_EXPR}) AS amount,
+       COALESCE(SUM(ii.line_amount), 0) AS amount,
        CURRENT_DATE - CAST(inc.due_date AS DATE) AS days_overdue
 FROM income inc
 JOIN income_items ii ON ii.income_id = inc.id
-JOIN items i ON i.id = ii.items_id
 LEFT JOIN contacts c ON c.id = inc.contact_id
 LEFT JOIN status_type st ON st.id = inc.status_type_id
 WHERE CAST(inc.due_date AS DATE) < CURRENT_DATE
-  AND LOWER(COALESCE(st.value, '')) IN ('pending', 'partial_paid'){_org_frag("inc", params)}
+  AND LOWER(COALESCE(st.value, '')) IN ('pending', 'partial_paid', 'partially_paid'){_org_frag("inc", params)}
   {customer_filter}
 GROUP BY c.name, inc.invoice_number, inc.invoice_date, inc.due_date, st.value
-ORDER BY days_overdue DESC
+ORDER BY days_overdue {order}
 LIMIT {int(limit)}"""
 
     result = _run_sql(sql)
@@ -1189,7 +1274,8 @@ def _task_overdue_bills(params: Dict) -> Dict:
     Overdue bills — expense bills with PENDING/PARTIAL_PAID status older than 30 days.
     Note: expense table has no due_date; uses reception_date > 30 days as overdue proxy.
     """
-    limit = params.get("limit", 100)
+    limit = _resolve_limit(params, default=100, ceiling=500)
+    order = order_sql(_direction(params))
     vendor_filter = ""
     if params.get("vendor"):
         vendor_filter = f"AND LOWER(c.name) LIKE '%{params['vendor'].lower()}%'"
@@ -1197,18 +1283,17 @@ def _task_overdue_bills(params: Dict) -> Dict:
     sql = f"""SELECT COALESCE(c.name, 'Unknown') AS vendor,
        e.receipt_number, e.reception_date,
        COALESCE(st.value, 'Unknown') AS status,
-       SUM({COST_EXPR}) AS amount,
+       COALESCE(SUM(ei.line_amount), 0) AS amount,
        CURRENT_DATE - CAST(e.reception_date AS DATE) AS days_outstanding
 FROM expense e
 JOIN expense_items ei ON ei.expense_id = e.id
-JOIN items i ON i.id = ei.items_id
 LEFT JOIN contacts c ON c.id = e.contact_id
 LEFT JOIN status_type st ON st.id = e.status_type_id
 WHERE CAST(e.reception_date AS DATE) < CURRENT_DATE - INTERVAL '30 days'
-  AND LOWER(COALESCE(st.value, '')) IN ('pending', 'partial_paid'){_org_frag("e", params)}
+  AND LOWER(COALESCE(st.value, '')) IN ('pending', 'partial_paid', 'partially_paid'){_org_frag("e", params)}
   {vendor_filter}
 GROUP BY c.name, e.receipt_number, e.reception_date, st.value
-ORDER BY days_outstanding DESC
+ORDER BY days_outstanding {order}
 LIMIT {int(limit)}"""
 
     result = _run_sql(sql)
@@ -1331,25 +1416,27 @@ ORDER BY prj.project_name"""
 
 
 def _task_expense_by_category(params: Dict) -> Dict:
-    """Expenses grouped by expense_category_type."""
+    """Expenses grouped by expense_category_type, top (or bottom) N by amount."""
+    limit = _resolve_limit(params, default=50, ceiling=50)
+    order = order_sql(_direction(params))
     filters = params.get("filters", {})
     clauses = []
     _maybe_org(clauses, "e", params)
     date_clauses = _build_date_filter("e", "reception_date", filters)
     clauses.extend(date_clauses)
 
-    where = f"WHERE {' AND '.join(clauses)}"
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
 
     sql = f"""SELECT COALESCE(ect.value, 'Uncategorized') AS category,
        COUNT(DISTINCT e.id) AS bill_count,
-       COALESCE(SUM({COST_EXPR}), 0) AS total_amount
+       COALESCE(SUM(ei.line_amount), 0) AS total_amount
 FROM expense e
 JOIN expense_items ei ON ei.expense_id = e.id
-JOIN items i ON i.id = ei.items_id
 LEFT JOIN expense_category_type ect ON ect.id = e.expense_category_type_id
 {where}
 GROUP BY ect.value
-ORDER BY total_amount DESC"""
+ORDER BY total_amount {order}
+LIMIT {int(limit)}"""
     return _run_sql(sql)
 
 
@@ -1422,17 +1509,16 @@ def _task_vendor_payments(params: Dict) -> Dict:
     if filters.get("year"):
         clauses.append(f"EXTRACT(YEAR FROM CAST(e.reception_date AS DATE)) = {_safe_year(filters['year'])}")
 
-    where = f"WHERE {' AND '.join(clauses)}"
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     limit = params.get("limit", 100)
 
     sql = f"""SELECT e.receipt_number AS reference, e.reception_date AS date,
-       SUM({COST_EXPR}) AS amount,
+       COALESCE(SUM(ei.line_amount), 0) AS amount,
        COALESCE(st.value, 'Unknown') AS status,
        COALESCE(c.name, 'Unknown') AS vendor,
        COALESCE(ect.value, 'EXPENSE') AS category
 FROM expense e
 JOIN expense_items ei ON ei.expense_id = e.id
-JOIN items i ON i.id = ei.items_id
 LEFT JOIN contacts c ON c.id = e.contact_id
 LEFT JOIN status_type st ON st.id = e.status_type_id
 LEFT JOIN expense_category_type ect ON ect.id = e.expense_category_type_id
@@ -1453,7 +1539,8 @@ LIMIT {int(limit)}"""
 def _task_unallocated_payments(params: Dict) -> Dict:
     """Customer payments not fully applied to invoices (excess/unused payments)."""
     entity = params.get("entity", "customer")
-    limit = params.get("limit", 100)
+    limit = _resolve_limit(params, default=100, ceiling=500)
+    order = order_sql(_direction(params))
 
     if entity in ("vendor", "supplier"):
         sql = f"""SELECT sp.payment_number, sp.date, sp.amount,
@@ -1466,7 +1553,7 @@ LEFT JOIN contacts c ON c.id = sp.supplier_id
 WHERE sp.amount > COALESCE(
     (SELECT SUM(spi.amount_applied) FROM supplier_payment_items spi WHERE spi.payment_id = sp.id), 0
 ){_org_frag("sp", params)}
-ORDER BY unallocated_amount DESC
+ORDER BY unallocated_amount {order}
 LIMIT {int(limit)}"""
     else:
         sql = f"""SELECT cp.payment_number, cp.date, cp.amount,
@@ -1479,7 +1566,7 @@ LEFT JOIN contacts c ON c.id = cp.customer_id
 WHERE cp.amount > COALESCE(
     (SELECT SUM(cpi.amount_applied) FROM customer_payment_items cpi WHERE cpi.payment_id = cp.id), 0
 ){_org_frag("cp", params)}
-ORDER BY unallocated_amount DESC
+ORDER BY unallocated_amount {order}
 LIMIT {int(limit)}"""
 
     result = _run_sql(sql)
@@ -1509,10 +1596,9 @@ def _task_payment_forecast(params: Dict) -> Dict:
            inc.due_date, inc.invoice_date,
            COALESCE(st.value, 'Unknown') AS status,
            CAST(inc.due_date AS DATE) - CURRENT_DATE AS days_until_due,
-           SUM({COST_EXPR}) AS amount
+           COALESCE(SUM(ii.line_amount), 0) AS amount
 FROM income inc
 JOIN income_items ii ON ii.income_id = inc.id
-JOIN items i ON i.id = ii.items_id
 LEFT JOIN contacts c ON c.id = inc.contact_id
 LEFT JOIN status_type st ON st.id = inc.status_type_id
 WHERE COALESCE(st.value, '') NOT IN ('PAID', 'CANCELLED', 'VOIDED')
@@ -1534,10 +1620,9 @@ LIMIT {int(limit)}"""
            e.reception_date AS bill_date,
            COALESCE(st.value, 'Unknown') AS status,
            CURRENT_DATE - CAST(e.reception_date AS DATE) AS days_outstanding,
-           SUM({COST_EXPR}) AS amount
+           COALESCE(SUM(ei.line_amount), 0) AS amount
 FROM expense e
 JOIN expense_items ei ON ei.expense_id = e.id
-JOIN items i ON i.id = ei.items_id
 LEFT JOIN contacts c ON c.id = e.contact_id
 LEFT JOIN status_type st ON st.id = e.status_type_id
 WHERE COALESCE(st.value, '') NOT IN ('PAID', 'CANCELLED', 'VOIDED')
@@ -1654,15 +1739,14 @@ def _task_invoice_status_summary(params: Dict) -> Dict:
     if filters.get("year"):
         clauses.append(f"EXTRACT(YEAR FROM CAST(inc.invoice_date AS DATE)) = {_safe_year(filters['year'])}")
 
-    where = f"WHERE {' AND '.join(clauses)}"
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
 
     sql = f"""SELECT COALESCE(st.value, 'Unknown') AS status,
        COUNT(DISTINCT inc.id) AS invoice_count,
-       COALESCE(SUM({COST_EXPR}), 0) AS total_amount
+       COALESCE(SUM(ii.line_amount), 0) AS total_amount
 FROM income inc
 LEFT JOIN status_type st ON st.id = inc.status_type_id
 LEFT JOIN income_items ii ON ii.income_id = inc.id
-LEFT JOIN items i ON i.id = ii.items_id
 {where}
 GROUP BY st.value
 ORDER BY total_amount DESC"""
@@ -1680,15 +1764,14 @@ def _task_bill_status_summary(params: Dict) -> Dict:
     if filters.get("year"):
         clauses.append(f"EXTRACT(YEAR FROM CAST(e.reception_date AS DATE)) = {_safe_year(filters['year'])}")
 
-    where = f"WHERE {' AND '.join(clauses)}"
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
 
     sql = f"""SELECT COALESCE(st.value, 'Unknown') AS status,
        COUNT(DISTINCT e.id) AS bill_count,
-       COALESCE(SUM({COST_EXPR}), 0) AS total_amount
+       COALESCE(SUM(ei.line_amount), 0) AS total_amount
 FROM expense e
 LEFT JOIN status_type st ON st.id = e.status_type_id
 LEFT JOIN expense_items ei ON ei.expense_id = e.id
-LEFT JOIN items i ON i.id = ei.items_id
 {where}
 GROUP BY st.value
 ORDER BY total_amount DESC"""
@@ -1707,10 +1790,9 @@ def _task_weekly_transaction_summary(params: Dict) -> Dict:
     sql = f"""SELECT 'invoice' AS type,
        COALESCE(st.value, 'Unknown') AS status,
        COUNT(DISTINCT inc.id) AS count,
-       COALESCE(SUM({COST_EXPR}), 0) AS total_amount
+       COALESCE(SUM(ii.line_amount), 0) AS total_amount
 FROM income inc
 JOIN income_items ii ON ii.income_id = inc.id
-JOIN items i ON i.id = ii.items_id
 LEFT JOIN status_type st ON st.id = inc.status_type_id
 WHERE CAST(inc.invoice_date AS DATE) >= CURRENT_DATE - INTERVAL '7 days'{_org_frag("inc", params)}
 GROUP BY st.value
@@ -1718,10 +1800,9 @@ UNION ALL
 SELECT 'bill' AS type,
        COALESCE(st.value, 'Unknown') AS status,
        COUNT(DISTINCT e.id) AS count,
-       COALESCE(SUM({COST_EXPR}), 0) AS total_amount
+       COALESCE(SUM(ei.line_amount), 0) AS total_amount
 FROM expense e
 JOIN expense_items ei ON ei.expense_id = e.id
-JOIN items i ON i.id = ei.items_id
 LEFT JOIN status_type st ON st.id = e.status_type_id
 WHERE CAST(e.reception_date AS DATE) >= CURRENT_DATE - INTERVAL '7 days'{_org_frag("e", params)}
 GROUP BY st.value
@@ -1763,6 +1844,8 @@ def _task_vat_summary(params: Dict) -> Dict:
     Uses journal entries to find VAT account balances.
     """
     filters = params.get("filters", {})
+    limit = _resolve_limit(params, default=20, ceiling=50)
+    order = order_sql(_direction(params))
     # First try journal entries for VAT accounts
     date_clauses = _build_date_filter("je", "transaction_date", filters)
     where = f"WHERE {' AND '.join(date_clauses)}" if date_clauses else ""
@@ -1778,8 +1861,8 @@ WHERE (LOWER(jel.account_name) LIKE '%vat%'
     OR LOWER(jel.account_name) LIKE '%tax%'
     OR LOWER(jel.account_name) LIKE '%value added%')
 GROUP BY jel.account_name, coa.account_type
-ORDER BY ABS(COALESCE(SUM(jel.credit_amount), 0) - COALESCE(SUM(jel.debit_amount), 0)) DESC
-LIMIT 20"""
+ORDER BY ABS(COALESCE(SUM(jel.credit_amount), 0) - COALESCE(SUM(jel.debit_amount), 0)) {order}
+LIMIT {int(limit)}"""
     # Fix the WHERE duplication
     if date_clauses:
         sql = f"""SELECT jel.account_name,
@@ -1793,8 +1876,8 @@ WHERE {' AND '.join(date_clauses)}
     OR LOWER(jel.account_name) LIKE '%tax%'
     OR LOWER(jel.account_name) LIKE '%value added%'){_org_frag("je", params)}
 GROUP BY jel.account_name, coa.account_type
-ORDER BY ABS(COALESCE(SUM(jel.credit_amount), 0) - COALESCE(SUM(jel.debit_amount), 0)) DESC
-LIMIT 20"""
+ORDER BY ABS(COALESCE(SUM(jel.credit_amount), 0) - COALESCE(SUM(jel.debit_amount), 0)) {order}
+LIMIT {int(limit)}"""
     else:
         sql = f"""SELECT jel.account_name,
        COALESCE(coa.account_type, 'Unknown') AS account_type,
@@ -1806,8 +1889,8 @@ WHERE (LOWER(jel.account_name) LIKE '%vat%'
    OR LOWER(jel.account_name) LIKE '%tax%'
    OR LOWER(jel.account_name) LIKE '%value added%'){_org_frag("je", params)}
 GROUP BY jel.account_name, coa.account_type
-ORDER BY ABS(COALESCE(SUM(jel.credit_amount), 0) - COALESCE(SUM(jel.debit_amount), 0)) DESC
-LIMIT 20"""
+ORDER BY ABS(COALESCE(SUM(jel.credit_amount), 0) - COALESCE(SUM(jel.debit_amount), 0)) {order}
+LIMIT {int(limit)}"""
     result = _run_sql(sql)
     if result["success"] and result["results"]:
         output_vat = sum(r.get("net_balance", 0) or 0
@@ -1844,10 +1927,9 @@ def _task_recent_transactions(params: Dict) -> Dict:
        COALESCE(c.name, 'Unknown') AS contact,
        inc.invoice_date AS date,
        COALESCE(st.value, 'Unknown') AS status,
-       SUM({COST_EXPR}) AS amount
+       COALESCE(SUM(ii.line_amount), 0) AS amount
 FROM income inc
 JOIN income_items ii ON ii.income_id = inc.id
-JOIN items i ON i.id = ii.items_id
 LEFT JOIN contacts c ON c.id = inc.contact_id
 LEFT JOIN status_type st ON st.id = inc.status_type_id
 WHERE CAST(inc.invoice_date AS DATE) >= CURRENT_DATE - INTERVAL '{int(days)} days'{_org_frag("inc", params)}
@@ -1863,10 +1945,9 @@ LIMIT {int(limit)}"""
        COALESCE(c.name, 'Unknown') AS contact,
        e.reception_date AS date,
        COALESCE(st.value, 'Unknown') AS status,
-       SUM({COST_EXPR}) AS amount
+       COALESCE(SUM(ei.line_amount), 0) AS amount
 FROM expense e
 JOIN expense_items ei ON ei.expense_id = e.id
-JOIN items i ON i.id = ei.items_id
 LEFT JOIN contacts c ON c.id = e.contact_id
 LEFT JOIN status_type st ON st.id = e.status_type_id
 WHERE CAST(e.reception_date AS DATE) >= CURRENT_DATE - INTERVAL '{int(days)} days'{_org_frag("e", params)}
@@ -1891,18 +1972,18 @@ LIMIT {int(limit)}"""
 
 
 def _task_customer_overdue_summary(params: Dict) -> Dict:
-    """Top N customers with overdue invoices — amount, count and days overdue."""
-    limit = params.get("limit", 20)
+    """Top (or bottom, via sort_order) N customers with overdue invoices — amount, count and days overdue."""
+    limit = _resolve_limit(params, default=20, ceiling=50)
+    order = order_sql(_direction(params))
     min_days = params.get("min_days_overdue", 0)
     sql = f"""SELECT COALESCE(c.name, 'Unknown') AS customer,
        COUNT(DISTINCT inc.id) AS overdue_invoice_count,
-       SUM({COST_EXPR}) AS total_overdue_amount,
+       COALESCE(SUM(ii.line_amount), 0) AS total_overdue_amount,
        MAX(CURRENT_DATE - CAST(inc.due_date AS DATE)) AS max_days_overdue,
        MIN(CURRENT_DATE - CAST(inc.due_date AS DATE)) AS min_days_overdue,
        c.email, c.phone_number, c.trn_number
 FROM income inc
 JOIN income_items ii ON ii.income_id = inc.id
-JOIN items i ON i.id = ii.items_id
 LEFT JOIN contacts c ON c.id = inc.contact_id
 LEFT JOIN status_type st ON st.id = inc.status_type_id
 WHERE inc.due_date IS NOT NULL AND inc.due_date <> ''
@@ -1910,7 +1991,7 @@ WHERE inc.due_date IS NOT NULL AND inc.due_date <> ''
   AND LOWER(COALESCE(st.value, '')) IN ('pending', 'partial_paid')
   AND CURRENT_DATE - CAST(inc.due_date AS DATE) >= {int(min_days)}{_org_frag("inc", params)}
 GROUP BY c.name, c.email, c.phone_number, c.trn_number
-ORDER BY total_overdue_amount DESC NULLS LAST
+ORDER BY total_overdue_amount {order} NULLS LAST
 LIMIT {int(limit)}"""
     result = _run_sql(sql)
     if result["success"] and result["results"]:

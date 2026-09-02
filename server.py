@@ -7,6 +7,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -30,7 +31,10 @@ if hasattr(sys.stdout, "reconfigure"):
 def main() -> None:
     parser = argparse.ArgumentParser(description="Start the Gemini Brain REST API & Swagger server.")
     parser.add_argument("--host", default=settings.api_host, help="Host address (default: 0.0.0.0)")
-    parser.add_argument("--port", type=int, default=settings.api_port, help="Port number (default: 8000)")
+    parser.add_argument(
+        "--port", type=int, default=int(os.environ.get("PORT", settings.api_port)),
+        help="Port number (default: 8000, or $PORT if set)",
+    )
     parser.add_argument("--reload", action="store_true", help="Enable auto-reload on code changes.")
 
     args = parser.parse_args()

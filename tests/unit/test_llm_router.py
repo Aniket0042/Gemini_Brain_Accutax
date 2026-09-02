@@ -86,7 +86,12 @@ def test_route_with_gemini_success():
 
 
 def test_select_endpoint_structured_pydantic_mapping():
-    """Verify select_endpoint_structured maps tool calls into verified query and path parameters."""
+    """Verify select_endpoint_structured maps tool calls into verified query and path parameters.
+
+    income_total resolves to a direct DB report (rpt_income_total), not REST
+    /income/total -- that endpoint was found to ignore organization_id and
+    return the identical figure for every org, including ones that don't exist.
+    """
     mock_caller = MagicMock(return_value=('{"name": "income_total", "parameters": {"period": "2026"}}', 40, 10))
     sel, ti, to = select_endpoint_structured(
         query="What is total revenue in 2026?",
@@ -96,13 +101,12 @@ def test_select_endpoint_structured_pydantic_mapping():
     )
 
     assert sel is not None
-    assert sel["endpoint"] == "/income/total"
+    assert sel["endpoint"] == "rpt_income_total"
     assert sel["tool_name"] == "income_total"
     assert sel["intent"] == 4
-    assert sel["query_params"]["filter_year"] == "2026"
-    assert sel["query_params"]["filter_type"] == "YEARLY"
+    assert sel["query_params"]["start_date"] == "2026-01-01"
+    assert sel["query_params"]["end_date"] == "2026-12-31"
     assert sel["query_params"]["organization_id"] == 27
-    assert sel["query_params"]["user_id"] == "18"
 
 
 def test_select_endpoint_structured_trial_balance():
@@ -149,5 +153,6 @@ def test_select_endpoint_integration_with_keyword_fallback():
     )
 
     assert sel is not None
-    assert sel["endpoint"] == "/income/total"
-    assert "filter_year" in sel["query_params"]
+    assert sel["endpoint"] == "rpt_income_total"
+    assert "start_date" in sel["query_params"]
+    assert "end_date" in sel["query_params"]

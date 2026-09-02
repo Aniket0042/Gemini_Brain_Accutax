@@ -773,3 +773,82 @@ class ProfitLossWithAccountsParams(BaseModel):
         return {}
 
 
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Deterministic SQL report parameters (see reports/definitions.py)
+#
+# These mirror the period/as-of shape of the REST params above so the router
+# treats them identically — the only difference is that _retrieve() dispatches
+# their `rpt_` endpoint to the report engine instead of an HTTP call.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ReportPeriodParams(BaseModel):
+    """Start/end period for a date-ranged SQL report."""
+    period: str = Field(default="this year", description="Period phrase e.g. 'this month', 'last quarter', '2026'.")
+
+    def to_query(self, ctx: RequestCtx) -> Dict[str, Any]:
+        w = dates.resolve(self.period)
+        return {
+            "organization_id": ctx.org_id,
+            "start_date": w.date_from.isoformat(),
+            "end_date": w.date_to.isoformat(),
+        }
+
+    def to_path_params(self, ctx: RequestCtx) -> Dict[str, Any]:
+        return {}
+
+
+class ReportPeriodLimitParams(ReportPeriodParams):
+    """Date-ranged SQL report that also ranks, so it takes a row limit and direction."""
+    limit: int = Field(default=20, ge=1, le=50, description="Maximum rows to return (1-50).")
+    sort_order: str = Field(
+        default="desc",
+        description=(
+            "'desc' for top/highest/most/best (the default), 'asc' for "
+            "bottom/lowest/least/worst/smallest."
+        ),
+    )
+
+    def to_query(self, ctx: RequestCtx) -> Dict[str, Any]:
+        params = super().to_query(ctx)
+        params["limit"] = self.limit
+        params["sort_order"] = self.sort_order
+        return params
+
+
+class ReportAsOfParams(BaseModel):
+    """Point-in-time parameters for an aging-detail SQL report."""
+    as_of: str = Field(default="today", description="As-of date phrase (e.g. 'today').")
+
+    def to_query(self, ctx: RequestCtx) -> Dict[str, Any]:
+        # Clamp to today: dates.resolve() has no "today" phrase, so it falls
+        # through to "this year" and hands back 31 December. Aging measured
+        # against a future date inflates days_overdue by up to a year, which is
+        # exactly the number these reports exist to get right.
+        as_of = min(dates.resolve(self.as_of).date_to, dates.today())
+        return {
+            "organization_id": ctx.org_id,
+            "as_of_date": as_of.isoformat(),
+        }
+
+
+class ReportAsOfLimitParams(ReportAsOfParams):
+    """Point-in-time SQL report that also ranks, so it takes a row limit and direction."""
+    limit: int = Field(default=20, ge=1, le=50, description="Maximum rows to return (1-50).")
+    sort_order: str = Field(
+        default="desc",
+        description=(
+            "'desc' for top/highest/most/worst-overdue (the default), 'asc' for "
+            "bottom/lowest/least/smallest."
+        ),
+    )
+
+    def to_query(self, ctx: RequestCtx) -> Dict[str, Any]:
+        params = super().to_query(ctx)
+        params["limit"] = self.limit
+        params["sort_order"] = self.sort_order
+        return params
+
+    def to_path_params(self, ctx: RequestCtx) -> Dict[str, Any]:
+        return {}

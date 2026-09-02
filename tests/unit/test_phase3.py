@@ -118,8 +118,11 @@ def test_gemini_declarations_structure():
     assert "unsupported" in names
 
 
-def test_narrate_false_tool_bypasses_bedrock():
-    """Verify narrate=False tool (e.g. invoice_list) renders table with zero Bedrock calls."""
+def test_all_tools_are_narrated_including_former_lookup_tools():
+    """Verify every tool's result -- including simple lookups like invoice_list that
+    used to skip narration entirely -- is narrated by Bedrock. The formatted table is
+    still produced and exposed separately via table_markdown for the UI, but it is
+    never the `answer` on the happy path."""
     runner = GeminiBrainRunner(api_key="test-key")
     runner._enforce_tenant_isolation = MagicMock(return_value=27)
 
@@ -130,17 +133,21 @@ def test_narrate_false_tool_bypasses_bedrock():
 
     with patch("gemini_brain.orchestrator.gemini_brain_runner.select_endpoint", return_value=({"endpoint": "/income/list", "query_params": {}}, 10, 10)), \
          patch("gemini_brain.api_client.accutax_client.call_api_resilient", return_value=Retrieved(Outcome.OK, payload=invoice_data, tier="live_api", endpoint="/income/list")), \
-         patch("gemini_brain.orchestrator.gemini_brain_runner.reason_over_data") as mock_reason:
+         patch(
+             "gemini_brain.orchestrator.gemini_brain_runner.reason_over_data",
+             return_value=("You have 2 invoices: INV-101 (paid) and INV-102 (unpaid).", "Claude Haiku 4.5", 10, 5),
+         ) as mock_reason:
 
         res = runner.run(
             query="Show recent sales invoices",
             organization_id=27,
             use_api=True,
-            narrate=True,  # Request allows narration, but toolSpec for invoice_list has narrate=False
         )
 
-        # Bedrock must NOT be called for narrate=False tool
-        mock_reason.assert_not_called()
-        assert "| Invoice Number | Name | Total | Status |" in res["answer"]
-        assert "INV-101" in res["answer"]
-        assert "AED 1,500.00" in res["answer"]
+        # Bedrock IS called even for a former narrate=False tool
+        mock_reason.assert_called_once()
+        assert res["answer"] == "You have 2 invoices: INV-101 (paid) and INV-102 (unpaid)."
+        # The deterministic table is still built and exposed separately for the UI
+        assert "| Invoice Number | Name | Total | Status |" in res["table_markdown"]
+        assert "INV-101" in res["table_markdown"]
+        assert "AED 1,500.00" in res["table_markdown"]
