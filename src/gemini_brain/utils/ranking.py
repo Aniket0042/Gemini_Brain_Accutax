@@ -67,6 +67,51 @@ def resolve_limit_and_direction(
     return resolve_limit(params, default, ceiling), resolve_direction(params, raw_query)
 
 
+#: Matches an explicit count in free-form query text: "top 5", "bottom 10",
+#: "first 3", "5 largest", etc. First capture group is always the count.
+_EXPLICIT_COUNT: Pattern = re.compile(
+    r"\b(?:top|bottom|first|last)\s+(\d+)\b|\b(\d+)\s+(?:largest|smallest|highest|lowest|biggest|top|most|least)\b",
+    re.IGNORECASE,
+)
+
+#: Phrasing that asks for a single entity ("the largest debtor", "who is our
+#: biggest customer", "which vendor spent the most") with no explicit number —
+#: these should render as one row, not a default-sized list.
+_SINGULAR_ASK: Pattern = re.compile(
+    r"\b(?:the|our|who\s+is|which)\b[^.?!]{0,40}\b(largest|biggest|smallest|highest|lowest|most|least|top|worst|best)\b(?!\s+\d)",
+    re.IGNORECASE,
+)
+
+
+def extract_requested_count(query: str, default: int = 20, ceiling: int = 50) -> int:
+    """Recover how many rows a table should show from the user's own phrasing.
+
+    Every table-rendering call site used to hand the full result set to a flat
+    default (50) regardless of what was actually asked — "top 5 overdue
+    invoices" rendered 50 rows, "who is our largest debtor" rendered the whole
+    aging list. This is the single place that maps free-form query text to a
+    row count, so every renderer gets it right by construction:
+
+    - An explicit number ("top 5", "5 largest") wins outright.
+    - A singular ask with no number ("the largest debtor", "who is our biggest
+      customer") means exactly one row.
+    - Otherwise, the caller's own default stands unchanged — a plain "list
+      invoices" keeps showing a normal-sized page.
+    """
+    if not isinstance(query, str) or not query:
+        return default
+    m = _EXPLICIT_COUNT.search(query)
+    if m:
+        raw = m.group(1) or m.group(2)
+        try:
+            return max(1, min(int(raw), ceiling))
+        except (TypeError, ValueError):
+            return default
+    if _SINGULAR_ASK.search(query):
+        return 1
+    return default
+
+
 def order_sql(ascending: bool) -> str:
     """SQL keyword for a resolved direction. Never derived from user input
     directly — always from the bool this module computed — so it's safe to

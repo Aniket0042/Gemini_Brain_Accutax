@@ -5,7 +5,7 @@ from .messages import notice_for, NOTICES
 from .envelope import (
     build_notice, build_success, build_empty, build_degraded, normalize_envelope, new_request_id,
 )
-from .output_guard import sanitize_answer, looks_like_backend_leak
+from .output_guard import sanitize_answer, looks_like_backend_leak, strip_emojis
 
 __all__ = [
     "Outcome", "Retrieved", "classify_payload",
@@ -13,5 +13,5 @@ __all__ = [
     "notice_for", "NOTICES",
     "build_notice", "build_success", "build_empty", "build_degraded", "normalize_envelope",
     "new_request_id",
-    "sanitize_answer", "looks_like_backend_leak",
+    "sanitize_answer", "looks_like_backend_leak", "strip_emojis",
 ]

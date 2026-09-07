@@ -68,6 +68,31 @@ _FALLBACK_MESSAGE = (
     "date range or filter."
 )
 
+#: Unicode ranges covering emoji, pictographs, dingbats, and variation
+#: selectors/ZWJ used to compose them. This is a professional finance product —
+#: no system prompt reliably suppresses emoji output from every model/path, so
+#: this strips them deterministically regardless of which path produced the text.
+_EMOJI_PATTERN = re.compile(
+    "["
+    "\U0001F300-\U0001FAFF"  # symbols & pictographs, transport, supplemental, emoticons, etc.
+    "\U00002600-\U000027BF"  # misc symbols, dingbats
+    "\U0001F1E6-\U0001F1FF"  # regional indicators (flag letters)
+    "\U00002190-\U000021FF"  # arrows (incl. emoji-style arrows)
+    "\U00002B00-\U00002BFF"  # misc symbols and arrows
+    "\U0000FE0F"             # variation selector-16 (emoji presentation)
+    "\U0000200D"             # zero-width joiner (emoji sequences)
+    "]+"
+)
+
+
+def strip_emojis(text: Optional[str]) -> Optional[str]:
+    """Remove emoji/pictograph characters from `text`, collapsing any resulting
+    double spaces left behind. Returns `text` unchanged when falsy."""
+    if not text:
+        return text
+    cleaned = _EMOJI_PATTERN.sub("", text)
+    return re.sub(r"[ \t]{2,}", " ", cleaned)
+
 
 def looks_like_backend_leak(text: str) -> bool:
     """True if `text` contains a database/IT-support-style leak signal."""

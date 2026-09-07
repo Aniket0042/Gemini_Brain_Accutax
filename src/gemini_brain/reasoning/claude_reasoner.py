@@ -56,6 +56,7 @@ The DATA block is authoritative and already fully aggregated by the system.
   owner, not describing a schema. Translate every field into plain business
   language.
 - Format amounts as AED 1,234,567.00.
+- Never use emojis. This is a professional finance product.
 """
 
 #: For payloads that are one figure or a handful of fields. A terse answer is the

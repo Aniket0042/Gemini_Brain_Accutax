@@ -17,6 +17,7 @@ from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple
 from gemini_brain.router.dates import Window
 from gemini_brain.utils.ranking import extract_direction_from_text
 from gemini_brain.utils.ranking import extract_limit_from_text as _extract_limit_from_query
+from gemini_brain.utils.ranking import extract_requested_count
 
 
 def _safe_int(m: Any, group: int, default: int = 10) -> int:
@@ -361,7 +362,10 @@ def get_sql_fast_path_rules() -> List[Tuple[Pattern, str, Callable]]:
         elif r.name == "cash_forecast":
             builder = lambda m, oid: {"months": 6, "organization_id": oid}
         elif r.name in ("invoice_list", "bill_list"):
-            builder = lambda m, oid: {"limit": 20, "organization_id": oid}
+            builder = lambda m, oid: {
+                "limit": extract_requested_count(m.string if m is not None else "", default=20),
+                "organization_id": oid,
+            }
         else:
             builder = lambda m, oid: {"organization_id": oid}
 
@@ -456,7 +460,10 @@ def get_endpoint_sql_verifiers() -> Dict[str, Tuple[str, Callable[[Any, int], Di
         elif r.name == "cash_forecast":
             builder = lambda m, oid: {"months": 6, "organization_id": oid}
         elif r.name in ("invoice_list", "bill_list"):
-            builder = lambda m, oid: {"limit": 20, "organization_id": oid}
+            builder = lambda m, oid: {
+                "limit": extract_requested_count(m.string if m is not None else "", default=20),
+                "organization_id": oid,
+            }
         else:
             builder = lambda m, oid: {"organization_id": oid}
         verifiers[r.endpoint] = (r.sql_task, builder)

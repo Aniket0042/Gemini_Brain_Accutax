@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from .errors import ErrorCode
 from .messages import notice_for
-from .output_guard import sanitize_answer
+from .output_guard import sanitize_answer, strip_emojis
 
 _EMPTY_USAGE = {
     "input_tokens": 0,
@@ -166,6 +166,11 @@ def normalize_envelope(result: Dict[str, Any]) -> Dict[str, Any]:
         or bool(out.get("data_source")) or bool(out.get("results"))
     if touched_backend_data:
         answer = sanitize_answer(answer)
+
+    # This is a professional finance product — strip emojis from every answer
+    # regardless of which path produced it, since a system prompt alone doesn't
+    # reliably suppress them across every model/reasoning path.
+    answer = strip_emojis(answer)
 
     # Apply markdown normalizer if available
     try:

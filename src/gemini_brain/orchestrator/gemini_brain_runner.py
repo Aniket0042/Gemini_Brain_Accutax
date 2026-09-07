@@ -464,7 +464,7 @@ class GeminiBrainRunner:
         endpoint = getattr(retrieved, "endpoint", "")
         verified = _verify_empty_via_sql(endpoint, organization_id, raw_query)
         if verified is not None:
-            formatted_table = render("row_table", verified.payload)
+            formatted_table = render("row_table", verified.payload, query=raw_query)
             answer, b_label, bi_new, bo_new, narration_degraded = self._narrate_or_fallback(
                 query=query,
                 data=verified.payload,
@@ -1236,7 +1236,7 @@ class GeminiBrainRunner:
             data = retrieved.payload
             results_payload = data if isinstance(data, list) else ([data] if isinstance(data, dict) else [])
             formatter_name = tool_spec.formatter if tool_spec else "row_table"
-            formatted_table = render(formatter_name, data)
+            formatted_table = render(formatter_name, data, query=query)
 
             with trace.stage("bedrock_reasoning", intent=qtype):
                 answer, b_label, bi_new, bo_new, narration_degraded = self._narrate_or_fallback(
@@ -1765,7 +1765,7 @@ class GeminiBrainRunner:
             data = retrieved.payload
             results_payload = data if isinstance(data, list) else ([data] if isinstance(data, dict) else [])
             formatter_name = tool_spec.formatter if tool_spec else "row_table"
-            formatted_table = render(formatter_name, data)
+            formatted_table = render(formatter_name, data, query=query)
 
             # Emit data table immediately so frontend can paint table before narration starts
             yield {

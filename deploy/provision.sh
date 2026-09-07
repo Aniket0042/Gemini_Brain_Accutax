@@ -95,7 +95,7 @@ fi
 
 echo "==> Building UI (using $NODE_BIN)"
 NODE_DIR="$(dirname "$NODE_BIN")"
-cd "$APP_DIR/ui"
+cd "$APP_DIR/frontend"
 sudo -u "$APP_USER" env PATH="$NODE_DIR:$PATH" npm ci
 sudo -u "$APP_USER" env PATH="$NODE_DIR:$PATH" npm run build
 cd "$APP_DIR"

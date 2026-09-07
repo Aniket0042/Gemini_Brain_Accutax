@@ -403,13 +403,24 @@ FORMATTERS = {
 }
 
 
-def render(formatter_name: str, data: Any) -> str:
-    """Render data into markdown using the specified formatter."""
+def render(formatter_name: str, data: Any, query: Optional[str] = None) -> str:
+    """Render data into markdown using the specified formatter.
+
+    `query` is the user's own question text, if available. For the generic
+    "row_table" formatter it's used to cap the table to what was actually
+    asked for (see utils.ranking.extract_requested_count) — without it, every
+    table defaulted to a flat 50 rows regardless of whether the user asked for
+    "top 5" or "the largest debtor".
+    """
     if data is None or data == [] or data == {}:
         return "_No records found._"
     fn = FORMATTERS.get(formatter_name, render_row_table)
     try:
-        res = fn(data)
+        if fn is render_row_table and query:
+            from gemini_brain.utils.ranking import extract_requested_count
+            res = render_row_table(data, max_rows=extract_requested_count(query))
+        else:
+            res = fn(data)
         try:
             from gemini_brain.formatting.markdown import normalize_markdown
             return normalize_markdown(res)
