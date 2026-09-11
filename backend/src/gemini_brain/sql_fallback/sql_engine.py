@@ -1,0 +1,727 @@
+"""
+sql_engine.py — SQL Fallback Engine.
+
+Extracted from engine.py.
+Drives the production NL-to-SQL tool-calling loop using BedrockAdapter.
+Imports coordinator_agent and sub-agents from the host production codebase.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import os
+import re
+import sys
+import time
+from typing import Any, Dict, Generator, List, Optional, Tuple
+
+from gemini_brain.config.constants import (
+    DEFAULT_USER_ID,
+    ENGINE_MAX_ITERATIONS,
+    ENGINE_RECOVERY_BUDGET_SECONDS,
+    ENGINE_TIME_BUDGET_SECONDS,
+    ENGINE_TOOL_RESULT_TRUNCATE_CHARS,
+    ENGINE_TRUNCATION_KEEP_RECENT,
+    NEVER_EXPOSE_BACKEND_RULE,
+)
+from gemini_brain.reasoning.bedrock_client import extract_text, extract_tool_calls
+from gemini_brain.sql_fallback.answer_cleaner import (
+    clean_thinking_artifacts,
+    is_garbage_answer,
+)
+from gemini_brain.sql_fallback.cost_optimizer import (
+    compact_tool_result,
+    get_cached_result,
+    resolve_complexity,
+    select_tools,
+    set_cached_result,
+)
+from gemini_brain.sql_fallback.fast_path import try_fast_path
+from gemini_brain.sql_fallback.sql_safety import assert_read_only
+from gemini_brain.sql_fallback.tenant_sql_guard import enforce_tenant_isolation_sql
+
+logger = logging.getLogger("gemini_brain.sql_fallback.sql_engine")
+
+
+def _get_coordinator_pipeline() -> Tuple[Any, Any, Any, Any, Any, Any, Any]:
+    """Helper to lazily import production coordinator pipeline components."""
+    try:
+        from gemini_brain.agents.coordinator_agent import (
+            _build_system_prompt,
+            TOOL_DEFINITIONS,
+            AGENT_HANDLERS,
+            _deep_serialize,
+            _strip_sql_from_answer,
+            _format_raw_results,
+            _infer_question_type,
+        )
+        return (
+            _build_system_prompt,
+            TOOL_DEFINITIONS,
+            AGENT_HANDLERS,
+            _deep_serialize,
+            _strip_sql_from_answer,
+            _format_raw_results,
+            _infer_question_type,
+        )
+    except ImportError as e:
+        logger.error("Failed to import production agents pipeline: %s", e)
+        raise RuntimeError(
+            "Production coordinator_agent pipeline is required for SQL fallback engine."
+        ) from e
+
+
+#: `enforce_tenant_isolation_sql` now lives in tenant_sql_guard.py, shared
+#: with agents/finance_agent.py — see that module's docstring for why the two
+#: previously-separate, divergent copies were consolidated.
+
+
+def _safe_build_system_prompt(fn: Any, org_id: Optional[int]) -> str:
+    """Safely build system prompt regardless of keyword argument naming differences with strict tenant isolation hardening.
+
+    Raises
+    ------
+    ValueError
+        If ``org_id`` is missing. This prompt tells the model which tenant it is
+        confined to, so a substituted default would not merely be wrong — it
+        would instruct the model to read another organization's books.
+    """
+    if org_id is None:
+        raise ValueError(
+            "Cannot build a tenant-isolated prompt without an organization_id."
+        )
+    val = org_id
+    base_prompt = ""
+    if fn and callable(fn):
+        try:
+            base_prompt = fn(val)
+        except Exception:
+            try:
+                base_prompt = fn(org_id=val)
+            except Exception:
+                try:
+                    base_prompt = fn(organization_id=val)
+                except Exception:
+                    base_prompt = fn()
+
+    security_rule = (
+        f"\n\n===================================================\n"
+        f"CRITICAL TENANT SECURITY & ISOLATION BOUNDARY:\n"
+        f"You are strictly isolated to Organization ID: {val}.\n"
+        f"- In EVERY SQL query, you MUST filter by `organization_id = {val}` (or `id = {val}` for the `organizations` table).\n"
+        f"- Under NO circumstances are you allowed to query or reveal data for any other organization ID, even if the user explicitly asks for 'organization 45', 'org #1', or names another company.\n"
+        f"- Always query and output data ONLY for the current active organization ID ({val}).\n"
+        f"===================================================\n"
+    )
+    return base_prompt + security_rule + "\n" + NEVER_EXPOSE_BACKEND_RULE
+
+
+def _safe_infer_question_type(fn: Any, task: str = "", params: Optional[Dict] = None, current: str = "unknown") -> str:
+    """Safely call _infer_question_type handling varying parameter signatures."""
+    if not fn or not callable(fn):
+        return current
+    try:
+        import inspect
+        sig = inspect.signature(fn)
+        param_count = len(sig.parameters)
+        if param_count == 3:
+            return fn(task, params or {}, current)
+        elif param_count == 1:
+            return fn(task)
+    except Exception:
+        pass
+    return current
+
+
+def run(
+    user_question: str,
+    adapter: Any,
+    *,
+    organization_id: Optional[int] = None,
+    user_id: int = DEFAULT_USER_ID,
+    session_id: Optional[str] = None,
+    raw_user_question: Optional[str] = None,
+    intent: Optional[int] = None,
+    save_message_by_session: Optional[Any] = None,
+    update_conversation_state_hybrid_by_session: Optional[Any] = None,
+    maybe_auto_title: Optional[Any] = None,
+    conversation_memory: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Run a question through the SQL fallback engine pipeline."""
+    if organization_id is None:
+        raise ValueError("Organization ID is required and was not provided.")
+    (
+        _build_system_prompt,
+        TOOL_DEFINITIONS,
+        AGENT_HANDLERS,
+        _deep_serialize,
+        _strip_sql_from_answer,
+        _format_raw_results,
+        _infer_question_type,
+    ) = _get_coordinator_pipeline()
+
+    adapter.reset_tokens()
+    start_time = time.time()
+    saved_query = raw_user_question or user_question
+
+    # Fast-path check
+    fast_result = try_fast_path(user_question, organization_id, AGENT_HANDLERS)
+    if fast_result is not None:
+        fp_agent_result, fp_task, _fp_params = fast_result
+        if isinstance(fp_agent_result, list):
+            fp_agent_result = {"results": fp_agent_result}
+        elif not isinstance(fp_agent_result, dict):
+            fp_agent_result = {"results": [], "raw": str(fp_agent_result)}
+        fp_compact = compact_tool_result(fp_agent_result, fp_task)
+        fp_answer = None
+        fp_system = (
+            "You are a professional financial analyst for a UAE technology company. "
+            "Convert the following database result into a complete, well-structured answer. "
+            "Use AED X,XXX.XX currency format. "
+            "Use ## headers for sections, markdown tables for ranked lists, bullet points for facts. "
+            "Show ALL groups/buckets/categories individually — never collapse into just a total. "
+            "Give a direct decisive answer — do NOT append a Data Source section."
+        )
+        if conversation_memory:
+            fp_system = (
+                fp_system
+                + "\n\n"
+                + conversation_memory
+                + "\nIf the latest question is a follow-up, resolve pronouns and relative periods from CONVERSATION SO FAR."
+            )
+        for _fp_attempt in range(2):
+            try:
+                fp_resp = adapter.converse_with_tools(
+                    system_prompt=fp_system,
+                    messages=[{"role": "user", "content": [{"text": f"Question: {user_question}\n\nData:\n{fp_compact}"}]}],
+                    tools=[],
+                    temperature=0.0,
+                    max_tokens=2000,
+                )
+                fp_answer = extract_text(fp_resp)
+                break
+            except Exception:
+                fp_answer = None
+                # One retry before falling back to the deterministic formatter below --
+                # every answer should be LLM-narrated if at all possible.
+
+        final_answer = (
+            _strip_sql_from_answer(fp_answer)
+            if fp_answer
+            else _format_raw_results(user_question, fp_agent_result.get("results", []))
+        )
+        token_usage = adapter.get_token_usage()
+        token_usage["elapsed_seconds"] = round(time.time() - start_time, 2)
+        question_type = _safe_infer_question_type(_infer_question_type, fp_task, _fp_params, "unknown")
+
+        last_results = fp_agent_result.get("results") or []
+        last_sql = fp_agent_result.get("sql", None)
+        agent_trace = [{"agent": "fast_path", "task": fp_task, "success": True}]
+
+        if session_id and save_message_by_session:
+            save_message_by_session(session_id, "user", saved_query)
+            save_message_by_session(session_id, "assistant", final_answer or "No answer generated.")
+            if update_conversation_state_hybrid_by_session:
+                update_conversation_state_hybrid_by_session(
+                    session_id=session_id,
+                    user_id=user_id,
+                    query=user_question,
+                    response=final_answer or "No answer generated.",
+                    agent_trace=agent_trace,
+                )
+            if maybe_auto_title:
+                maybe_auto_title(session_id, user_question)
+
+        return {
+            "query": user_question,
+            "answer": final_answer or "No answer generated.",
+            "question_type": question_type,
+            "sql": last_sql,
+            "results": last_results or [],
+            "agent_trace": agent_trace,
+            "token_usage": token_usage,
+            "total_count": len(last_results) if isinstance(last_results, list) else None,
+            "error": None,
+        }
+
+    # Standard tool loop
+    system_prompt = _safe_build_system_prompt(_build_system_prompt, organization_id)
+    if conversation_memory:
+        system_prompt = (
+            system_prompt
+            + "\n\n"
+            + conversation_memory
+            + "\nIf the latest question is a follow-up, resolve pronouns and relative periods from CONVERSATION SO FAR."
+        )
+    messages: List[Dict[str, Any]] = [{"role": "user", "content": [{"text": user_question}]}]
+    agent_trace: List[Dict[str, Any]] = []
+
+    last_sql: Optional[str] = None
+    last_results: Optional[List[Dict[str, Any]]] = None
+    final_answer: str = ""
+    iteration = 0
+    question_type = "unknown"
+
+    complexity = resolve_complexity(user_question, intent)
+    active_tools = select_tools(complexity, user_question, TOOL_DEFINITIONS)
+    if len(active_tools) < len(TOOL_DEFINITIONS):
+        logger.info(
+            "Engine tool set pruned to %d/%d for %s question (intent=%s)",
+            len(active_tools), len(TOOL_DEFINITIONS), complexity, intent,
+        )
+
+    #: True once the model closes the conversation itself (a turn with no tool
+    #: calls, or stopReason=end_turn). While it is False the loop is still
+    #: mid-plan, and any text the model has emitted is commentary about what it
+    #: intends to do next — never an answer to hand the user.
+    final_turn_reached = False
+    exit_reason = ""
+
+    while iteration < ENGINE_MAX_ITERATIONS:
+        iteration += 1
+        elapsed = time.time() - start_time
+        if elapsed > ENGINE_TIME_BUDGET_SECONDS:
+            logger.warning("Engine time budget exceeded (%.1fs)", elapsed)
+            exit_reason = "time budget"
+            break
+
+        try:
+            response = adapter.converse_with_tools(
+                system_prompt=system_prompt,
+                messages=messages,
+                tools=active_tools,
+                temperature=0.0,
+                max_tokens=2000,
+            )
+        except Exception as e:
+            logger.error("LLM call failed at iteration %d: %s", iteration, e)
+            token_usage = adapter.get_token_usage()
+            token_usage["elapsed_seconds"] = round(time.time() - start_time, 2)
+            return {
+                "query": user_question,
+                "answer": f"Error: LLM call failed — {e}",
+                "question_type": "error",
+                "sql": last_sql,
+                "results": last_results or [],
+                "agent_trace": agent_trace,
+                "token_usage": token_usage,
+                "total_count": None,
+                "error": str(e),
+            }
+
+        stop_reason = response.get("stopReason", "end_turn")
+        tool_calls = extract_tool_calls(response)
+        text_output = extract_text(response)
+
+        if stop_reason == "end_turn" or not tool_calls:
+            # Terminal turn — this text is the model's actual answer, so it is
+            # the only text worth keeping. Assigning on every turn (as this used
+            # to) meant a loop that later timed out handed the user its own
+            # planning commentary: "Let me first check the chart of accounts...".
+            final_answer = text_output or ""
+            final_turn_reached = True
+            break
+
+        assistant_content = response.get("output", {}).get("message", {}).get("content", [])
+        messages.append({"role": "assistant", "content": assistant_content})
+
+        tool_results_content: List[Dict[str, Any]] = []
+        for tc in tool_calls:
+            tool_use_id = tc["toolUseId"]
+            tool_name = tc["name"]
+            tool_input = tc.get("input", {})
+            from_cache = False
+
+            handler = AGENT_HANDLERS.get(tool_name)
+            if not handler:
+                agent_result = {"success": False, "error": f"Unknown tool '{tool_name}'"}
+            else:
+                task = tool_input.get("task", "")
+                params = tool_input.get("params", {})
+
+                if not isinstance(params, dict):
+                    params = {}
+                params["organization_id"] = organization_id
+
+                if tool_name == "finance_agent" and task == "execute_sql":
+                    if not params.get("sql"):
+                        fallback_sql = _generate_sql_fallback(adapter, user_question, system_prompt, organization_id)
+                        if fallback_sql:
+                            params["sql"] = fallback_sql
+                    if params.get("sql"):
+                        # Phase F safety gap 1: Belt-and-suspenders read-only check
+                        assert_read_only(params["sql"])
+                        params["sql"] = enforce_tenant_isolation_sql(params["sql"], organization_id)
+
+                try:
+                    if tool_name == "finance_agent":
+                        # Repeated tasks within a loop (and across loops inside the
+                        # TTL) are common — the model re-checks a total it already
+                        # pulled. Serving those from cache skips a database round
+                        # trip entirely. Only successful results are stored, and the
+                        # key includes the params, so a different period or filter
+                        # is a different entry. See _TASK_TTL for per-task lifetimes.
+                        cached = get_cached_result(organization_id, task, params)
+                        if cached is not None:
+                            agent_result = cached
+                            from_cache = True
+                        else:
+                            agent_result = handler(task, params)
+                            if isinstance(agent_result, dict) and agent_result.get("success"):
+                                set_cached_result(organization_id, task, params, agent_result)
+                    else:
+                        agent_result = handler(task, params)
+                except Exception as e:
+                    agent_result = {"success": False, "error": str(e)}
+
+            if isinstance(agent_result, dict):
+                if agent_result.get("sql"):
+                    last_sql = agent_result["sql"]
+                if agent_result.get("results") is not None:
+                    last_results = agent_result["results"]
+
+            trace_entry = {
+                "iteration": iteration,
+                "agent": tool_name,
+                "task": tool_input.get("task"),
+                "params": tool_input.get("params"),
+                "success": agent_result.get("success", False) if isinstance(agent_result, dict) else False,
+            }
+            if isinstance(agent_result, dict) and agent_result.get("error"):
+                trace_entry["error"] = agent_result["error"]
+            if from_cache:
+                trace_entry["source"] = "cache_hit"
+            agent_trace.append(trace_entry)
+
+            if isinstance(agent_result, dict):
+                # Hoist period + summary to the front so that when this result is
+                # truncated on a later iteration, the aggregate figures survive and
+                # the row detail is what gets cut — not the other way round.
+                # Builds a new dict rather than reordering in place: agent_result
+                # may be the object now held in the TTL cache.
+                if "summary" in agent_result:
+                    hoisted = {
+                        "period": agent_result.get("period", ""),
+                        "summary": agent_result["summary"],
+                    }
+                    hoisted.update(
+                        {k: v for k, v in agent_result.items() if k not in ("period", "summary")}
+                    )
+                    agent_result = hoisted
+                compact_str = compact_tool_result(agent_result, tool_input.get("task", ""))
+            else:
+                compact_str = str(agent_result)[:2000]
+            tool_results_content.append({
+                "toolResult": {
+                    "toolUseId": tool_use_id,
+                    "content": [{"text": compact_str}],
+                }
+            })
+
+        messages.append({"role": "user", "content": tool_results_content})
+        _truncate_stale_tool_results(messages)
+
+    token_usage = adapter.get_token_usage()
+    token_usage["elapsed_seconds"] = round(time.time() - start_time, 2)
+    question_type = _safe_infer_question_type(_infer_question_type, user_question, {}, "unknown")
+
+    # Recovery runs only after the loop has already spent its budget, so it gets
+    # a small deadline of its own rather than an open-ended retry (see
+    # ENGINE_RECOVERY_BUDGET_SECONDS). Past it, recovery renders rows locally
+    # instead of making another LLM call.
+    recovery_deadline = start_time + ENGINE_TIME_BUDGET_SECONDS + ENGINE_RECOVERY_BUDGET_SECONDS
+
+    if not final_turn_reached:
+        # The loop ran out of time or iterations before the model closed. Whatever
+        # is in final_answer is mid-plan commentary; clearing it routes this query
+        # into the recovery block below instead of shipping the commentary.
+        logger.warning(
+            "Engine exited on %s after %d iteration(s) without a closing turn — "
+            "discarding mid-plan text and recovering an answer from retrieved rows",
+            exit_reason or "iteration limit",
+            iteration,
+        )
+        final_answer = ""
+
+    if final_answer:
+        final_answer = _strip_sql_from_answer(final_answer)
+        final_answer = re.sub(r'<function_quality_\w+>.*?</function_quality_\w+>\s*', '', final_answer, flags=re.DOTALL).strip()
+        final_answer = clean_thinking_artifacts(final_answer)
+
+    if last_results and isinstance(last_results, list) and len(last_results) > 0:
+        row_count = len(last_results)
+        min_len = 500 if row_count >= 20 else 300 if row_count >= 5 else 60
+        ans_too_short = bool(final_answer) and row_count >= 5 and len(final_answer) < min_len
+        if not final_answer or len(final_answer) < 30 or is_garbage_answer(final_answer) or ans_too_short:
+            final_answer = _force_answer(
+                adapter, user_question, system_prompt, messages, last_results,
+                _strip_sql_from_answer, _format_raw_results, deadline=recovery_deadline,
+            )
+            if not final_answer or is_garbage_answer(final_answer):
+                # Retry narration once more before falling back to the deterministic
+                # formatter -- every answer should be LLM-narrated if at all possible.
+                # Skipped once the recovery budget is gone, so a query that already
+                # blew its time budget can't spend two more model calls here.
+                if time.time() < recovery_deadline:
+                    final_answer = _force_answer(
+                        adapter, user_question, system_prompt, messages, last_results,
+                        _strip_sql_from_answer, _format_raw_results, deadline=recovery_deadline,
+                    )
+                if not final_answer or is_garbage_answer(final_answer):
+                    final_answer = _format_raw_results(user_question, last_results)
+    elif is_garbage_answer(final_answer):
+        final_answer = _graceful_no_data_answer(
+            adapter, user_question, system_prompt, agent_trace, deadline=recovery_deadline,
+        )
+
+    if session_id and save_message_by_session:
+        save_message_by_session(session_id, "user", saved_query)
+        save_message_by_session(session_id, "assistant", final_answer or "No answer generated.")
+        if update_conversation_state_hybrid_by_session:
+            update_conversation_state_hybrid_by_session(
+                session_id=session_id,
+                user_id=user_id,
+                query=user_question,
+                response=final_answer or "No answer generated.",
+                agent_trace=agent_trace,
+            )
+        if maybe_auto_title:
+            maybe_auto_title(session_id, user_question)
+
+    return {
+        "query": user_question,
+        "answer": final_answer or "No answer generated.",
+        "question_type": question_type,
+        "sql": last_sql,
+        "results": last_results or [],
+        "agent_trace": agent_trace,
+        "token_usage": token_usage,
+        "total_count": len(last_results) if isinstance(last_results, list) and last_results else None,
+        "error": None,
+    }
+
+
+def _truncate_stale_tool_results(messages: List[Dict[str, Any]]) -> int:
+    """Shrink tool results the model has already reasoned over.
+
+    Every iteration re-sends the whole message list as input tokens. A result the
+    model read two turns ago does not need to be re-transmitted in full — but the
+    aggregates in it might still be referenced, which is why compact_tool_result
+    puts PERIOD/SUMMARY first and this keeps the head of the string.
+
+    The last ENGINE_TRUNCATION_KEEP_RECENT messages are left intact: that is the
+    exchange the model is actively working on. Mutates `messages` in place and
+    returns how many blocks it shrank.
+    """
+    if len(messages) <= 4:
+        return 0
+
+    cutoff = len(messages) - ENGINE_TRUNCATION_KEEP_RECENT
+    truncated = 0
+    for msg in messages[:cutoff]:
+        if msg.get("role") != "user":
+            continue
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            tool_result = block.get("toolResult")
+            if not isinstance(tool_result, dict):
+                continue
+            for part in tool_result.get("content", []):
+                text = part.get("text", "")
+                if len(text) > ENGINE_TOOL_RESULT_TRUNCATE_CHARS:
+                    part["text"] = text[:ENGINE_TOOL_RESULT_TRUNCATE_CHARS] + "..."
+                    truncated += 1
+    if truncated:
+        logger.debug("Truncated %d stale tool result block(s) to keep context small", truncated)
+    return truncated
+
+
+def _generate_sql_fallback(adapter: Any, question: str, system_prompt: str, org_id: int) -> str:
+    sql_prompt = (
+        "Generate a single PostgreSQL SELECT query to answer the following question. "
+        f"Filter by organization_id = {org_id}. "
+        "Return ONLY the SQL, no explanation, no markdown fences. LIMIT 100."
+    )
+    try:
+        result = adapter.converse(
+            system_prompt=system_prompt,
+            messages=[{"role": "user", "content": [{"text": f"{sql_prompt}\n\nQuestion: {question}"}]}],
+            temperature=0.0,
+            max_tokens=1500,
+        )
+        sql = result.strip()
+        if sql.startswith("```"):
+            sql = sql.split("\n", 1)[-1]
+        if sql.endswith("```"):
+            sql = sql.rsplit("```", 1)[0]
+        sql = sql.strip().rstrip(";")
+        if sql.lower().startswith("sql\n"):
+            sql = sql[4:].strip()
+        if sql.upper().startswith("SELECT"):
+            return enforce_tenant_isolation_sql(sql, org_id)
+    except Exception as e:
+        logger.warning("Fallback SQL generation failed: %s", e)
+    return ""
+
+
+def _force_answer(
+    adapter: Any,
+    question: str,
+    system_prompt: str,
+    messages: List[Dict[str, Any]],
+    last_results: List[Dict[str, Any]],
+    strip_sql_fn: Any,
+    format_raw_fn: Any,
+    deadline: Optional[float] = None,
+) -> str:
+    """Turn whatever the loop retrieved into a user-facing answer.
+
+    `deadline` is an absolute time.time() value. Once it passes, the LLM calls
+    below are skipped and rows are rendered with the deterministic formatter —
+    this only ever runs on a query that has already exhausted its time budget,
+    so the recovery must not become the reason it runs even longer.
+    """
+    budget_spent = deadline is not None and time.time() >= deadline
+    if budget_spent:
+        logger.warning("Recovery budget exhausted — formatting rows without a model call")
+
+    if last_results and isinstance(last_results, list) and len(last_results) > 0:
+        n = len(last_results)
+        if budget_spent:
+            return format_raw_fn(question, last_results)
+        try:
+            data_preview = json.dumps(last_results[:25], default=str)[:4000]
+            note = f" There are {n} total records — list the first 10 by name/reference and give a summary count." if n > 10 else ""
+            force_msg = [
+                {"role": "user", "content": [{"text": question}]},
+                {"role": "user", "content": [{"text": (
+                    f"Below are {n} database rows matching the query above.\n\n"
+                    f"{data_preview}\n\n"
+                    f"Using ONLY this data, answer the question. "
+                    f"List each entry by its reference number/ID with key fields (date, description, amounts). "
+                    f"AED X,XXX.XX format.{note}"
+                )}]},
+            ]
+            resp = adapter.converse_with_tools(
+                system_prompt=(
+                    "You are a financial data assistant. Present database results clearly: "
+                    "list records by reference/ID with key details. Never describe the SQL. "
+                    "Never say 'the query searches'. Just answer directly.\n"
+                    + NEVER_EXPOSE_BACKEND_RULE
+                ),
+                messages=force_msg,
+                tools=[],
+                temperature=0.0,
+                max_tokens=2000,
+            )
+            answer = extract_text(resp)
+            if answer and len(answer) >= 40 and not is_garbage_answer(answer):
+                return answer
+        except Exception:
+            pass
+        return format_raw_fn(question, last_results)
+
+    if budget_spent:
+        return "No relevant data found."
+
+    try:
+        resp = adapter.converse_with_tools(
+            system_prompt=system_prompt,
+            messages=messages + [{"role": "user", "content": [{"text": "Please give your best answer now."}]}],
+            tools=[],
+            temperature=0.0,
+            max_tokens=600,
+        )
+        answer = extract_text(resp)
+        if answer:
+            return answer
+    except Exception:
+        pass
+    return "No relevant data found."
+
+
+def _graceful_no_data_answer(
+    adapter: Any,
+    question: str,
+    system_prompt: str,
+    agent_trace: List[Dict[str, Any]],
+    deadline: Optional[float] = None,
+) -> str:
+    if deadline is not None and time.time() >= deadline:
+        logger.warning("Recovery budget exhausted — skipping no-data narration")
+        return (
+            "The requested data could not be retrieved from the database. The query may "
+            "require data that doesn't exist for the specified criteria, or the calculation "
+            "method may need to be adjusted for this dataset."
+        )
+    errors = [t.get("error", "") for t in agent_trace if t.get("error")]
+    error_summary = "; ".join(str(e)[:100] for e in errors[:3]) if errors else "No errors recorded"
+    try:
+        resp = adapter.converse_with_tools(
+            system_prompt=(
+                "You are a professional financial analyst assistant. "
+                "When a database query was attempted but returned no data or failed, "
+                "you must give a clear, professional explanation. "
+                "Never say 'Let me try' or use thinking-out-loud language. "
+                "Be direct: explain what data is or isn't available and why.\n"
+                + NEVER_EXPOSE_BACKEND_RULE
+            ),
+            messages=[{"role": "user", "content": [{"text": (
+                f"Question: {question}\n\n"
+                f"The database queries were attempted but returned no results. "
+                f"Internal error detail (for your understanding only, never quote or "
+                f"paraphrase this to the user): {error_summary}\n\n"
+                "Please give a clear professional answer explaining, in plain business terms:\n"
+                "1. What specific data was not found\n"
+                "2. A plausible business reason it might not be available (e.g. no matching "
+                "records for this period/filter) — never a technical or schema-based reason\n"
+                "3. What alternative data or analysis could be provided instead\n"
+                "Be concise. Do NOT say 'Let me try' or attempt further queries."
+            )}]}],
+            tools=[],
+            temperature=0.0,
+            max_tokens=500,
+        )
+        answer = extract_text(resp)
+        if answer and len(answer) > 30 and not is_garbage_answer(answer):
+            return answer
+    except Exception:
+        pass
+    return "The requested data could not be retrieved from the database. The query may require data that doesn't exist for the specified criteria, or the calculation method may need to be adjusted for this dataset."
+
+
+def run_stream(
+    user_question: str,
+    adapter: Any,
+    *,
+    organization_id: Optional[int] = None,
+    user_id: int = DEFAULT_USER_ID,
+    session_id: Optional[str] = None,
+    raw_user_question: Optional[str] = None,
+    intent: Optional[int] = None,
+    save_message_by_session: Optional[Any] = None,
+    update_conversation_state_hybrid_by_session: Optional[Any] = None,
+    maybe_auto_title: Optional[Any] = None,
+    conversation_memory: Optional[str] = None,
+) -> Generator[Dict[str, Any], None, None]:
+    """Stream execution progress and final result of the SQL fallback engine."""
+    yield {"status": "Executing database query", "type": "retrieval"}
+    res = run(
+        user_question,
+        adapter,
+        organization_id=organization_id,
+        user_id=user_id,
+        session_id=session_id,
+        raw_user_question=raw_user_question,
+        intent=intent,
+        save_message_by_session=save_message_by_session,
+        update_conversation_state_hybrid_by_session=update_conversation_state_hybrid_by_session,
+        maybe_auto_title=maybe_auto_title,
+        conversation_memory=conversation_memory,
+    )
+    yield {"final_result": res}
+

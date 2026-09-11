@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Sparkles, Building2, ChevronDown, Check, MessageSquare, Plus, ArrowLeft, Trash2 } from 'lucide-react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { Sparkles, Plus, ArrowLeft, Trash2, ChevronDown } from 'lucide-react';
 
 /**
  * Groups chat history entries into time-based sections (Today, Yesterday, This Week, Earlier).
@@ -34,33 +34,25 @@ function groupByTime(entries) {
 }
 
 export const Sidebar = ({
-  tenant,
-  availableTenants = [],
-  onSelectTenant,
   onNewSession,
   chatHistory = [],
   activeHistoryId = null,
   onSelectHistory,
   onDeleteHistory
 }) => {
-  const [hoveredHistoryId, setHoveredHistoryId] = useState(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(null);
   const dropdownRef = useRef(null);
 
   useEffect(() => {
-    const handleClickOutside = (event) => {
+    function handleClickOutside(event) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setDropdownOpen(false);
       }
-    };
+    }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const handleSelect = (t) => {
-    if (onSelectTenant) onSelectTenant(t);
-    setDropdownOpen(false);
-  };
 
   const groupedHistory = useMemo(() => groupByTime(chatHistory), [chatHistory]);
 
@@ -68,64 +60,78 @@ export const Sidebar = ({
     <div style={styles.sidebar}>
       <div style={styles.topSection}>
         {/* Branding */}
-        <div style={styles.brandGroup}>
+        <div style={styles.brandRow}>
           <div style={styles.brandIcon}>
-            <Sparkles size={14} color="#ffffff" />
+            <Sparkles size={20} color="var(--surface)" />
           </div>
-          <div>
-            <h1 style={styles.brandTitle}>AccuTax AI</h1>
-            <p style={styles.brandSubtitle}>Financial Intelligence</p>
+          <div style={styles.brandTextGroup}>
+            <span style={styles.brandTitle}>AccuTax AI</span>
+            <span style={styles.brandSubtitle}>Financial Intelligence</span>
           </div>
         </div>
 
         {/* New Session Button */}
-        <button style={styles.newSessionBtn} onClick={onNewSession}>
-          <Plus size={14} />
+        <button className="control-btn" style={styles.newSessionBtn} onClick={onNewSession}>
+          <Plus size={18} />
           New Session
         </button>
 
-        {/* Tenant Selector Dropdown */}
+        {/* Model Selector Dropdown (matches screenshot design) */}
         <div style={styles.dropdownContainer} ref={dropdownRef}>
-          <button 
+          <button
+            className="control-btn"
             style={styles.tenantBtn}
             onClick={() => setDropdownOpen(!dropdownOpen)}
           >
-            <Sparkles size={12} color="#0e8a75" />
-            <span style={styles.tenantName}>
-              {tenant ? (tenant.display_name || tenant.org_name || `Org ${tenant.organization_id}`) : 'Select Tenant'}
-            </span>
-            <span style={styles.recommendedTag}>Recommended</span>
-            <ChevronDown size={12} color="#94a3b8" style={{ marginLeft: 'auto' }} />
+            <Sparkles size={16} color="var(--accent)" />
+            <span style={styles.tenantName}>AccuTax Pro</span>
+            <span style={styles.recommendedBadge}>Recommended</span>
+            <ChevronDown 
+              size={14} 
+              color="var(--ink-soft)" 
+              style={{ flexShrink: 0, transform: dropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} 
+            />
           </button>
 
           {dropdownOpen && (
             <div style={styles.dropdownMenu}>
-              {availableTenants.map((t) => {
-                const isSelected = tenant && (tenant.organization_id === t.id || tenant.organization_id === t.organization_id);
-                return (
-                  <div
-                    key={t.id || t.organization_id}
-                    style={{
-                      ...styles.tenantItem,
-                      backgroundColor: isSelected ? '#f1f5f9' : 'transparent',
-                    }}
-                    onClick={() => handleSelect(t)}
-                  >
-                    <span style={styles.tenantItemName}>{t.display_name || t.name}</span>
-                    {isSelected && <Check size={14} color="#0e8a75" />}
-                  </div>
-                );
-              })}
+              <div style={styles.modelItem}>
+                <Sparkles size={14} color="var(--accent)" style={styles.modelIcon} />
+                <div style={styles.modelTextGroup}>
+                  <div style={styles.modelTitle}>AccuTax Pro</div>
+                  <div style={styles.modelDesc}>Best for financial analysis & tax</div>
+                </div>
+              </div>
+              <div style={styles.modelItem}>
+                <div style={styles.modelIconWrapper}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: "var(--ink-soft)"}}><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line></svg>
+                </div>
+                <div style={styles.modelTextGroup}>
+                  <div style={styles.modelTitle}>AccuTax Agent</div>
+                  <div style={styles.modelDesc}>Multi-step tasks & automation</div>
+                </div>
+              </div>
+              <div style={styles.modelItem}>
+                <div style={styles.modelIconWrapper}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: "var(--ink-soft)"}}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                </div>
+                <div style={styles.modelTextGroup}>
+                  <div style={styles.modelTitle}>AccuTax Fast</div>
+                  <div style={styles.modelDesc}>Instant answers & lookups</div>
+                </div>
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Dynamic Chat History */}
+      {/* Dynamic Chat History — flat rows, one line each, no per-item icon
+          or preview snippet. Matches how ChatGPT/Claude/Gemini render a
+          history list: the title is the only thing shown until you open it. */}
       <div style={styles.historyList}>
+        <h2 style={styles.recentHeading}>Recent chats</h2>
         {groupedHistory.length === 0 ? (
           <div style={styles.emptyHistory}>
-            <MessageSquare size={16} color="#cbd5e1" />
             <span>No conversations yet</span>
           </div>
         ) : (
@@ -135,31 +141,29 @@ export const Sidebar = ({
               {group.items.map((item) => (
                 <div
                   key={item.id}
-                  style={{
-                    ...styles.historyItem,
-                    ...(item.id === activeHistoryId ? styles.historyItemActive : {}),
-                  }}
+                  className="history-item"
+                  style={styles.historyItem}
                   onClick={() => onSelectHistory && onSelectHistory(item.id)}
-                  onMouseEnter={() => setHoveredHistoryId(item.id)}
-                  onMouseLeave={() => setHoveredHistoryId((prev) => (prev === item.id ? null : prev))}
                 >
-                  <MessageSquare size={13} color="#0A5C52" style={{ marginTop: '2px', flexShrink: 0 }} />
-                  <div style={styles.historyText}>
-                    <div style={styles.historyTitle}>{item.title}</div>
-                    <div style={styles.historyPreview}>{item.preview}</div>
-                  </div>
-                  {hoveredHistoryId === item.id && (
-                    <button
-                      style={styles.historyDeleteBtn}
-                      title="Delete session"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (onDeleteHistory) onDeleteHistory(item.id);
-                      }}
-                    >
-                      <Trash2 size={13} color="#94a3b8" />
-                    </button>
-                  )}
+                  <span
+                    style={{
+                      ...styles.historyTitle,
+                      ...(item.id === activeHistoryId ? styles.historyTitleActive : {}),
+                    }}
+                  >
+                    {item.title}
+                  </span>
+                  <button
+                    className="history-delete-btn"
+                    style={styles.historyDeleteBtn}
+                    title="Delete session"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPendingDelete(item);
+                    }}
+                  >
+                    <Trash2 size={16} strokeWidth={2} />
+                  </button>
                 </div>
               ))}
             </div>
@@ -169,11 +173,61 @@ export const Sidebar = ({
 
       {/* Bottom Action */}
       <div style={styles.bottomSection}>
-        <button style={styles.backBtn} onClick={() => { window.location.href = 'https://accutax-bk-testing.netlify.app/'; }}>
+        <button
+          className="control-btn"
+          style={styles.backBtn}
+          onClick={() => {
+            const appUrl = (import.meta.env.VITE_ACCUTAX_APP_URL || 'http://localhost:5173').replace(/\/$/, '');
+            window.location.href = `${appUrl}/`;
+          }}
+        >
           <ArrowLeft size={13} />
           Back to Dashboard
         </button>
       </div>
+
+      {pendingDelete && (
+        <div
+          className="modal-overlay"
+          onClick={() => setPendingDelete(null)}
+          role="presentation"
+        >
+          <div
+            className="modal-content"
+            style={styles.deleteModal}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-chat-title"
+          >
+            <h3 id="delete-chat-title" style={styles.deleteTitle}>Delete this chat?</h3>
+            <p style={styles.deleteBody}>
+              “{pendingDelete.title || 'This conversation'}” will be removed from Recent chats. This cannot be undone.
+            </p>
+            <div style={styles.deleteActions}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setPendingDelete(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn"
+                style={styles.deleteConfirm}
+                onClick={() => {
+                  const id = pendingDelete.id;
+                  setPendingDelete(null);
+                  if (onDeleteHistory) onDeleteHistory(id);
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -184,82 +238,84 @@ const styles = {
     height: '100%',
     display: 'flex',
     flexDirection: 'column',
-    backgroundColor: '#ffffff',
+    backgroundColor: 'var(--sidebar-bg, var(--surface-2))',
   },
   topSection: {
-    padding: '12px 12px 8px',
+    padding: '14px 10px 10px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '10px',
+    gap: '8px',
   },
-  brandGroup: {
+  brandRow: {
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
-    marginBottom: '2px',
+    gap: '12px',
+    padding: '4px 4px',
+    marginBottom: '12px',
   },
   brandIcon: {
     width: '30px',
     height: '30px',
-    backgroundColor: '#0A5C52',
+    backgroundColor: 'var(--accent-ink)',
     borderRadius: '50%',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
+  },
+  brandTextGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
   },
   brandTitle: {
-    fontSize: '0.95rem',
+    fontSize: '0.875rem',
     fontWeight: 700,
-    color: '#1e293b',
-    lineHeight: 1.2,
+    color: 'var(--ink)',
+    lineHeight: 1,
   },
   brandSubtitle: {
     fontSize: '0.65rem',
-    color: '#94a3b8',
-    fontWeight: 500,
+    color: 'var(--ink-soft)',
+    lineHeight: 1,
   },
   newSessionBtn: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: '6px',
+    justifyContent: 'flex-start',
+    gap: '10px',
     width: '100%',
-    padding: '8px',
-    background: 'linear-gradient(to right, #0A5C52, #109383)',
-    color: '#ffffff',
+    height: '36px',
+    padding: '0 12px',
+    background: 'linear-gradient(115deg, #0A5C52 60%, #109383)',
+    color: 'var(--surface)',
     border: 'none',
-    borderRadius: '20px',
+    borderRadius: '18px',
     fontWeight: 600,
-    fontSize: '0.82rem',
+    fontSize: '0.8125rem',
     cursor: 'pointer',
-    transition: 'opacity 0.2s',
+    marginBottom: '8px',
+    boxShadow: '0 2px 4px rgba(10, 92, 82, 0.2)',
   },
   tenantBtn: {
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
+    gap: '10px',
     width: '100%',
-    padding: '7px 10px',
-    backgroundColor: '#f8fafc',
-    border: '1px solid #e2e8f0',
-    borderRadius: '20px',
+    height: '36px',
+    padding: '0 12px',
+    backgroundColor: 'var(--surface-2)',
+    border: '1px solid var(--border-soft)',
+    borderRadius: 'var(--radius-md)',
     cursor: 'pointer',
-    fontSize: '0.78rem',
   },
   tenantName: {
-    fontSize: '0.78rem',
+    fontSize: '0.8125rem',
     fontWeight: 500,
-    color: '#1e293b',
+    color: 'var(--ink)',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
-    maxWidth: '100px',
-  },
-  recommendedTag: {
-    fontSize: '0.6rem',
-    color: '#0e8a75',
-    fontWeight: 600,
-    marginLeft: 'auto',
   },
   dropdownContainer: {
     position: 'relative',
@@ -270,118 +326,171 @@ const styles = {
     top: '100%',
     left: 0,
     width: '100%',
-    backgroundColor: '#ffffff',
-    border: '1px solid #e2e8f0',
-    borderRadius: '8px',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-    marginTop: '4px',
+    backgroundColor: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-md)',
+    marginTop: '6px',
     zIndex: 50,
     overflow: 'hidden',
+    animation: 'menuIn var(--dur-base) var(--ease)',
+    transformOrigin: 'top left',
   },
-  tenantItem: {
+  recommendedBadge: {
+    fontSize: '0.65rem',
+    color: 'var(--accent)',
+    fontWeight: 600,
+    marginLeft: 'auto',
+    marginRight: '6px',
+    alignSelf: 'center',
+  },
+  modelItem: {
     padding: '8px 10px',
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: '10px',
     cursor: 'pointer',
-    borderBottom: '1px solid #f1f5f9',
-    fontSize: '0.8rem',
+    transition: 'background-color var(--dur-fast) var(--ease)',
   },
-  tenantItemName: {
-    fontSize: '0.8rem',
-    color: '#1e293b',
+  modelIconWrapper: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    marginTop: '2px',
+    width: '16px',
+  },
+  modelIcon: {
+    marginTop: '2px',
+    flexShrink: 0,
+  },
+  modelTextGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    minWidth: 0,
+  },
+  modelTitle: {
+    fontSize: '0.8125rem',
+    fontWeight: 500,
+    color: 'var(--ink)',
+  },
+  modelDesc: {
+    fontSize: '0.6875rem',
+    color: 'var(--ink-soft)',
+    lineHeight: 1.3,
   },
   historyList: {
     flex: 1,
     overflowY: 'auto',
-    padding: '4px 12px',
+    padding: '6px 8px',
+  },
+  recentHeading: {
+    fontSize: '0.95rem',
+    fontWeight: 500,
+    color: 'var(--ink)',
+    margin: '6px 8px 10px',
+    letterSpacing: '-0.01em',
   },
   emptyHistory: {
     display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '32px 0',
-    color: '#cbd5e1',
-    fontSize: '0.78rem',
+    justifyContent: 'center',
+    padding: '28px 0',
+    color: 'var(--ink-faint)',
+    fontSize: 'var(--text-sm)',
   },
   historyGroup: {
-    marginBottom: '14px',
+    marginBottom: '10px',
   },
   groupTitle: {
-    fontSize: '0.62rem',
-    fontWeight: 600,
-    color: '#94a3b8',
-    marginBottom: '6px',
-    letterSpacing: '0.06em',
+    fontSize: '0.75rem',
+    fontWeight: 650,
+    color: 'var(--ink-soft)',
+    margin: '10px 8px 6px',
+    letterSpacing: '0.04em',
     textTransform: 'uppercase',
   },
+  // One line, no icon, no preview — no fill on the row in either theme.
   historyItem: {
     display: 'flex',
-    alignItems: 'flex-start',
-    gap: '8px',
-    marginBottom: '6px',
+    alignItems: 'center',
+    gap: '6px',
     cursor: 'pointer',
-    padding: '5px 6px',
-    borderRadius: '8px',
-    transition: 'background-color 0.15s',
-    position: 'relative',
+    padding: '7px 8px',
+    minHeight: '32px',
+    boxSizing: 'border-box',
+    backgroundColor: 'transparent',
   },
-  historyItemActive: {
-    backgroundColor: '#eef2f5',
+  historyTitleActive: {
+    color: 'var(--ink)',
+    fontWeight: 400,
   },
   historyDeleteBtn: {
     background: 'none',
     border: 'none',
     cursor: 'pointer',
-    padding: '2px',
+    padding: 0,
+    width: '24px',
+    height: '24px',
     marginLeft: 'auto',
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: '4px',
-  },
-  historyText: {
-    display: 'flex',
-    flexDirection: 'column',
-    minWidth: 0,
-    flex: 1,
+    borderRadius: 'var(--radius-sm)',
   },
   historyTitle: {
-    fontSize: '0.78rem',
-    color: '#334155',
-    fontWeight: 500,
-    marginBottom: '1px',
+    fontSize: '0.875rem',
+    fontWeight: 400,
+    color: 'var(--ink-soft)',
     lineHeight: 1.3,
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
+    flex: 1,
+    minWidth: 0,
   },
-  historyPreview: {
-    fontSize: '0.68rem',
-    color: '#94a3b8',
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    maxWidth: '170px',
+  deleteModal: {
+    maxWidth: '420px',
+    padding: '24px',
+  },
+  deleteTitle: {
+    margin: '0 0 8px',
+    fontSize: '1.05rem',
+    fontWeight: 700,
+    color: 'var(--ink)',
+  },
+  deleteBody: {
+    margin: '0 0 20px',
+    fontSize: '0.875rem',
+    lineHeight: 1.45,
+    color: 'var(--ink-soft)',
+  },
+  deleteActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '10px',
+  },
+  deleteConfirm: {
+    backgroundColor: '#dc2626',
+    color: '#fff',
   },
   bottomSection: {
-    padding: '8px 12px',
-    borderTop: '1px solid #f1f5f9',
+    padding: '8px',
+    borderTop: '1px solid var(--border-soft)',
   },
   backBtn: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '6px',
+    gap: '10px',
     width: '100%',
-    padding: '7px',
-    backgroundColor: '#f8fafc',
-    border: '1px solid #e2e8f0',
-    borderRadius: '10px',
-    color: '#475569',
-    fontSize: '0.78rem',
+    height: '38px',
+    padding: '0 16px',
+    backgroundColor: 'var(--surface-2)',
+    border: '1px solid var(--border-soft)',
+    borderRadius: 'var(--radius-md)',
+    color: 'var(--ink-soft)',
+    fontSize: 'var(--text-sm)',
     fontWeight: 500,
     cursor: 'pointer',
   }

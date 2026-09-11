@@ -2,13 +2,27 @@ import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { NoticeCard } from './NoticeCard';
+import { AnswerProvenance } from './AnswerProvenance';
+import { BlockRenderer, hasPortedBlocks, chatFacingBlocks } from './blocks/BlockRenderer';
+import { ReportActions } from './blocks/ReportActions';
+import { CodeChrome } from './blocks/CodeBlock';
 import { 
   Sparkles, ShieldAlert, Code2, Layers, 
   ChevronDown, ChevronUp, Copy, Check, 
   RotateCw, Clock, DollarSign, Database, Server,
-  Bot, Share, Edit2, FileText, CheckCircle2,
+  Sparkles as AssistantMark, Share, Edit2, FileText, CheckCircle2,
   Zap, HardDrive, BarChart3, Search
 } from 'lucide-react';
+
+/** Formats a stored timestamp for display; older saved sessions may not have one. */
+function formatTime(ts) {
+  if (!ts) return null;
+  try {
+    return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Custom components for ReactMarkdown to ensure wide tables and elements are cleanly scrollable.
@@ -85,16 +99,20 @@ const PacedMarkdownStream = ({ text, isStreaming }) => {
     return () => clearInterval(timer);
   }, [text, isStreaming]);
 
-  const isStillPacing = revealedLength < (text || '').length;
-  const showCursor = isStreaming || isStillPacing;
-  const currentSlice = text ? text.slice(0, revealedLength) : '';
+  const fullLength = (text || '').length;
+  // Don't wait for the effect: once the stream is done, render the finished
+  // answer with no caret. The caret used to stay on for the whole
+  // "Finalizing response" window because showCursor keyed off isStreaming.
+  const displayLength = isStreaming ? Math.min(revealedLength, fullLength) : fullLength;
+  const isStillPacing = isStreaming && displayLength < fullLength;
+  const currentSlice = text ? text.slice(0, displayLength) : '';
 
   return (
     <div className="markdown-body" style={styles.markdownWrapper}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={customMarkdownComponents}>
-        {currentSlice || text}
+        {currentSlice}
       </ReactMarkdown>
-      {showCursor && <span className="streaming-cursor" />}
+      {isStillPacing && <span className="streaming-cursor" />}
     </div>
   );
 };
@@ -102,11 +120,13 @@ const PacedMarkdownStream = ({ text, isStreaming }) => {
 /**
  * AssistantResponseCard — Renders individual assistant response in clean unboxed ChatGPT/Gemini style.
  */
-const AssistantResponseCard = ({ 
-  msg, 
-  userQuery, 
-  onRegenerate, 
-  activeTenant 
+const AssistantResponseCard = ({
+  msg,
+  userQuery,
+  onRegenerate,
+  activeTenant,
+  onOpenCanvas,
+  token,
 }) => {
   const [copied, setCopied] = useState(false);
   const [showSql, setShowSql] = useState(false);
@@ -118,6 +138,12 @@ const AssistantResponseCard = ({
   const rawContent = responseData?.answer || msg.streamingText || '';
   const content = rawContent.trim();
   const tableMarkdown = msg.tableData || responseData?.table_markdown;
+  // Once a formatter is ported (kv_summary, row_table so far — see the UI
+  // rebuild plan), its structured block replaces the pre-rendered markdown
+  // table below. Anything not yet ported keeps using tableMarkdown exactly
+  // as before — this is additive, not a behaviour change for those.
+  const blocks = responseData?.blocks;
+  const showBlocks = !isStreaming && hasPortedBlocks(blocks);
   const isSecurityError = Boolean(!notice && (responseData?.error || (responseData?.answer && responseData.answer.startsWith('Error:'))));
   const isError = Boolean(msg.isError || isSecurityError || responseData?.status === 'failed');
 
@@ -134,9 +160,9 @@ const AssistantResponseCard = ({
   };
 
   return (
-    <div style={styles.assistantRow}>
+    <div className="turn-wrapper" style={styles.assistantRow}>
       <div style={styles.avatarBox}>
-        <Bot size={18} color="#ffffff" />
+        <AssistantMark size={16} color="var(--surface)" />
       </div>
       <div style={styles.assistantContentCol}>
         
@@ -149,24 +175,33 @@ const AssistantResponseCard = ({
           />
         )}
 
-        {/* Assistant Main Content Card */}
-        <div style={styles.assistantCard}>
-          {/* Immediate Data Table (rendered before or alongside narration) */}
-          {tableMarkdown && (
-            <div className="data-table-container">
-              <div className="markdown-body" style={styles.markdownWrapper}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]} components={customMarkdownComponents}>
-                  {tableMarkdown}
-                </ReactMarkdown>
+        {(() => {
+          const steps = (msg.agentSteps || []).filter(Boolean);
+          if (!steps.length) return null;
+          return (
+            <div style={styles.agentStepsWrapper}>
+              <div style={styles.agentStepsHeader}>
+                <Layers size={12} />
+                AGENT STEPS
+              </div>
+              <div style={styles.agentStepsList}>
+                {steps.map((step, i) => (
+                  <div key={`${step}-${i}`} style={styles.agentStepItem}>
+                    <CheckCircle2 size={14} color="var(--accent)" />
+                    <span style={styles.stepTitle}>{step}</span>
+                  </div>
+                ))}
               </div>
             </div>
-          )}
+          );
+        })()}
 
-          {/* Security Error Banner or Paced Streaming Markdown Content */}
+        {/* Assistant Main Content Card */}
+        <div style={styles.assistantCard}>
           {isSecurityError ? (
             <div style={styles.errorBox}>
               <div style={styles.errorHeader}>
-                <ShieldAlert size={20} color="#f43f5e" />
+                <ShieldAlert size={20} color="var(--danger)" />
                 <div>
                   <h4 style={styles.errorTitle}>Security Isolation Boundary Notice</h4>
                   <p style={styles.errorSub}>{responseData.error || responseData.answer}</p>
@@ -175,25 +210,61 @@ const AssistantResponseCard = ({
             </div>
           ) : content ? (
             <PacedMarkdownStream text={content} isStreaming={isStreaming} />
+          ) : null}
+
+          {showBlocks ? (
+            <div className="data-table-container" style={styles.markdownWrapper}>
+              <BlockRenderer
+                blocks={chatFacingBlocks(blocks)}
+                verification={responseData?.verification}
+                onOpenCanvas={onOpenCanvas}
+                token={token}
+              />
+            </div>
           ) : (
-            !notice && !tableMarkdown && (
-              <div style={styles.emptyNotice}>
-                <span>No response generated. Please try again.</span>
+            tableMarkdown && (
+              <div className="data-table-container">
+                <div className="markdown-body" style={styles.markdownWrapper}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={customMarkdownComponents}>
+                    {tableMarkdown}
+                  </ReactMarkdown>
+                </div>
               </div>
             )
           )}
+
+          {!isStreaming && (
+            <ReportActions blocks={blocks} onOpenCanvas={onOpenCanvas} token={token} />
+          )}
+
+          {!content && !notice && !tableMarkdown && !showBlocks && (
+            <div style={styles.emptyNotice}>
+              <span>No response generated. Please try again.</span>
+            </div>
+          )}
         </div>
+
+        {showSql && responseData?.sql && (
+          <CodeChrome language="sql" content={responseData.sql} title="Executed SQL" />
+        )}
+
+        {!isStreaming && content && !isError && (responseData?.policy || responseData?.verification) && (
+          <AnswerProvenance
+            policy={responseData.policy}
+            verification={responseData.verification}
+          />
+        )}
 
         {/* ChatGPT / Gemini Style Bottom Action Buttons & Metrics */}
         {!isStreaming && content && !isError && (
-          <div style={styles.actionToolbar}>
+          <div className="turn-actions" style={styles.actionToolbar}>
             <div style={styles.actionLeft}>
               <button 
                 style={{ ...styles.actionBtn, ...(copied ? styles.actionBtnActive : {}) }} 
                 onClick={handleCopy} 
                 title={copied ? "Copied to clipboard!" : "Copy response"}
               >
-                {copied ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+                {copied ? <Check size={14} color="var(--success)" /> : <Copy size={14} />}
               </button>
 
               <button style={styles.actionBtn} title="Share response">
@@ -209,19 +280,30 @@ const AssistantResponseCard = ({
                   <RotateCw size={14} />
                 </button>
               )}
+
+              {responseData?.sql && (
+                <button
+                  style={{ ...styles.actionBtn, ...(showSql ? styles.actionBtnActive : {}) }}
+                  onClick={() => setShowSql((v) => !v)}
+                  title={showSql ? 'Hide SQL' : 'Show SQL'}
+                >
+                  <Code2 size={14} color={showSql ? 'var(--accent-ink)' : undefined} />
+                </button>
+              )}
             </div>
 
             {/* Clean Subtle Token Count & Latency Metrics */}
-            {tokenUsage && (
-              <div style={styles.metricsBar}>
-                {elapsedSeconds !== undefined && elapsedSeconds !== null && (
-                  <span style={styles.metricPill} title="Response generation latency">
-                    <Clock size={11} color="#f59e0b" />
-                    <span>{elapsedSeconds}s</span>
-                  </span>
-                )}
-              </div>
-            )}
+            <div style={styles.metricsBar}>
+              {tokenUsage && elapsedSeconds !== undefined && elapsedSeconds !== null && (
+                <span style={styles.metricPill} title="Response generation latency">
+                  <Clock size={11} color="var(--warning)" />
+                  <span>{elapsedSeconds}s</span>
+                </span>
+              )}
+              {formatTime(msg.timestamp) && (
+                <span style={styles.timestamp}>{formatTime(msg.timestamp)}</span>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -230,9 +312,97 @@ const AssistantResponseCard = ({
 };
 
 /**
+ * ModelAnswerCard — one model's answer within a multi-model ("All Models")
+ * response. A trimmed-down version of AssistantResponseCard's content area:
+ * same block/markdown/notice rendering, no per-message action toolbar (copy/
+ * regenerate/etc. don't make sense per-card in a comparison view) — those
+ * live once on the MultiModelResponseCard wrapper instead.
+ */
+const ModelAnswerCard = ({ response }) => {
+  const notice = response?.notice;
+  const content = (response?.answer || '').trim();
+  const blocks = response?.blocks;
+  const showBlocks = hasPortedBlocks(blocks);
+  const tableMarkdown = response?.table_markdown;
+  const isError = Boolean(response?.error || response?.status === 'failed');
+  const modelLabel = response?.policy?.model_label || response?.policy?.model || 'Model';
+  const elapsedSeconds = response?.token_usage?.elapsed_seconds;
+
+  return (
+    <div style={styles.modelCard}>
+      <div style={styles.modelCardHeader}>
+        <span style={styles.modelCardLabel}>{modelLabel}</span>
+        {elapsedSeconds !== undefined && elapsedSeconds !== null && (
+          <span style={styles.metricPill} title="Response generation latency">
+            <Clock size={11} color="var(--warning)" />
+            <span>{elapsedSeconds}s</span>
+          </span>
+        )}
+      </div>
+
+      {notice && <NoticeCard notice={notice} />}
+
+      {showBlocks ? (
+        <div className="data-table-container" style={styles.markdownWrapper}>
+          <BlockRenderer blocks={blocks} verification={response?.verification} />
+        </div>
+      ) : (
+        tableMarkdown && (
+          <div className="data-table-container">
+            <div className="markdown-body" style={styles.markdownWrapper}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={customMarkdownComponents}>
+                {tableMarkdown}
+              </ReactMarkdown>
+            </div>
+          </div>
+        )
+      )}
+
+      {content ? (
+        <div className="markdown-body" style={styles.markdownWrapper}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={customMarkdownComponents}>
+            {content}
+          </ReactMarkdown>
+        </div>
+      ) : (
+        !notice && !tableMarkdown && (
+          <div style={styles.emptyNotice}>
+            <span>{isError ? 'This model failed to respond.' : 'No response generated.'}</span>
+          </div>
+        )
+      )}
+    </div>
+  );
+};
+
+/**
+ * MultiModelResponseCard — "All Models" dev comparison result: one
+ * ModelAnswerCard per model that was queried, stacked vertically.
+ */
+const MultiModelResponseCard = ({ msg }) => {
+  const responses = msg.responses || [];
+  return (
+    <div className="turn-wrapper" style={styles.assistantRow}>
+      <div style={styles.avatarBox}>
+        <AssistantMark size={16} color="var(--surface)" />
+      </div>
+      <div style={styles.assistantContentCol}>
+        <div style={styles.multiModelHeader}>
+          <Layers size={13} />
+          <span>All Models — {responses.length} response{responses.length === 1 ? '' : 's'}</span>
+        </div>
+        {responses.map((response, i) => (
+          <ModelAnswerCard key={i} response={response} />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/**
  * ResponseView — Renders full conversation list sequentially in clean ChatGPT/Gemini layout.
  */
-export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant, onRegenerate }) => {
+export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant, onRegenerate, onOpenCanvas, token }) => {
   if (!conversation || conversation.length === 0) return null;
 
   return (
@@ -242,18 +412,20 @@ export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant
 
         if (isUser) {
           return (
-            <div key={idx} style={styles.userTurnWrapper}>
+            <div key={idx} className="turn-wrapper" style={styles.userTurnWrapper}>
               <div style={styles.userMsgWrapper}>
                 <div style={styles.userBubble}>
                   {msg.content}
                 </div>
-                <div style={styles.userFooter}>
+                <div className="turn-actions" style={styles.userFooter}>
                   <div style={styles.userActionLeft}>
                     <button style={styles.userActionBtn} title="Copy"><Copy size={13} /></button>
                     <button style={styles.userActionBtn} title="Share"><Share size={13} /></button>
                     <button style={styles.userActionBtn} title="Edit"><Edit2 size={13} /></button>
                   </div>
-                  <span style={styles.timestamp}>06:27 PM</span>
+                  {formatTime(msg.timestamp) && (
+                    <span style={styles.timestamp}>{formatTime(msg.timestamp)}</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -277,7 +449,7 @@ export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant
           return (
             <div key={idx} style={styles.minimalLoaderContainer}>
               <div style={styles.loaderIconBox}>
-                <Sparkles size={18} color="#0e8a75" className="gemini-sparkle-spin" />
+                <Sparkles size={18} color="var(--accent)" className="gemini-sparkle-spin" />
               </div>
               <div style={styles.loaderTextGroup}>
                 <span style={styles.loaderStatusText}>{statusText}</span>
@@ -291,13 +463,19 @@ export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant
           );
         }
 
+        if (msg.isMultiModel) {
+          return <MultiModelResponseCard key={idx} msg={msg} />;
+        }
+
         return (
-          <AssistantResponseCard 
+          <AssistantResponseCard
             key={idx}
             msg={msg}
             userQuery={prevUserTurn}
             onRegenerate={onRegenerate}
             activeTenant={activeTenant}
+            onOpenCanvas={onOpenCanvas}
+            token={token}
           />
         );
       })}
@@ -309,9 +487,39 @@ const styles = {
   conversationList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '28px',
+    gap: '20px',
     paddingBottom: '40px',
     width: '100%',
+  },
+  multiModelHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 600,
+    letterSpacing: '0.03em',
+    textTransform: 'uppercase',
+    color: 'var(--ink-faint)',
+  },
+  modelCard: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    backgroundColor: 'var(--surface)',
+    borderRadius: 'var(--radius-md)',
+    padding: '16px',
+    border: '1px solid var(--border-soft)',
+  },
+  modelCardHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
+  },
+  modelCardLabel: {
+    fontSize: 'var(--text-ui)',
+    fontWeight: 600,
+    color: 'var(--ink)',
   },
   userTurnWrapper: {
     display: 'flex',
@@ -319,6 +527,7 @@ const styles = {
     alignItems: 'flex-end',
     marginBottom: '16px',
     maxWidth: '100%',
+    animation: 'messageIn var(--dur-base) var(--ease)',
   },
   userMsgWrapper: {
     display: 'flex',
@@ -326,15 +535,15 @@ const styles = {
     maxWidth: '75%',
   },
   userBubble: {
-    padding: '12px 20px',
-    borderRadius: '20px 20px 0 20px',
-    backgroundColor: '#0A5C52',
-    color: '#ffffff',
-    fontSize: '0.95rem',
+    padding: '8px 16px',
+    borderRadius: '16px 16px 0 16px',
+    backgroundColor: '#109383',
+    color: '#FFFFFF',
+    fontSize: '0.875rem',
     lineHeight: '1.5',
     textAlign: 'left',
     wordBreak: 'break-word',
-    boxShadow: '0 2px 8px rgba(10, 92, 82, 0.15)',
+    boxShadow: '0 1px 4px rgba(16, 147, 131, 0.15)',
   },
   userFooter: {
     display: 'flex',
@@ -350,17 +559,17 @@ const styles = {
   userActionBtn: {
     background: 'none',
     border: 'none',
-    color: '#94a3b8',
+    color: 'var(--ink-faint)',
     cursor: 'pointer',
     padding: '2px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    transition: 'color 0.2s',
+    transition: 'color var(--dur-fast) var(--ease)',
   },
   timestamp: {
     fontSize: '0.75rem',
-    color: '#94a3b8',
+    color: 'var(--ink-faint)',
   },
   assistantRow: {
     width: '100%',
@@ -368,16 +577,22 @@ const styles = {
     display: 'flex',
     flexDirection: 'row',
     gap: '16px',
+    animation: 'messageIn var(--dur-base) var(--ease)',
     textAlign: 'left',
     padding: '0',
     backgroundColor: 'transparent',
     border: 'none',
   },
+  // Matches the brand mark used everywhere else — header, sidebar, composer
+  // empty state — instead of a generic robot icon on an unrelated "success"
+  // green. One consistent mark for the assistant, like every reference
+  // product uses, rather than a decorative color pulled from a semantic
+  // status token that had nothing to do with success/failure here.
   avatarBox: {
-    width: '32px',
-    height: '32px',
+    width: '28px',
+    height: '28px',
     borderRadius: '50%',
-    backgroundColor: '#10b981',
+    backgroundColor: 'var(--accent-ink)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -388,14 +603,22 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     flex: 1,
-    gap: '12px',
+    gap: '8px',
     minWidth: 0,
   },
+  // --surface, not --bg: this is a card sitting on the page canvas, not the
+  // canvas itself — using the page's own color here was why content inside
+  // it (the KPI tiles) needed a border just to be visible at all; against
+  // --surface, --surface-2 tiles read as a clear sunken step down with no
+  // border needed anywhere in the chain. Elevation comes from the shadow.
   assistantCard: {
-    backgroundColor: '#f8fafc',
-    border: '1px solid #e2e8f0',
-    borderRadius: '16px',
-    padding: '20px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    backgroundColor: 'var(--surface)',
+    borderRadius: 'var(--radius-md)',
+    padding: '16px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
   },
   agentStepsWrapper: {
     display: 'flex',
@@ -410,7 +633,7 @@ const styles = {
     gap: '6px',
     fontSize: '0.75rem',
     fontWeight: 700,
-    color: '#0A5C52',
+    color: 'var(--accent-ink)',
     letterSpacing: '0.05em',
   },
   agentStepsList: {
@@ -425,18 +648,18 @@ const styles = {
   },
   stepTitle: {
     fontSize: '0.85rem',
-    color: '#0f172a',
+    color: 'var(--ink)',
     fontWeight: 500,
   },
   stepDesc: {
     fontSize: '0.85rem',
-    color: '#64748b',
+    color: 'var(--ink-soft)',
   },
   markdownWrapper: {
     width: '100%',
     maxWidth: '100%',
-    color: '#1e293b',
-    fontSize: '0.925rem',
+    color: 'var(--ink)',
+    fontSize: 'var(--text-body)',
     lineHeight: '1.7',
     wordBreak: 'break-word',
   },
@@ -450,9 +673,9 @@ const styles = {
   loaderIconBox: {
     width: '32px',
     height: '32px',
-    borderRadius: '10px',
-    backgroundColor: 'rgba(14, 138, 117, 0.15)',
-    border: '1px solid rgba(14, 138, 117, 0.3)',
+    borderRadius: 'var(--radius-sm)',
+    backgroundColor: 'rgba(var(--accent-rgb), 0.15)',
+    border: '1px solid rgba(var(--accent-rgb), 0.3)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -466,15 +689,18 @@ const styles = {
   loaderStatusText: {
     fontSize: '0.95rem',
     fontWeight: 600,
-    color: '#1e293b',
+    color: 'var(--ink)',
     letterSpacing: '-0.01em',
   },
+  // No marginTop here — assistantContentCol's own flex `gap` already spaces
+  // every child consistently. Adding a second margin on top of that gap was
+  // stacking (12px gap + 6px margin = 18px) and reading as an oversized gap
+  // between the answer and its action row.
   actionToolbar: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: '12px',
-    marginTop: '6px',
     flexWrap: 'wrap',
   },
   actionLeft: {
@@ -485,18 +711,18 @@ const styles = {
   actionBtn: {
     background: 'transparent',
     border: 'none',
-    color: '#9ca3af',
+    color: 'var(--ink-faint)',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     padding: '6px 8px',
-    borderRadius: '6px',
-    transition: 'all 0.15s ease',
+    borderRadius: 'var(--radius-sm)',
+    transition: 'background-color var(--dur-fast) var(--ease)',
   },
   actionBtnActive: {
-    color: '#818cf8',
-    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    color: 'var(--violet)',
+    backgroundColor: 'rgba(var(--violet-rgb), 0.1)',
   },
   metricsBar: {
     display: 'flex',
@@ -508,119 +734,14 @@ const styles = {
     alignItems: 'center',
     gap: '4px',
     fontSize: '0.75rem',
-    color: '#6b7280',
+    color: 'var(--ink-faint)',
     fontWeight: 500,
-  },
-  inspectorsRow: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    marginTop: '8px',
-  },
-  sqlInspector: {
-    borderRadius: '8px',
-    backgroundColor: 'rgba(0, 0, 0, 0.25)',
-    border: '1px solid rgba(16, 185, 129, 0.15)',
-    overflow: 'hidden',
-  },
-  traceInspector: {
-    borderRadius: '8px',
-    backgroundColor: 'transparent',
-    overflow: 'hidden',
-  },
-  inspectorToggle: {
-    width: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '8px 12px',
-    background: '#e2e8f0',
-    border: 'none',
-    borderRadius: '8px',
-    color: '#64748b',
-    cursor: 'pointer',
-    fontSize: '0.8rem',
-    fontWeight: 500,
-  },
-  traceToggle: {
-    width: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '8px 12px',
-    background: '#cbd5e1',
-    border: 'none',
-    borderRadius: '8px',
-    color: '#94a3b8',
-    cursor: 'pointer',
-    fontSize: '0.8rem',
-    fontWeight: 500,
-  },
-  inspectorTitle: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-  },
-  sqlCodeBlock: {
-    padding: '12px 14px',
-    backgroundColor: '#0a0d14',
-    color: '#10b981',
-    fontFamily: 'var(--font-mono)',
-    fontSize: '0.8rem',
-    overflowX: 'auto',
-    borderTop: '1px solid rgba(255, 255, 255, 0.06)',
-  },
-  traceContent: {
-    padding: '10px 14px',
-    borderTop: '1px solid rgba(255, 255, 255, 0.06)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  traceStepItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    fontSize: '0.75rem',
-  },
-  traceStepText: {
-    fontFamily: 'var(--font-mono)',
-    color: '#475569',
-  },
-  dataSourcePill: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '8px 12px',
-    border: '1px solid #e2e8f0',
-    borderRadius: '12px',
-    backgroundColor: '#f8fafc',
-    marginBottom: '16px',
-    width: 'fit-content',
-  },
-  sourceLabel: {
-    fontSize: '0.85rem',
-    color: '#64748b',
-  },
-  sourceTag: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '4px',
-    padding: '2px 8px',
-    borderRadius: '4px',
-    fontSize: '0.75rem',
-    fontWeight: 600,
-  },
-  sourceEndpoint: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '0.8rem',
-    color: '#64748b',
   },
   errorBox: {
     padding: '14px 16px',
-    borderRadius: '10px',
-    backgroundColor: 'rgba(244, 63, 94, 0.08)',
-    border: '1px solid rgba(244, 63, 94, 0.25)',
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: 'rgba(var(--danger-rgb), 0.08)',
+    border: '1px solid rgba(var(--danger-rgb), 0.25)',
   },
   errorHeader: {
     display: 'flex',
@@ -628,17 +749,17 @@ const styles = {
     gap: '12px',
   },
   errorTitle: {
-    color: '#f43f5e',
+    color: 'var(--danger)',
     fontSize: '0.95rem',
     marginBottom: '2px',
   },
   errorSub: {
-    color: '#e5e7eb',
+    color: 'var(--border-soft)',
     fontSize: '0.85rem',
     fontFamily: 'var(--font-mono)',
   },
   emptyNotice: {
-    color: '#6b7280',
+    color: 'var(--ink-faint)',
     fontSize: '0.875rem',
     fontStyle: 'italic',
     padding: '4px 0',

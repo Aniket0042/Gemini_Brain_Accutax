@@ -1,19 +1,47 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, Radio, Paperclip } from 'lucide-react';
+import { ArrowUp, Sparkles, Radio, Paperclip } from 'lucide-react';
+import { ModelMenu } from './PolicyPicker';
 
-export const QueryInput = ({ onSubmitQuery, isLoading, isStreaming, setIsStreaming, variant = 'compact' }) => {
+export const QueryInput = ({
+  onSubmitQuery,
+  isLoading,
+  isStreaming,
+  setIsStreaming,
+  variant = 'compact',
+  catalog = null,
+  catalogState = 'ready',
+  onRetryCatalog = () => {},
+  model = 'auto',
+  onModelChange = () => {},
+  brief = false,
+  onBriefChange = () => {},
+}) => {
   const [prompt, setPrompt] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const textareaRef = useRef(null);
 
   const isHero = variant === 'hero';
   const maxHeight = isHero ? 240 : 200;
-  const minHeight = isHero ? 44 : 24;
+  // Single source of vertical space is the pill's own padding (below) —
+  // these are just the textarea's natural single-line floor, not a second
+  // layer of padding stacked on top of it.
+  const minHeight = isHero ? 26 : 23;
 
   // Auto-expand textarea height based on content
   useEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
+
+    // Measuring scrollHeight on an empty textarea also measures its
+    // *placeholder* text wrapping, which grew the pill even with nothing
+    // typed once the composer got narrower (model/effort chips now share
+    // its width). Skip the measurement entirely when there's no value —
+    // minHeight already is the correct empty-state height.
+    if (!prompt) {
+      textarea.style.height = `${minHeight}px`;
+      textarea.style.overflowY = 'hidden';
+      return;
+    }
 
     // Reset height to auto to accurately measure scrollHeight
     textarea.style.height = 'auto';
@@ -27,7 +55,7 @@ export const QueryInput = ({ onSubmitQuery, isLoading, isStreaming, setIsStreami
   const handleSubmit = (e) => {
     if (e) e.preventDefault();
     if (!prompt.trim() || isLoading) return;
-    onSubmitQuery(prompt);
+    onSubmitQuery(prompt, { brief });
     setPrompt('');
     if (textareaRef.current) {
       textareaRef.current.style.height = `${minHeight}px`;
@@ -41,19 +69,19 @@ export const QueryInput = ({ onSubmitQuery, isLoading, isStreaming, setIsStreami
           style={{
             ...styles.inputPill,
             ...(isHero ? styles.heroPill : {}),
-            borderColor: isFocused ? 'rgba(14, 138, 117, 0.5)' : '#e2e8f0',
-            boxShadow: isFocused ? '0 0 15px rgba(14, 138, 117, 0.15)' : '0 2px 8px rgba(0,0,0,0.05)',
+            borderColor: isFocused ? 'var(--border-strong)' : 'var(--border)',
+            boxShadow: isFocused ? '0 0 0 3px rgba(var(--ink-rgb), 0.06)' : '0 2px 8px rgba(0,0,0,0.05)',
           }}
         >
           <button type="button" style={styles.attachBtn} title="Attach file">
-            <Paperclip size={18} color="#64748b" />
+            <Paperclip size={18} color="var(--ink-soft)" />
           </button>
           
           <textarea
             ref={textareaRef}
             className="query-textarea"
             rows={1}
-            placeholder="Ask AccuTax AI anything... or describe invoice details to create one"
+            placeholder="Ask AccuTax AI…"
             value={prompt}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
@@ -71,21 +99,50 @@ export const QueryInput = ({ onSubmitQuery, isLoading, isStreaming, setIsStreami
             }}
           />
 
-          <div style={styles.rightActions}>
+          {/* Model selection lives inside the same pill as the input, right up
+              against the send button — one bordered object, not a control
+              row floating below it (see the UI rebuild plan, §3, Fig. 2).
+              Effort is no longer user-selectable — every query runs at the
+              highest tier its model supports. */}
+          <div className="pp-inline" style={styles.rightActions}>
+            <button
+              type="button"
+              className={`brief-pill${brief ? ' is-on' : ''}`}
+              aria-pressed={brief}
+              title={brief ? 'Brief answers on — click for full answers' : 'Keep answers brief'}
+              onClick={() => onBriefChange(!brief)}
+            >
+              Brief
+            </button>
+            <ModelMenu
+              catalog={catalog}
+              catalogState={catalogState}
+              onRetryCatalog={onRetryCatalog}
+              model={model}
+              onModelChange={onModelChange}
+            />
+            <span style={styles.divider} />
             <button
               type="submit"
               style={{
                 ...styles.sendCircle,
-                backgroundColor: prompt.trim() ? 'rgba(10, 92, 82, 0.1)' : '#f1f5f9',
-                cursor: prompt.trim() && !isLoading ? 'pointer' : 'not-allowed',
+                backgroundColor: prompt.trim() ? 'var(--accent)' : 'var(--surface-2)',
+                color: prompt.trim() ? '#ffffff' : 'var(--ink-faint)',
+                cursor: prompt.trim() && !isLoading ? 'pointer' : 'default',
+                boxShadow: prompt.trim() ? '0 2px 8px var(--accent-glow)' : 'none',
+                opacity: prompt.trim() || isLoading ? 1 : 0.6,
               }}
               disabled={isLoading || !prompt.trim()}
               title={prompt.trim() ? 'Send Message (Enter)' : 'Enter your question'}
             >
               {isLoading ? (
-                <Sparkles size={16} color="#0A5C52" className="pulse-animation" />
+                <Sparkles size={16} color="#ffffff" className="pulse-animation" />
               ) : (
-                <Send size={15} color={prompt.trim() ? '#0A5C52' : '#94a3b8'} />
+                <ArrowUp
+                  size={16}
+                  strokeWidth={2.5}
+                  color={prompt.trim() ? '#ffffff' : 'var(--ink-faint)'}
+                />
               )}
             </button>
           </div>
@@ -106,7 +163,7 @@ const styles = {
   },
   compactWrapper: {
     width: '100%',
-    maxWidth: '1050px',
+    maxWidth: 'var(--content-width)',
     margin: '0 auto',
     display: 'flex',
     flexDirection: 'column',
@@ -115,19 +172,21 @@ const styles = {
   form: {
     width: '100%',
   },
+  // A pill's radius should always be half its own height regardless of how
+  // tall the textarea grows — var(--radius-pill) (9999px) does that for
+  // free, which is why this no longer carries an explicit pixel radius.
   inputPill: {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
-    padding: '8px 16px',
-    borderRadius: '32px',
-    backgroundColor: '#ffffff',
-    border: '1px solid #cbd5e1',
-    transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+    padding: '9px 18px',
+    borderRadius: 'var(--radius-pill)',
+    backgroundColor: 'var(--surface)',
+    border: '1px solid var(--border-strong)',
+    transition: 'border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease)',
   },
   heroPill: {
-    padding: '12px 20px',
-    borderRadius: '36px',
+    padding: '13px 22px',
   },
   attachBtn: {
     background: 'transparent',
@@ -137,39 +196,54 @@ const styles = {
     justifyContent: 'center',
     cursor: 'pointer',
     padding: '4px',
-    color: '#94a3b8',
+    color: 'var(--ink-faint)',
     borderRadius: '50%',
-    transition: 'color 0.2s',
+    transition: 'color var(--dur-fast) var(--ease)',
   },
   textarea: {
     flex: '1',
     background: 'transparent',
     border: 'none',
     outline: 'none',
-    color: '#1e293b',
-    fontSize: '0.95rem',
+    color: 'var(--ink)',
+    fontSize: 'var(--text-body)',
     fontFamily: 'inherit',
     resize: 'none',
     lineHeight: '1.5',
-    padding: '8px 0',
+    padding: 0,
     overflowY: 'hidden',
     boxSizing: 'border-box',
-    transition: 'height 0.08s ease-out',
+    transition: 'height var(--dur-fast) var(--ease)',
   },
   rightActions: {
     display: 'flex',
     alignItems: 'center',
+    gap: '6px',
     flexShrink: 0,
   },
+  divider: {
+    width: '1px',
+    height: '20px',
+    backgroundColor: 'var(--border)',
+    margin: '0 2px',
+    flexShrink: 0,
+  },
+  // Deliberately the --control-h tier rather than --control-h-sm: the send
+  // Sized to match the pp-trigger dropdown chips (~28px) so all
+  // controls in the input pill share a consistent visual height.
   sendCircle: {
-    width: '36px',
-    height: '36px',
+    width: '28px',
+    height: '28px',
     borderRadius: '50%',
     border: 'none',
+    padding: 0,
+    margin: 0,
+    boxSizing: 'border-box',
+    outline: 'none',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    transition: 'all 0.2s ease',
+    transition: 'background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease)',
     flexShrink: 0,
   }
 };

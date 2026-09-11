@@ -38,7 +38,7 @@ export const LoginPage = ({ onLoginSuccess }) => {
         {/* Brand Header */}
         <div style={styles.brandHeader}>
           <div style={styles.brandIconBox}>
-            <Sparkles size={32} color="#0e8a75" />
+            <Sparkles size={32} color="var(--accent)" />
           </div>
           <h2 style={styles.brandTitle}>AccuTax AI</h2>
           <p style={styles.brandSubtitle}>Financial Intelligence & Multi-Tenant Portal</p>
@@ -47,7 +47,7 @@ export const LoginPage = ({ onLoginSuccess }) => {
         {/* Error Alert Banner */}
         {error && (
           <div style={styles.errorBox}>
-            <AlertCircle size={18} color="#f43f5e" />
+            <AlertCircle size={18} color="var(--danger)" />
             <span>{error}</span>
           </div>
         )}
@@ -57,7 +57,7 @@ export const LoginPage = ({ onLoginSuccess }) => {
           <div style={styles.inputGroup}>
             <label style={styles.label}>Email Address</label>
             <div style={styles.inputWrapper}>
-              <Mail size={18} color="#9ca3af" style={styles.inputIcon} />
+              <Mail size={18} color="var(--ink-faint)" style={styles.inputIcon} />
               <input
                 type="email"
                 placeholder="name@company.com"
@@ -72,7 +72,7 @@ export const LoginPage = ({ onLoginSuccess }) => {
           <div style={styles.inputGroup}>
             <label style={styles.label}>Password</label>
             <div style={styles.inputWrapper}>
-              <Lock size={18} color="#9ca3af" style={styles.inputIcon} />
+              <Lock size={18} color="var(--ink-faint)" style={styles.inputIcon} />
               <input
                 type={showPassword ? 'text' : 'password'}
                 placeholder="••••••••••••"
@@ -86,7 +86,7 @@ export const LoginPage = ({ onLoginSuccess }) => {
                 style={styles.eyeBtn}
                 onClick={() => setShowPassword(!showPassword)}
               >
-                {showPassword ? <EyeOff size={18} color="#9ca3af" /> : <Eye size={18} color="#9ca3af" />}
+                {showPassword ? <EyeOff size={18} color="var(--ink-faint)" /> : <Eye size={18} color="var(--ink-faint)" />}
               </button>
             </div>
           </div>
@@ -109,7 +109,7 @@ export const LoginPage = ({ onLoginSuccess }) => {
         {/* Quick Demo Credentials */}
         <div style={styles.quickFillSection}>
           <p style={styles.quickFillTitle}>
-            <Building2 size={13} color="#818cf8" />
+            <Building2 size={13} color="var(--violet)" />
             <span>Preconfigured Multi-Tenant Accounts</span>
           </p>
           <div style={styles.quickFillGrid}>
@@ -122,7 +122,19 @@ export const LoginPage = ({ onLoginSuccess }) => {
                 <span style={styles.quickFillEmail}>genthird456@gmail.com</span>
                 <span style={styles.quickFillBadge}>Accutax Live</span>
               </div>
-              <span style={styles.quickFillDesc}>All 4 Orgs (27, 25, 154, 28)</span>
+              <span style={styles.quickFillDesc}>All 4 Orgs (2, 1, 3, 5)</span>
+            </button>
+
+            <button
+              type="button"
+              style={styles.quickFillBtn}
+              onClick={() => handleQuickFill('superadmin@accutax.com', 'SuperAdmin@2026!')}
+            >
+              <div style={styles.quickFillBtnHeader}>
+                <span style={styles.quickFillEmail}>superadmin@accutax.com</span>
+                <span style={{ ...styles.quickFillBadge, backgroundColor: 'rgba(var(--accent-rgb), 0.15)', color: 'var(--accent-ink)' }}>Super Admin</span>
+              </div>
+              <span style={styles.quickFillDesc}>Platform Superadmin · All Tenants</span>
             </button>
 
             <button
@@ -150,15 +162,15 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: '24px',
-    background: 'radial-gradient(circle at 50% 30%, rgba(14, 138, 117, 0.08) 0%, #f8fafc 60%)',
+    background: 'radial-gradient(circle at 50% 30%, rgba(var(--accent-rgb), 0.08) 0%, var(--bg) 60%)',
   },
   loginCard: {
     width: '100%',
     maxWidth: '460px',
     padding: '36px',
-    borderRadius: '20px',
-    backgroundColor: '#ffffff',
-    border: '1px solid #e2e8f0',
+    borderRadius: 'var(--radius-lg)',
+    backgroundColor: 'var(--surface)',
+    border: '1px solid var(--border)',
     boxShadow: '0 20px 50px rgba(0, 0, 0, 0.1)',
   },
   brandHeader: {
@@ -171,8 +183,8 @@ const styles = {
   brandIconBox: {
     width: '56px',
     height: '56px',
-    borderRadius: '16px',
-    backgroundColor: 'rgba(14, 138, 117, 0.1)',
+    borderRadius: 'var(--radius-lg)',
+    backgroundColor: 'rgba(var(--accent-rgb), 0.1)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -181,22 +193,22 @@ const styles = {
   brandTitle: {
     fontSize: '1.75rem',
     fontWeight: 700,
-    color: '#1e293b',
+    color: 'var(--ink)',
     marginBottom: '4px',
   },
   brandSubtitle: {
     fontSize: '0.85rem',
-    color: '#64748b',
+    color: 'var(--ink-soft)',
   },
   errorBox: {
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
     padding: '12px 14px',
-    borderRadius: '10px',
-    backgroundColor: 'rgba(244, 63, 94, 0.12)',
-    border: '1px solid rgba(244, 63, 94, 0.3)',
-    color: '#f43f5e',
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: 'rgba(var(--danger-rgb), 0.12)',
+    border: '1px solid rgba(var(--danger-rgb), 0.3)',
+    color: 'var(--danger)',
     fontSize: '0.85rem',
     marginBottom: '20px',
   },
@@ -213,7 +225,7 @@ const styles = {
   label: {
     fontSize: '0.825rem',
     fontWeight: 600,
-    color: '#475569',
+    color: 'var(--ink-soft)',
   },
   inputWrapper: {
     position: 'relative',
@@ -228,13 +240,13 @@ const styles = {
   input: {
     width: '100%',
     padding: '12px 42px 12px 42px',
-    borderRadius: '10px',
-    backgroundColor: '#f8fafc',
-    border: '1px solid #e2e8f0',
-    color: '#1e293b',
+    borderRadius: 'var(--radius-sm)',
+    backgroundColor: 'var(--bg)',
+    border: '1px solid var(--border)',
+    color: 'var(--ink)',
     fontSize: '0.9rem',
     outline: 'none',
-    transition: 'border-color 0.2s',
+    transition: 'border-color var(--dur-fast) var(--ease)',
   },
   eyeBtn: {
     position: 'absolute',
@@ -253,14 +265,14 @@ const styles = {
     justifyContent: 'center',
     gap: '8px',
     padding: '12px 20px',
-    borderRadius: '10px',
+    borderRadius: 'var(--radius-sm)',
     border: 'none',
     fontSize: '0.95rem',
     fontWeight: 600,
     cursor: 'pointer',
     marginTop: '6px',
-    boxShadow: '0 4px 14px rgba(14, 138, 117, 0.3)',
-    transition: 'all 0.2s',
+    boxShadow: '0 4px 14px rgba(var(--accent-rgb), 0.3)',
+    transition: 'box-shadow var(--dur-fast) var(--ease), filter var(--dur-fast) var(--ease)',
   },
   quickFillSection: {
     marginTop: '24px',
@@ -273,7 +285,7 @@ const styles = {
     gap: '6px',
     fontSize: '0.75rem',
     fontWeight: 600,
-    color: '#9ca3af',
+    color: 'var(--ink-faint)',
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
     marginBottom: '10px',
@@ -288,12 +300,12 @@ const styles = {
     flexDirection: 'column',
     gap: '2px',
     padding: '8px 12px',
-    borderRadius: '8px',
-    backgroundColor: '#f8fafc',
-    border: '1px solid #e2e8f0',
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: 'var(--bg)',
+    border: '1px solid var(--border)',
     textAlign: 'left',
     cursor: 'pointer',
-    transition: 'all 0.15s ease',
+    transition: 'background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease)',
   },
   quickFillBtnHeader: {
     display: 'flex',
@@ -303,18 +315,18 @@ const styles = {
   quickFillEmail: {
     fontSize: '0.78rem',
     fontWeight: 600,
-    color: '#1e293b',
+    color: 'var(--ink)',
   },
   quickFillBadge: {
     fontSize: '0.65rem',
     fontWeight: 600,
-    color: '#0e8a75',
-    backgroundColor: 'rgba(14, 138, 117, 0.15)',
+    color: 'var(--accent)',
+    backgroundColor: 'rgba(var(--accent-rgb), 0.15)',
     padding: '1px 6px',
-    borderRadius: '4px',
+    borderRadius: 'var(--radius-sm)',
   },
   quickFillDesc: {
     fontSize: '0.7rem',
-    color: '#94a3b8',
+    color: 'var(--ink-faint)',
   },
 };

@@ -66,14 +66,14 @@ export const TenantLoginModal = ({ currentTenant, onSelectTenant, onClose }) => 
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div style={styles.modalHeader}>
           <div style={styles.modalTitleBox}>
-            <ShieldCheck size={24} color="#818cf8" />
+            <ShieldCheck size={24} color="var(--violet)" />
             <div>
               <h3>Tenant Authentication & Security Context</h3>
               <p style={styles.modalSub}>Select or switch tenant organization context</p>
             </div>
           </div>
           <button style={styles.closeBtn} onClick={onClose}>
-            <X size={20} color="#9ca3af" />
+            <X size={20} color="var(--ink-faint)" />
           </button>
         </div>
 
@@ -97,10 +97,10 @@ export const TenantLoginModal = ({ currentTenant, onSelectTenant, onClose }) => 
               >
                 <div style={styles.presetTop}>
                   <div style={styles.presetNameGroup}>
-                    {isWarning ? <AlertTriangle size={18} color="#f43f5e" /> : <Building2 size={18} color="#10b981" />}
+                    {isWarning ? <AlertTriangle size={18} color="var(--danger)" /> : <Building2 size={18} color="var(--success)" />}
                     <span style={styles.presetName}>{preset.org_name}</span>
                   </div>
-                  {isSelected && <CheckCircle2 size={18} color="#10b981" />}
+                  {isSelected && <CheckCircle2 size={18} color="var(--success)" />}
                 </div>
 
                 <p style={styles.presetDesc}>{preset.description}</p>
@@ -186,7 +186,7 @@ const styles = {
   },
   modalSub: {
     fontSize: '0.8rem',
-    color: '#9ca3af',
+    color: 'var(--ink-faint)',
   },
   closeBtn: {
     background: 'none',
@@ -201,19 +201,19 @@ const styles = {
   },
   presetCard: {
     padding: '14px 16px',
-    borderRadius: '12px',
+    borderRadius: 'var(--radius-md)',
     backgroundColor: 'rgba(255, 255, 255, 0.03)',
     border: '1px solid rgba(255, 255, 255, 0.08)',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
+    transition: 'background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease)',
   },
   presetCardSelected: {
-    borderColor: '#10b981',
-    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    borderColor: 'var(--success)',
+    backgroundColor: 'rgba(var(--success-rgb), 0.08)',
   },
   presetCardWarning: {
-    borderColor: 'rgba(244, 63, 94, 0.3)',
-    backgroundColor: 'rgba(244, 63, 94, 0.05)',
+    borderColor: 'rgba(var(--danger-rgb), 0.3)',
+    backgroundColor: 'rgba(var(--danger-rgb), 0.05)',
   },
   presetTop: {
     display: 'flex',
@@ -232,7 +232,7 @@ const styles = {
   },
   presetDesc: {
     fontSize: '0.8rem',
-    color: '#9ca3af',
+    color: 'var(--ink-faint)',
     marginBottom: '10px',
   },
   presetMetaRow: {
@@ -257,15 +257,15 @@ const styles = {
   },
   label: {
     fontSize: '0.78rem',
-    color: '#9ca3af',
+    color: 'var(--ink-faint)',
     fontWeight: 500,
   },
   input: {
     padding: '10px 12px',
-    borderRadius: '8px',
+    borderRadius: 'var(--radius-sm)',
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
     border: '1px solid rgba(255, 255, 255, 0.15)',
-    color: '#ffffff',
+    color: 'var(--surface)',
     fontSize: '0.9rem',
     outline: 'none',
   },
