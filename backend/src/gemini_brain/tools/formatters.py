@@ -838,11 +838,45 @@ def render_table_block(data: Any, max_rows: int = 50) -> Dict[str, Any]:
     # detail page. Carried as a hidden field, not a column.
     id_key = next((k for k in first if _is_id_key(k) and _looks_numeric(first.get(k))), None)
 
+    # Fallback enrichment: when upstream API (e.g. /report/invoice-details) omits
+    # the numeric ID, batch-lookup ID by invoice_number or receipt_number so the
+    # UI table still renders active, clickable hyperlinks to the record detail page.
+    enrich_map: dict[str, Any] = {}
+    if id_key is None and isinstance(first, dict):
+        if "invoice_number" in first:
+            try:
+                from gemini_brain.sql_fallback.db_connection import get_connection
+                inv_nums = [str(r["invoice_number"]) for r in data[:max_rows] if isinstance(r, dict) and r.get("invoice_number")]
+                if inv_nums:
+                    with get_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute("SELECT invoice_number, id FROM income WHERE invoice_number = ANY(%s)", (inv_nums,))
+                            for inv_num, inv_id in cur.fetchall():
+                                enrich_map[f"invoice:{inv_num}"] = inv_id
+            except Exception:
+                pass
+        elif "receipt_number" in first:
+            try:
+                from gemini_brain.sql_fallback.db_connection import get_connection
+                rcpt_nums = [str(r["receipt_number"]) for r in data[:max_rows] if isinstance(r, dict) and r.get("receipt_number")]
+                if rcpt_nums:
+                    with get_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute("SELECT receipt_number, id FROM expense WHERE receipt_number = ANY(%s)", (rcpt_nums,))
+                            for rcpt_num, exp_id in cur.fetchall():
+                                enrich_map[f"receipt:{rcpt_num}"] = exp_id
+            except Exception:
+                pass
+
     rows = []
     for row in data[:max_rows]:
         out = {k: _format_cell_value(k, row.get(k)) for k in selected_keys}
         if id_key is not None and row.get(id_key) is not None:
             out["_row_id"] = row[id_key]
+        elif "invoice_number" in row and f"invoice:{row.get('invoice_number')}" in enrich_map:
+            out["_row_id"] = enrich_map[f"invoice:{row.get('invoice_number')}"]
+        elif "receipt_number" in row and f"receipt:{row.get('receipt_number')}" in enrich_map:
+            out["_row_id"] = enrich_map[f"receipt:{row.get('receipt_number')}"]
         rows.append(out)
 
     return {
