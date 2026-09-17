@@ -21,7 +21,7 @@ GEMINI_MODEL: str = "gemini-3.5-flash"
 # Bedrock / Claude model identifiers
 # ─────────────────────────────────────────────────────────────
 HAIKU3_ID: str = "anthropic.claude-3-haiku-20240307-v1:0"
-HAIKU45_ID: str = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+HAIKU45_ID: str = "anthropic.claude-3-haiku-20240307-v1:0"
 SONNET35_ID: str = "apac.anthropic.claude-3-5-sonnet-20241022-v2:0"
 
 # ─────────────────────────────────────────────────────────────
@@ -29,7 +29,7 @@ SONNET35_ID: str = "apac.anthropic.claude-3-5-sonnet-20241022-v2:0"
 # ─────────────────────────────────────────────────────────────
 COMPLEXITY_MODEL_MAP: dict[str, tuple[str, str]] = {
     "SIMPLE":  (HAIKU3_ID,   "Claude 3 Haiku"),
-    "MEDIUM":  (HAIKU45_ID,  "Claude Haiku 4.5"),
+    "MEDIUM":  (HAIKU3_ID,   "Claude 3 Haiku"),
     "COMPLEX": (SONNET35_ID, "Claude 3.5 Sonnet"),
 }
 
