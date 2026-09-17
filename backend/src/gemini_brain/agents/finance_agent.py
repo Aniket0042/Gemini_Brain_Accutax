@@ -1252,7 +1252,8 @@ def _task_overdue_invoices(params: Dict) -> Dict:
     if params.get("customer"):
         customer_filter = f"AND LOWER(c.name) LIKE {_like(params['customer'].lower())}"
 
-    sql = f"""SELECT COALESCE(c.name, 'Unknown') AS customer,
+    sql = f"""SELECT inc.id,
+       COALESCE(c.name, 'Unknown') AS customer,
        inc.invoice_number, inc.invoice_date, inc.due_date,
        COALESCE(st.value, 'Unknown') AS status,
        COALESCE(SUM(ii.line_amount), 0) AS amount,
@@ -1264,7 +1265,7 @@ LEFT JOIN status_type st ON st.id = inc.status_type_id
 WHERE CAST(inc.due_date AS DATE) < CURRENT_DATE
   AND LOWER(COALESCE(st.value, '')) IN ('pending', 'partial_paid', 'partially_paid'){_org_frag("inc", params)}
   {customer_filter}
-GROUP BY c.name, inc.invoice_number, inc.invoice_date, inc.due_date, st.value
+GROUP BY inc.id, c.name, inc.invoice_number, inc.invoice_date, inc.due_date, st.value
 ORDER BY days_overdue {order}
 LIMIT {int(limit)}"""
 
@@ -1290,7 +1291,8 @@ def _task_overdue_bills(params: Dict) -> Dict:
     if params.get("vendor"):
         vendor_filter = f"AND LOWER(c.name) LIKE {_like(params['vendor'].lower())}"
 
-    sql = f"""SELECT COALESCE(c.name, 'Unknown') AS vendor,
+    sql = f"""SELECT e.id,
+       COALESCE(c.name, 'Unknown') AS vendor,
        e.receipt_number, e.reception_date,
        COALESCE(st.value, 'Unknown') AS status,
        COALESCE(SUM(ei.line_amount), 0) AS amount,
@@ -1302,7 +1304,7 @@ LEFT JOIN status_type st ON st.id = e.status_type_id
 WHERE CAST(e.reception_date AS DATE) < CURRENT_DATE - INTERVAL '30 days'
   AND LOWER(COALESCE(st.value, '')) IN ('pending', 'partial_paid', 'partially_paid'){_org_frag("e", params)}
   {vendor_filter}
-GROUP BY c.name, e.receipt_number, e.reception_date, st.value
+GROUP BY e.id, c.name, e.receipt_number, e.reception_date, st.value
 ORDER BY days_outstanding {order}
 LIMIT {int(limit)}"""
 

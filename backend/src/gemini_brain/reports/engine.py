@@ -64,8 +64,12 @@ def query(
     db_name: str = "",
 ) -> List[Dict[str, Any]]:
     """Run one vetted read-only report query. Raises on failure — see run_report_safe."""
+    from gemini_brain.observability.sql_tracer import record_sql_trace
+    import time
+
     assert_read_only(sql)
 
+    t0 = time.perf_counter()
     conn = get_connection(db_name=db_name)
     try:
         conn.autocommit = False
@@ -76,12 +80,15 @@ def query(
             cur.execute(sql, params)
             if cur.description is None:
                 conn.rollback()
+                record_sql_trace(sql, duration_ms=(time.perf_counter() - t0) * 1000, row_count=0, source="report_engine")
                 return []
             cols = [d[0] for d in cur.description]
             rows = [dict(zip(cols, row)) for row in cur.fetchall()]
         # Read-only transaction: nothing to commit, and rollback releases cleanly.
         conn.rollback()
-        return serialize_rows(rows)
+        serialized = serialize_rows(rows)
+        record_sql_trace(sql, duration_ms=(time.perf_counter() - t0) * 1000, row_count=len(serialized), source="report_engine")
+        return serialized
     except Exception:
         try:
             conn.rollback()

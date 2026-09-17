@@ -147,6 +147,7 @@ class QueryResponse(BaseModel):
         ),
     )
     sql: Optional[str] = Field(default=None, description="SQL query executed (if DB fallback path).")
+    sql_traces: List[Dict[str, Any]] = Field(default_factory=list, description="SQL queries executed during query evaluation.")
     results: List[Any] = Field(default_factory=list, description="Raw structured results list.")
     error: Optional[str] = Field(default=None, description="Error message if processing failed.")
     status: str = Field(default="ok", description="ok | empty | partial | degraded | failed")

@@ -209,5 +209,11 @@ def normalize_envelope(result: Dict[str, Any]) -> Dict[str, Any]:
         out["blocks"] = []
     out.setdefault("request_id", new_request_id())
     out.setdefault("sql", None)
+    if not isinstance(out.get("sql_traces"), list):
+        out["sql_traces"] = []
+    if out.get("sql") and not out["sql_traces"]:
+        out["sql_traces"] = [{"sql": out["sql"], "duration_ms": 0.0, "row_count": len(out.get("results") or []), "source": "sql"}]
+    elif out["sql_traces"] and not out.get("sql"):
+        out["sql"] = out["sql_traces"][0]["sql"]
     out.setdefault("error", None)
     return out

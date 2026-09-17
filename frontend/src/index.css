@@ -919,6 +919,110 @@ h1, h2, h3, h4, h5 {
 .control-btn-accent:hover { filter: brightness(0.95); }
 .control-btn-accent:active { filter: brightness(0.9); }
 
+.history-item {
+  position: relative;
+  border-radius: var(--radius-sm, 8px);
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.history-item:hover {
+  background-color: var(--surface-2);
+}
+.history-item.active,
+.history-item.active:hover {
+  background-color: var(--surface-hover);
+}
+.history-item.active .history-title {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.history-menu-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  width: 26px;
+  height: 26px;
+  color: var(--ink-faint);
+  opacity: 0;
+  border-radius: var(--radius-sm, 6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
+}
+
+.history-item:hover .history-menu-btn,
+.history-item.active .history-menu-btn,
+.history-item.menu-open .history-menu-btn,
+.history-menu-btn.active {
+  opacity: 1;
+}
+
+.history-menu-btn:hover,
+.history-menu-btn.active {
+  color: var(--ink);
+  background-color: var(--surface-hover);
+}
+
+.session-context-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 1000;
+  min-width: 140px;
+  background-color: var(--surface);
+  border: 1px solid var(--border-strong, rgba(255, 255, 255, 0.12));
+  border-radius: 10px;
+  padding: 5px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.45), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+  animation: menuIn var(--dur-fast) var(--ease);
+  transform-origin: top right;
+}
+
+.context-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
+  font-weight: 450;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.context-menu-item:hover {
+  background-color: var(--surface-2);
+  color: var(--ink);
+}
+
+.context-menu-item.danger {
+  color: var(--danger, #f43f5e);
+}
+
+.context-menu-item.danger:hover {
+  background-color: var(--danger-soft, rgba(244, 63, 94, 0.12));
+  color: var(--danger, #f43f5e);
+}
+
+.history-rename-input {
+  width: 100%;
+  background-color: var(--surface-2);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--ink);
+  font-size: 0.875rem;
+  padding: 3px 6px;
+  outline: none;
+  box-sizing: border-box;
+}
+
 .history-delete-btn {
   color: var(--ink-faint);
   opacity: 0;
@@ -926,7 +1030,8 @@ h1, h2, h3, h4, h5 {
   transition: color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease);
 }
 .history-item:hover .history-delete-btn,
-.history-item:focus-within .history-delete-btn {
+.history-item:focus-within .history-delete-btn,
+.history-item.active .history-delete-btn {
   opacity: 1;
   pointer-events: auto;
 }

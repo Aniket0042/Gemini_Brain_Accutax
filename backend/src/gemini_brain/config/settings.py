@@ -150,6 +150,10 @@ class GeminiBrainSettings(BaseSettings):
         default=60,
         description="JWT token validity in minutes.",
     )
+    show_sql_traces: bool = Field(
+        default=True,
+        description="Whether to capture and return executed SQL traces in query responses.",
+    )
 
     model_config = {
         # Anchored to the repository root rather than the process working

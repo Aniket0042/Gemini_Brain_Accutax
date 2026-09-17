@@ -120,46 +120,97 @@ def create_access_token(
 # this directory needs to be re-derived against that database instead.
 ORGANIZATION_DIRECTORY: list[dict[str, Any]] = [
     {
+        "id": 5,
+        "name": "Connectify LLC",
+        "display_name": "Connectify LLC (Dubai)",
+        "tag": "Primary Org",
+        "badge_color": "indigo",
+        "industry": "Corporate",
+        "currency": "AED",
+        "description": "761 invoices (AED 10.5M revenue), 469 bills, 1,686 journal entries.",
+    },
+    {
         "id": 2,
         "name": "Infro Labs",
-        "display_name": "Technology (Abu Dhabi)",
-        "tag": "Broadest Contact Base",
+        "display_name": "Infro Labs (Abu Dhabi)",
+        "tag": "Branch Org",
         "badge_color": "emerald",
         "industry": "Technology",
         "currency": "AED",
-        "description": "930 invoices (AED 2.6M revenue), 465 bills, 964 journal entries, 49 customers, 7 cost centers.",
+        "description": "930 invoices, 465 bills, 964 journal entries.",
     },
     {
         "id": 1,
-        "name": "Connectify",
-        "display_name": "Technology (Dubai)",
-        "tag": "Financials & GL",
+        "name": "Infro Labs",
+        "display_name": "Infro Labs (Dubai)",
+        "tag": "Branch Org",
         "badge_color": "amber",
         "industry": "Technology",
         "currency": "AED",
-        "description": "930 invoices (AED 3.5M revenue), 465 bills, 936 journal entries, 41 customers.",
+        "description": "930 invoices, 465 bills, 936 journal entries.",
     },
     {
         "id": 3,
         "name": "Connectify",
-        "display_name": "Agriculture (Abu Dhabi)",
-        "tag": "Full P&L & Cost Centers",
+        "display_name": "Connectify (Abu Dhabi)",
+        "tag": "Branch Org",
         "badge_color": "purple",
-        "industry": "Agriculture",
+        "industry": "Corporate",
         "currency": "AED",
-        "description": "930 invoices (AED 3.5M revenue), 465 bills, 930 journal entries, 40 customers.",
-    },
-    {
-        "id": 5,
-        "name": "Connectify LLC",
-        "display_name": "Agriculture (Dubai)",
-        "tag": "Richest Tenant — Multi-Year Ledger",
-        "badge_color": "indigo",
-        "industry": "Agriculture",
-        "currency": "AED",
-        "description": "Richest tenant in this database: 761 invoices (AED 10.5M revenue), 469 bills, 1,686 journal entries, 20 cost centers, 12 projects — data spans Oct 2023 through Sep 2026.",
+        "description": "930 invoices, 465 bills, 930 journal entries.",
     },
 ]
+
+
+def fetch_organizations_from_db(org_ids: list[int] | None = None, db_name: str = "") -> list[dict[str, Any]]:
+    """Fetch organizations directly from PostgreSQL public.organizations table."""
+    try:
+        conn = get_connection(db_name)
+        cur = conn.cursor()
+        try:
+            if org_ids:
+                cur.execute(
+                    """
+                    SELECT id, name, emirate, currency, company_type
+                    FROM public.organizations
+                    WHERE id = ANY(%s)
+                    ORDER BY id ASC;
+                    """,
+                    (list(org_ids),),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT id, name, emirate, currency, company_type
+                    FROM public.organizations
+                    ORDER BY id ASC;
+                    """
+                )
+            rows = cur.fetchall()
+            tenants = []
+            for r in rows:
+                oid = int(r[0])
+                name = r[1] or f"Organization {oid}"
+                emirate = r[2] or ""
+                currency = r[3] or "AED"
+                display_label = f"{name} ({emirate})" if emirate else name
+                tenants.append({
+                    "id": oid,
+                    "name": name,
+                    "display_name": display_label,
+                    "tag": emirate or "Tenant",
+                    "badge_color": "indigo" if oid == 5 else "emerald" if oid == 2 else "amber" if oid == 1 else "purple",
+                    "industry": str(r[4] or ""),
+                    "currency": currency,
+                    "description": "",
+                })
+            return tenants
+        finally:
+            cur.close()
+            conn.close()
+    except Exception as e:
+        logger.warning("Failed to query organizations table from DB: %s", e)
+        return []
 
 
 # Tokens we've personally seen returned by a successful upstream Accutax

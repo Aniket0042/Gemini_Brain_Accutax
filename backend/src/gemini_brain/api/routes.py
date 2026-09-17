@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from typing import Generator, Optional
+from typing import Any, Generator, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
@@ -18,6 +18,7 @@ from gemini_brain.api.auth import (
     authenticate_with_accutax_api,
     create_access_token,
     fetch_accutax_accessible_orgs,
+    fetch_organizations_from_db,
     get_current_user,
     get_user_allowed_orgs,
     get_user_by_email,
@@ -62,16 +63,25 @@ logger = logging.getLogger("gemini_brain.api.routes")
 router = APIRouter(prefix="/api/v1", tags=["Gemini Brain AI Engine"])
 
 
+def _resolve_tenants_for_org_ids(org_ids: list[int]) -> list[dict[str, Any]]:
+    if not org_ids:
+        return []
+    db_tenants = fetch_organizations_from_db(org_ids)
+    if db_tenants:
+        return db_tenants
+    allowed_set = {int(o) for o in org_ids}
+    return [t for t in ORGANIZATION_DIRECTORY if t["id"] in allowed_set]
+
+
 # ── Authentication Endpoints ──────────────────────────────────────────────────
 
 @router.post(
     "/auth/login",
     response_model=TokenResponse,
     tags=["Authentication"],
-    summary="User Login (Swagger Form & OAuth2)",
+    summary="OAuth2 Password Flow Login (Form-Encoded)",
     description=(
-        "Authenticates user email and password against live Accutax Backend API (with local fallback), "
-        "returning an authentic JWT token with accessible organization tenants. "
+        "Standard OAuth2 form-encoded login returning JWT access token with user claims. "
         "Compatible with Swagger UI's top-right **Authorize** button."
     ),
 )
@@ -80,7 +90,8 @@ def login_form(form_data: OAuth2PasswordRequestForm = Depends()) -> TokenRespons
     # 1. Try upstream Accutax API login first
     upstream = authenticate_with_accutax_api(form_data.username, form_data.password)
     if upstream:
-        tenants = [t for t in ORGANIZATION_DIRECTORY if t["id"] in upstream["allowed_org_ids"]]
+        live = fetch_accutax_accessible_orgs(upstream["access_token"], upstream["user_id"])
+        tenants = live if live else _resolve_tenants_for_org_ids(upstream["allowed_org_ids"])
         # Issue our own signed token rather than passing the upstream one
         # through: ours is verifiable by any worker, and survives a restart.
         session_token = create_access_token(
@@ -114,7 +125,7 @@ def login_form(form_data: OAuth2PasswordRequestForm = Depends()) -> TokenRespons
         email=user["email"],
         allowed_org_ids=allowed_org_ids,
     )
-    tenants = [t for t in ORGANIZATION_DIRECTORY if t["id"] in allowed_org_ids]
+    tenants = _resolve_tenants_for_org_ids(allowed_org_ids)
 
     return TokenResponse(
         access_token=access_token,
@@ -139,7 +150,8 @@ def login_json(payload: LoginRequest) -> TokenResponse:
     # 1. Try upstream Accutax API login first
     upstream = authenticate_with_accutax_api(payload.username, payload.password)
     if upstream:
-        tenants = [t for t in ORGANIZATION_DIRECTORY if t["id"] in upstream["allowed_org_ids"]]
+        live = fetch_accutax_accessible_orgs(upstream["access_token"], upstream["user_id"])
+        tenants = live if live else _resolve_tenants_for_org_ids(upstream["allowed_org_ids"])
         # Issue our own signed token rather than passing the upstream one
         # through: ours is verifiable by any worker, and survives a restart.
         session_token = create_access_token(
@@ -173,7 +185,7 @@ def login_json(payload: LoginRequest) -> TokenResponse:
         email=user["email"],
         allowed_org_ids=allowed_org_ids,
     )
-    tenants = [t for t in ORGANIZATION_DIRECTORY if t["id"] in allowed_org_ids]
+    tenants = _resolve_tenants_for_org_ids(allowed_org_ids)
 
     return TokenResponse(
         access_token=access_token,
@@ -231,16 +243,14 @@ def list_model_catalog(
 def list_tenants(current_user: CurrentUser = Depends(get_current_user)) -> TenantListResponse:
     """List organizations this user owns or can access as a collaborator."""
     live = fetch_accutax_accessible_orgs(current_user.raw_token, current_user.user_id)
-    if live:
-        tenants = live
-    else:
-        allowed = {int(o) for o in (current_user.allowed_org_ids or [])}
-        tenants = [t for t in ORGANIZATION_DIRECTORY if t["id"] in allowed]
+    if not live:
+        allowed = [int(o) for o in (current_user.allowed_org_ids or [])]
+        live = _resolve_tenants_for_org_ids(allowed)
 
     return TenantListResponse(
         user_id=current_user.user_id,
         email=current_user.email,
-        tenants=[TenantInfo(**t) for t in tenants],
+        tenants=[TenantInfo(**t) for t in live],
     )
 
 
@@ -456,21 +466,33 @@ async def run_query(
         runner = GeminiBrainRunner()
         
         def _run():
-            return runner.run(
-                query=payload.query,
-                organization_id=payload.organization_id,
-                db_name=payload.db_name,
-                use_api=payload.use_api,
-                user_id=current_user.user_id,
-                session_id=payload.session_id,
-                selected_model_key=payload.selected_model_key,
-                allowed_org_ids=current_user.allowed_org_ids,
-                auth_token=current_user.raw_token,
-                model=payload.model,
-                effort=payload.effort,
-                ui_context=payload.ui_context.model_dump() if payload.ui_context else None,
-                brief=bool(payload.brief),
-            )
+            from gemini_brain.observability.sql_tracer import start_sql_trace, get_sql_traces, clear_sql_trace
+            rid = new_request_id()
+            start_sql_trace(trace_id=rid)
+            try:
+                res = runner.run(
+                    query=payload.query,
+                    organization_id=payload.organization_id,
+                    db_name=payload.db_name,
+                    use_api=payload.use_api,
+                    user_id=current_user.user_id,
+                    session_id=payload.session_id,
+                    selected_model_key=payload.selected_model_key,
+                    allowed_org_ids=current_user.allowed_org_ids,
+                    auth_token=current_user.raw_token,
+                    model=payload.model,
+                    effort=payload.effort,
+                    ui_context=payload.ui_context.model_dump() if payload.ui_context else None,
+                    brief=bool(payload.brief),
+                )
+                traces = get_sql_traces(trace_id=rid)
+                if traces and isinstance(res, dict):
+                    res["sql_traces"] = traces
+                    if not res.get("sql"):
+                        res["sql"] = traces[0]["sql"]
+                return res
+            finally:
+                clear_sql_trace(trace_id=rid)
             
         result = await asyncio.to_thread(_run)
         return QueryResponse(**normalize_envelope(result))
@@ -588,8 +610,10 @@ def stream_query(
     """Stream query execution status chunks via Server-Sent Events (SSE)."""
 
     def event_generator() -> Generator[str, None, None]:
+        from gemini_brain.observability.sql_tracer import start_sql_trace, get_sql_traces, clear_sql_trace
         rid = new_request_id()
         token_reset = active_auth_token.set(current_user.raw_token)
+        start_sql_trace(trace_id=rid)
         try:
             runner = GeminiBrainRunner()
             for chunk in runner.run_stream(
@@ -608,6 +632,11 @@ def stream_query(
                 brief=bool(payload.brief),
             ):
                 if isinstance(chunk, dict) and "final_result" in chunk:
+                    traces = get_sql_traces(trace_id=rid)
+                    if traces and isinstance(chunk["final_result"], dict):
+                        chunk["final_result"]["sql_traces"] = traces
+                        if not chunk["final_result"].get("sql"):
+                            chunk["final_result"]["sql"] = traces[0]["sql"]
                     chunk["final_result"] = normalize_envelope(chunk["final_result"])
                 yield f"data: {json.dumps(chunk, default=str)}\n\n"
         except ValueError as ve:
@@ -635,6 +664,7 @@ def stream_query(
             yield f"data: {json.dumps({'type': 'error', 'notice': err_notice})}\n\n"
             yield f"data: {json.dumps({'final_result': err_env})}\n\n"
         finally:
+            clear_sql_trace(trace_id=rid)
             try:
                 active_auth_token.reset(token_reset)
             except ValueError:

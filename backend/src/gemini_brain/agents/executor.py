@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import re
 
+import time
+from gemini_brain.observability.sql_tracer import record_sql_trace
 from gemini_brain.sql_fallback.db_connection import get_connection
 
 __all__ = ["get_connection", "assert_read_only", "execute_sql"]
@@ -54,6 +56,7 @@ def execute_sql(sql: str, org_id: int | None = None) -> tuple[list[str], list[tu
     """
     assert_read_only(sql)
 
+    t0 = time.perf_counter()
     conn = get_connection()
     cur = conn.cursor()
     try:
@@ -61,9 +64,11 @@ def execute_sql(sql: str, org_id: int | None = None) -> tuple[list[str], list[tu
             cur.execute("SET LOCAL app.current_org = %s;", (str(int(org_id)),))
         cur.execute(sql)
         if cur.description is None:
+            record_sql_trace(sql, duration_ms=(time.perf_counter() - t0) * 1000, row_count=0, source="execute_sql")
             return [], []
         columns = [desc[0] for desc in cur.description]
         rows = cur.fetchall()
+        record_sql_trace(sql, duration_ms=(time.perf_counter() - t0) * 1000, row_count=len(rows), source="execute_sql")
         return columns, rows
     finally:
         cur.close()

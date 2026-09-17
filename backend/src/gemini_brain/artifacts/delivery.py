@@ -34,10 +34,10 @@ CHART_WORDS = re.compile(
     r"bar charts?|pie charts?|line charts?|area charts?|trend(?:line)?s?)\b",
     re.IGNORECASE,
 )
-BAR_HINT = re.compile(r"\bbar(?:\s+chart)?\b", re.IGNORECASE)
-LINE_HINT = re.compile(r"\b(?:line(?:\s+chart)?|trendlines?)\b", re.IGNORECASE)
-AREA_HINT = re.compile(r"\barea(?:\s+chart)?\b", re.IGNORECASE)
-PIE_HINT = re.compile(r"\bpie(?:\s+chart)?\b", re.IGNORECASE)
+BAR_HINT = re.compile(r"\b(?:bar|column)(?:\s+(?:chart|graph|plot))?\b", re.IGNORECASE)
+LINE_HINT = re.compile(r"\b(?:line(?:\s+(?:chart|graph|plot))?|trend(?:line)?s?|trending)\b", re.IGNORECASE)
+AREA_HINT = re.compile(r"\barea(?:\s+(?:chart|graph|plot))?\b", re.IGNORECASE)
+PIE_HINT = re.compile(r"\b(?:pie|donut|doughnut)(?:\s+(?:chart|graph|plot))?\b", re.IGNORECASE)
 
 FILE_PRIORITY = (
     ("csv", FILE_CSV),

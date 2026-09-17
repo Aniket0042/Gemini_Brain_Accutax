@@ -171,3 +171,104 @@ def test_sql_pnl_summary_charts_without_monthly():
     assert spec["charts"]
     assert spec["kpis"]
     assert spec["tables"]
+
+
+def test_single_row_category_pie_chart():
+    data = [{"category_id": 1, "category_name": "Uncategorized", "total_expense": 6720.0}]
+    spec = build_report_spec(data, "Show me a pie chart of expenses by category", chart_hint="pie")
+    assert spec["charts"]
+    chart = spec["charts"][0]
+    assert chart["chart_type"] == "pie"
+    assert chart["categories"] == ["Uncategorized"]
+    assert chart["series"][0]["data"] == [6720.0]
+
+
+def test_kpi_excludes_database_ids():
+    data = {"category_id": 1, "user_id": 42, "total_expense": 6720.0, "status": "active"}
+    spec = build_report_spec(data, "show summary")
+    labels = {k["label"] for k in spec["kpis"]}
+    assert "Category Id" not in labels
+    assert "User Id" not in labels
+    assert "Total Expense" in labels
+
+
+def test_pnl_monthly_with_line_hint():
+    data = {
+        "statement": "profit_and_loss",
+        "monthly": [
+            {"month": "2026-01", "revenue": 100000, "expenses": 60000},
+            {"month": "2026-02", "revenue": 120000, "expenses": 70000},
+        ],
+    }
+    spec = build_report_spec(data, "Plot monthly income trend for this year", chart_hint="line")
+    assert spec["charts"]
+    chart = spec["charts"][0]
+    assert chart["chart_type"] == "line"
+    assert chart["categories"] == ["2026-01", "2026-02"]
+
+
+def test_formatted_sales_display_noise_excluded():
+    rows = [
+        {"customer_id": 1, "customer_name": "Apex Retail", "sales": 220500, "formatted_sales": "220,500.00 AED"},
+        {"customer_id": 2, "customer_name": "Falcon Energy", "sales": 191310, "formatted_sales": "191,310.00 AED"},
+        {"customer_id": 3, "customer_name": "Al Habtoor", "sales": 181755, "formatted_sales": "181,755.00 AED"},
+    ]
+    # Bar chart must only have 1 single numeric series ('Sales'), not duplicate 'Formatted Sales'
+    spec = build_report_spec(rows, "show me top 5 customers with their spend in bar graph", chart_hint="bar")
+    assert spec["charts"]
+    chart = spec["charts"][0]
+    assert chart["chart_type"] == "bar"
+    assert len(chart["series"]) == 1
+    assert chart["series"][0]["name"] == "Sales"
+    assert chart["series"][0]["data"] == [220500.0, 191310.0, 181755.0]
+    assert "bar_colors" in chart  # Single series gets pastel colors for each customer
+
+    # Pie chart hint must succeed and not be downgraded by a duplicate series
+    pie_spec = build_report_spec(rows, "pie chart of top customers", chart_hint="pie")
+    assert pie_spec["charts"]
+    pie_chart = pie_spec["charts"][0]
+    assert pie_chart["chart_type"] == "pie"
+    assert len(pie_chart["series"]) == 1
+    assert pie_chart["categories"] == ["Apex Retail", "Falcon Energy", "Al Habtoor"]
+
+
+def test_top_n_explicit_limit_in_charts_and_tables():
+    raw_rows = [
+        {"customer_name": "Dubai Logistics FZCO", "sales": 166635.0},
+        {"customer_name": "Emirates Tech Solutions LLC", "sales": 174405.0},
+        {"customer_name": "Burj Digital Consultancies", "sales": 161280.0},
+        {"customer_name": "Falcon Energy & Engineering", "sales": 191310.0},
+        {"customer_name": "Apex Retail Group LLC", "sales": 220500.0},
+        {"customer_name": "Al Habtoor Trading Co.", "sales": 181755.0},
+        {"customer_name": "Gulf Creative Media Agency", "sales": 176190.0},
+        {"customer_name": "Oasis Hospitality Services", "sales": 158400.0},
+    ]
+    # When user asks for top 5, chart must have exactly 5 slices sorted descending
+    pie_spec = build_report_spec(raw_rows, "Top 5 customers by revenue share", chart_hint="pie")
+    assert pie_spec["charts"]
+    pie = pie_spec["charts"][0]
+    assert pie["chart_type"] == "pie"
+    assert len(pie["categories"]) == 5
+    assert pie["categories"] == [
+        "Apex Retail Group LLC",
+        "Falcon Energy & Engineering",
+        "Al Habtoor Trading Co.",
+        "Gulf Creative Media Agency",
+        "Emirates Tech Solutions LLC",
+    ]
+    assert pie["series"][0]["data"] == [220500.0, 191310.0, 181755.0, 176190.0, 174405.0]
+
+    # Bar chart must also have exactly 5 bars sorted descending
+    bar_spec = build_report_spec(raw_rows, "show me top 5 customers with their spend in bar graph", chart_hint="bar")
+    assert bar_spec["charts"]
+    bar = bar_spec["charts"][0]
+    assert bar["chart_type"] == "bar"
+    assert len(bar["categories"]) == 5
+    assert bar["categories"] == pie["categories"]
+    assert bar["series"][0]["data"] == pie["series"][0]["data"]
+    # Table must also be limited to 5 and sorted
+    assert len(bar_spec["tables"][0]["rows"]) == 5
+    assert bar_spec["tables"][0]["rows"][0]["customer_name"] == "Apex Retail Group LLC"
+
+
+

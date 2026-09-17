@@ -104,3 +104,21 @@ def test_visualize():
 def test_pie_hint():
     d = detect_delivery("pie chart of expenses by category")
     assert d.chart_hint == "pie"
+
+
+def test_trend_sets_line_hint():
+    d = detect_delivery("Plot monthly income trend for this year")
+    assert d.mode == "chart"
+    assert d.chart_hint == "line"
+    assert d.wants_chart
+
+
+def test_line_graph_hint():
+    d = detect_delivery("give me a line graph of revenue")
+    assert d.chart_hint == "line"
+
+
+def test_donut_chart_hint():
+    d = detect_delivery("donut chart of expenses")
+    assert d.chart_hint == "pie"
+

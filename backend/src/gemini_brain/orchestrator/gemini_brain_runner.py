@@ -1156,12 +1156,24 @@ class GeminiBrainRunner:
 
     @staticmethod
     def _payload_for_delivery(result: Dict[str, Any]) -> Any:
-        results = result.get("results") or []
-        if len(results) == 1 and isinstance(results[0], dict):
-            return results[0]
-        if results:
+        if not isinstance(result, dict):
+            return result
+        if any(k in result for k in ("summary", "monthly", "graphData", "graph_data", "statement", "revenue", "expenses", "income")):
+            return result
+        results = result.get("results")
+        if results is not None:
+            if isinstance(results, list):
+                if len(results) == 1 and isinstance(results[0], dict):
+                    first = results[0]
+                    has_label = any(
+                        k in first
+                        for k in ("category", "category_name", "account_name", "contact_name", "customer", "vendor", "name", "month", "date", "status")
+                    )
+                    if not has_label:
+                        return first
+                return results
             return results
-        return None
+        return result
 
     def _apply_delivery(
         self,

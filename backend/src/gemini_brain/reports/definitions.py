@@ -59,6 +59,7 @@ def aged_receivables_detail(params: Dict[str, Any], org_id: int, db_name: str = 
     rows = query(
         f"""
         SELECT
+            inc.id,
             inc.invoice_number,
             COALESCE(c.name, c.organization_name, 'Unknown') AS customer,
             CAST(inc.invoice_date AS DATE)                    AS invoice_date,

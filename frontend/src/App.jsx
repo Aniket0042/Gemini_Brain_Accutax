@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { LoginPage } from './components/LoginPage';
 import { QueryInput } from './components/QueryInput';
 import { ResponseView } from './components/ResponseView';
@@ -299,6 +299,10 @@ export default function App() {
   const [historyDirty, setHistoryDirty] = useState(false);
   const chatHistoryRef = useRef(chatHistory);
   chatHistoryRef.current = chatHistory;
+  const activeHistoryIdRef = useRef(activeHistoryId);
+  useEffect(() => {
+    activeHistoryIdRef.current = activeHistoryId;
+  }, [activeHistoryId]);
 
   useEffect(() => {
     try {
@@ -325,8 +329,10 @@ export default function App() {
     // Charts stay in the chat card. The canvas column opens only from Preview.
   }, [conversation]);
 
-  // Auto-scroll target ref
+  // Auto-scroll target ref and container ref
   const scrollBottomRef = useRef(null);
+  const chatScrollAreaRef = useRef(null);
+  const isSwitchingSessionRef = useRef(false);
 
   const { isAuthenticated, isLoading: authLoading, getAccessTokenSilently, loginWithRedirect, user: auth0User } = useAuth0();
 
@@ -377,7 +383,11 @@ export default function App() {
     if (wantsAccutaxHandoff && !handoffTimedOut) return;
     if (authLoading) return;
     if (!isAuthenticated) {
-      loginWithRedirect();
+      // Do not auto-redirect to Auth0: this client isn't registered for
+      // every deployment's callback URL, and the app has its own
+      // email/password LoginPage that hits the backend directly. Falling
+      // through here lets that render instead (see the `!currentUser`
+      // branch in the component body).
       return;
     }
     const initAuth = async () => {
@@ -600,12 +610,25 @@ export default function App() {
     return undefined;
   }, [activeTenant?.organization_id, activeTenant?.id]);
 
-  // Smooth auto-scroll to bottom when new response or streaming status arrives
+  // Instant scroll to bottom when switching session (ChatGPT/Claude/Gemini behavior)
+  useLayoutEffect(() => {
+    if (isSwitchingSessionRef.current) {
+      isSwitchingSessionRef.current = false;
+      if (chatScrollAreaRef.current) {
+        chatScrollAreaRef.current.scrollTop = chatScrollAreaRef.current.scrollHeight;
+      } else {
+        scrollBottomRef.current?.scrollIntoView({ behavior: 'auto' });
+      }
+    }
+  }, [conversation]);
+
+  // Smooth auto-scroll to bottom only when new response/stream chunk arrives
   useEffect(() => {
-    if (responseData || isLoading || streamLogs.length > 0 || conversation.length > 0) {
+    if (isSwitchingSessionRef.current) return;
+    if (isLoading || isStreaming || streamLogs.length > 0) {
       scrollBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [responseData, isLoading, streamLogs, conversation]);
+  }, [responseData, isLoading, streamLogs, isStreaming]);
 
   // Load accessible tenants from API
   const loadUserTenants = async (token, user) => {
@@ -733,9 +756,31 @@ export default function App() {
   //
   // No-ops unless historyDirty — just opening a saved session to read it
   // must not touch its timestamp or shuffle the list. The whole list is
-  // always re-sorted by timestamp (never spliced to the front by hand), so
-  // ordering is purely "most recently active first" — same as any normal
-  // chat app's session list.
+  // Helper to update active history transcript & preview without altering timestamp
+  const updateActiveHistoryEntry = (updatedConvo, previewText) => {
+    const targetId = activeHistoryIdRef.current;
+    if (!targetId) return;
+    const firstUser = (updatedConvo || []).find((m) => m.role === 'user');
+    setChatHistory((prev) => {
+      const idx = prev.findIndex((e) => e.id === targetId);
+      if (idx === -1) return prev;
+      const existing = prev[idx];
+      const updatedEntry = {
+        ...existing,
+        title: existing.title || (firstUser?.content || '').slice(0, 50),
+        preview: previewText ? previewText.slice(0, 60) : existing.preview,
+        conversation: updatedConvo,
+      };
+      const nextList = prev.map((e, i) => (i === idx ? updatedEntry : e));
+      try {
+        localStorage.setItem('accutax_chat_history', JSON.stringify(nextList));
+      } catch { /* ignore */ }
+      return nextList;
+    });
+  };
+
+  // Persist the current conversation into chatHistory — either updating the
+  // entry it was loaded from (activeHistoryId) or creating a new one.
   const persistCurrentConversation = () => {
     if (!historyDirty || conversation.length === 0) return;
     const firstUserMsg = conversation.find(m => m.role === 'user');
@@ -743,28 +788,39 @@ export default function App() {
 
     const lastAssistant = [...conversation].reverse().find(m => m.role === 'assistant');
     const preview = lastAssistant?.streamingText?.slice(0, 60) || lastAssistant?.responseData?.answer?.slice(0, 60) || 'Processing...';
+    
+    const targetId = activeHistoryIdRef.current || activeHistoryId || Date.now();
+    const existingEntry = chatHistoryRef.current.find((e) => e.id === targetId);
+
+    // Keep existing timestamp if available, else first message timestamp, else now
+    const sessionTimestamp =
+      existingEntry?.timestamp ||
+      (firstUserMsg.timestamp ? new Date(firstUserMsg.timestamp).toISOString() : new Date().toISOString());
+
     const entryData = {
+      id: targetId,
       title: firstUserMsg.content.slice(0, 50),
       preview,
-      timestamp: new Date().toISOString(),
+      timestamp: sessionTimestamp,
       conversation, // full transcript, not just a title/preview snippet
       sessionId: widgetSessionId || null,
       organizationId: activeTenant?.organization_id ?? activeTenant?.id ?? null,
     };
 
-    const nextId = activeHistoryId || Date.now();
     setChatHistory(prev => {
-      const existingIdx = prev.findIndex((e) => e.id === nextId);
+      const existingIdx = prev.findIndex((e) => e.id === targetId);
       const withEntry = existingIdx !== -1
         ? prev.map((e, i) => (i === existingIdx ? { ...e, ...entryData } : e))
-        : [{ id: nextId, ...entryData }, ...prev];
+        : [{ id: targetId, ...entryData }, ...prev];
       const updated = withEntry
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
         .slice(0, 30); // keep max 30
-      localStorage.setItem('accutax_chat_history', JSON.stringify(updated));
+      try {
+        localStorage.setItem('accutax_chat_history', JSON.stringify(updated));
+      } catch { /* ignore */ }
       return updated;
     });
-    if (!activeHistoryId) setActiveHistoryId(nextId);
+    if (!activeHistoryId) setActiveHistoryId(targetId);
     setHistoryDirty(false);
   };
 
@@ -773,6 +829,7 @@ export default function App() {
     persistCurrentConversation();
     setConversation([]);
     setActiveHistoryId(null);
+    activeHistoryIdRef.current = null;
     setHistoryDirty(false);
     stripSessionIdFromUrl();
     setWidgetSessionId(null);
@@ -797,8 +854,10 @@ export default function App() {
     if (entry.organizationId != null && String(entry.organizationId) !== String(orgId)) {
       return;
     }
+    isSwitchingSessionRef.current = true;
     setConversation(entry.conversation || []);
     setActiveHistoryId(id);
+    activeHistoryIdRef.current = id;
     setHistoryDirty(false);
     if (entry.sessionId) setWidgetSessionId(entry.sessionId);
     setResponseData(null);
@@ -853,6 +912,29 @@ export default function App() {
       setStreamLogs([]);
       setIsLoading(false);
     }
+  };
+
+  // Handle renaming a session
+  const handleRenameHistory = (id, newTitle) => {
+    if (!newTitle) return;
+    setChatHistory((prev) => {
+      const updated = prev.map((e) => (e.id === id ? { ...e, title: newTitle } : e));
+      try {
+        localStorage.setItem('accutax_chat_history', JSON.stringify(updated));
+      } catch { /* ignore */ }
+      return updated;
+    });
+  };
+
+  // Handle pinning / unpinning a session
+  const handlePinHistory = (id) => {
+    setChatHistory((prev) => {
+      const updated = prev.map((e) => (e.id === id ? { ...e, isPinned: !e.isPinned } : e));
+      try {
+        localStorage.setItem('accutax_chat_history', JSON.stringify(updated));
+      } catch { /* ignore */ }
+      return updated;
+    });
   };
 
   // Handle Query Submission
@@ -921,7 +1003,60 @@ export default function App() {
       responseData: null,
       timestamp: Date.now(),
     };
-    setConversation((prev) => [...prev, userTurn, assistantTurn]);
+    const nextConversation = [...conversation, userTurn, assistantTurn];
+    setConversation(nextConversation);
+
+    // Immediately create or register the session in sidebar (just like Gemini & ChatGPT)
+    let currentHistoryId = activeHistoryIdRef.current;
+    let currentSessionId = widgetSessionId;
+
+    if (!currentHistoryId) {
+      currentHistoryId = Date.now();
+      setActiveHistoryId(currentHistoryId);
+      activeHistoryIdRef.current = currentHistoryId;
+
+      if (!currentSessionId) {
+        currentSessionId =
+          typeof crypto !== 'undefined' && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `chat-${Date.now()}`;
+        setWidgetSessionId(currentSessionId);
+      }
+
+      const newSessionEntry = {
+        id: currentHistoryId,
+        sessionId: currentSessionId,
+        title: queryText.trim().slice(0, 50),
+        preview: 'Thinking...',
+        timestamp: new Date(userTurn.timestamp).toISOString(),
+        conversation: nextConversation,
+        organizationId: activeTenant?.organization_id ?? activeTenant?.id ?? null,
+      };
+
+      setChatHistory((prev) => {
+        const withoutOld = prev.filter((e) => e.id !== currentHistoryId);
+        const updated = [newSessionEntry, ...withoutOld]
+          .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+          .slice(0, 30);
+        try {
+          localStorage.setItem('accutax_chat_history', JSON.stringify(updated));
+        } catch { /* ignore */ }
+        return updated;
+      });
+    } else {
+      setChatHistory((prev) => {
+        const idx = prev.findIndex((e) => e.id === currentHistoryId);
+        if (idx === -1) return prev;
+        const existing = prev[idx];
+        const updated = prev.map((e, i) =>
+          i === idx ? { ...existing, conversation: nextConversation, preview: 'Thinking...' } : e
+        );
+        try {
+          localStorage.setItem('accutax_chat_history', JSON.stringify(updated));
+        } catch { /* ignore */ }
+        return updated;
+      });
+    }
 
     const payload = {
       query: queryText,
@@ -1041,6 +1176,7 @@ export default function App() {
                   isStreaming: false,
                 };
               }
+              updateActiveHistoryEntry(updated, chunk.final_result.answer);
               return updated;
             });
             setResponseData(chunk.final_result);
@@ -1109,6 +1245,7 @@ export default function App() {
                 isStreaming: false,
               };
             }
+            updateActiveHistoryEntry(updated, updated[lastIdx]?.streamingText || updated[lastIdx]?.responseData?.answer);
             return updated;
           });
           setIsLoading(false);
@@ -1197,6 +1334,8 @@ export default function App() {
           activeHistoryId={activeHistoryId}
           onSelectHistory={handleSelectHistory}
           onDeleteHistory={handleDeleteHistory}
+          onRenameHistory={handleRenameHistory}
+          onPinHistory={handlePinHistory}
         />
       </div>
 
@@ -1214,7 +1353,7 @@ export default function App() {
           onOpenHealthModal={() => setShowHealthModal(true)}
         />
         <div className="main-stage">
-        <div style={styles.chatScrollArea}>
+        <div ref={chatScrollAreaRef} style={styles.chatScrollArea}>
           <div style={!hasStartedChat ? styles.chatContentIntro : styles.chatContent}>
             {!hasStartedChat ? (
               <>
@@ -1307,7 +1446,6 @@ const styles = {
     minHeight: 0,
     overflowY: 'auto',
     padding: '20px 20px',
-    scrollBehavior: 'smooth',
     display: 'flex',
     flexDirection: 'column',
   },

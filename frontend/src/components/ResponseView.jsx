@@ -6,6 +6,7 @@ import { AnswerProvenance } from './AnswerProvenance';
 import { BlockRenderer, hasPortedBlocks, chatFacingBlocks } from './blocks/BlockRenderer';
 import { ReportActions } from './blocks/ReportActions';
 import { CodeChrome } from './blocks/CodeBlock';
+import { SqlTraceCard } from './SqlTraceCard';
 import { 
   Sparkles, ShieldAlert, Code2, Layers, 
   ChevronDown, ChevronUp, Copy, Check, 
@@ -244,6 +245,14 @@ const AssistantResponseCard = ({
           )}
         </div>
 
+        {/* Database Queries SQL Traces (controlled by VITE_SHOW_SQL_TRACES in .env) */}
+        {!isStreaming && (
+          <SqlTraceCard
+            sqlTraces={responseData?.sql_traces || msg.sqlTraces}
+            fallbackSql={responseData?.sql}
+          />
+        )}
+
         {showSql && responseData?.sql && (
           <CodeChrome language="sql" content={responseData.sql} title="Executed SQL" />
         )}
@@ -371,6 +380,12 @@ const ModelAnswerCard = ({ response }) => {
           </div>
         )
       )}
+
+      {/* Database Queries SQL Traces (controlled by VITE_SHOW_SQL_TRACES in .env) */}
+      <SqlTraceCard
+        sqlTraces={response?.sql_traces}
+        fallbackSql={response?.sql}
+      />
     </div>
   );
 };

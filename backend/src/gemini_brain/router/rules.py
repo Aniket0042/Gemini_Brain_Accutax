@@ -104,7 +104,8 @@ ROUTING_RULES: List[RoutingRule] = [
         name="income_chart_or_report",
         patterns=[
             re.compile(
-                r"\b((?:total\s+)?(?:sales|revenue|income).{0,48}"
+                r"\b(?!(?:.*?\b(?:customers?|clients?|vendors?|suppliers?|items?|products?|categor(?:y|ies))\b))"
+                r"((?:total\s+)?(?:sales|revenue|income).{0,48}"
                 r"(?:charts?|graphs?|reports?|trend(?:line)?s?|visuali[sz]e)|"
                 r"(?:charts?|graphs?|reports?|trend(?:line)?s?|visuali[sz]e).{0,48}"
                 r"(?:sales|revenue|income))\b",
@@ -247,14 +248,35 @@ ROUTING_RULES: List[RoutingRule] = [
     RoutingRule(
         name="ar_aging",
         patterns=[
-            re.compile(r"\b(who owes us|overdue invoices?|aging report|aged receivables?|accounts? receivable aging)\b", re.IGNORECASE),
+            re.compile(r"\b(who owes us|aging report|aged receivables?|accounts? receivable aging)\b", re.IGNORECASE),
             re.compile(r"(?:ar|accounts?\s+receivable)\s+aging|aged\s+receivables?", re.IGNORECASE),
         ],
         endpoint="/report/ar-aging-summary",
         sql_task="ar_aging",
         intent=4,
-        quick_reference_hint="overdue invoices / aging report / who owes us → /report/ar-aging-summary",
-        keyword_triggers=["ar aging", "aging report", "receivables aging", "overdue invoices", "who owes us"],
+        quick_reference_hint="aging report / who owes us (customer-level totals) → /report/ar-aging-summary",
+        keyword_triggers=["ar aging", "aging report", "receivables aging", "who owes us"],
+    ),
+    RoutingRule(
+        name="ar_aging_detail",
+        patterns=[
+            re.compile(
+                r"\b(overdue invoices?|invoices?\s+(?:that\s+are\s+|which\s+are\s+)?overdue|"
+                r"which\s+invoices\s+are\s+overdue|overdue\s+invoice\s+detail|"
+                r"invoice[\s-]level\s+aging|aged\s+receivables?\s+detail)\b",
+                re.IGNORECASE,
+            ),
+        ],
+        endpoint="/report/invoice-details",
+        # No sql_task: "aged_receivables_detail" is not a real finance_agent
+        # dispatch key (only reports/definitions.py handles this report,
+        # via reports/engine.py's separate rpt_* registry) — wiring it here
+        # would send an unrecognized task name into the SQL-fallback fast
+        # path. See _VALID_FINANCE_AGENT_TASKS above for the actual list.
+        sql_task=None,
+        intent=4,
+        quick_reference_hint="overdue invoices (per-invoice detail, invoice number/days overdue) → /report/invoice-details",
+        keyword_triggers=["overdue invoices", "which invoices are overdue", "overdue invoice detail"],
     ),
     RoutingRule(
         name="ap_aging",
@@ -283,7 +305,7 @@ ROUTING_RULES: List[RoutingRule] = [
         name="sales_by_customer",
         patterns=[
             re.compile(
-                r"\b(top|bottom|least|lowest|worst)\s+customers?\b|"
+                r"\b(top|bottom|least|lowest|worst)(?:\s+\d+)?\s+customers?\b|"
                 r"\bsales by customer\b|\bhighest grossing buyers?\b",
                 re.IGNORECASE,
             ),

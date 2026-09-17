@@ -179,8 +179,9 @@ GET /report/profit-loss-with-accounts
 ### AR / AP AGING REPORTS
 GET /report/ar-aging-summary
   query: organization_id* (required), as_of_date (YYYY-MM-DD, defaults to today)
-  → Accounts receivable aging summary (current, 30d, 60d, 90d, 120d+ buckets)
-  USE FOR: "AR aging", "aging report", "receivables aging", "overdue invoices", "outstanding AR", "defaulters", "who owes us"
+  → Accounts receivable aging summary, customer-level totals (current, 30d, 60d, 90d, 120d+ buckets)
+  USE FOR: "AR aging", "aging report", "receivables aging", "outstanding AR", "defaulters", "who owes us"
+  NOT FOR: "overdue invoices" (per-invoice list) — use /report/invoice-details instead
 
 GET /report/customer-balance-summary
   query: organization_id* (required)
@@ -229,7 +230,8 @@ GET /report/sales-by-project
 
 GET /report/invoice-details
   query: organization_id* (required), start_date, end_date
-  → Detailed invoice listing report
+  → Per-invoice overdue detail: invoice number, customer, due date, days overdue, outstanding amount
+  USE FOR: "overdue invoices", "which invoices are overdue", "list overdue invoices", "invoice-level aging", "aged receivables detail"
 
 ### EXPENSE REPORTS
 GET /report/expense-by-category

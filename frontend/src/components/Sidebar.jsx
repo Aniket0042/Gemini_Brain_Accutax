@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Sparkles, Plus, ArrowLeft, Trash2, ChevronDown } from 'lucide-react';
+import { Sparkles, Plus, ArrowLeft, Trash2, ChevronDown, MoreVertical, Pin, PinOff, Pencil } from 'lucide-react';
 
 /**
  * Groups chat history entries into time-based sections (Today, Yesterday, This Week, Earlier).
@@ -12,9 +12,14 @@ function groupByTime(entries) {
   const weekStart = new Date(todayStart);
   weekStart.setDate(weekStart.getDate() - 7);
 
+  const pinned = [];
   const groups = { TODAY: [], YESTERDAY: [], 'THIS WEEK': [], EARLIER: [] };
 
   for (const entry of entries) {
+    if (entry.isPinned) {
+      pinned.push(entry);
+      continue;
+    }
     const ts = new Date(entry.timestamp);
     if (ts >= todayStart) {
       groups.TODAY.push(entry);
@@ -27,10 +32,18 @@ function groupByTime(entries) {
     }
   }
 
-  // Return only non-empty groups
-  return Object.entries(groups)
-    .filter(([, items]) => items.length > 0)
-    .map(([section, items]) => ({ section, items }));
+  const result = [];
+  if (pinned.length > 0) {
+    result.push({ section: 'PINNED', items: pinned });
+  }
+
+  for (const [section, items] of Object.entries(groups)) {
+    if (items.length > 0) {
+      result.push({ section, items });
+    }
+  }
+
+  return result;
 }
 
 export const Sidebar = ({
@@ -38,11 +51,17 @@ export const Sidebar = ({
   chatHistory = [],
   activeHistoryId = null,
   onSelectHistory,
-  onDeleteHistory
+  onDeleteHistory,
+  onRenameHistory,
+  onPinHistory,
 }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [menuOpenSessionId, setMenuOpenSessionId] = useState(null);
+  const [editingSessionId, setEditingSessionId] = useState(null);
+  const [editingTitle, setEditingTitle] = useState('');
   const dropdownRef = useRef(null);
+  const menuRef = useRef(null);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -53,6 +72,43 @@ export const Sidebar = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    function handleMenuClickOutside(event) {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setMenuOpenSessionId(null);
+      }
+    }
+    if (menuOpenSessionId) {
+      document.addEventListener('mousedown', handleMenuClickOutside);
+      return () => document.removeEventListener('mousedown', handleMenuClickOutside);
+    }
+  }, [menuOpenSessionId]);
+
+  const handleStartRename = (item) => {
+    setEditingSessionId(item.id);
+    setEditingTitle(item.title);
+    setMenuOpenSessionId(null);
+  };
+
+  const handleSaveRename = (id) => {
+    if (editingTitle && editingTitle.trim() && onRenameHistory) {
+      onRenameHistory(id, editingTitle.trim());
+    }
+    setEditingSessionId(null);
+  };
+
+  const handleTogglePin = (item) => {
+    if (onPinHistory) {
+      onPinHistory(item.id);
+    }
+    setMenuOpenSessionId(null);
+  };
+
+  const handleDeleteClick = (item) => {
+    setPendingDelete(item);
+    setMenuOpenSessionId(null);
+  };
 
   const groupedHistory = useMemo(() => groupByTime(chatHistory), [chatHistory]);
 
@@ -138,34 +194,104 @@ export const Sidebar = ({
           groupedHistory.map((group) => (
             <div key={group.section} style={styles.historyGroup}>
               <h3 style={styles.groupTitle}>{group.section}</h3>
-              {group.items.map((item) => (
-                <div
-                  key={item.id}
-                  className="history-item"
-                  style={styles.historyItem}
-                  onClick={() => onSelectHistory && onSelectHistory(item.id)}
-                >
-                  <span
-                    style={{
-                      ...styles.historyTitle,
-                      ...(item.id === activeHistoryId ? styles.historyTitleActive : {}),
+              {group.items.map((item) => {
+                const isEditing = editingSessionId === item.id;
+                const isMenuOpen = menuOpenSessionId === item.id;
+                const isActive = item.id === activeHistoryId;
+
+                return (
+                  <div
+                    key={item.id}
+                    className={`history-item ${isActive ? 'active' : ''} ${isMenuOpen ? 'menu-open' : ''}`}
+                    style={styles.historyItem}
+                    onClick={() => {
+                      if (!isEditing && onSelectHistory) {
+                        onSelectHistory(item.id);
+                      }
                     }}
                   >
-                    {item.title}
-                  </span>
-                  <button
-                    className="history-delete-btn"
-                    style={styles.historyDeleteBtn}
-                    title="Delete session"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPendingDelete(item);
-                    }}
-                  >
-                    <Trash2 size={16} strokeWidth={2} />
-                  </button>
-                </div>
-              ))}
+                    {item.isPinned && (
+                      <Pin size={12} style={styles.pinnedIndicator} />
+                    )}
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        className="history-rename-input"
+                        value={editingTitle}
+                        autoFocus
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => setEditingTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleSaveRename(item.id);
+                          } else if (e.key === 'Escape') {
+                            setEditingSessionId(null);
+                          }
+                        }}
+                        onBlur={() => handleSaveRename(item.id)}
+                      />
+                    ) : (
+                      <span
+                        className="history-title"
+                        style={{
+                          ...styles.historyTitle,
+                          ...(isActive ? styles.historyTitleActive : {}),
+                        }}
+                        title={item.title}
+                      >
+                        {item.title}
+                      </span>
+                    )}
+
+                    {/* Three dots menu button & dropdown */}
+                    {!isEditing && (
+                      <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+                        <button
+                          className={`history-menu-btn ${isMenuOpen ? 'active' : ''}`}
+                          title="Options"
+                          aria-label="Session options"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMenuOpenSessionId((prev) => (prev === item.id ? null : item.id));
+                          }}
+                        >
+                          <MoreVertical size={16} strokeWidth={2} />
+                        </button>
+
+                        {isMenuOpen && (
+                          <div ref={menuRef} className="session-context-menu">
+                            <button
+                              type="button"
+                              className="context-menu-item"
+                              onClick={() => handleTogglePin(item)}
+                            >
+                              {item.isPinned ? <PinOff size={15} /> : <Pin size={15} />}
+                              <span>{item.isPinned ? 'Unpin' : 'Pin'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="context-menu-item"
+                              onClick={() => handleStartRename(item)}
+                            >
+                              <Pencil size={15} />
+                              <span>Rename</span>
+                            </button>
+                            <div style={styles.menuDivider} />
+                            <button
+                              type="button"
+                              className="context-menu-item danger"
+                              onClick={() => handleDeleteClick(item)}
+                            >
+                              <Trash2 size={15} />
+                              <span>Delete</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ))
         )}
@@ -409,20 +535,30 @@ const styles = {
     letterSpacing: '0.04em',
     textTransform: 'uppercase',
   },
-  // One line, no icon, no preview — no fill on the row in either theme.
+  // Rounded rectangle row, matching modern chat apps (ChatGPT/Gemini).
   historyItem: {
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
+    gap: '8px',
     cursor: 'pointer',
-    padding: '7px 8px',
-    minHeight: '32px',
+    padding: '7px 10px',
+    minHeight: '34px',
     boxSizing: 'border-box',
-    backgroundColor: 'transparent',
+    borderRadius: 'var(--radius-sm, 8px)',
+  },
+  pinnedIndicator: {
+    color: 'var(--ink-soft)',
+    transform: 'rotate(45deg)',
+    flexShrink: 0,
+  },
+  menuDivider: {
+    height: '1px',
+    backgroundColor: 'var(--border)',
+    margin: '4px 0',
   },
   historyTitleActive: {
     color: 'var(--ink)',
-    fontWeight: 400,
+    fontWeight: 500,
   },
   historyDeleteBtn: {
     background: 'none',

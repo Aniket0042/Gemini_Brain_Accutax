@@ -832,9 +832,18 @@ def render_table_block(data: Any, max_rows: int = 50) -> Dict[str, Any]:
             "align": "right" if _is_money_key(k) or _is_days_key(k) else "left",
         })
 
+    # Row primary key, e.g. "id"/"invoice_id" — dropped from `selected_keys`
+    # (see `_row_column_keys`) since it's not useful to display, but a client
+    # needs it to link a row (e.g. "invoice_number") back to that record's
+    # detail page. Carried as a hidden field, not a column.
+    id_key = next((k for k in first if _is_id_key(k) and _looks_numeric(first.get(k))), None)
+
     rows = []
     for row in data[:max_rows]:
-        rows.append({k: _format_cell_value(k, row.get(k)) for k in selected_keys})
+        out = {k: _format_cell_value(k, row.get(k)) for k in selected_keys}
+        if id_key is not None and row.get(id_key) is not None:
+            out["_row_id"] = row[id_key]
+        rows.append(out)
 
     return {
         "type": "table",

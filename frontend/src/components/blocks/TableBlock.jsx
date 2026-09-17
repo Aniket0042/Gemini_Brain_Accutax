@@ -1,6 +1,25 @@
 import React, { useMemo, useState } from 'react';
 import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 
+//: Columns whose value links to that row's own detail page on the main
+// dashboard, when the row carries a `_row_id` (see backend render_table_block).
+// Add an entry here whenever a new report exposes a linkable record — the
+// row's numeric id must already survive to `_row_id` (it does automatically
+// for any row shaped with a bare `id` column; a raw-SQL/mapped response that
+// renames or drops it needs its own backend fix, same as the invoice one).
+const _RECORD_LINK_ROUTES = {
+  invoice_number: (id) => `/income/details/${id}`,
+  invoiceNumber: (id) => `/income/details/${id}`,
+  journal_number: (id) => `/journal-entries/${id}`,
+  journalNumber: (id) => `/journal-entries/${id}`,
+  receipt_number: (id) => `/expenses/edit-expense/${id}`,
+  receiptNumber: (id) => `/expenses/edit-expense/${id}`,
+};
+
+function _dashboardUrl() {
+  return (import.meta.env.VITE_ACCUTAX_APP_URL || 'http://localhost:5173').replace(/\/$/, '');
+}
+
 /**
  * Strips formatting ("AED 1,234.50" -> 1234.5, "42%" -> 42) so a column of
  * formatted currency/percentage strings still sorts numerically instead of
@@ -95,18 +114,33 @@ export function TableBlock({ block }) {
               const isLast = i === sortedRows.length - 1;
               return (
                 <tr key={i}>
-                  {columns.map((col) => (
-                    <td
-                      key={col.key}
-                      style={{
-                        ...styles.td,
-                        textAlign: col.align || 'left',
-                        ...(isLast ? { borderBottom: 'none' } : {}),
-                      }}
-                    >
-                      {row[col.key]}
-                    </td>
-                  ))}
+                  {columns.map((col) => {
+                    const routeFor = _RECORD_LINK_ROUTES[col.key];
+                    const isRecordLink = routeFor && row._row_id != null;
+                    return (
+                      <td
+                        key={col.key}
+                        style={{
+                          ...styles.td,
+                          textAlign: col.align || 'left',
+                          ...(isLast ? { borderBottom: 'none' } : {}),
+                        }}
+                      >
+                        {isRecordLink ? (
+                          <a
+                            href={`${_dashboardUrl()}${routeFor(row._row_id)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={styles.invoiceLink}
+                          >
+                            {row[col.key]}
+                          </a>
+                        ) : (
+                          row[col.key]
+                        )}
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}
@@ -176,6 +210,10 @@ const styles = {
     borderBottom: '1px solid var(--border-soft)',
     color: 'var(--ink-soft)',
     whiteSpace: 'nowrap',
+  },
+  invoiceLink: {
+    color: 'var(--accent)',
+    textDecoration: 'none',
   },
   empty: {
     fontSize: 'var(--text-sm)',

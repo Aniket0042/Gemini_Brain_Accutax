@@ -139,6 +139,10 @@ def execute_sql_function(
     list[dict[str, Any]]
         List of row dictionaries.
     """
+    from gemini_brain.observability.sql_tracer import record_sql_trace
+    import time
+
+    t0 = time.perf_counter()
     conn = get_connection(db_name=db_name)
     try:
         conn.autocommit = False
@@ -154,13 +158,16 @@ def execute_sql_function(
 
             if cur.description is None:
                 conn.commit()
+                record_sql_trace(query, duration_ms=(time.perf_counter() - t0) * 1000, row_count=0, source="sql_function")
                 return []
 
             cols = [desc[0] for desc in cur.description]
             rows = cur.fetchall()
             conn.commit()
 
-            return [dict(zip(cols, row)) for row in rows]
+            serialized = [dict(zip(cols, row)) for row in rows]
+            record_sql_trace(query, duration_ms=(time.perf_counter() - t0) * 1000, row_count=len(serialized), source="sql_function")
+            return serialized
     except Exception as e:
         conn.rollback()
         logger.error("Error executing SQL function %s with org_id=%s: %s", func_name, org_id, e)
