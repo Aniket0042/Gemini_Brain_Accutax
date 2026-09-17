@@ -200,14 +200,25 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=status_code, content=envelope)
 
     # ── CORS Middleware Configuration ──────────────────────────────
-    origins = settings.cors_origins or ["http://localhost:3000", "http://localhost:5173"]
+    configured_origins = list(settings.cors_origins) if settings.cors_origins else []
+    default_allowed = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+        "https://accutaxai.netlify.app",
+        "https://accutax-bk-testing.netlify.app",
+    ]
+    origins = list(dict.fromkeys(configured_origins + default_allowed))
     logger.info("Configuring CORS with origins: %s", origins)
 
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
+        allow_origin_regex=r"^https://.*\.netlify\.app$",
         allow_credentials=True,
-        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_methods=["*"],
         allow_headers=["*"],
     )
 

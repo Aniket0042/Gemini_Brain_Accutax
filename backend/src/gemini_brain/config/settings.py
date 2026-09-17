@@ -115,7 +115,15 @@ class GeminiBrainSettings(BaseSettings):
     api_host: str = Field(default="0.0.0.0", description="API server host.")
     api_port: int = Field(default=8000, description="API server port.")
     cors_origins: Annotated[list[str], NoDecode] = Field(
-        default=["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000", "http://127.0.0.1:5173"],
+        default=[
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://localhost:5174",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:5173",
+            "https://accutaxai.netlify.app",
+            "https://accutax-bk-testing.netlify.app",
+        ],
         description="Allowed CORS origins for API requests.",
     )
 
