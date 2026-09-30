@@ -120,5 +120,17 @@ def test_line_graph_hint():
 
 def test_donut_chart_hint():
     d = detect_delivery("donut chart of expenses")
-    assert d.chart_hint == "pie"
+    assert d.chart_hint == "donut"
+
+
+def test_send_as_markdown():
+    d = detect_delivery("send this as markdown")
+    assert d.mode == "file"
+    assert d.format == "md"
+
+
+def test_export_dot_md():
+    d = detect_delivery("export the P&L as .md")
+    assert d.mode == "file"
+    assert d.format == "md"
 

@@ -12,7 +12,7 @@ direction the same way, and gets it right by construction.
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Pattern, Tuple
+from typing import Any, Dict, List, Optional, Pattern, Tuple
 
 #: Words that mean "lowest/fewest first" when found in the user's own phrasing.
 ASCENDING_HINTS: Pattern = re.compile(
@@ -67,11 +67,34 @@ def resolve_limit_and_direction(
     return resolve_limit(params, default, ceiling), resolve_direction(params, raw_query)
 
 
-#: Matches an explicit count in free-form query text: "top 5", "bottom 10",
-#: "first 3", "5 largest", etc. First capture group is always the count.
-_EXPLICIT_COUNT: Pattern = re.compile(
-    r"\b(?:top|bottom|first|last)\s+(\d+)\b|\b(\d+)\s+(?:largest|smallest|highest|lowest|biggest|top|most|least)\b",
-    re.IGNORECASE,
+#: A number followed by one of these is a time window ("last 30 days"), not a
+#: row count.
+_NOT_A_COUNT = r"(?!\s*(?:days?|weeks?|months?|years?|quarters?|hours?)\b)"
+
+#: Record nouns a bare count can attach to: "5 customers", "list 5 vendors",
+#: "10 overdue invoices" (up to two words in between).
+_RECORD_NOUNS = (
+    r"customers?|clients?|debtors?|vendors?|suppliers?|creditors?|items?|products?|"
+    r"invoices?|bills?|expenses?|payments?|receipts?|transactions?|entries|accounts?|"
+    r"categories|employees?|contacts?|records?|rows?|results?"
+)
+
+#: Matches an explicit count in free-form query text: "top 5", "least 5",
+#: "5 largest", "5 customers", "list 5 vendors", "give me 5". Every
+#: alternative has exactly one capture group — the count.
+_EXPLICIT_COUNT_PATTERNS: Tuple[Pattern, ...] = (
+    re.compile(
+        r"\b(?:top|bottom|first|last|least|lowest|highest|largest|smallest|biggest|best|worst)\s+(\d{1,3})\b"
+        + _NOT_A_COUNT,
+        re.IGNORECASE,
+    ),
+    re.compile(r"\b(\d{1,3})\s+(?:largest|smallest|highest|lowest|biggest|top|most|least)\b", re.IGNORECASE),
+    re.compile(r"\b(\d{1,3})\s+(?:[a-z]+\s+){0,2}?(?:" + _RECORD_NOUNS + r")\b", re.IGNORECASE),
+    re.compile(
+        r"\b(?:show|display|give|list|get|fetch)\s+(?:me\s+)?(?:(?:the|our|my)\s+)?(?:list\s+)?(?:of\s+)?(\d{1,3})\b"
+        + _NOT_A_COUNT,
+        re.IGNORECASE,
+    ),
 )
 
 #: Phrasing that asks for a single entity ("the largest debtor", "who is our
@@ -100,16 +123,43 @@ def extract_requested_count(query: str, default: int = 20, ceiling: int = 50) ->
     """
     if not isinstance(query, str) or not query:
         return default
-    m = _EXPLICIT_COUNT.search(query)
-    if m:
-        raw = m.group(1) or m.group(2)
-        try:
-            return max(1, min(int(raw), ceiling))
-        except (TypeError, ValueError):
-            return default
+    explicit = extract_explicit_count(query)
+    if explicit is not None:
+        return max(1, min(explicit, ceiling))
     if _SINGULAR_ASK.search(query):
         return 1
     return default
+
+
+def extract_explicit_count(query: Any) -> Optional[int]:
+    """The number the user literally asked for ("top 5", "5 customers"), or
+    None when the query names no count."""
+    if not isinstance(query, str) or not query:
+        return None
+    for p in _EXPLICIT_COUNT_PATTERNS:
+        m = p.search(query)
+        if m:
+            value = int(m.group(1))
+            if value >= 1:
+                return value
+    return None
+
+
+#: Phrasing that asks for rows in date order ("last 5 invoices", "most recent
+#: 3 bills") — ranking those by amount would return the wrong rows.
+_RECENCY_ASK: Pattern = re.compile(
+    r"\b(last|latest|recent|newest|oldest|first|earliest)\b", re.IGNORECASE
+)
+
+
+def wants_amount_ranking(query: Any) -> bool:
+    """True when a "N rows" ask should pick the N rows by amount, not by the
+    API's own order. Recency phrasing ("last 5 invoices") keeps API order."""
+    if not isinstance(query, str) or not query:
+        return False
+    if extract_explicit_count(query) is None and not _SINGULAR_ASK.search(query):
+        return False
+    return not _RECENCY_ASK.search(query)
 
 
 def order_sql(ascending: bool) -> str:

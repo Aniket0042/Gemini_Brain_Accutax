@@ -4,24 +4,26 @@ routes.py — FastAPI route definitions for Gemini Brain.
 from __future__ import annotations
 
 import json
+from collections import Counter
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Generator, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
 from gemini_brain.api.auth import (
-    ORGANIZATION_DIRECTORY,
     CurrentUser,
     authenticate_with_accutax_api,
+    authorize_org_scope,
     create_access_token,
     fetch_accutax_accessible_orgs,
     fetch_organizations_from_db,
     get_current_user,
     get_user_allowed_orgs,
     get_user_by_email,
+    placeholder_tenants,
     verify_password,
 )
 from gemini_brain.api.models import (
@@ -45,8 +47,11 @@ from gemini_brain.api.models import (
     ChatMessageListResponse,
 )
 from gemini_brain.api_client.accutax_client import active_auth_token
+from gemini_brain.config.settings import settings
 from gemini_brain.health.model_health_checker import check_all_models_and_services
 from gemini_brain.orchestrator.gemini_brain_runner import GeminiBrainRunner
+from gemini_brain.orchestrator.multi_org import run_multi_org, run_multi_org_stream
+from gemini_brain.orchestrator.multi_org_plan import plan_query
 from gemini_brain.policy import choose_policy, list_models
 from gemini_brain.policy.effort import DEFAULT_EFFORT, EFFORT_ORDER, EFFORT_TIERS
 from gemini_brain.resilience import (
@@ -66,11 +71,7 @@ router = APIRouter(prefix="/api/v1", tags=["Gemini Brain AI Engine"])
 def _resolve_tenants_for_org_ids(org_ids: list[int]) -> list[dict[str, Any]]:
     if not org_ids:
         return []
-    db_tenants = fetch_organizations_from_db(org_ids)
-    if db_tenants:
-        return db_tenants
-    allowed_set = {int(o) for o in org_ids}
-    return [t for t in ORGANIZATION_DIRECTORY if t["id"] in allowed_set]
+    return fetch_organizations_from_db(org_ids) or placeholder_tenants(org_ids)
 
 
 # ── Authentication Endpoints ──────────────────────────────────────────────────
@@ -242,27 +243,125 @@ def list_model_catalog(
 )
 def list_tenants(current_user: CurrentUser = Depends(get_current_user)) -> TenantListResponse:
     """List organizations this user owns or can access as a collaborator."""
-    live = fetch_accutax_accessible_orgs(current_user.raw_token, current_user.user_id)
+    # The dropdown must never offer an org the query path would refuse, so the
+    # Accutax list is filtered to the same allow-list get_current_user resolved.
+    allowed = [int(o) for o in (current_user.allowed_org_ids or [])]
+    allowed_set = set(allowed)
+    live = [
+        t
+        for t in fetch_accutax_accessible_orgs(current_user.accutax_token, current_user.user_id)
+        if int(t["id"]) in allowed_set
+    ]
     if not live:
-        allowed = [int(o) for o in (current_user.allowed_org_ids or [])]
         live = _resolve_tenants_for_org_ids(allowed)
 
     return TenantListResponse(
         user_id=current_user.user_id,
         email=current_user.email,
         tenants=[TenantInfo(**t) for t in live],
+        multi_org_enabled=settings.multi_org_enabled,
+        max_orgs_per_query=settings.max_orgs_per_query if settings.multi_org_enabled else 1,
     )
 
 
-def _assert_org_allowed(organization_id: Optional[int], current_user: CurrentUser) -> None:
-    if organization_id is None:
-        return
-    allowed = current_user.allowed_org_ids or []
-    if allowed and int(organization_id) not in {int(o) for o in allowed}:
+def _query_orgs(payload: QueryRequest, current_user: CurrentUser, *, action: str) -> list[int]:
+    """Authorize every organization a query names and return them.
+
+    [] means the request named no organization; the runner then uses the
+    caller's first allowed one.
+    """
+    orgs = authorize_org_scope(payload.requested_org_ids(), current_user, action=action)
+    orgs = _match_session_scope(payload.session_id, orgs, current_user, action=action)
+    _require_multi_org_enabled(orgs)
+    return orgs
+
+
+def _require_multi_org_enabled(orgs: list[int]) -> None:
+    if len(orgs) > 1 and not settings.multi_org_enabled:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Organization is not in the caller's allowed tenant list.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Querying several organizations together is not enabled.",
         )
+
+
+def _match_session_scope(
+    session_id: Optional[str],
+    orgs: list[int],
+    current_user: CurrentUser,
+    *,
+    action: str,
+) -> list[int]:
+    """Hold a query to the organizations of the thread it continues.
+
+    A thread's memory holds data from its organizations, and the runner loads
+    that memory into the prompt. So the thread's organizations must all still
+    be allowed, and the query must name exactly them. A query that names none
+    continues the thread's own. A new selection needs a new thread.
+    """
+    from gemini_brain.memory.session_memory import get_session_record, is_valid_uuid, session_scope
+
+    if not session_id or not is_valid_uuid(session_id):
+        return orgs
+    rec = get_session_record(session_id)
+    if not rec:
+        return orgs
+    if int(rec["user_id"]) != int(current_user.user_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Session does not belong to this user.")
+    scope = authorize_org_scope(session_scope(rec), current_user, action=f"{action}.session")
+    if not scope:
+        return orgs
+    if not orgs:
+        return scope
+    if sorted(orgs) != scope:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This chat belongs to a different organization selection. Start a new chat to change it.",
+        )
+    return orgs
+
+
+def _org_meta(current_user: CurrentUser, orgs: list[int]) -> dict[int, dict[str, Any]]:
+    """Display name and currency for each authorized org, for labelling a comparison."""
+    known = {
+        int(t["id"]): t
+        for t in fetch_accutax_accessible_orgs(current_user.accutax_token, current_user.user_id)
+    }
+    # Names from every org the user can reach, not only the selected ones, so
+    # a name shared with an unselected org is still told apart.
+    missing = [o for o in {*orgs, *(current_user.allowed_org_ids or [])} if o not in known]
+    if missing:
+        known.update({int(t["id"]): t for t in fetch_organizations_from_db(missing)})
+
+    def base_name(oid: int) -> str:
+        return (known.get(oid) or {}).get("name") or f"Organization {oid}"
+
+    name_counts = Counter(base_name(oid) for oid in known)
+    # An unknown currency stays empty, so the comparison never labels an
+    # amount with a currency it does not have. A name two orgs share gets the
+    # org ID, so chips, headings and the comparison never mix them up.
+    return {
+        o: {"name": base_name(o) + (f" (ID {o})" if name_counts[base_name(o)] > 1 else ""),
+            "currency": (known.get(o) or {}).get("currency") or ""}
+        for o in orgs
+    }
+
+
+def _multi_org_run_kwargs(payload: QueryRequest, current_user: CurrentUser) -> dict[str, Any]:
+    """Per-org runner.run arguments; organization_id and session_id are set per org."""
+    return {
+        "db_name": payload.db_name,
+        "use_api": payload.use_api,
+        "user_id": current_user.user_id,
+        "selected_model_key": payload.selected_model_key,
+        "allowed_org_ids": current_user.allowed_org_ids,
+        "auth_token": current_user.raw_token,
+        "model": payload.model,
+        "effort": payload.effort,
+        "ui_context": payload.ui_context.model_dump() if payload.ui_context else None,
+        "brief": bool(payload.brief),
+        # Used once for the whole org set; each per-org run gets none.
+        "session_id": payload.session_id,
+    }
 
 
 @router.get(
@@ -273,12 +372,22 @@ def _assert_org_allowed(organization_id: Optional[int], current_user: CurrentUse
 )
 def list_chat_sessions(
     organization_id: Optional[int] = None,
+    organization_ids: Optional[list[int]] = Query(default=None),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> ChatSessionListResponse:
+    """organization_ids lists threads for exactly that selection; organization_id
+    lists single-org threads. Threads from organizations the user can no longer
+    access are never listed."""
     from gemini_brain.memory.session_memory import list_sessions_for_user_org
 
-    _assert_org_allowed(organization_id, current_user)
-    rows = list_sessions_for_user_org(current_user.user_id, organization_id)
+    requested = organization_ids if organization_ids else [organization_id]
+    authorize_org_scope(requested, current_user, action="sessions.list")
+    rows = list_sessions_for_user_org(
+        current_user.user_id,
+        organization_id,
+        organization_ids=organization_ids or None,
+        allowed_org_ids=current_user.allowed_org_ids,
+    )
     return ChatSessionListResponse(sessions=[ChatSessionSchema(**r) for r in rows])
 
 
@@ -296,16 +405,18 @@ def create_chat_session(
     import uuid as uuid_lib
     from gemini_brain.memory.session_memory import ensure_session, get_session_record, is_valid_uuid
 
-    _assert_org_allowed(payload.organization_id, current_user)
+    orgs = authorize_org_scope(payload.requested_org_ids(), current_user, action="sessions.create")
+    _require_multi_org_enabled(orgs)
     session_id = payload.session_id if payload.session_id and is_valid_uuid(payload.session_id) else str(uuid_lib.uuid4())
-    ok = ensure_session(session_id, current_user.user_id, payload.organization_id)
+    ok = ensure_session(session_id, current_user.user_id, organization_ids=orgs or None)
     if not ok:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not create session.")
     rec = get_session_record(session_id) or {}
     return ChatSessionSchema(
         id=session_id,
         user_id=current_user.user_id,
-        organization_id=payload.organization_id if payload.organization_id is not None else rec.get("organization_id"),
+        organization_id=orgs[0] if len(orgs) == 1 else rec.get("organization_id"),
+        organization_ids=rec.get("organization_ids") or sorted(orgs),
         name=rec.get("name") or "New Chat",
         created_at=rec.get("created_at"),
         updated_at=rec.get("updated_at"),
@@ -328,6 +439,7 @@ def get_chat_session_messages(
         get_transcript_by_session,
         verify_session_ownership,
         get_session_record,
+        session_scope,
     )
 
     rec = get_session_record(session_id)
@@ -335,7 +447,7 @@ def get_chat_session_messages(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
     if not verify_session_ownership(session_id, current_user.user_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Session does not belong to this user.")
-    _assert_org_allowed(rec.get("organization_id"), current_user)
+    authorize_org_scope(session_scope(rec), current_user, action="sessions.read")
     messages = get_transcript_by_session(session_id, limit=min(max(limit, 1), 200))
     return ChatMessageListResponse(
         session_id=session_id,
@@ -368,11 +480,11 @@ def delete_chat_session(
     session_id: str,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> Response:
-    from gemini_brain.memory.session_memory import delete_session, get_session_record
+    from gemini_brain.memory.session_memory import delete_session, get_session_record, session_scope
 
     rec = get_session_record(session_id)
-    if rec:
-        _assert_org_allowed(rec.get("organization_id"), current_user)
+    if rec and int(rec["user_id"]) == int(current_user.user_id):
+        authorize_org_scope(session_scope(rec), current_user, action="sessions.delete")
     if not delete_session(session_id, current_user.user_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -387,22 +499,79 @@ def download_artifact(
     artifact_id: str,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> FileResponse:
-    from gemini_brain.artifacts.store import get as get_artifact, was_expired
+    from gemini_brain.artifacts.store import get as get_artifact, get_spec, record_event, was_expired
 
     rec = get_artifact(artifact_id)
     if rec is None:
         if was_expired(artifact_id):
-            raise HTTPException(status_code=status.HTTP_410_GONE, detail="This file expired. Ask again to regenerate it.")
+            can_regenerate = get_spec(artifact_id) is not None
+            raise HTTPException(
+                status_code=status.HTTP_410_GONE,
+                detail={
+                    "message": "This file expired." + (" It can be regenerated." if can_regenerate
+                                                       else " Ask again to regenerate it."),
+                    "regenerate": can_regenerate,
+                },
+            )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact not found.")
-    if int(rec.user_id) != int(current_user.user_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This file does not belong to this user.")
-    _assert_org_allowed(rec.organization_id, current_user)
+    _authorize_artifact(rec, current_user, action="download")
+    record_event(rec.id, "downloaded", user_id=current_user.user_id, organization_id=rec.organization_id)
     return FileResponse(
         rec.path,
         media_type=rec.mime,
         filename=rec.filename,
         content_disposition_type="attachment",
     )
+
+
+def _authorize_artifact(rec: Any, current_user: CurrentUser, *, action: str) -> None:
+    """Owner and organization check; every refusal is written to the audit log."""
+    from gemini_brain.artifacts.store import record_event
+
+    if int(rec.user_id) != int(current_user.user_id):
+        record_event(rec.id, "denied", user_id=current_user.user_id, organization_id=rec.organization_id,
+                     detail={"action": action, "reason": "not_owner"})
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This file does not belong to this user.")
+    try:
+        authorize_org_scope([rec.organization_id], current_user, action=f"artifacts.{action}")
+    except HTTPException:
+        record_event(rec.id, "denied", user_id=current_user.user_id, organization_id=rec.organization_id,
+                     detail={"action": action, "reason": "organization"})
+        raise
+
+
+@router.post(
+    "/artifacts/{artifact_id}/regenerate",
+    tags=["Artifacts"],
+    summary="Rebuild an expired file from the report it was generated from",
+)
+def regenerate_artifact(
+    artifact_id: str,
+    format: Optional[str] = None,  # noqa: A002 - query parameter name
+    current_user: CurrentUser = Depends(get_current_user),
+) -> JSONResponse:
+    """Renders the stored, already-validated report spec again — no new data
+    retrieval, so the regenerated file shows exactly the figures of the
+    original. Owner and organization are checked as for a download."""
+    from gemini_brain.artifacts.generate import RENDERERS, generate_and_store
+    from gemini_brain.artifacts.store import get_spec
+
+    found = get_spec(artifact_id)
+    if found is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="This report is no longer kept. Ask again to rebuild it.")
+    rec, spec = found
+    _authorize_artifact(rec, current_user, action="regenerate")
+    fmt = (format or rec.fmt or "").lower()
+    if fmt not in RENDERERS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown format {fmt!r}.")
+    block = generate_and_store(
+        spec, fmt, user_id=rec.user_id, organization_id=rec.organization_id,
+        session_id=rec.session_id, regenerated_from=rec.id,
+    )
+    if block is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="The file could not be rebuilt.")
+    return JSONResponse(block)
 
 
 # ── Health & Diagnostic Endpoints ─────────────────────────────────────────────
@@ -460,6 +629,8 @@ async def run_query(
 ) -> QueryResponse:
     """Execute a synchronous financial query through Gemini Brain with tenant isolation enforcement."""
     import asyncio
+    orgs = _query_orgs(payload, current_user, action="query")
+    organization_id = orgs[0] if orgs else None
     # Set request-scoped bearer token for any downstream Accutax REST calls
     token_reset = active_auth_token.set(current_user.raw_token)
     try:
@@ -467,32 +638,52 @@ async def run_query(
         
         def _run():
             from gemini_brain.observability.sql_tracer import start_sql_trace, get_sql_traces, clear_sql_trace
+            from gemini_brain.observability.api_tracer import start_api_trace, get_api_traces, clear_api_trace
+            from gemini_brain.observability.llm_tracer import start_llm_trace, get_llm_traces, clear_llm_trace
             rid = new_request_id()
             start_sql_trace(trace_id=rid)
+            start_api_trace(trace_id=rid)
+            start_llm_trace(trace_id=rid)
             try:
-                res = runner.run(
-                    query=payload.query,
-                    organization_id=payload.organization_id,
-                    db_name=payload.db_name,
-                    use_api=payload.use_api,
-                    user_id=current_user.user_id,
-                    session_id=payload.session_id,
-                    selected_model_key=payload.selected_model_key,
-                    allowed_org_ids=current_user.allowed_org_ids,
-                    auth_token=current_user.raw_token,
-                    model=payload.model,
-                    effort=payload.effort,
-                    ui_context=payload.ui_context.model_dump() if payload.ui_context else None,
-                    brief=bool(payload.brief),
-                )
+                if len(orgs) > 1:
+                    res = run_multi_org(
+                        payload.query, orgs, _org_meta(current_user, orgs),
+                        runner_factory=GeminiBrainRunner,
+                        run_kwargs=_multi_org_run_kwargs(payload, current_user),
+                        planner=plan_query,
+                    )
+                else:
+                    res = runner.run(
+                        query=payload.query,
+                        organization_id=organization_id,
+                        db_name=payload.db_name,
+                        use_api=payload.use_api,
+                        user_id=current_user.user_id,
+                        session_id=payload.session_id,
+                        selected_model_key=payload.selected_model_key,
+                        allowed_org_ids=current_user.allowed_org_ids,
+                        auth_token=current_user.raw_token,
+                        model=payload.model,
+                        effort=payload.effort,
+                        ui_context=payload.ui_context.model_dump() if payload.ui_context else None,
+                        brief=bool(payload.brief),
+                    )
                 traces = get_sql_traces(trace_id=rid)
                 if traces and isinstance(res, dict):
                     res["sql_traces"] = traces
                     if not res.get("sql"):
                         res["sql"] = traces[0]["sql"]
+                api_traces = get_api_traces(trace_id=rid)
+                if api_traces and isinstance(res, dict):
+                    res["api_traces"] = api_traces
+                llm_traces = get_llm_traces(trace_id=rid)
+                if llm_traces and isinstance(res, dict):
+                    res["llm_traces"] = llm_traces
                 return res
             finally:
                 clear_sql_trace(trace_id=rid)
+                clear_api_trace(trace_id=rid)
+                clear_llm_trace(trace_id=rid)
             
         result = await asyncio.to_thread(_run)
         return QueryResponse(**normalize_envelope(result))
@@ -539,6 +730,14 @@ async def run_query_all_models(
 ) -> MultiModelQueryResponse:
     """Fan the same query out to every available model and collect every answer."""
     import asyncio
+    orgs = _query_orgs(payload, current_user, action="query.all_models")
+    if len(orgs) > 1:
+        # Models x organizations multiplies cost; this dev route stays single-org.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Model comparison runs against one organization at a time.",
+        )
+    organization_id = orgs[0] if orgs else None
     available_keys = [m["key"] for m in list_models() if m["available"]]
     auth_token = current_user.raw_token
 
@@ -551,7 +750,7 @@ async def run_query_all_models(
             runner = GeminiBrainRunner()
             result = runner.run(
                 query=payload.query,
-                organization_id=payload.organization_id,
+                organization_id=organization_id,
                 db_name=payload.db_name,
                 use_api=payload.use_api,
                 user_id=current_user.user_id,
@@ -608,35 +807,57 @@ def stream_query(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> StreamingResponse:
     """Stream query execution status chunks via Server-Sent Events (SSE)."""
+    # Checked before the stream opens, so a refused org is a plain 403 and no
+    # event is ever emitted for it.
+    orgs = _query_orgs(payload, current_user, action="query.stream")
+    organization_id = orgs[0] if orgs else None
 
     def event_generator() -> Generator[str, None, None]:
         from gemini_brain.observability.sql_tracer import start_sql_trace, get_sql_traces, clear_sql_trace
+        from gemini_brain.observability.api_tracer import start_api_trace, get_api_traces, clear_api_trace
+        from gemini_brain.observability.llm_tracer import start_llm_trace, get_llm_traces, clear_llm_trace
         rid = new_request_id()
         token_reset = active_auth_token.set(current_user.raw_token)
         start_sql_trace(trace_id=rid)
+        start_api_trace(trace_id=rid)
+        start_llm_trace(trace_id=rid)
         try:
-            runner = GeminiBrainRunner()
-            for chunk in runner.run_stream(
-                query=payload.query,
-                organization_id=payload.organization_id,
-                db_name=payload.db_name,
-                use_api=payload.use_api,
-                user_id=current_user.user_id,
-                session_id=payload.session_id,
-                selected_model_key=payload.selected_model_key,
-                allowed_org_ids=current_user.allowed_org_ids,
-                auth_token=current_user.raw_token,
-                model=payload.model,
-                effort=payload.effort,
-                ui_context=payload.ui_context.model_dump() if payload.ui_context else None,
-                brief=bool(payload.brief),
-            ):
+            if len(orgs) > 1:
+                chunks = run_multi_org_stream(
+                    payload.query, orgs, _org_meta(current_user, orgs),
+                    runner_factory=GeminiBrainRunner,
+                    run_kwargs=_multi_org_run_kwargs(payload, current_user),
+                    planner=plan_query,
+                )
+            else:
+                chunks = GeminiBrainRunner().run_stream(
+                    query=payload.query,
+                    organization_id=organization_id,
+                    db_name=payload.db_name,
+                    use_api=payload.use_api,
+                    user_id=current_user.user_id,
+                    session_id=payload.session_id,
+                    selected_model_key=payload.selected_model_key,
+                    allowed_org_ids=current_user.allowed_org_ids,
+                    auth_token=current_user.raw_token,
+                    model=payload.model,
+                    effort=payload.effort,
+                    ui_context=payload.ui_context.model_dump() if payload.ui_context else None,
+                    brief=bool(payload.brief),
+                )
+            for chunk in chunks:
                 if isinstance(chunk, dict) and "final_result" in chunk:
                     traces = get_sql_traces(trace_id=rid)
                     if traces and isinstance(chunk["final_result"], dict):
                         chunk["final_result"]["sql_traces"] = traces
                         if not chunk["final_result"].get("sql"):
                             chunk["final_result"]["sql"] = traces[0]["sql"]
+                    api_traces = get_api_traces(trace_id=rid)
+                    if api_traces and isinstance(chunk["final_result"], dict):
+                        chunk["final_result"]["api_traces"] = api_traces
+                    llm_traces = get_llm_traces(trace_id=rid)
+                    if llm_traces and isinstance(chunk["final_result"], dict):
+                        chunk["final_result"]["llm_traces"] = llm_traces
                     chunk["final_result"] = normalize_envelope(chunk["final_result"])
                 yield f"data: {json.dumps(chunk, default=str)}\n\n"
         except ValueError as ve:
@@ -665,6 +886,8 @@ def stream_query(
             yield f"data: {json.dumps({'final_result': err_env})}\n\n"
         finally:
             clear_sql_trace(trace_id=rid)
+            clear_api_trace(trace_id=rid)
+            clear_llm_trace(trace_id=rid)
             try:
                 active_auth_token.reset(token_reset)
             except ValueError:

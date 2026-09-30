@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "ES2021",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "strictNullChecks": false,
+    "noImplicitAny": false,
+    "noEmit": true
+  },
+  "files": ["seed-org-5yr-data.ts", "seed-5yr-invoices.ts", "stress-income-create.ts", "backfill-journal-entries.ts"]
+}

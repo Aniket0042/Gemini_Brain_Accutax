@@ -1,0 +1,88 @@
+{
+ "title": "Net Amount by Account",
+ "period": null,
+ "currency": "AED",
+ "kpis": [],
+ "charts": [
+  {
+   "type": "bar",
+   "title": "Net Amount by Account",
+   "categories": [
+    "Sales",
+    "Other Income",
+    "Refunds"
+   ],
+   "series": [
+    {
+     "name": "Net Amount",
+     "data": [
+      50000.0,
+      3100.0,
+      -4200.0
+     ]
+    }
+   ],
+   "series_colors": [
+    "#2A78D6"
+   ],
+   "point_colors": null,
+   "takeaway": "Sales is the largest at AED 50.0K; Refunds is negative at AED -4,200.",
+   "requested_type": "pie",
+   "downgrade_reason": "Net Amount has negative values (Refunds), and a slice cannot be negative.",
+   "total_indices": null
+  }
+ ],
+ "tables": [
+  {
+   "title": "Details",
+   "columns": [
+    "Account Name",
+    "Net Amount"
+   ],
+   "first_rows": [
+    {
+     "net_amount": "AED 50,000.00",
+     "account_name": "Sales"
+    },
+    {
+     "net_amount": "AED 3,100.00",
+     "account_name": "Other Income"
+    },
+    {
+     "net_amount": "AED -4,200.00",
+     "account_name": "Refunds"
+    }
+   ],
+   "total_rows": 3
+  }
+ ],
+ "callouts": [
+  {
+   "tone": "note",
+   "text": "A pie chart was requested, but Net Amount has negative values (Refunds), and a slice cannot be negative. It is shown as a bar chart instead."
+  }
+ ],
+ "narrative": {
+  "origin": "template",
+  "headline": "Sales is the largest at AED 50.0K",
+  "summary": [],
+  "drivers": [
+   "Refunds is negative at AED -4,200."
+  ],
+  "risks": [],
+  "actions": []
+ },
+ "integrity": {
+  "checks_run": 1,
+  "checks_failed": 0,
+  "figures_checked": 2,
+  "figures_verified": 2,
+  "sentences_removed": 0
+ },
+ "methodology": [
+  "Amounts in AED. A dash (—) marks a value the source did not provide.",
+  "Request: pie of net amount by account",
+  "The summary was generated directly from the verified figures in this report.",
+  "Consistency checks: 1 of 1 passed."
+ ]
+}

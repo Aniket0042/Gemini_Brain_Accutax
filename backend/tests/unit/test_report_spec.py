@@ -1,4 +1,5 @@
 """Tests for any-shape ReportSpec normalization."""
+from gemini_brain.artifacts import theme
 from gemini_brain.artifacts.report_spec import build_report_spec, spec_has_content
 
 
@@ -16,10 +17,8 @@ def test_scalar_dict_becomes_kpis():
     labels = {k["label"]: k["formatted"] for k in spec["kpis"]}
     assert labels["Total Income"] == "AED 1,612,654.50"
     assert labels["Invoice Count"] == "1,275"
-    chart = spec["charts"][0]
-    assert chart["bar_colors"]
-    assert len(chart["bar_colors"]) == len(chart["categories"])
-    assert len(set(chart["bar_colors"])) == len(chart["categories"])
+    # Money and a count on one axis would flatten the count: no mixed-unit chart.
+    assert spec["charts"] == []
 
 
 def test_pnl_envelope():
@@ -147,7 +146,7 @@ def test_nested_pnl_builds_grouped_bar_and_tables():
     assert "Monthly Breakdown" in titles
     assert spec["period"] == "Q2 2026"
     assert spec["entity"] == "AccuTax Client Co."
-    assert spec["charts"][0].get("caption")
+    # The chart's "so what" line is a grounded takeaway now (test_report_charts.py).
 
 
 def test_sql_pnl_summary_charts_without_monthly():
@@ -221,7 +220,9 @@ def test_formatted_sales_display_noise_excluded():
     assert len(chart["series"]) == 1
     assert chart["series"][0]["name"] == "Sales"
     assert chart["series"][0]["data"] == [220500.0, 191310.0, 181755.0]
-    assert "bar_colors" in chart  # Single series gets pastel colors for each customer
+    # One series = one entity: every bar the same brand color, no per-bar rainbow.
+    assert chart["series_colors"] == [theme.PRIMARY]
+    assert "point_colors" not in chart and "bar_colors" not in chart
 
     # Pie chart hint must succeed and not be downgraded by a duplicate series
     pie_spec = build_report_spec(rows, "pie chart of top customers", chart_hint="pie")
@@ -271,4 +272,71 @@ def test_top_n_explicit_limit_in_charts_and_tables():
     assert bar_spec["tables"][0]["rows"][0]["customer_name"] == "Apex Retail Group LLC"
 
 
+def test_total_invoices_formats_as_plain_count_not_currency():
+    """total_invoices/total_bills/total_estimates are a headcount, not AED.
 
+    Regression: _is_money_key's bare 'total_' prefix fallback used to treat
+    any total_X key as a sum of money, so an aged-receivables summary showed
+    "Total Invoices: AED 109.00" instead of "109".
+    """
+    spec = build_report_spec(
+        {
+            "report": "Aged Receivables Detail",
+            "summary": {"total_invoices": 109, "total_outstanding": 1503600.0},
+            "invoices": [{"invoice_number": "INV-1", "outstanding": 1503600.0}],
+        },
+        "list all overdue invoices",
+    )
+    by_label = {k["label"]: k for k in spec["kpis"]}
+    assert by_label["Total Invoices"]["formatted"] == "109"
+    assert by_label["Total Invoices"]["value"] == 109
+    assert by_label["Total Outstanding"]["formatted"] == "AED 1,503,600.00"
+
+
+def test_chart_excludes_day_count_column_from_money_series():
+    """A days-overdue/age column shares no scale with an AED amount column —
+    mixing them into one grouped bar chart makes the money bars unreadable
+    and the day bars an invisible sliver. Regression for that mismatch."""
+    rows = [
+        {"invoice_number": "INV-1", "customer_name": "Acme", "amount": 8925.0, "days_overdue": 30},
+        {"invoice_number": "INV-2", "customer_name": "Beta", "amount": 38850.0, "days_overdue": 45},
+        {"invoice_number": "INV-3", "customer_name": "Gamma", "amount": 8190.0, "days_overdue": 12},
+    ]
+    spec = build_report_spec(rows, "list all overdue invoices")
+    assert spec["charts"]
+    series_names = {s.get("name") for s in spec["charts"][0]["series"]}
+    assert "Days Overdue" not in series_names
+    assert "Amount" in series_names
+
+
+def test_title_strips_trailing_file_format_request():
+    rows = [{"invoice_number": "INV-1", "amount": 100}]
+    spec = build_report_spec(rows, "List all overdue invoices as a word document")
+    assert spec["title"] == "Overdue Invoices"
+
+    spec_pdf = build_report_spec(rows, "Generate the P&L as pdf")
+    assert spec_pdf["title"] == "P&L"
+
+
+
+
+
+def test_flat_accutax_profit_loss_keeps_revenue():
+    """/report/profit-loss returns flat totals with no "revenue" key. Revenue is
+    operating plus non-operating income; the report must still lead with it."""
+    data = {
+        "operating_income": 13447397, "non_operating_income": 0, "cost_of_goods_sold": 0,
+        "gross_profit": 13447397, "operating_expense": 2731844, "operating_profit": 10715553,
+        "non_operating_expense": 0, "net_profit_loss": 10715553,
+        "formatted_operating_income": "13447397.00 AED",
+        "period": {"start_date": "2025-01-01", "end_date": "2025-12-31"},
+    }
+    spec = build_report_spec(data, "P&L for 2025 as a chart")
+    kpis = {k["label"]: k["value"] for k in spec["kpis"]}
+    assert kpis["Total Revenue"] == 13447397
+    assert kpis["Total Expenses"] == 2731844
+    assert kpis["Net Profit"] == 10715553
+    lines = [r["line_item"] for r in next(t for t in spec["tables"] if t["title"] == "Line Items")["rows"]]
+    assert lines == ["Total Revenue", "Operating Income", "Operating Expenses", "Net Profit"]
+    chart = spec["charts"][0]
+    assert chart["categories"] == ["Revenue", "Expenses"]

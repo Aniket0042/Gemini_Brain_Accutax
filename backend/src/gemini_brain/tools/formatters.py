@@ -12,13 +12,19 @@ from __future__ import annotations
 import datetime as dt
 import numbers
 import re
+from contextvars import ContextVar
 from typing import Any, Dict, List, Optional
+
+
+#: Shown for a value the source did not provide. Never "AED 0.00": a missing
+#: figure rendered as zero reads as a real, confident zero.
+MISSING_DISPLAY = "—"
 
 
 def format_aed(val: Any) -> str:
     """Format numeric values as AED currency string."""
     if val is None or val == "":
-        return "AED 0.00"
+        return MISSING_DISPLAY
     try:
         num = float(val)
         return f"AED {num:,.2f}"
@@ -47,6 +53,16 @@ _MONEY_HINTS = (
     "income", "profit", "paid", "outstanding", "spend", "cost", "tax", "vat",
     "fee", "payment", "receipt", "sales", "cogs", "gross", "net", "liability",
     "cash",
+)
+#: `_is_money_key`'s `total_*`/`*_total` fallback (below) assumes a bare
+#: "total" prefix/suffix means a sum of money — true for total_revenue,
+#: total_amount, total_balance_due, but not for a headcount like
+#: total_invoices/total_bills/total_estimates. These entity-plural nouns
+#: carve those out before the money fallback ever sees them.
+_COUNT_NOUN_HINTS = (
+    "invoices", "bills", "estimates", "records", "items", "rows",
+    "transactions", "entries", "customers", "vendors", "suppliers",
+    "contacts", "accounts", "orders", "quotes", "documents",
 )
 
 
@@ -135,6 +151,25 @@ def _unwrap_row_list(data: Any) -> Any:
         if isinstance(v, list):
             return v
     return data
+
+
+def _unwrap_table_rows(data: Any) -> Any:
+    """`_unwrap_row_list`, plus a fallback for table formatters only.
+
+    Reports wrap their rows under a report-specific key
+    (`{"vendors": [...], "period": {...}}` from /report/purchases-by-vendor).
+    When no known key matches and exactly one value is a non-empty list of
+    rows, that list is the table. Kept out of `_unwrap_row_list` so KPI
+    payloads that carry a side list still render as KPI tiles.
+    """
+    unwrapped = _unwrap_row_list(data)
+    if not isinstance(unwrapped, dict):
+        return unwrapped
+    row_lists = [
+        v for v in unwrapped.values()
+        if isinstance(v, list) and v and isinstance(v[0], dict)
+    ]
+    return row_lists[0] if len(row_lists) == 1 else unwrapped
 
 
 def _is_total_row(row: Dict[str, Any]) -> bool:
@@ -318,13 +353,17 @@ def render_dashboard_overview(data: Any) -> str:
     return "\n\n".join(sections)
 
 
-def render_row_table(data: Any, max_rows: int = 50) -> str:
-    """Render a list of dictionaries as a clean markdown table."""
+def render_row_table(data: Any, max_rows: int = 50, show_total_note: bool = True) -> str:
+    """Render a list of dictionaries as a clean markdown table.
+
+    `show_total_note=False` drops the "Showing N of M" line — used when the
+    user asked for exactly N rows, so the cap is the answer, not a cut-off.
+    """
     if isinstance(data, dict) and isinstance(data.get("report"), list):
         return render_aging_buckets(data)
 
     if isinstance(data, dict):
-        data = _unwrap_row_list(data)
+        data = _unwrap_table_rows(data)
 
     if not isinstance(data, list) or not data:
         if isinstance(data, dict):
@@ -350,7 +389,7 @@ def render_row_table(data: Any, max_rows: int = 50) -> str:
         row_vals = [_format_cell_value(k, row.get(k)) for k in selected_keys]
         lines.append("| " + " | ".join(row_vals) + " |")
 
-    if len(data) > max_rows:
+    if show_total_note and len(data) > max_rows:
         lines.append(f"\n_Showing {max_rows} of {len(data)} total records._")
 
     return "\n".join(lines)
@@ -608,6 +647,71 @@ FORMATTERS = {
 }
 
 
+def _to_float(v: Any) -> Optional[float]:
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, str):
+        try:
+            return float(v.replace(",", "").strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _rank_rows_for_query(data: Any, query: Optional[str]) -> Any:
+    """Order a row list the way a "top/least N" ask means it.
+
+    The table is capped to the requested count, but APIs return rows in their
+    own order (often by name or id). Slicing that as-is shows N arbitrary rows
+    that disagree with the narrated "top 5". Sort by the first money column,
+    descending unless the query says "least/lowest/bottom", before capping.
+    Non-list data, recency asks ("last 5 invoices") and rows without a money
+    column pass through unchanged.
+    """
+    from gemini_brain.utils.ranking import extract_direction_from_text, wants_amount_ranking
+
+    if not wants_amount_ranking(query):
+        return data
+    rows = _unwrap_table_rows(data) if isinstance(data, dict) else data
+    if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+        return data
+    sort_key = next(
+        (k for k in _row_column_keys(rows[0], cap=len(rows[0]))
+         if _is_money_key(k) and _to_float(rows[0].get(k)) is not None),
+        None,
+    )
+    if sort_key is None:
+        return data
+    ascending = extract_direction_from_text(query)
+    present, missing = [], []
+    for r in rows:
+        (present if isinstance(r, dict) and _to_float(r.get(sort_key)) is not None else missing).append(r)
+    present.sort(key=lambda r: _to_float(r.get(sort_key)), reverse=not ascending)
+    return present + missing
+
+
+def rank_payload_for_query(data: Any, query: Optional[str]) -> Any:
+    """`_rank_rows_for_query` that keeps a report's wrapper (period, totals) intact.
+
+    Narration must see rows in the same order as the table. Left in API order,
+    the model ranks them itself and misorders near-equal amounts.
+    """
+    if isinstance(data, list):
+        if len(data) == 1 and isinstance(data[0], dict):
+            return [rank_payload_for_query(data[0], query)]
+        return _rank_rows_for_query(data, query)
+    if not isinstance(data, dict):
+        return data
+    rows = _unwrap_table_rows(data)
+    key = next((k for k, v in data.items() if v is rows), None)
+    if key is None:
+        return data
+    ranked = _rank_rows_for_query(rows, query)
+    return data if ranked is rows else {**data, key: ranked}
+
+
 def render(formatter_name: str, data: Any, query: Optional[str] = None) -> str:
     """Render data into markdown using the specified formatter.
 
@@ -622,8 +726,12 @@ def render(formatter_name: str, data: Any, query: Optional[str] = None) -> str:
     fn = FORMATTERS.get(formatter_name, render_row_table)
     try:
         if fn is render_row_table and query:
-            from gemini_brain.utils.ranking import extract_requested_count
-            res = render_row_table(data, max_rows=extract_requested_count(query))
+            from gemini_brain.utils.ranking import extract_explicit_count, extract_requested_count
+            res = render_row_table(
+                _rank_rows_for_query(data, query),
+                max_rows=extract_requested_count(query),
+                show_total_note=extract_explicit_count(query) is None,
+            )
         else:
             res = fn(data)
         try:
@@ -680,7 +788,9 @@ def _is_display_noise_key(key: str) -> bool:
 
 def _is_count_key(key: str) -> bool:
     k = (key or "").lower().replace(" ", "_")
-    return k == "count" or k.endswith("_count") or "quantity" in k or k.endswith("_qty") or k.startswith("qty_")
+    if k == "count" or k.endswith("_count") or "quantity" in k or k.endswith("_qty") or k.startswith("qty_"):
+        return True
+    return (k.startswith("total_") or k.endswith("_total")) and any(h in k for h in _COUNT_NOUN_HINTS)
 
 
 def _format_metric_display(key: str, v: Any) -> tuple[str, Any, bool]:
@@ -794,6 +904,48 @@ def render_chart_block(
     }
 
 
+#: (organization_id, db_name) of the request whose rows are being formatted.
+#: Set by render_blocks() for the length of one synchronous call; unset means
+#: "no tenant known", and the ID lookup below then does nothing (fail closed).
+_record_lookup_scope: ContextVar[Optional[tuple]] = ContextVar("formatter_record_lookup_scope", default=None)
+
+#: Tables/columns the row-link lookup may read. Fixed here — never taken from data.
+_RECORD_LOOKUPS = {
+    ("income", "invoice_number"): "SELECT invoice_number, id FROM income WHERE organization_id = %s AND invoice_number = ANY(%s)",
+    ("expense", "receipt_number"): "SELECT receipt_number, id FROM expense WHERE organization_id = %s AND receipt_number = ANY(%s)",
+}
+
+
+def _lookup_record_ids(table: str, column: str, values: List[str]) -> List[tuple]:
+    """(number, id) pairs for row links, restricted to the current organization.
+
+    Runs only when render_blocks() was given the tenant: an unscoped lookup by
+    invoice number can resolve another organization's record id, since
+    numbers like INV-0001 repeat across tenants.
+    """
+    scope = _record_lookup_scope.get()
+    sql = _RECORD_LOOKUPS.get((table, column))
+    if not values or not scope or scope[0] is None or sql is None:
+        return []
+    org_id, db_name = scope
+    try:
+        from gemini_brain.sql_fallback.db_connection import get_connection
+
+        conn = get_connection(db_name=db_name or "")
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SET TRANSACTION READ ONLY;")
+                cur.execute("SET LOCAL app.current_org = %s;", (str(int(org_id)),))
+                cur.execute(sql, (int(org_id), values))
+                rows = cur.fetchall()
+            conn.rollback()
+            return rows
+        finally:
+            conn.close()
+    except Exception:
+        return []
+
+
 def render_table_block(data: Any, max_rows: int = 50) -> Dict[str, Any]:
     """Structured counterpart to `render_row_table` — real columns and rows,
     not a markdown string, so a client can sort/scroll/export it."""
@@ -803,8 +955,9 @@ def render_table_block(data: Any, max_rows: int = 50) -> Dict[str, Any]:
             "type": "table", "columns": [], "rows": [], "total_rows": 0, "truncated": False,
         }
 
+    period = _format_period(data.get("period")) if isinstance(data, dict) else None
     if isinstance(data, dict):
-        data = _unwrap_row_list(data)
+        data = _unwrap_table_rows(data)
 
     if not isinstance(data, list) or not data:
         if isinstance(data, dict):
@@ -844,29 +997,13 @@ def render_table_block(data: Any, max_rows: int = 50) -> Dict[str, Any]:
     enrich_map: dict[str, Any] = {}
     if id_key is None and isinstance(first, dict):
         if "invoice_number" in first:
-            try:
-                from gemini_brain.sql_fallback.db_connection import get_connection
-                inv_nums = [str(r["invoice_number"]) for r in data[:max_rows] if isinstance(r, dict) and r.get("invoice_number")]
-                if inv_nums:
-                    with get_connection() as conn:
-                        with conn.cursor() as cur:
-                            cur.execute("SELECT invoice_number, id FROM income WHERE invoice_number = ANY(%s)", (inv_nums,))
-                            for inv_num, inv_id in cur.fetchall():
-                                enrich_map[f"invoice:{inv_num}"] = inv_id
-            except Exception:
-                pass
+            inv_nums = [str(r["invoice_number"]) for r in data[:max_rows] if isinstance(r, dict) and r.get("invoice_number")]
+            for inv_num, inv_id in _lookup_record_ids("income", "invoice_number", inv_nums):
+                enrich_map[f"invoice:{inv_num}"] = inv_id
         elif "receipt_number" in first:
-            try:
-                from gemini_brain.sql_fallback.db_connection import get_connection
-                rcpt_nums = [str(r["receipt_number"]) for r in data[:max_rows] if isinstance(r, dict) and r.get("receipt_number")]
-                if rcpt_nums:
-                    with get_connection() as conn:
-                        with conn.cursor() as cur:
-                            cur.execute("SELECT receipt_number, id FROM expense WHERE receipt_number = ANY(%s)", (rcpt_nums,))
-                            for rcpt_num, exp_id in cur.fetchall():
-                                enrich_map[f"receipt:{rcpt_num}"] = exp_id
-            except Exception:
-                pass
+            rcpt_nums = [str(r["receipt_number"]) for r in data[:max_rows] if isinstance(r, dict) and r.get("receipt_number")]
+            for rcpt_num, exp_id in _lookup_record_ids("expense", "receipt_number", rcpt_nums):
+                enrich_map[f"receipt:{rcpt_num}"] = exp_id
 
     rows = []
     for row in data[:max_rows]:
@@ -879,13 +1016,16 @@ def render_table_block(data: Any, max_rows: int = 50) -> Dict[str, Any]:
             out["_row_id"] = enrich_map[f"receipt:{row.get('receipt_number')}"]
         rows.append(out)
 
-    return {
+    block = {
         "type": "table",
         "columns": columns,
         "rows": rows,
         "total_rows": len(data),
         "truncated": len(data) > max_rows,
     }
+    if period:
+        block["period"] = period
+    return block
 
 
 def render_account_tree_block(data: Any) -> Dict[str, Any]:
@@ -1124,14 +1264,32 @@ BLOCK_BUILDERS = {
 }
 
 
-def render_blocks(formatter_name: str, data: Any, query: Optional[str] = None) -> List[Dict[str, Any]]:
+def render_blocks(
+    formatter_name: str,
+    data: Any,
+    query: Optional[str] = None,
+    *,
+    organization_id: Optional[int] = None,
+    db_name: str = "",
+) -> List[Dict[str, Any]]:
     """Structured counterpart to `render()`. Always returns a non-empty list.
 
     A ported formatter gets its typed block(s); anything else falls back to a
     single markdown block carrying the exact same text `render()` would have
     produced, so the frontend always has something well-formed to render
     regardless of migration progress.
+
+    `organization_id` scopes the row-link id lookup (see _lookup_record_ids);
+    without it tables still render, just without resolved record links.
     """
+    token = _record_lookup_scope.set((organization_id, db_name) if organization_id is not None else None)
+    try:
+        return _render_blocks(formatter_name, data, query)
+    finally:
+        _record_lookup_scope.reset(token)
+
+
+def _render_blocks(formatter_name: str, data: Any, query: Optional[str]) -> List[Dict[str, Any]]:
     if data is None or data == [] or data == {}:
         return [{"type": "markdown", "text": "_No records found._"}]
 
@@ -1144,8 +1302,19 @@ def render_blocks(formatter_name: str, data: Any, query: Optional[str] = None) -
             if isinstance(data, dict) and isinstance(data.get("report"), list):
                 return render_aging_buckets_blocks(data)
             if query:
-                from gemini_brain.utils.ranking import extract_requested_count
-                return [render_table_block(data, max_rows=extract_requested_count(query))]
+                from gemini_brain.utils.ranking import extract_explicit_count, extract_requested_count
+                block = render_table_block(
+                    _rank_rows_for_query(data, query), max_rows=extract_requested_count(query)
+                )
+                # User asked for exactly N rows: the cap is the answer, so the
+                # frontend hides its "Showing N of M" note.
+                if extract_explicit_count(query) is not None:
+                    block["hide_total_note"] = True
+                # Ranking returns the bare row list, so re-read the period here.
+                period = _format_period(data.get("period")) if isinstance(data, dict) else None
+                if period and block.get("type") == "table":
+                    block.setdefault("period", period)
+                return [block]
             result = builder(data)
             return result if isinstance(result, list) else [result]
         result = builder(data)

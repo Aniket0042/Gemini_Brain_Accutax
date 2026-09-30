@@ -19,6 +19,10 @@ export const Header = ({
   activeTenant,
   availableTenants,
   onSelectTenant,
+  selectedOrgIds,
+  onSelectOrgs,
+  multiOrgEnabled = false,
+  maxOrgs = 1,
   onOpenHealthModal,
 }) => {
   const { icon: ThemeIcon, label: themeLabel } = THEME_META[theme] || THEME_META.system;
@@ -29,7 +33,15 @@ export const Header = ({
         <button className="icon-btn" style={styles.iconBtn} onClick={onToggleSidebar} title="Toggle Sidebar">
           <PanelLeft size={18} color="var(--ink-soft)" />
         </button>
-        <TenantSwitcher tenant={activeTenant} availableTenants={availableTenants} onSelectTenant={onSelectTenant} />
+        <TenantSwitcher
+          tenant={activeTenant}
+          availableTenants={availableTenants}
+          onSelectTenant={onSelectTenant}
+          selectedOrgIds={selectedOrgIds}
+          onSelectOrgs={onSelectOrgs}
+          multiOrgEnabled={multiOrgEnabled}
+          maxOrgs={maxOrgs}
+        />
         {sessionTitle && (
           <div style={styles.titleContainer}>
             <div style={styles.greenDot} />

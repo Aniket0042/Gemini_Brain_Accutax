@@ -52,6 +52,40 @@ def _is_route_not_found(body_text: str) -> bool:
     message = str(data.get("message", ""))
     return message.startswith(("Cannot GET", "Cannot POST", "Cannot PUT", "Cannot DELETE", "Cannot PATCH"))
 
+#: Every spelling of the tenant parameter seen across Accutax endpoints.
+ORG_PARAM_KEYS = ("organization_id", "organizationId", "orgId", "org_id")
+
+
+def force_org_params(
+    path_params: Optional[Dict[str, Any]],
+    query_params: Optional[Dict[str, Any]],
+    org_id: int,
+    accepted_query_params: Optional[set] = None,
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Pin every tenant parameter of a REST call to the verified organization.
+
+    The endpoint and its parameters are usually chosen by a model, which is
+    told the org ID but can still write another one; in a multi-org fan-out
+    that other ID can be a sibling org the user may also access, so its data
+    would be fetched under the wrong label. Whatever the selection holds, the
+    call leaves with ``org_id``:
+
+    - any tenant key already present, in the path or the query, is overwritten;
+    - when the OpenAPI spec lists the endpoint's query parameters, each tenant
+      key it accepts is added if missing.
+
+    Without the spec, nothing is added: sending a parameter an endpoint does
+    not declare can fail its request validation.
+    """
+    oid = int(org_id)
+    path = {k: (str(oid) if k in ORG_PARAM_KEYS else v) for k, v in (path_params or {}).items()}
+    query = {k: (str(oid) if k in ORG_PARAM_KEYS else v) for k, v in (query_params or {}).items()}
+    for key in ORG_PARAM_KEYS:
+        if accepted_query_params and key in accepted_query_params:
+            query[key] = str(oid)
+    return path, query
+
+
 _RETRY_STATUS = frozenset({429, 500, 502, 503, 504})
 _MAX_ATTEMPTS = 3
 
@@ -176,8 +210,44 @@ def call_api_resilient(
 ) -> Retrieved:
     """GET with bounded retry + jitter, returning an explicit Retrieved outcome.
 
-    Never raises. Never returns None.
+    Never raises. Never returns None. Wraps _call_api_resilient_impl to record
+    a single API trace entry (endpoint, params, status, duration) per call for
+    SHOW_API_TRACES — the REST counterpart of record_sql_trace.
     """
+    t0 = time.perf_counter()
+    result = _call_api_resilient_impl(
+        endpoint, path_params, query_params,
+        base_url=base_url, auth_token=auth_token, timeout=timeout, attempts=attempts,
+    )
+    duration_ms = (time.perf_counter() - t0) * 1000
+    try:
+        from gemini_brain.observability.api_tracer import record_api_trace
+        outcome = result.outcome.value if hasattr(result.outcome, "value") else str(result.outcome)
+        record_api_trace(
+            endpoint=endpoint,
+            method="GET",
+            path_params=path_params,
+            query_params={k: v for k, v in query_params.items() if v is not None},
+            status_code=getattr(result, "http_status", None),
+            outcome=outcome,
+            duration_ms=duration_ms,
+            row_count=getattr(result, "row_count", 0) or 0,
+        )
+    except Exception as e:
+        logger.warning("API trace recording failed for %s: %s", endpoint, e)
+    return result
+
+
+def _call_api_resilient_impl(
+    endpoint: str,
+    path_params: Dict[str, Any],
+    query_params: Dict[str, Any],
+    *,
+    base_url: str = "",
+    auth_token: str = "",
+    timeout: float = 6.0,
+    attempts: int = _MAX_ATTEMPTS,
+) -> Retrieved:
     client = get_sync_client(base_url, auth_token)
     url_path = _format_url_path(endpoint, path_params)
     clean_params = {k: v for k, v in query_params.items() if v is not None}

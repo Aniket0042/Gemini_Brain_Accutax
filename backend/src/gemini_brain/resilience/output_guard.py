@@ -119,6 +119,36 @@ def strip_invented_turns(text: Optional[str]) -> Optional[str]:
     return preface
 
 
+#: Lines shorter than this may repeat legitimately ("- None.", "---").
+_MIN_REPEAT_CHARS = 25
+
+
+def strip_repeated_lines(text: Optional[str]) -> Optional[str]:
+    """Drop lines the model already wrote, keeping the first of each.
+
+    A model that loops (measured: the same eight org bullets written eight
+    times until the token limit) produces an answer that is mostly repeats.
+    Only prose lines of some length are compared; table rows, blank lines and
+    short markers may repeat legitimately and are kept.
+    """
+    if not text:
+        return text
+    seen = set()
+    kept = []
+    changed = False
+    for line in text.split("\n"):
+        key = " ".join(line.split()).strip("-*• ").casefold()
+        if len(key) >= _MIN_REPEAT_CHARS and not line.lstrip().startswith("|"):
+            if key in seen:
+                changed = True
+                continue
+            seen.add(key)
+        kept.append(line)
+    if not changed:
+        return text
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(kept)).strip()
+
+
 def looks_like_backend_leak(text: str) -> bool:
     """True if `text` contains a database/IT-support-style leak signal."""
     if not text:

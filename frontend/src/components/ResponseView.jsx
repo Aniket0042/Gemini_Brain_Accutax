@@ -7,6 +7,8 @@ import { BlockRenderer, hasPortedBlocks, chatFacingBlocks } from './blocks/Block
 import { ReportActions } from './blocks/ReportActions';
 import { CodeChrome } from './blocks/CodeBlock';
 import { SqlTraceCard } from './SqlTraceCard';
+import { ApiTraceCard } from './ApiTraceCard';
+import { LlmTraceCard } from './LlmTraceCard';
 import { 
   Sparkles, ShieldAlert, Code2, Layers, 
   ChevronDown, ChevronUp, Copy, Check, 
@@ -23,6 +25,50 @@ function formatTime(ts) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Copies text and reports whether it worked. The async Clipboard API is
+ * refused outside a secure context and inside an iframe without the
+ * clipboard-write permission (the Accutax dashboard widget), so a hidden
+ * textarea + execCommand is the fallback. Callers show "Copied" only on true.
+ */
+async function copyText(text) {
+  if (!text) return false;
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through to the textarea fallback */
+  }
+  try {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(area);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Copy state for one button: flips to true for 2s after a successful copy. */
+function useCopied() {
+  const [copied, setCopied] = useState(false);
+  const copy = async (text) => {
+    if (await copyText(text)) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+  return [copied, copy];
 }
 
 /**
@@ -129,7 +175,7 @@ const AssistantResponseCard = ({
   onOpenCanvas,
   token,
 }) => {
-  const [copied, setCopied] = useState(false);
+  const [copied, copy] = useCopied();
   const [showSql, setShowSql] = useState(false);
   const [showTrace, setShowTrace] = useState(false);
 
@@ -153,12 +199,9 @@ const AssistantResponseCard = ({
   const elapsedSeconds = tokenUsage?.elapsed_seconds ?? responseData?.elapsed_seconds;
   const costUsd = tokenUsage?.cost_usd;
 
-  const handleCopy = () => {
-    if (!content) return;
-    navigator.clipboard.writeText(content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  // The answer plus its table, so a pasted copy keeps the figures the
+  // answer refers to.
+  const handleCopy = () => copy([content, tableMarkdown].filter(Boolean).join('\n\n'));
 
   return (
     <div className="turn-wrapper" style={styles.assistantRow}>
@@ -167,6 +210,8 @@ const AssistantResponseCard = ({
       </div>
       <div style={styles.assistantContentCol}>
         
+        <OrgChips organizations={responseData?.organizations} />
+
         {/* Notice Card for Empty / Partial / Degraded / Denied / Error states */}
         {notice && (
           <NoticeCard
@@ -253,6 +298,16 @@ const AssistantResponseCard = ({
           />
         )}
 
+        {/* Accutax REST API call traces (controlled by VITE_SHOW_API_TRACES in .env) */}
+        {!isStreaming && (
+          <ApiTraceCard apiTraces={responseData?.api_traces || msg.apiTraces} />
+        )}
+
+        {/* Bedrock/Claude LLM call traces (controlled by VITE_SHOW_LLM_TRACES in .env) */}
+        {!isStreaming && (
+          <LlmTraceCard llmTraces={responseData?.llm_traces || msg.llmTraces} />
+        )}
+
         {showSql && responseData?.sql && (
           <CodeChrome language="sql" content={responseData.sql} title="Executed SQL" />
         )}
@@ -316,6 +371,34 @@ const AssistantResponseCard = ({
           </div>
         )}
       </div>
+    </div>
+  );
+};
+
+/**
+ * OrgChips — which organizations a multi-org answer covers. An org whose data
+ * could not be retrieved is struck through, so a comparison that silently
+ * leaves one out is never mistaken for a complete one.
+ */
+const MISSING_ORG_STATUSES = ['failed', 'degraded'];
+
+const OrgChips = ({ organizations }) => {
+  if (!Array.isArray(organizations) || organizations.length < 2) return null;
+  return (
+    <div className="org-chips" aria-label="Organizations in this answer">
+      {organizations.map((org) => {
+        const missing = MISSING_ORG_STATUSES.includes(org.status);
+        return (
+          <span
+            key={org.id}
+            className={`org-chip ${missing ? 'is-missing' : ''}`}
+            title={missing ? `No data could be retrieved for ${org.name}` : org.name}
+          >
+            <span>{org.name}</span>
+            {org.currency && <span className="org-chip-currency">{org.currency}</span>}
+          </span>
+        );
+      })}
     </div>
   );
 };
@@ -386,6 +469,12 @@ const ModelAnswerCard = ({ response }) => {
         sqlTraces={response?.sql_traces}
         fallbackSql={response?.sql}
       />
+
+      {/* Accutax REST API call traces (controlled by VITE_SHOW_API_TRACES in .env) */}
+      <ApiTraceCard apiTraces={response?.api_traces} />
+
+      {/* Bedrock/Claude LLM call traces (controlled by VITE_SHOW_LLM_TRACES in .env) */}
+      <LlmTraceCard llmTraces={response?.llm_traces} />
     </div>
   );
 };
@@ -417,6 +506,35 @@ const MultiModelResponseCard = ({ msg }) => {
 /**
  * ResponseView — Renders full conversation list sequentially in clean ChatGPT/Gemini layout.
  */
+const UserMessage = ({ msg }) => {
+  const [copied, copy] = useCopied();
+  return (
+    <div className="turn-wrapper" style={styles.userTurnWrapper}>
+      <div style={styles.userMsgWrapper}>
+        <div style={styles.userBubble}>
+          {msg.content}
+        </div>
+        <div className="turn-actions" style={styles.userFooter}>
+          <div style={styles.userActionLeft}>
+            <button
+              style={styles.userActionBtn}
+              onClick={() => copy(msg.content)}
+              title={copied ? 'Copied to clipboard!' : 'Copy prompt'}
+            >
+              {copied ? <Check size={13} color="var(--success)" /> : <Copy size={13} />}
+            </button>
+            <button style={styles.userActionBtn} title="Share"><Share size={13} /></button>
+            <button style={styles.userActionBtn} title="Edit"><Edit2 size={13} /></button>
+          </div>
+          {formatTime(msg.timestamp) && (
+            <span style={styles.timestamp}>{formatTime(msg.timestamp)}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant, onRegenerate, onOpenCanvas, token }) => {
   if (!conversation || conversation.length === 0) return null;
 
@@ -426,25 +544,7 @@ export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant
         const isUser = msg.role === 'user';
 
         if (isUser) {
-          return (
-            <div key={idx} className="turn-wrapper" style={styles.userTurnWrapper}>
-              <div style={styles.userMsgWrapper}>
-                <div style={styles.userBubble}>
-                  {msg.content}
-                </div>
-                <div className="turn-actions" style={styles.userFooter}>
-                  <div style={styles.userActionLeft}>
-                    <button style={styles.userActionBtn} title="Copy"><Copy size={13} /></button>
-                    <button style={styles.userActionBtn} title="Share"><Share size={13} /></button>
-                    <button style={styles.userActionBtn} title="Edit"><Edit2 size={13} /></button>
-                  </div>
-                  {formatTime(msg.timestamp) && (
-                    <span style={styles.timestamp}>{formatTime(msg.timestamp)}</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
+          return <UserMessage key={idx} msg={msg} />;
         }
 
         // Assistant Turn

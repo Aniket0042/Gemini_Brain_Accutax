@@ -8,7 +8,7 @@ from gemini_brain.artifacts.generate import (
     render_xlsx,
 )
 from gemini_brain.artifacts.report_spec import build_report_spec
-from gemini_brain.artifacts.store import reset_for_tests
+from gemini_brain.artifacts.store import TTL_SECONDS, reset_for_tests
 
 
 SPEC = build_report_spec(
@@ -66,5 +66,5 @@ def test_generate_and_store_artifact_block():
     block = generate_and_store(SPEC, "csv", user_id=14, organization_id=2)
     assert block["type"] == "artifact"
     assert block["filename"].endswith(".csv")
-    assert block["expires_in"] == 120
+    assert block["expires_in"] == TTL_SECONDS
     assert block["id"]

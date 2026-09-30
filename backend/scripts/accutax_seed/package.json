@@ -1,0 +1,23 @@
+{
+  "name": "accutax-seed-scripts",
+  "private": true,
+  "description": "Fixed copies of the Accutax seed scripts, run against the Accutax API. The Accutax backend itself is not changed.",
+  "scripts": {
+    "seed:org-5yr-data": "ts-node seed-org-5yr-data.ts",
+    "seed:5yr-invoices": "ts-node seed-5yr-invoices.ts",
+    "stress:income-create": "ts-node stress-income-create.ts",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "axios": "^1.8.4",
+    "dotenv": "^16.5.0",
+    "ioredis": "^5.10.1",
+    "pg": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.8.0"
+  }
+}

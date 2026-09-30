@@ -17,7 +17,8 @@ from typing import Any, Dict, List, Set
 # The trailing guard rejects a digit continuing the number but must allow a
 # sentence-ending period, so it checks for "." only when a digit follows it.
 _NUMBER = re.compile(
-    r"(?<![\w.,])(\d[\d,]*(?:\.\d+)?)\s*(%|k|m|bn|b)?(?![\d,]|\.\d)",
+    # Letter suffixes need a word boundary: "13 bills" is 13, not 13 billion.
+    r"(?<![\w.,])(\d[\d,]*(?:\.\d+)?)\s*(%|(?:k|m|bn|b)\b)?(?![\d,]|\.\d)",
     re.IGNORECASE,
 )
 
@@ -34,6 +35,11 @@ class VerificationReport:
     unmatched: List[str] = field(default_factory=list)
     skipped: int = 0
     enforced: bool = False
+    #: "payload" (any number in the data), "attributed" (each org's own data)
+    #: or "computed" (the answer was written in code from the data).
+    method: str = "payload"
+    #: Figures stated for one organization that belong to another.
+    misattributed: List[str] = field(default_factory=list)
 
     @property
     def grounded(self) -> bool:
@@ -51,6 +57,8 @@ class VerificationReport:
             "grounding_rate": round(self.grounding_rate, 4),
             "grounded": self.grounded,
             "enforced": self.enforced,
+            "method": self.method,
+            "misattributed": self.misattributed[:10],
         }
 
 
@@ -175,3 +183,87 @@ def strictness_note(report: VerificationReport) -> str:
         f"\n\n> **Unverified figures:** {figures} could not be traced to the retrieved "
         f"data. Treat them as indicative and re-run at a higher effort level to confirm."
     )
+
+
+def _numbers_in(text: str) -> List[tuple]:
+    """(label, value) for every figure in `text` that carries a data claim."""
+    found = []
+    for raw, suffix in _NUMBER.findall(text):
+        try:
+            value = float(raw.replace(",", ""))
+        except ValueError:
+            continue
+        suffix = (suffix or "").lower()
+        if suffix and suffix != "%":
+            value *= _SCALE.get(suffix, 1)
+        if value in _IGNORED or (1900 <= value <= 2100 and value == int(value) and not suffix):
+            continue
+        found.append((f"{raw}{suffix}" if suffix else raw, value))
+    return found
+
+
+def _gaps(values: Set[float]) -> Set[float]:
+    """Differences between the figures of the organizations a line compares."""
+    vals = [v for v in values if v not in _IGNORED][:40]
+    return {round(abs(a - b), 2) for i, a in enumerate(vals) for b in vals[i + 1:]}
+
+
+def verify_attributed(answer: str, org_payloads: Dict[str, Any], shared: Any = None) -> VerificationReport:
+    """Check each figure against the data of the organization the sentence names.
+
+    The plain check pooled every organization's numbers and every ratio
+    between them, so with ten organizations almost any number matched: a
+    wrong 41.40-point gap passed as "verified". Here a line that names
+    organizations may only use their figures, their sums, shares and the gaps
+    between them; a line that names none is checked against everything.
+    `shared` holds figures valid for any line (totals computed in code).
+    """
+    report = VerificationReport(method="attributed")
+    if not answer:
+        return report
+    names = sorted(org_payloads, key=len, reverse=True)
+    patterns = {n: re.compile(r"(?<!\w)" + re.escape(n) + r"(?!\w)") for n in names if n}
+    own: Dict[str, Set[float]] = {}
+    for name in names:
+        own[name] = set()
+        _collect_numbers(org_payloads[name], own[name])
+    common: Set[float] = set()
+    _collect_numbers(shared, common)
+    everything = set(common).union(*own.values()) if own else set(common)
+    everything |= _derived(everything)
+
+    for line in answer.splitlines():
+        numbers = _numbers_in(line)
+        if not numbers:
+            continue
+        named, rest = [], line
+        for name in names:  # longest first, so "..._Org10" is taken before "..._Org1"
+            if patterns[name].search(rest):
+                named.append(name)
+                rest = patterns[name].sub(" ", rest)
+        if named:
+            scope = set(common).union(*(own[n] for n in named))
+            known = scope | _derived(scope) | (_gaps(scope) if len(named) > 1 else set())
+        else:
+            known = everything
+        for label, value in numbers:
+            report.checked += 1
+            if _tolerant_match(value, known):
+                report.matched += 1
+                continue
+            report.unmatched.append(label)
+            other = next((n for n in names if n not in named and _tolerant_match(value, own[n])), None)
+            if named and other:
+                report.misattributed.append(f"{label} (belongs to {other}, not {', '.join(named)})")
+    return report
+
+
+def unverified_note(report: VerificationReport) -> str:
+    """A visible line under an answer whose figures could not all be traced."""
+    if report.grounded:
+        return ""
+    if report.misattributed:
+        return ("\n\n> **Check these figures:** " + "; ".join(report.misattributed[:3])
+                + ". The tables below show each organization's own figures.")
+    return ("\n\n> **Unverified figures:** " + ", ".join(report.unmatched[:3])
+            + " could not be traced to the retrieved data. Rely on the tables below.")

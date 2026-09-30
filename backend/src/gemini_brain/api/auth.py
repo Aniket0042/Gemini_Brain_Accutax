@@ -3,10 +3,11 @@ auth.py — Authentication, JWT token management, password hashing, and tenant i
 """
 from __future__ import annotations
 
+import json
 import logging
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Iterable
 
 import jwt
 from fastapi import Depends, HTTPException, status
@@ -101,65 +102,24 @@ def create_access_token(
     return token
 
 
-# ── Organization Master Directory for Multi-Tenant Workspace ──────────────────
-# Re-pointed 2026-09-10: the previous four orgs (25/20/16/23) referenced
-# "accutax_bk_1_4" — a Postgres instance only reachable over an SSH tunnel
-# (`ssh -L 5435:localhost:5432 root@106.51.80.81 -p 7676`, see
-# deploy/gemini-brain-db-tunnel.service) that this environment's DB_HOST/
-# DB_NAME (`accutax_db`, directly reachable, no tunnel) never actually
-# connects to. Every one of those four org IDs was silently absent from the
-# database this service was actually querying — see docs/DATABASE_DEEP_DIVE.md
-# for the tunnel-only database this directory previously described.
-#
-# These four are chosen from `accutax_db` itself by measured data breadth
-# (income, expense, contacts, journal entries, cost centers, projects — same
-# methodology as the previous survey). Of `accutax_db`'s 21 organizations,
-# only orgs 1-5 have any transactional data at all; 6-21 are empty shells.
-# All stats below are live counts from *this* database — see the survey run
-# 2026-09-10. If DB_HOST/DB_NAME is later re-pointed at the tunnel database,
-# this directory needs to be re-derived against that database instead.
-ORGANIZATION_DIRECTORY: list[dict[str, Any]] = [
-    {
-        "id": 5,
-        "name": "Connectify LLC",
-        "display_name": "Connectify LLC (Dubai)",
-        "tag": "Primary Org",
-        "badge_color": "indigo",
-        "industry": "Corporate",
-        "currency": "AED",
-        "description": "761 invoices (AED 10.5M revenue), 469 bills, 1,686 journal entries.",
-    },
-    {
-        "id": 2,
-        "name": "Infro Labs",
-        "display_name": "Infro Labs (Abu Dhabi)",
-        "tag": "Branch Org",
-        "badge_color": "emerald",
-        "industry": "Technology",
-        "currency": "AED",
-        "description": "930 invoices, 465 bills, 964 journal entries.",
-    },
-    {
-        "id": 1,
-        "name": "Infro Labs",
-        "display_name": "Infro Labs (Dubai)",
-        "tag": "Branch Org",
-        "badge_color": "amber",
-        "industry": "Technology",
-        "currency": "AED",
-        "description": "930 invoices, 465 bills, 936 journal entries.",
-    },
-    {
-        "id": 3,
-        "name": "Connectify",
-        "display_name": "Connectify (Abu Dhabi)",
-        "tag": "Branch Org",
-        "badge_color": "purple",
-        "industry": "Corporate",
-        "currency": "AED",
-        "description": "930 invoices, 465 bills, 930 journal entries.",
-    },
-]
+_BADGE_COLORS = ("indigo", "emerald", "amber", "purple")
+
+
+def placeholder_tenants(org_ids: list[int]) -> list[dict[str, Any]]:
+    """Minimal tenant entries for when the organizations table cannot be read."""
+    return [
+        {
+            "id": int(oid),
+            "name": f"Organization {oid}",
+            "display_name": f"Organization {oid}",
+            "tag": "Tenant",
+            "badge_color": _BADGE_COLORS[i % len(_BADGE_COLORS)],
+            "industry": "",
+            "currency": "AED",
+            "description": "",
+        }
+        for i, oid in enumerate(org_ids)
+    ]
 
 
 def fetch_organizations_from_db(org_ids: list[int] | None = None, db_name: str = "") -> list[dict[str, Any]]:
@@ -188,7 +148,7 @@ def fetch_organizations_from_db(org_ids: list[int] | None = None, db_name: str =
                 )
             rows = cur.fetchall()
             tenants = []
-            for r in rows:
+            for i, r in enumerate(rows):
                 oid = int(r[0])
                 name = r[1] or f"Organization {oid}"
                 emirate = r[2] or ""
@@ -199,7 +159,7 @@ def fetch_organizations_from_db(org_ids: list[int] | None = None, db_name: str =
                     "name": name,
                     "display_name": display_label,
                     "tag": emirate or "Tenant",
-                    "badge_color": "indigo" if oid == 5 else "emerald" if oid == 2 else "amber" if oid == 1 else "purple",
+                    "badge_color": _BADGE_COLORS[i % len(_BADGE_COLORS)],
                     "industry": str(r[4] or ""),
                     "currency": currency,
                     "description": "",
@@ -259,15 +219,23 @@ def authenticate_with_accutax_api(email: str, password: str) -> dict[str, Any] |
                     claims = jwt.decode(token, options={"verify_signature": False})
                 except Exception:
                     claims = {}
-                user_id = int(claims.get("userId") or claims.get("user_id") or claims.get("sub") or 18)
+                raw_user_id = claims.get("userId") or claims.get("user_id") or claims.get("sub")
+                try:
+                    user_id = int(raw_user_id)
+                except (TypeError, ValueError):
+                    # Never guess an identity: a token we cannot tie to a user
+                    # would otherwise be served as some default account.
+                    logger.warning("Upstream Accutax token carries no usable user id; rejecting upstream login")
+                    return None
                 user_email = claims.get("email") or email
-                allowed_orgs = get_user_allowed_orgs(user_id)
+                allowed_orgs = _live_allowed_org_ids(user_id, token) or []
                 logger.info("Successfully authenticated with upstream Accutax API for %s (userId=%d)", user_email, user_id)
                 _remember_trusted_token(token, {
                     "sub": str(user_id),
                     "userId": user_id,
                     "email": user_email,
                     "allowed_org_ids": allowed_orgs,
+                    "accutax_token": token,
                 })
                 return {
                     "access_token": token,
@@ -308,8 +276,18 @@ def decode_access_token(token: str) -> dict[str, Any]:
 
 def fetch_accutax_accessible_orgs(token: str, user_id: int) -> list[dict[str, Any]]:
     """Owned + collaborator organizations from Accutax, matching the dashboard switcher."""
+    return _fetch_accutax_orgs(token, user_id) or []
+
+
+def _fetch_accutax_orgs(token: str, user_id: int) -> list[dict[str, Any]] | None:
+    """Like fetch_accutax_accessible_orgs, but None when Accutax could not answer.
+
+    An empty list is a real answer (the user has no organizations) and must not
+    be confused with a failed lookup, or revoked access could not be told apart
+    from an outage.
+    """
     if not token or not user_id:
-        return []
+        return None
     now = time.time()
     cache_key = f"{user_id}:{token[:24]}"
     cached = _ACCUTAX_ORG_CACHE.get(cache_key)
@@ -326,11 +304,11 @@ def fetch_accutax_accessible_orgs(token: str, user_id: int) -> list[dict[str, An
         )
         if resp.status_code != 200:
             logger.warning("Accutax all_organizations returned %s", resp.status_code)
-            return []
+            return None
         body = resp.json()
         raw = body.get("data") if isinstance(body, dict) else None
         if not isinstance(raw, list):
-            return []
+            return None
         tenants: list[dict[str, Any]] = []
         for org in raw:
             if not isinstance(org, dict) or org.get("id") is None:
@@ -361,7 +339,7 @@ def fetch_accutax_accessible_orgs(token: str, user_id: int) -> list[dict[str, An
         return tenants
     except Exception as e:
         logger.warning("Failed to load Accutax organizations for user %s: %s", user_id, e)
-        return []
+        return None
 
 
 def _decode_accutax_app_token(token: str) -> dict[str, Any] | None:
@@ -382,34 +360,64 @@ def _decode_accutax_app_token(token: str) -> dict[str, Any] | None:
     except (TypeError, ValueError):
         return None
 
-    allowed: list[int] = []
-    live = fetch_accutax_accessible_orgs(token, user_id_int)
-    if live:
-        allowed = [int(t["id"]) for t in live]
-    else:
-        org_id = claims.get("organization_id")
-        if org_id is not None:
-            try:
-                allowed.append(int(org_id))
-            except (TypeError, ValueError):
-                pass
-        try:
-            allowed.extend(get_user_allowed_orgs(user_id_int))
-        except Exception:
-            pass
+    # Live access is resolved per request in get_current_user. The org this
+    # token was issued for is kept only as the last-resort fallback there.
+    token_orgs: list[int] = []
+    try:
+        if claims.get("organization_id") is not None:
+            token_orgs.append(int(claims["organization_id"]))
+    except (TypeError, ValueError):
+        pass
 
-    unique_orgs = list(dict.fromkeys(allowed))
     return {
         "sub": str(user_id_int),
         "userId": user_id_int,
         "email": claims.get("email") or "",
-        "allowed_org_ids": unique_orgs,
+        "allowed_org_ids": token_orgs,
         "accutax_token": token,
     }
 
 
+def _load_seed_users() -> list[dict[str, Any]]:
+    """Parse SEED_TEST_USERS, a JSON list of {name, email, password, org_ids}."""
+    raw = (settings.seed_test_users or "").strip()
+    if not raw:
+        return []
+    try:
+        entries = json.loads(raw)
+    except ValueError as e:
+        logger.error("SEED_TEST_USERS is not valid JSON; no test users seeded: %s", e)
+        return []
+    if not isinstance(entries, list):
+        logger.error("SEED_TEST_USERS must be a JSON list; no test users seeded.")
+        return []
+
+    seeds: list[dict[str, Any]] = []
+    for index, entry in enumerate(entries):
+        try:
+            seeds.append({
+                "name": str(entry.get("name") or entry["email"]),
+                "email": str(entry["email"]),
+                "password": str(entry["password"]),
+                "org_ids": [int(o) for o in entry.get("org_ids") or []],
+            })
+        except (AttributeError, KeyError, TypeError, ValueError):
+            # Index only: the entry itself holds a password.
+            logger.error("Skipping malformed SEED_TEST_USERS entry at index %d.", index)
+    return seeds
+
+
 def init_auth_db(db_name: str = "") -> None:
-    """Initialize users and user_organizations tables and seed test users."""
+    """Create the local auth tables and seed the accounts listed in SEED_TEST_USERS.
+
+    Does nothing when SEED_TEST_USERS is empty, so a database whose users and
+    organizations belong to the Accutax backend is never written to at startup.
+    """
+    seed_users = _load_seed_users()
+    if not seed_users:
+        logger.info("SEED_TEST_USERS is empty; skipping auth DB initialization.")
+        return
+
     conn = get_connection(db_name)
     cur = conn.cursor()
     try:
@@ -438,30 +446,13 @@ def init_auth_db(db_name: str = "") -> None:
 
         conn.commit()
 
-        # 3. Seed default test accounts if missing
-        # Org IDs below (1, 2, 3, 5) are accutax_db's own organizations — see
-        # ORGANIZATION_DIRECTORY above for why. They used to be 27/25/154/28/14/44,
-        # which don't exist in this database; those stale values shipped real,
-        # already-inserted rows in production's public.user_organizations that this
-        # block's own "insert if missing" check could never repair — fixed with a
-        # one-time UPDATE on 2026-09-10, see git history for that migration.
-        seed_users = [
-            ("Org 27 User", "user_org27@accutax.com", "Org27Pass123!", [1]),
-            ("Org 25 User", "user_org25@accutax.com", "Org25Pass123!", [2]),
-            ("Org 154 User", "user_org154@accutax.com", "Org154Pass123!", [3]),
-            ("Org 28 User", "user_org28@accutax.com", "Org28Pass123!", [5]),
-            ("All Orgs Admin", "admin_all@accutax.com", "AdminPass123!", [1, 2, 3, 5]),
-            ("Legacy User 18", "testuser12@test.com", "TestPass123!", [3]),
-            ("Accutax Test User", "genthird456@gmail.com", "Password123$$", [3]),
-            ("Single Org User", "user_single@example.com", "TestPass123!", [1]),
-            ("Multi Org User", "user_multi@example.com", "TestPass123!", [1, 3]),
-        ]
-
+        # 3. Seed test accounts if missing
         # Check existing columns in public.users to build robust INSERT statement
         cur.execute("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='users';")
         cols = {r[0] for r in cur.fetchall()}
 
-        for name, email, password, orgs in seed_users:
+        for seed in seed_users:
+            name, email, password, orgs = seed["name"], seed["email"], seed["password"], seed["org_ids"]
             cur.execute("SELECT id, password FROM public.users WHERE email = %s;", (email,))
             row = cur.fetchone()
             if not row:
@@ -506,95 +497,8 @@ def init_auth_db(db_name: str = "") -> None:
         conn.close()
 
 
-# Pre-computed seed test accounts for guaranteed login even when PostgreSQL tunnel is offline
-_SEED_USER_MAP: dict[str, dict[str, Any]] = {
-    "user_org27@accutax.com": {
-        "id": 2701,
-        "email": "user_org27@accutax.com",
-        "password": "Org27Pass123!",
-        "allowed_org_ids": [27],
-    },
-    "user_org25@accutax.com": {
-        "id": 2501,
-        "email": "user_org25@accutax.com",
-        "password": "Org25Pass123!",
-        "allowed_org_ids": [25],
-    },
-    "user_org154@accutax.com": {
-        "id": 15401,
-        "email": "user_org154@accutax.com",
-        "password": "Org154Pass123!",
-        "allowed_org_ids": [154],
-    },
-    "user_org28@accutax.com": {
-        "id": 2801,
-        "email": "user_org28@accutax.com",
-        "password": "Org28Pass123!",
-        "allowed_org_ids": [28],
-    },
-    "admin_all@accutax.com": {
-        "id": 9999,
-        "email": "admin_all@accutax.com",
-        "password": "AdminPass123!",
-        "allowed_org_ids": [2, 1, 3, 5],
-    },
-    "testuser12@test.com": {
-        "id": 18,
-        "email": "testuser12@test.com",
-        "password": "TestPass123!",
-        "allowed_org_ids": [2, 1, 3, 5],
-    },
-    "genthird456@gmail.com": {
-        "id": 18,
-        "email": "genthird456@gmail.com",
-        "password": "Password123$$",
-        "allowed_org_ids": [2, 1, 3, 5],
-    },
-    "admin@accutax.com": {
-        "id": 7483,
-        "email": "admin@accutax.com",
-        "password": "TestPass123!",
-        "allowed_org_ids": [14, 44],
-    },
-    "user_single@example.com": {
-        "id": 1012,
-        "email": "user_single@example.com",
-        "password": "TestPass123!",
-        "allowed_org_ids": [14],
-    },
-    "user_multi@example.com": {
-        "id": 1013,
-        "email": "user_multi@example.com",
-        "password": "TestPass123!",
-        "allowed_org_ids": [14, 44],
-    },
-    "user_no_org@example.com": {
-        "id": 1014,
-        "email": "user_no_org@example.com",
-        "password": "TestPass123!",
-        "allowed_org_ids": [],
-    },
-    "usertest1@test.com": {
-        "id": 7484,
-        "email": "usertest1@test.com",
-        "password": "TestPass123!",
-        "allowed_org_ids": [44],
-    },
-    "usertest2@test.com": {
-        "id": 7485,
-        "email": "usertest2@test.com",
-        "password": "TestPass123!",
-        "allowed_org_ids": [45],
-    },
-}
-
-
 def get_user_by_email(email: str, db_name: str = "") -> dict[str, Any] | None:
-    """Fetch user record by email from public.users with fallback to seed accounts."""
-    # Check in-memory seed map first for guaranteed instant login
-    if email in _SEED_USER_MAP:
-        return _SEED_USER_MAP[email]
-
+    """Fetch user record by email from public.users. None if absent or the DB is unreachable."""
     try:
         conn = get_connection(db_name)
         cur = conn.cursor()
@@ -607,51 +511,164 @@ def get_user_by_email(email: str, db_name: str = "") -> dict[str, Any] | None:
             cur.close()
             conn.close()
     except Exception as e:
-        logger.warning("Failed to query user by email from DB: %s (using offline fallback)", e)
-
-    # Dynamic fallback user record for arbitrary corporate emails when DB is offline
-    return {
-        "id": 18,
-        "email": email,
-        "password": "TestPass123!",
-    }
+        logger.warning("Failed to query user by email from DB: %s", e)
+    return None
 
 
 def get_user_allowed_orgs(user_id: int, db_name: str = "") -> list[int]:
-    """Fetch list of allowed organization IDs for a given user ID."""
-    # Check seed user IDs first
-    for seed_user in _SEED_USER_MAP.values():
-        if seed_user["id"] == user_id:
-            return seed_user["allowed_org_ids"]
+    """Organizations the user is granted in user_organizations or owns via organizations.user_id."""
+    return _query_user_allowed_orgs(user_id, db_name) or []
 
+
+_DB_ORG_CACHE: dict[int, tuple[float, list[int]]] = {}
+
+
+def _query_user_allowed_orgs(user_id: int, db_name: str = "") -> list[int] | None:
+    """Like get_user_allowed_orgs, but None when the database could not answer."""
     try:
         conn = get_connection(db_name)
         cur = conn.cursor()
         try:
             cur.execute(
-                "SELECT organization_id FROM public.user_organizations WHERE user_id = %s ORDER BY organization_id ASC;",
-                (user_id,),
+                """
+                SELECT organization_id FROM public.user_organizations WHERE user_id = %s
+                UNION
+                SELECT id FROM public.organizations WHERE user_id = %s
+                ORDER BY 1;
+                """,
+                (user_id, user_id),
             )
-            rows = cur.fetchall()
-            if rows:
-                return [r[0] for r in rows]
-            return []
+            return [int(r[0]) for r in cur.fetchall()]
         finally:
             cur.close()
             conn.close()
     except Exception as e:
         logger.warning("Failed to fetch user allowed orgs from DB: %s", e)
-        return []
+        return None
+
+
+def _live_allowed_org_ids(user_id: int, accutax_token: str = "") -> list[int] | None:
+    """Current organization access from the source of truth, or None if unreachable.
+
+    Accutax's own organization list comes first, since it is what the dashboard
+    switcher shows (owners and collaborators). The database is the fallback,
+    and the only source for locally issued tokens. Both answers are cached for
+    the same TTL, so revoked access stops working within that window.
+    """
+    if accutax_token:
+        live = _fetch_accutax_orgs(accutax_token, user_id)
+        if live is not None:
+            return [int(t["id"]) for t in live]
+
+    now = time.time()
+    cached = _DB_ORG_CACHE.get(user_id)
+    if cached and (now - cached[0]) < _ACCUTAX_ORG_CACHE_TTL_SECONDS:
+        return cached[1]
+    from_db = _query_user_allowed_orgs(user_id)
+    if from_db is not None:
+        _DB_ORG_CACHE[user_id] = (now, from_db)
+    return from_db
+
+
+def resolve_allowed_org_ids(
+    user_id: int,
+    accutax_token: str = "",
+    token_org_ids: list[int] | None = None,
+) -> list[int]:
+    """Organizations this user may query right now.
+
+    The org list signed into a token is a snapshot from login, so it keeps
+    granting access after that access is revoked. It is used only when no live
+    source can answer. With no live answer and no snapshot, access is refused.
+    """
+    live = _live_allowed_org_ids(user_id, accutax_token)
+    if live is not None:
+        return live
+    if token_org_ids is not None:
+        logger.warning(
+            "Live organization lookup failed for user %s; using the org list from the token",
+            user_id,
+        )
+        return [int(o) for o in token_org_ids]
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Could not verify organization access. Try again shortly.",
+    )
+
+
+_audit_logger = logging.getLogger("gemini_brain.audit.org_access")
+
+
+def authorize_org_scope(
+    requested: Iterable[Any] | None,
+    user: CurrentUser,
+    *,
+    action: str,
+) -> list[int]:
+    """The single gate for every organization a request names.
+
+    Returns the requested IDs, de-duplicated in request order, when the user may
+    access all of them. Refuses the whole request if any one is outside the
+    user's live allow-list: dropping it silently would answer a different
+    question than the one asked. An empty allow-list grants nothing. Naming no
+    organization returns [] and leaves the default to the caller.
+
+    Every decision is written to the org-access audit log.
+    """
+    try:
+        orgs = list(dict.fromkeys(int(o) for o in (requested or []) if o is not None))
+    except (TypeError, ValueError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Organization IDs must be integers.",
+        ) from e
+
+    limit = settings.max_orgs_per_query
+    if len(orgs) > limit:
+        _audit_logger.warning(
+            "org_access denied action=%s user=%s requested=%s reason=too_many limit=%d",
+            action, user.user_id, orgs, limit,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"At most {limit} organizations can be queried together.",
+        )
+
+    allowed = {int(o) for o in (user.allowed_org_ids or [])}
+    denied = [o for o in orgs if o not in allowed]
+    if denied:
+        _audit_logger.warning(
+            "org_access denied action=%s user=%s requested=%s denied=%s allowed_count=%d",
+            action, user.user_id, orgs, denied, len(allowed),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Organization is not in the caller's allowed tenant list.",
+        )
+
+    if orgs:
+        _audit_logger.info("org_access granted action=%s user=%s orgs=%s", action, user.user_id, orgs)
+    return orgs
 
 
 class CurrentUser:
     """Class representing authenticated user claims extracted from JWT token."""
 
-    def __init__(self, user_id: int, email: str, allowed_org_ids: list[int], raw_token: str = ""):
+    def __init__(
+        self,
+        user_id: int,
+        email: str,
+        allowed_org_ids: list[int],
+        raw_token: str = "",
+        accutax_token: str = "",
+    ):
         self.user_id = user_id
         self.email = email
         self.allowed_org_ids = allowed_org_ids
         self.raw_token = raw_token
+        # Set only when the caller holds a genuine Accutax bearer; raw_token
+        # falls back to our own JWT, which Accutax does not accept.
+        self.accutax_token = accutax_token
 
 
 def get_current_user(token: str | None = Depends(oauth2_scheme)) -> CurrentUser:
@@ -664,32 +681,34 @@ def get_current_user(token: str | None = Depends(oauth2_scheme)) -> CurrentUser:
             headers={"WWW-Authenticate": "Bearer"},
         )
     payload = decode_access_token(token)
-    user_id_str = payload.get("sub") or str(payload.get("userId") or "18")
+    # No default identity: a verified token that names no user is refused
+    # rather than served as some fallback account.
+    raw_user_id = payload.get("sub") or payload.get("userId")
     try:
-        user_id = int(user_id_str)
-    except ValueError as e:
+        user_id = int(raw_user_id)
+    except (TypeError, ValueError) as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid user ID format in token",
+            detail="Access token does not identify a user",
+            headers={"WWW-Authenticate": "Bearer"},
         ) from e
 
     email = payload.get("email", "")
-    # Only fall back to a looked-up org list when the token never carried the
-    # claim at all. A token with allowed_org_ids explicitly set to [] means
-    # this user genuinely has no assigned organizations -- that must not be
-    # silently upgraded to a default org list.
-    if "allowed_org_ids" in payload:
-        allowed_org_ids = payload.get("allowed_org_ids") or []
-    else:
-        allowed_org_ids = get_user_allowed_orgs(user_id)
+    accutax_token = payload.get("accutax_token") or ""
+    # Resolved live on every request, so revoked access ends within the lookup
+    # cache TTL instead of lasting until the token expires. A live answer of []
+    # means the user has no organizations and is final.
+    token_org_ids = (payload.get("allowed_org_ids") or []) if "allowed_org_ids" in payload else None
+    allowed_org_ids = resolve_allowed_org_ids(user_id, accutax_token, token_org_ids)
 
     # Accutax REST calls need the upstream bearer, which rides as a claim. Fall
     # back to the presented token for locally-issued tokens that carry none.
-    upstream_token = payload.get("accutax_token") or token
+    upstream_token = accutax_token or token
 
     return CurrentUser(
         user_id=user_id,
         email=email,
         allowed_org_ids=[int(o) for o in allowed_org_ids],
         raw_token=upstream_token,
+        accutax_token=accutax_token,
     )

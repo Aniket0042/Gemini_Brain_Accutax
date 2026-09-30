@@ -1,0 +1,137 @@
+{
+ "title": "Overdue Invoices",
+ "period": null,
+ "currency": "AED",
+ "kpis": [],
+ "charts": [
+  {
+   "type": "hbar",
+   "title": "Amount by Invoice Number",
+   "categories": [
+    "INV-1079",
+    "INV-1078",
+    "INV-1077",
+    "INV-1076",
+    "INV-1075",
+    "INV-1074",
+    "INV-1073",
+    "INV-1072",
+    "INV-1071",
+    "INV-1070",
+    "INV-1069",
+    "Other"
+   ],
+   "series": [
+    {
+     "name": "Amount",
+     "data": [
+      97525.5,
+      96291.0,
+      95056.5,
+      93822.0,
+      92587.5,
+      91353.0,
+      90118.5,
+      88884.0,
+      87649.5,
+      86415.0,
+      85180.5,
+      2896137.0
+     ]
+    }
+   ],
+   "series_colors": [
+    "#0E8A75"
+   ],
+   "point_colors": null,
+   "takeaway": "INV-1079 is the largest at AED 97.5K, 2.5% of the total. The top three make up 7.4%.",
+   "requested_type": null,
+   "downgrade_reason": null,
+   "total_indices": null
+  }
+ ],
+ "tables": [
+  {
+   "title": "Details",
+   "columns": [
+    "Invoice Number",
+    "Due Date",
+    "Amount",
+    "Status",
+    "Customer Name",
+    "Issue Date"
+   ],
+   "first_rows": [
+    {
+     "status": "UNPAID",
+     "invoice_number": "INV-1079",
+     "customer_name": "Customer with a fairly long trading name 79 LLC",
+     "due_date": "1 Apr 2026",
+     "amount": "AED 97,525.50",
+     "issue_date": "1 Mar 2026"
+    },
+    {
+     "status": "UNPAID",
+     "invoice_number": "INV-1078",
+     "customer_name": "Customer with a fairly long trading name 78 LLC",
+     "due_date": "1 Apr 2026",
+     "amount": "AED 96,291.00",
+     "issue_date": "1 Mar 2026"
+    },
+    {
+     "status": "UNPAID",
+     "invoice_number": "INV-1077",
+     "customer_name": "Customer with a fairly long trading name 77 LLC",
+     "due_date": "1 Apr 2026",
+     "amount": "AED 95,056.50",
+     "issue_date": "1 Mar 2026"
+    },
+    {
+     "status": "UNPAID",
+     "invoice_number": "INV-1076",
+     "customer_name": "Customer with a fairly long trading name 76 LLC",
+     "due_date": "1 Apr 2026",
+     "amount": "AED 93,822.00",
+     "issue_date": "1 Mar 2026"
+    },
+    {
+     "status": "UNPAID",
+     "invoice_number": "INV-1075",
+     "customer_name": "Customer with a fairly long trading name 75 LLC",
+     "due_date": "1 Apr 2026",
+     "amount": "AED 92,587.50",
+     "issue_date": "1 Mar 2026"
+    }
+   ],
+   "total_rows": 79
+  }
+ ],
+ "callouts": [
+  {
+   "tone": "note",
+   "text": "Showing 50 of 79 rows. Download Excel for the full extract."
+  }
+ ],
+ "narrative": {
+  "origin": "template",
+  "headline": "INV-1079 is the largest at AED 97.5K, 2.5% of the total",
+  "summary": [],
+  "drivers": [
+   "The top three make up 7.4%."
+  ],
+  "risks": [],
+  "actions": []
+ },
+ "integrity": {
+  "checks_run": 0,
+  "checks_failed": 0,
+  "figures_checked": 3,
+  "figures_verified": 3,
+  "sentences_removed": 0
+ },
+ "methodology": [
+  "Amounts in AED. A dash (—) marks a value the source did not provide.",
+  "Request: overdue invoices as pdf",
+  "The summary was generated directly from the verified figures in this report."
+ ]
+}

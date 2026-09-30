@@ -1,0 +1,77 @@
+{
+ "title": "Income vs Expense",
+ "period": null,
+ "currency": "AED",
+ "kpis": [],
+ "charts": [
+  {
+   "type": "line",
+   "title": "Income vs Expense vs Cash Flow",
+   "categories": [
+    "Jan 2026",
+    "Feb 2026",
+    "Mar 2026"
+   ],
+   "series": [
+    {
+     "name": "Income",
+     "data": [
+      100000.0,
+      120000.0,
+      90000.0
+     ]
+    },
+    {
+     "name": "Expense",
+     "data": [
+      60000.0,
+      65000.0,
+      70000.0
+     ]
+    },
+    {
+     "name": "Cash Flow",
+     "data": [
+      40000.0,
+      55000.0,
+      20000.0
+     ]
+    }
+   ],
+   "series_colors": [
+    "#0E8A75",
+    "#EB6834",
+    "#2A78D6"
+   ],
+   "point_colors": null,
+   "takeaway": "Income was above Expense in 3 of 3 periods; the widest gap was AED 55.0K in Feb 2026.",
+   "requested_type": "line",
+   "downgrade_reason": null,
+   "total_indices": null
+  }
+ ],
+ "tables": [],
+ "callouts": [],
+ "narrative": {
+  "origin": "template",
+  "headline": "Income was above Expense in 3 of 3 periods",
+  "summary": [],
+  "drivers": [
+   "The widest gap was AED 55.0K in Feb 2026."
+  ],
+  "risks": [],
+  "actions": []
+ },
+ "integrity": {
+  "checks_run": 0,
+  "checks_failed": 0,
+  "figures_checked": 1,
+  "figures_verified": 1,
+  "sentences_removed": 0
+ },
+ "methodology": [
+  "Amounts in AED. A dash (—) marks a value the source did not provide.",
+  "Request: income vs expense trend chart",
+  "The summary was generated directly from the verified figures in this report."
+ ]
+}

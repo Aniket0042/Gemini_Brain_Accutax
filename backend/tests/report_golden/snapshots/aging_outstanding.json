@@ -1,0 +1,106 @@
+{
+ "title": "Outstanding Receivables by Customer",
+ "period": null,
+ "currency": "AED",
+ "kpis": [],
+ "charts": [
+  {
+   "type": "hbar",
+   "title": "Outstanding Amount and Current by Customer",
+   "categories": [
+    "Apex Retail Trading LLC",
+    "Marina Foods",
+    "Falcon Energy"
+   ],
+   "series": [
+    {
+     "name": "Outstanding Amount",
+     "data": [
+      39000.0,
+      12000.0,
+      7500.0
+     ]
+    },
+    {
+     "name": "Current",
+     "data": [
+      12000.0,
+      0.0,
+      5000.0
+     ]
+    }
+   ],
+   "series_colors": [
+    "#0E8A75",
+    "#2A78D6"
+   ],
+   "point_colors": null,
+   "takeaway": "Apex Retail Trading LLC has the highest Outstanding Amount at AED 39.0K, 66.7% of the total.",
+   "requested_type": null,
+   "downgrade_reason": null,
+   "total_indices": null
+  }
+ ],
+ "tables": [
+  {
+   "title": "Details",
+   "columns": [
+    "Customer Name",
+    "Current",
+    "Days 1 30",
+    "Days 31 60",
+    "Days Over 90",
+    "Outstanding Amount"
+   ],
+   "first_rows": [
+    {
+     "outstanding_amount": "AED 39,000.00",
+     "days_1_30": "8,000",
+     "days_31_60": "4,000",
+     "customer_name": "Apex Retail Trading LLC",
+     "days_over_90": "15,000",
+     "current": "12000"
+    },
+    {
+     "outstanding_amount": "AED 12,000.00",
+     "days_1_30": "3,000",
+     "days_31_60": "0",
+     "customer_name": "Marina Foods",
+     "days_over_90": "9,000",
+     "current": "0"
+    },
+    {
+     "outstanding_amount": "AED 7,500.00",
+     "days_1_30": "0",
+     "days_31_60": "2,500",
+     "customer_name": "Falcon Energy",
+     "days_over_90": "0",
+     "current": "5000"
+    }
+   ],
+   "total_rows": 3
+  }
+ ],
+ "callouts": [],
+ "narrative": {
+  "origin": "template",
+  "headline": "Apex Retail Trading LLC has the highest Outstanding Amount at AED 39.0K, 66.7% of the total",
+  "summary": [],
+  "drivers": [],
+  "risks": [],
+  "actions": []
+ },
+ "integrity": {
+  "checks_run": 2,
+  "checks_failed": 0,
+  "figures_checked": 2,
+  "figures_verified": 2,
+  "sentences_removed": 0
+ },
+ "methodology": [
+  "Amounts in AED. A dash (—) marks a value the source did not provide.",
+  "Request: outstanding receivables by customer chart",
+  "The summary was generated directly from the verified figures in this report.",
+  "Consistency checks: 2 of 2 passed."
+ ]
+}

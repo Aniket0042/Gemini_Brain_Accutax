@@ -1,0 +1,311 @@
+{
+  "description": "Multi-organization questions with the answer layout each must get. 'offline' cases are decided without any model call and are checked by tests/unit/test_multi_org_eval_cases.py on every run; all cases run live via scripts/eval/multi_org_eval.py.",
+  "word_limits": {
+    "metric": 220,
+    "per_org": 300,
+    "merged": 220,
+    "overlap": 220,
+    "collapsed": 300,
+    "direct": 320,
+    "multi_metric": 260,
+    "series": 260
+  },
+  "cases": [
+    {
+      "id": "s1_compare_revenue",
+      "question": "Compare total revenue this year",
+      "layout": "metric",
+      "metric": "revenue",
+      "screenshot": true
+    },
+    {
+      "id": "s2_higher_receivables",
+      "question": "Which organization has higher outstanding receivables?",
+      "layout": "metric",
+      "metric": "receivables",
+      "screenshot": true
+    },
+    {
+      "id": "s3_vendors_overdue_bills",
+      "question": "List vendors with overdue bills in each organization",
+      "layout": "per_org",
+      "screenshot": true
+    },
+    {
+      "id": "s4_highest_cash",
+      "question": "Which organization has the highest cash balance?",
+      "layout": "metric",
+      "metric": "cash_balance",
+      "screenshot": true
+    },
+    {
+      "id": "s5_rank_expenses",
+      "question": "Rank the organizations by total expenses",
+      "layout": "metric",
+      "metric": "expenses",
+      "screenshot": true
+    },
+    {
+      "id": "s6_vendors_both",
+      "question": "Which vendors are good for both organizations?",
+      "layout": "overlap",
+      "screenshot": true
+    },
+    {
+      "id": "m_revenue_last_year",
+      "question": "Compare revenue for last year",
+      "layout": "metric",
+      "metric": "revenue"
+    },
+    {
+      "id": "m_least_revenue_quarter",
+      "question": "Which org earned the least revenue this quarter?",
+      "layout": "metric",
+      "metric": "revenue",
+      "order": "ascending"
+    },
+    {
+      "id": "m_net_profit",
+      "question": "Compare net profit this year",
+      "layout": "metric",
+      "metric": "net_profit"
+    },
+    {
+      "id": "m_most_profitable",
+      "question": "Which organization is most profitable?",
+      "layout": "metric",
+      "metric": "net_profit"
+    },
+    {
+      "id": "m_overdue_invoices",
+      "question": "Who has the most overdue invoices?",
+      "layout": "metric",
+      "metric": "overdue_receivables"
+    },
+    {
+      "id": "m_payables",
+      "question": "Compare outstanding payables",
+      "layout": "metric",
+      "metric": "payables"
+    },
+    {
+      "id": "m_overdue_bills",
+      "question": "Which org has the highest overdue bills?",
+      "layout": "metric",
+      "metric": "overdue_payables"
+    },
+    {
+      "id": "m_spending_month",
+      "question": "Compare total spending this month",
+      "layout": "metric",
+      "metric": "expenses"
+    },
+    {
+      "id": "m_sales_last_quarter",
+      "question": "Rank organizations by sales last quarter",
+      "layout": "metric",
+      "metric": "revenue"
+    },
+    {
+      "id": "m_lowest_expenses",
+      "question": "Which organization has the lowest expenses this year?",
+      "layout": "metric",
+      "metric": "expenses",
+      "order": "ascending"
+    },
+    {
+      "id": "p_invoices_year",
+      "question": "List invoices for this year",
+      "layout": "per_org"
+    },
+    {
+      "id": "p_top5_customers",
+      "question": "Show top 5 customers for each organization",
+      "layout": "per_org"
+    },
+    {
+      "id": "p_unpaid_invoices",
+      "question": "List unpaid invoices in each organization",
+      "layout": "per_org"
+    },
+    {
+      "id": "p_expenses_by_category",
+      "question": "Show expenses by category",
+      "layout": "per_org"
+    },
+    {
+      "id": "p_top_vendors",
+      "question": "List top vendors per organization",
+      "layout": "per_org"
+    },
+    {
+      "id": "g_top_customers_all",
+      "question": "Top 10 customers across all organizations",
+      "layout": "merged"
+    },
+    {
+      "id": "g_largest_invoices",
+      "question": "Show the largest invoices overall",
+      "layout": "merged"
+    },
+    {
+      "id": "g_top_vendors_spend",
+      "question": "Top vendors by spend across all organizations",
+      "layout": "merged"
+    },
+    {
+      "id": "o_common_customers",
+      "question": "Which customers are common to all organizations?",
+      "layout": "overlap"
+    },
+    {
+      "id": "o_shared_vendors",
+      "question": "Vendors shared between the organizations",
+      "layout": "overlap"
+    },
+    {
+      "id": "o_both_vendors",
+      "question": "Which vendors do both organizations use?",
+      "layout": "overlap"
+    },
+    {
+      "id": "mm_balance_sheet",
+      "question": "Compare the balance sheet",
+      "layout": "multi_metric",
+      "metrics": [
+        "total_assets",
+        "total_liabilities",
+        "total_equity"
+      ]
+    },
+    {
+      "id": "m_vat_payable",
+      "question": "Compare VAT payable",
+      "layout": "metric",
+      "metric": "vat_payable"
+    },
+    {
+      "id": "mm_pl_statement",
+      "question": "Compare the P&L statement",
+      "layout": "multi_metric",
+      "metrics": [
+        "revenue",
+        "expenses",
+        "net_profit",
+        "profit_margin"
+      ]
+    },
+    {
+      "id": "d_what_is_vat",
+      "question": "What is VAT?",
+      "layout": "direct",
+      "offline": false
+    },
+    {
+      "id": "d_how_create_invoice",
+      "question": "How do I create an invoice?",
+      "layout": "direct",
+      "offline": false
+    },
+    {
+      "id": "w_what_is_total_revenue",
+      "question": "What is the total revenue for each organization this year?",
+      "layout": "metric",
+      "metric": "revenue"
+    },
+    {
+      "id": "w_show_me_revenue",
+      "question": "Show me the total revenue for this year",
+      "layout": "metric",
+      "metric": "revenue"
+    },
+    {
+      "id": "w_lowercase_compare",
+      "question": "compare total revenue this year",
+      "layout": "metric",
+      "metric": "revenue"
+    },
+    {
+      "id": "w_what_is_cash",
+      "question": "What is the cash balance of each organization?",
+      "layout": "metric",
+      "metric": "cash_balance"
+    },
+    {
+      "id": "w_how_much_expenses",
+      "question": "How much did each organization spend this year?",
+      "layout": "metric",
+      "metric": "expenses"
+    },
+    {
+      "id": "mm_revenue_expenses_cash",
+      "question": "Compare revenue, expenses and cash this year",
+      "layout": "multi_metric",
+      "metrics": [
+        "revenue",
+        "expenses",
+        "cash_balance"
+      ]
+    },
+    {
+      "id": "mm_assets_liabilities",
+      "question": "Compare total assets and liabilities",
+      "layout": "multi_metric",
+      "metrics": [
+        "total_assets",
+        "total_liabilities"
+      ]
+    },
+    {
+      "id": "mm_revenue_profit_growth",
+      "question": "Show revenue and profit growth vs last year",
+      "layout": "multi_metric",
+      "metrics": [
+        "revenue_growth",
+        "profit_growth"
+      ]
+    },
+    {
+      "id": "r_profit_margin",
+      "question": "Which organization has the best profit margin this year?",
+      "layout": "metric",
+      "metric": "profit_margin"
+    },
+    {
+      "id": "r_net_margin",
+      "question": "Compare net margin",
+      "layout": "metric",
+      "metric": "profit_margin"
+    },
+    {
+      "id": "r_revenue_growth_yoy",
+      "question": "Compare revenue growth vs last year",
+      "layout": "metric",
+      "metric": "revenue_growth"
+    },
+    {
+      "id": "r_expense_change_qoq",
+      "question": "How did expenses change compared to the previous quarter?",
+      "layout": "metric",
+      "metric": "expense_growth"
+    },
+    {
+      "id": "t_revenue_by_month",
+      "question": "Revenue by month for each organization this year",
+      "layout": "series",
+      "metric": "revenue"
+    },
+    {
+      "id": "t_quarterly_profit",
+      "question": "Quarterly profit trend this year",
+      "layout": "series",
+      "metric": "net_profit"
+    },
+    {
+      "id": "t_expenses_monthly",
+      "question": "Show monthly expenses for each organization",
+      "layout": "series",
+      "metric": "expenses"
+    }
+  ]
+}

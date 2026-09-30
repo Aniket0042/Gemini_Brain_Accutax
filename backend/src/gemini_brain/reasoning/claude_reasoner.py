@@ -47,6 +47,10 @@ The DATA block is authoritative and already fully aggregated by the system.
   exactly as given.
 - If a figure the user asked for is not present in DATA, say it is not available.
   Never estimate or infer it.
+- Name every figure by what it measures in DATA, never by the user's wording.
+  If the user asked for a per-customer, per-vendor, or per-item breakdown and
+  DATA holds only totals, say that breakdown is not in this data; never present
+  a total (for example net profit) as the answer to it.
 - DATA is only "truncated" if it literally contains the marker
   "[payload truncated]". If that marker is absent, do not describe the data as
   truncated, incomplete, or missing — a zero, an empty list, and an all-zero
@@ -94,8 +98,11 @@ ANALYST_SYSTEM_PROMPT_DETAILED: str = _ANALYST_CORE_RULES + """- A full table of
   its figure, as a markdown bullet list. Never collapse a breakdown into a single
   total — if the user asked which categories, which customers, or which months,
   they need those named.
+- For a top/bottom ranking, DATA rows are already sorted in the order asked. Keep
+  that order; never re-rank them yourself.
 - For a long ranking, cover the leaders individually and characterise the rest in
-  one line (how much of the total they represent, whether the tail is even).
+  one line (whether the tail is even). State the rest's share of a total only when
+  DATA gives that total — never add the rows up yourself.
 - Close with what stands out and what to watch, in at most three short bullets.
 - Use markdown headers and bullets for structure. Do not build a markdown table.
 - Be complete but not padded. Stop when the question is answered — roughly 350
@@ -197,6 +204,9 @@ def _format_payload_and_system(
     brief: bool = False,
 ) -> Tuple[str, str]:
     """Format and cap data payload to 2000 tokens with truncation notice if needed."""
+    from gemini_brain.tools.formatters import rank_payload_for_query
+
+    data = rank_payload_for_query(data, query)
     total_rows = 0
     shown_rows = 0
     is_list_payload = False
@@ -306,6 +316,7 @@ def reason_over_data(
         messages=[{"role": "user", "content": [{"text": user_msg}]}],
         temperature=0.0,
         max_tokens=max_tokens,
+        purpose="narration",
     )
     tu = adapter.get_token_usage()
     return (
@@ -371,6 +382,7 @@ def reason_over_data_stream(
         messages=[{"role": "user", "content": [{"text": user_msg}]}],
         temperature=0.0,
         max_tokens=max_tokens,
+        purpose="narration",
     ):
         full_chunks.append(chunk)
         yield chunk, None

@@ -55,6 +55,16 @@ class GeminiBrainSettings(BaseSettings):
 
     # ── Accutax Backend API ────────────────────────────────────
     accutax_base_url: str = Field(default="http://13.127.157.108:8081")
+    accutax_app_url: str = Field(
+        default="https://accutax-bk-testing.netlify.app",
+        description=(
+            "Public URL of the Accutax web app (the frontend users click "
+            "into), NOT the REST API host above. Used to build deep links "
+            "from App Guidance answers into the live app — see "
+            "knowledge/guide_loader.py SECTION_ROUTES. Override via "
+            "ACCUTAX_APP_URL for production."
+        ),
+    )
     accutax_auth_token: str = Field(
         default="",
         description=(
@@ -158,9 +168,87 @@ class GeminiBrainSettings(BaseSettings):
         default=60,
         description="JWT token validity in minutes.",
     )
+    max_orgs_per_query: int = Field(
+        default=5,
+        description="Most organizations one request may name. Bounds fan-out cost and latency.",
+    )
+    multi_org_enabled: bool = Field(
+        default=False,
+        description=(
+            "Allow one query to name several organizations (MULTI_ORG_ENABLED). "
+            "Off: a request naming more than one organization is refused."
+        ),
+    )
+    multi_org_plan_log: str = Field(
+        default="logs/multi_org_plans.jsonl",
+        description=(
+            "JSON-lines file recording how each multi-organization question was planned and laid "
+            "out (redacted question, no IDs), relative to backend/. Empty turns it off."
+        ),
+    )
+    seed_test_users: str = Field(
+        default="",
+        description=(
+            "JSON list of test accounts to create at startup, e.g. "
+            '[{"name": "Demo", "email": "demo@x.com", "password": "...", "org_ids": [27]}]. '
+            "Empty means no seeding and no startup writes to the database."
+        ),
+    )
     show_sql_traces: bool = Field(
         default=True,
         description="Whether to capture and return executed SQL traces in query responses.",
+    )
+    show_api_traces: bool = Field(
+        default=True,
+        description="Whether to capture and return executed Accutax REST API call traces (endpoint, params, status) in query responses.",
+    )
+    show_llm_traces: bool = Field(
+        default=True,
+        description="Whether to capture and return per-call Bedrock/Claude LLM traces (model, purpose, tokens, duration) in query responses.",
+    )
+    report_narrative_mode: str = Field(
+        default="llm",
+        description=(
+            "How report files and the canvas get their written summary: 'llm' (a report "
+            "narrator writes from the verified fact brief, template on failure), 'template' "
+            "(deterministic sentences only, no model call)."
+        ),
+    )
+    report_narrative_model_id: str = Field(
+        default="",
+        description="Bedrock model for report narration. Empty = BEDROCK_MODEL_ID (the primary model).",
+    )
+    report_narrative_timeout_seconds: float = Field(
+        default=20.0,
+        ge=1.0,
+        description="Longest a report waits for its narrative before using the template instead.",
+    )
+    artifact_dir: str = Field(
+        default="",
+        description="Directory for generated report files, their specs and the audit log. Empty = <system temp>/accutax-artifacts.",
+    )
+    artifact_spec_retention_days: int = Field(
+        default=30,
+        ge=0,
+        description="How long a report's validated spec is kept after its file expires, so the file can be regenerated.",
+    )
+    artifact_max_bytes: int = Field(
+        default=25 * 1024 * 1024,
+        ge=1024,
+        description="Largest generated file the store accepts; a bigger render is refused rather than served.",
+    )
+    report_render_timeout_seconds: float = Field(
+        default=45.0,
+        ge=1.0,
+        description="Longest one file format may take to render before the report goes out without it.",
+    )
+    artifact_ttl_seconds: int = Field(
+        default=86_400,
+        ge=60,
+        description=(
+            "How long a generated report file (PDF/XLSX/DOCX/...) stays downloadable. "
+            "Download still requires the owning user and an allowed organization."
+        ),
     )
 
     model_config = {

@@ -1,0 +1,85 @@
+{
+ "title": "Revenue by Region",
+ "period": null,
+ "currency": "USD",
+ "kpis": [],
+ "charts": [
+  {
+   "type": "bar",
+   "title": "Revenue by Region",
+   "categories": [
+    "North",
+    "South",
+    "West"
+   ],
+   "series": [
+    {
+     "name": "Revenue",
+     "data": [
+      125000.0,
+      98000.0,
+      43000.0
+     ]
+    }
+   ],
+   "series_colors": [
+    "#0E8A75"
+   ],
+   "point_colors": null,
+   "takeaway": "North is the largest at USD 125.0K, 47.0% of the total.",
+   "requested_type": null,
+   "downgrade_reason": null,
+   "total_indices": null
+  }
+ ],
+ "tables": [
+  {
+   "title": "Details",
+   "columns": [
+    "Region",
+    "Revenue"
+   ],
+   "first_rows": [
+    {
+     "revenue": "AED 125,000.00",
+     "region": "North"
+    },
+    {
+     "revenue": "AED 98,000.00",
+     "region": "South"
+    },
+    {
+     "revenue": "AED 43,000.00",
+     "region": "West"
+    }
+   ],
+   "total_rows": 3
+  }
+ ],
+ "callouts": [],
+ "narrative": {
+  "origin": "template",
+  "headline": "North is the largest at USD 125.0K, 47.0% of the total",
+  "summary": [],
+  "drivers": [],
+  "risks": [
+   "North accounts for 47.0% of the total, so results depend heavily on a single name."
+  ],
+  "actions": [
+   "Review exposure to North and how to broaden the base."
+  ]
+ },
+ "integrity": {
+  "checks_run": 1,
+  "checks_failed": 0,
+  "figures_checked": 3,
+  "figures_verified": 3,
+  "sentences_removed": 0
+ },
+ "methodology": [
+  "Amounts in USD. A dash (—) marks a value the source did not provide.",
+  "Request: revenue by region chart",
+  "The summary was generated directly from the verified figures in this report.",
+  "Consistency checks: 1 of 1 passed."
+ ]
+}

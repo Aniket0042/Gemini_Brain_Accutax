@@ -610,16 +610,16 @@ h1, h2, h3, h4, h5 {
   color: var(--ink-soft);
 }
 
-.query-textarea::-webkit-scrollbar {
-  width: 5px;
-}
-.query-textarea::-webkit-scrollbar-track {
-  background: transparent;
-}
-.query-textarea::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border-radius: 4px;
-}
+/* Composer text: a thin scrollbar that only shows while hovered, and no
+   arrow buttons, so a long question never shows a heavy gutter. */
+.query-textarea { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+.query-textarea:hover { scrollbar-color: var(--border-strong) transparent; }
+.query-textarea::-webkit-scrollbar { width: 6px; }
+.query-textarea::-webkit-scrollbar-button { display: none; height: 0; }
+.query-textarea::-webkit-scrollbar-track { background: transparent; }
+.query-textarea::-webkit-scrollbar-thumb { background: transparent; border-radius: 6px; }
+.query-textarea:hover::-webkit-scrollbar-thumb { background: var(--border-strong); }
+.query-textarea::placeholder { color: var(--ink-faint); }
 
 /* Minimal Modern AI Suggestion Cards (Claude / ChatGPT style) */
 .intro-hero {
@@ -1313,6 +1313,95 @@ h1, h2, h3, h4, h5 {
 
 .pp-divider { height: 1px; background: var(--border-soft); margin: 4px 2px; }
 
+/* Search box at the top of the org switcher; stays put while the list scrolls. */
+.pp-search {
+  position: sticky;
+  top: -6px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -6px -6px 4px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-soft);
+}
+.pp-search-icon { flex: 0 0 auto; color: var(--ink-faint); }
+.pp-search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--text-ui);
+}
+.pp-search-input::placeholder { color: var(--ink-faint); }
+.pp-search-clear {
+  display: inline-flex;
+  border: none;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+}
+.pp-search-clear:hover { color: var(--ink); background: var(--surface-2); }
+
+/* Multi-select rows in the org switcher. */
+.pp-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface);
+  color: #fff;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.pp-checkbox.is-checked { background: var(--accent); border-color: var(--accent); }
+.pp-row:focus-visible .pp-checkbox { box-shadow: 0 0 0 3px var(--accent-glow); }
+
+/* Per-organization details of a multi-org answer, closed by default. */
+.cg-wrap { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.cg-head, .cg-section-head {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 10px 12px; border: none; background: transparent; cursor: pointer;
+  text-align: left; color: var(--ink); font-size: var(--text-ui);
+}
+.cg-head { font-weight: 600; background: var(--surface-2); }
+.cg-head:hover, .cg-section-head:hover:not(:disabled) { background: var(--surface-hover); }
+.cg-section-head:disabled { cursor: default; opacity: 0.7; }
+.cg-caret { flex: 0 0 auto; color: var(--ink-faint); transition: transform var(--dur-fast) var(--ease); }
+.cg-caret.is-open { transform: rotate(90deg); }
+.cg-title { flex: 1; }
+.cg-count {
+  font-size: var(--text-sm); color: var(--ink-soft); background: var(--surface);
+  border-radius: 999px; padding: 1px 8px;
+}
+.cg-section { border-top: 1px solid var(--border-soft); }
+.cg-section-title { font-weight: 500; }
+.cg-section-sub { margin-left: auto; font-size: var(--text-sm); color: var(--ink-faint); }
+.cg-section-body { padding: 4px 12px 12px; }
+
+/* Organization chips above a multi-org answer. */
+.org-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.org-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: var(--text-sm);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+.org-chip-currency { opacity: 0.75; font-variant-numeric: tabular-nums; }
+.org-chip.is-missing { background: var(--surface-2); color: var(--ink-soft); text-decoration: line-through; }
+
 .pp-notice {
   padding: 8px 10px;
   margin-bottom: 2px;
@@ -1600,7 +1689,8 @@ body.is-canvas-resizing .live-chart {
 
 .answer-canvas-kpis {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* Every KPI shows; the grid wraps instead of cutting the list at three. */
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   gap: 10px;
 }
 
@@ -1667,6 +1757,77 @@ body.is-canvas-resizing .live-chart {
   color: var(--ink-faint);
 }
 
+.answer-canvas-analysis {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(var(--ink-rgb), 0.03);
+  border: 1px solid var(--border-soft);
+}
+
+.answer-canvas-headline {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.answer-canvas-summary {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.answer-canvas-analysis-group h4 {
+  margin: 6px 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.answer-canvas-analysis-group ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.answer-canvas-callouts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.answer-canvas-callout {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border-left: 3px solid var(--border);
+  background: rgba(var(--ink-rgb), 0.03);
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.answer-canvas-callout.is-caveat {
+  border-left-color: #EDA100;
+  color: var(--ink);
+}
+
+.answer-canvas-callout.is-warning {
+  border-left-color: #E34948;
+  color: var(--ink);
+}
+
 .answer-canvas-tabs {
   display: flex;
   gap: 4px;
@@ -1714,6 +1875,40 @@ body.is-canvas-resizing .live-chart {
   font-size: var(--text-sm);
   color: var(--ink-faint);
   font-style: italic;
+}
+
+/* XLSX/CSV preview: SheetJS's sheet_to_html ships its own table markup with
+   no theming, so it needs the same table treatment markdown-body gives its
+   tables — plus horizontal scroll, since a wide report easily outgrows the
+   canvas panel's width. */
+.answer-canvas-sheet {
+  overflow-x: auto;
+}
+.answer-canvas-sheet table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+}
+.answer-canvas-sheet th,
+.answer-canvas-sheet td {
+  padding: 7px 12px;
+  border: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+.answer-canvas-sheet th {
+  background-color: var(--surface-2);
+  font-weight: 600;
+  font-size: var(--text-xs);
+  color: var(--ink);
+  text-align: left;
+}
+
+/* DOCX preview: mammoth emits plain HTML (h1/p/table/…) — markdown-body's
+   rules already cover that same element set, so the docx preview reuses it
+   instead of a second, near-duplicate stylesheet. */
+.answer-canvas-docx {
+  overflow-x: auto;
 }
 
 .live-chart,

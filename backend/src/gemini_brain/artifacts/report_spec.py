@@ -5,8 +5,13 @@ from datetime import datetime, timezone
 import re
 from typing import Any, Dict, List, Optional, Sequence
 
+from gemini_brain.artifacts import theme
+from gemini_brain.artifacts.insights import KPI_CHART_TITLE
 from gemini_brain.tools.formatters import (
+    MISSING_DISPLAY,
+    format_aed,
     _format_metric_display,
+    _is_count_key,
     _format_period,
     _get_any,
     _is_display_noise_key,
@@ -18,26 +23,19 @@ CANVAS_MAX_ROWS = 50
 XLSX_MAX_ROWS = 10_000
 MAX_CHART_CATEGORIES = 12
 MAX_CANVAS_COLUMNS = 8
+#: 7 named slices + "Other" — matches the 7 categorical slots in theme.py, so
+#: no slice ever repeats a color.
 MAX_PIE_SLICES = 8
-
-PASTEL_COLORS = [
-    "#8EC5D6",
-    "#F4B183",
-    "#C3B1E1",
-    "#9DD9C5",
-    "#F3A6B8",
-    "#F2D98A",
-    "#8FB8E8",
-    "#B5D99C",
-    "#E8A0C2",
-    "#D4C1EC",
-]
+PART_TO_WHOLE = ("pie", "donut")
 
 LIST_KEYS = (
     "items", "results", "invoices", "bills", "transactions", "contacts",
     "data", "rows", "records", "vendors", "customers",
 )
 _ENVELOPE_KEYS = frozenset({"code", "message", "success", "status"})
+#: Keys that describe the report rather than measure anything — never a KPI tile.
+_META_KEYS = frozenset({"report", "period", "statement", "currency", "entity", "organisation",
+                        "organization", "title", "generated_at", "as_of", "basis"})
 _DATE_KEY_HINTS = ("date", "month", "period", "year", "week", "label")
 _LABEL_KEY_HINTS = (
     "name", "contact_name", "customer", "vendor", "category", "account",
@@ -49,14 +47,28 @@ _AMOUNT_KEY_HINTS = (
 )
 
 
+#: Abbreviations that must stay upper-case in labels ("vat_amount" -> "VAT Amount").
+_ACRONYMS = {"vat", "gst", "tds", "trn", "cogs", "ebitda", "ar", "ap", "aed", "usd", "inr", "id", "ytd", "mtd", "qtd", "fy"}
+
+
+def _humanize(key: Any) -> str:
+    """Column key to reader label: "vat_amount" -> "VAT Amount"."""
+    words = re.split(r"[_\s]+", str(key or "").strip())
+    return " ".join(w.upper() if w.lower() in _ACRONYMS else w[:1].upper() + w[1:].lower() for w in words if w)
+
+
 def _as_float(v: Any) -> Optional[float]:
     if isinstance(v, bool) or v is None:
         return None
     if isinstance(v, (int, float)):
         return float(v)
     if isinstance(v, str):
+        s = v.strip()
+        # Accounting negative: "(1,234.00)" / "AED (1,234.00)" means -1234.
+        negative = "(" in s and s.endswith(")")
         cleaned = (
-            v.replace(",", "")
+            s.replace("(", "").replace(")", "")
+            .replace(",", "")
             .replace("AED", "")
             .replace("INR", "")
             .replace("USD", "")
@@ -68,10 +80,45 @@ def _as_float(v: Any) -> Optional[float]:
             .strip()
         )
         try:
-            return float(cleaned)
+            n = float(cleaned)
         except ValueError:
             return None
+        return -abs(n) if negative else n
     return None
+
+
+def _first_number(*sources: tuple) -> Optional[float]:
+    """First key present with a numeric value, across (dict, keys) sources in order.
+
+    Replaces `a.get(x) or a.get(y) or ...` chains, which skip a real 0 and fall
+    through to the next key — revenue of 0 used to come back as gross profit
+    and still be labelled "Total Revenue".
+    """
+    for blob, keys in sources:
+        if not isinstance(blob, dict):
+            continue
+        for key in keys:
+            if key in blob:
+                n = _as_float(blob.get(key))
+                if n is not None:
+                    return n
+    return None
+
+
+_MONTH_NAME = (
+    r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?"
+    r"|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?"
+)
+_DATE_VALUE = re.compile(
+    r"^\s*(?:"
+    r"(?:19|20)\d{2}(?:[-/.]\d{1,2}(?:[-/.]\d{1,2})?)?"   # 2026, 2026-03, 2026-03-31
+    r"|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}"                    # 31/03/2026
+    rf"|\d{{1,2}}\s+{_MONTH_NAME}(?:\s+\d{{2,4}})?"          # 31 Mar 2026
+    rf"|{_MONTH_NAME}(?:[\s'-]+\d{{2,4}})?"                   # Mar, March 2026
+    r"|(?:q[1-4]|h[12]|fy)\s*[-']?\s*(?:\d{2,4})?"         # Q1 2026, FY26
+    r")\s*(?:T[\d:.]+Z?)?\s*$",
+    re.IGNORECASE,
+)
 
 
 def _looks_date_label(key: str, samples: Sequence[str]) -> bool:
@@ -80,11 +127,9 @@ def _looks_date_label(key: str, samples: Sequence[str]) -> bool:
         return True
     if not samples:
         return False
-    dateish = 0
-    for s in samples[:8]:
-        t = str(s)
-        if any(ch.isdigit() for ch in t) and ("-" in t or "/" in t or " " in t):
-            dateish += 1
+    # Real date shapes only. "Customer 1" / "Branch 12" also have a digit and
+    # a space, and used to be read as a time axis (unsorted, never a pie).
+    dateish = sum(1 for s in samples[:8] if _DATE_VALUE.search(str(s)))
     return dateish >= max(1, min(3, len(samples[:8]) // 2))
 
 
@@ -109,6 +154,15 @@ def _is_id_column(col: str) -> bool:
     return cl == "id" or cl.endswith("_id") or cl.startswith("id_")
 
 
+def _is_unit_mismatched_column(col: str) -> bool:
+    """A day-count/age column doesn't share a scale with a money column — a
+    grouped bar chart mixing e.g. 'days_overdue' (0-300) with 'amount' (AED
+    100k+) makes the money bars unreadable and the day bars invisible. Token
+    match, not substring: 'age' alone would also catch 'average'/'manage'."""
+    tokens = re.split(r"[_\s]+", (col or "").lower())
+    return any(t in ("day", "days", "age") for t in tokens)
+
+
 def _pick_numeric_keys(columns: List[str], rows: List[Dict[str, Any]], label_key: Optional[str]) -> List[str]:
     ranked: List[str] = []
     for hint in _AMOUNT_KEY_HINTS:
@@ -118,13 +172,29 @@ def _pick_numeric_keys(columns: List[str], rows: List[Dict[str, Any]], label_key
             if hint in c.lower():
                 ranked.append(c)
     for c in columns:
-        if c == label_key or c in ranked or _is_id_column(c) or _is_display_noise_key(c):
+        if c == label_key or c in ranked or _is_id_column(c) or _is_display_noise_key(c) or _is_unit_mismatched_column(c):
             continue
         nums = [_as_float(r.get(c)) for r in rows[:20]]
         if sum(v is not None for v in nums) >= max(1, len(nums) // 2):
             ranked.append(c)
     return ranked[:4]
 
+
+def _prefer_queried(keys: List[str], query: str) -> List[str]:
+    """Move the measure the user named ("pie of tax by customer") to the front,
+    so it becomes the primary series instead of whichever column ranked first."""
+    words = set(re.findall(r"[a-z]+", (query or "").lower())) - {"total", "amount"}
+    named = [k for k in keys if set(re.split(r"[_\s]+", k.lower())) & words]
+    return named + [k for k in keys if k not in named]
+
+
+def _same_unit(keys: List[str]) -> List[str]:
+    """Keep only measures in the primary measure's unit (count vs money) — a
+    count bar beside an AED 100k bar on one axis is invisible and misleading."""
+    if not keys:
+        return keys
+    primary_is_count = _is_count_key(keys[0])
+    return [k for k in keys if _is_count_key(k) == primary_is_count]
 
 
 _EXPLICIT_COUNT_PATTERNS = (
@@ -161,22 +231,19 @@ def _top_n_with_other(categories: List[str], series: List[Dict[str, Any]], n: in
     new_series = []
     for s in series:
         data = s.get("data") or []
-        kept = [float(data[i]) if i < len(data) and data[i] is not None else 0.0 for i in keep]
-        other = sum(float(data[i]) if i < len(data) and data[i] is not None else 0.0 for i in rest)
+        kept = [data[i] if i < len(data) else None for i in keep]
+        rest_vals = [float(data[i]) for i in rest if i < len(data) and data[i] is not None]
+        other = sum(rest_vals) if rest_vals else None
         new_series.append({"name": s.get("name") or "Value", "data": kept + [other]})
     return new_cats, new_series
 
 
 def _pick_chart_type(query: str, categories: List[str], series: List[Dict[str, Any]], hint: Optional[str]) -> str:
-    if hint == "pie" and len(series) == 1 and len(categories) <= MAX_PIE_SLICES:
-        return "pie"
+    if hint in PART_TO_WHOLE and len(series) == 1 and len(categories) <= MAX_PIE_SLICES:
+        return hint
     if hint in ("bar", "line", "area"):
         return hint
-    samples = [str(c) for c in categories[:6]]
-    timeish = _looks_date_label("category", samples) or any(
-        any(h in str(c).lower() for h in ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec", "q1", "q2", "q3", "q4"))
-        for c in samples
-    )
+    timeish = _is_time_axis(categories)
     if timeish:
         # Grouped bars match the P&L live-preview mock; a single series still reads as a trend.
         return "bar" if len(series) >= 2 else "line"
@@ -243,6 +310,18 @@ def _looks_like_financial_statement(data: Any) -> bool:
     return any(tok in stmt for tok in ("profit", "loss", "balance", "cash"))
 
 
+#: Strips a trailing delivery-format request ("... as a word document", "...
+#: as pdf") off a query used as a title fallback — the title is meant to name
+#: the report, not echo back the user's file-format instruction to the file
+#: itself. Anchored to the end so it only ever removes a trailing phrase.
+_TITLE_FORMAT_STRIP = re.compile(
+    r"\s*\b(?:as|to|in)\s+(?:a\s+|an\s+|the\s+)?"
+    r"(?:pdf|csv|excel|xlsx|spreadsheet|workbook|word\s+doc(?:ument)?|docx|"
+    r"powerpoint|pptx|slides?|presentation|markdown|\.?md)\b\.?\s*$",
+    re.IGNORECASE,
+)
+
+
 def _title_from(data: Any, query: str) -> str:
     if isinstance(data, dict):
         report = data.get("report")
@@ -258,9 +337,62 @@ def _title_from(data: Any, query: str) -> str:
         if _looks_like_financial_statement(data):
             return "Profit & Loss Statement"
     q = (query or "").strip()
+    q = _TITLE_FORMAT_STRIP.sub("", q).strip()
+    q = _TITLE_CHART_SUFFIX.sub("", _TITLE_REQUEST_STRIP.sub("", q))
+    q = re.sub(r"\s{2,}", " ", _TITLE_FORM_WORDS.sub(" ", q)).strip(" ?.!,:")
+    q = _TITLE_TRAILING_COURTESY.sub("", q).strip(" ?.!,:")
+    q = _title_case(q)
     if q:
-        return q[:80].rstrip("?.!")
+        return q[:80]
     return "Accutax report"
+
+
+#: Leading request phrasing ("can you show me a donut chart of ...") that
+#: names what the user wants done, not what the report is about. Applied
+#: repeatedly from the start, so "please show me the top" strips fully.
+_TITLE_REQUEST_STRIP = re.compile(
+    r"^(?:\s*(?:please|kindly|can you|could you|would you|i want|i need|i'd like|"
+    r"show|give|get|list|display|generate|create|make|build|prepare|plot|draw|"
+    r"visuali[sz]e|export|send|download|me|us|all|a|an|the|my|our|"
+    r"(?:pie|donut|doughnut|bar|column|line|area)|charts?|graphs?|plots?|"
+    r"of|for|showing|with|on)\b)+",
+    re.IGNORECASE,
+)
+_TITLE_TRAILING_COURTESY = re.compile(
+    r"(?:[\s,]+(?:please|pls|plz|kindly|thanks|thank\s+you|asap))+$", re.IGNORECASE,
+)
+_TITLE_CHART_SUFFIX = re.compile(
+    r"\s+(?:in|as|on|using|with)\s+(?:a\s+|an\s+|the\s+)?"
+    r"(?:pie|donut|doughnut|bar|column|line|area)?\s*(?:charts?|graphs?|plots?)\s*$",
+    re.IGNORECASE,
+)
+#: Chart-form words left anywhere in a title ("VAT by month line chart",
+#: "breakdown chart of sales", "stacked bar of …"): the title names the subject.
+_TITLE_FORM_WORDS = re.compile(
+    r"^(?:(?:horizontal|stacked|pie|donut|doughnut|bar|column|line|area|waterfall)\s+)*"
+    r"(?:charts?|graphs?|plots?|bars?|columns?)\s+of\b"                        # "stacked bar of …"
+    r"|\b(?:(?:horizontal|stacked|pie|donut|doughnut|bar|column|line|area|waterfall|trend)\s+)*"
+    r"(?:charts?|graphs?|plots?)\b"                                            # "… line chart"
+    r"|\s+(?:trend\s+)?(?:line|bar|area|pie|donut|waterfall)$",                # "revenue trend line"
+    re.IGNORECASE,
+)
+_SMALL_WORDS = frozenset({"a", "an", "and", "as", "at", "by", "for", "in", "of", "on", "or", "the", "to", "vs", "with"})
+
+
+def _title_case(text: str) -> str:
+    """"sales by customer" -> "Sales by Customer"; acronyms like P&L/VAT kept."""
+    words = text.split()
+    out = []
+    for i, w in enumerate(words):
+        if any(ch.isupper() for ch in w[1:]) or w.isupper():
+            out.append(w)
+        elif w.lower() in _ACRONYMS:
+            out.append(w.upper())
+        elif i and w.lower() in _SMALL_WORDS:
+            out.append(w.lower())
+        else:
+            out.append(w[:1].upper() + w[1:])
+    return " ".join(out)
 
 
 def _pick_row_key(row: Dict[str, Any], hints: Sequence[str]) -> Optional[str]:
@@ -272,6 +404,13 @@ def _pick_row_key(row: Dict[str, Any], hints: Sequence[str]) -> Optional[str]:
             if hint in lk:
                 return orig
     return None
+
+
+def _money_cell(key: str, value: Optional[float]) -> str:
+    """Display text for a money cell; a value the source did not give shows as "—"."""
+    if value is None:
+        return MISSING_DISPLAY
+    return _format_metric_display(key, value)[0]
 
 
 def _line_items_from_section(section: Any) -> List[Dict[str, Any]]:
@@ -303,13 +442,17 @@ def _section_total(section: Any) -> Optional[float]:
         n = _as_float(section.get(key))
         if n is not None:
             return n
-    items = _line_items_from_section(section)
-    if not items:
-        return None
-    return sum(
-        _as_float(i.get("amount") or i.get("total") or i.get("net_amount") or i.get("value")) or 0.0
-        for i in items
-    )
+    # No stated total: sum the line items, skipping any row that is itself a
+    # subtotal/total (summing those alongside their parts double-counts).
+    values = []
+    for item in _line_items_from_section(section):
+        label = str(item.get("name") or item.get("account_name") or item.get("label") or "").lower()
+        if re.search(r"\b(?:sub)?total\b", label):
+            continue
+        n = _first_number((item, ("amount", "total", "net_amount", "value")))
+        if n is not None:
+            values.append(n)
+    return round(sum(values), 2) if values else None
 
 
 def _monthly_rows(data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -326,81 +469,101 @@ def _monthly_rows(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     return []
 
 
-def _chart_grouped_bar(title: str, categories: List[str], series: List[Dict[str, Any]]) -> Dict[str, Any]:
-    chart = {
-        "chart_type": "bar",
-        "title": title,
-        "x_label": "",
-        "y_label": "",
-        "categories": categories,
-        "series": series,
-        "caption": None,
-    }
-    if len(series) == 1 and len(categories) > 1:
-        chart["bar_colors"] = [PASTEL_COLORS[i % len(PASTEL_COLORS)] for i in range(len(categories))]
-    return chart
+#: Flat totals the Accutax /report/profit-loss endpoint returns, in statement
+#: order: (key, label, side). Income lines add to profit, cost lines subtract.
+_FLAT_PNL_LINES = (
+    ("operating_income", "Operating Income", "income"),
+    ("non_operating_income", "Non-Operating Income", "income"),
+    ("cost_of_goods_sold", "Cost of Goods Sold", "cost"),
+    ("operating_expense", "Operating Expenses", "cost"),
+    ("non_operating_expense", "Non-Operating Expenses", "cost"),
+)
 
 
-def _from_financial_statement(data: Dict[str, Any], chart_hint: Optional[str] = None) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
+def _flat_pnl_sections(data: Dict[str, Any]) -> Optional[tuple[Dict[str, Any], Dict[str, Any]]]:
+    """Revenue and expense sections for a flat Accutax P&L, or None for any other shape.
+
+    That payload has no "revenue" key: revenue is operating plus non-operating
+    income, and expenses are cost of goods sold plus operating and
+    non-operating expenses. Read literally, the statement lost its revenue
+    line and the report showed only expenses and net profit.
+    """
+    if _as_float(data.get("operating_income")) is None or isinstance(data.get("revenue"), dict):
+        return None
+    sections: Dict[str, List[Dict[str, Any]]] = {"income": [], "cost": []}
+    for key, label, side in _FLAT_PNL_LINES:
+        amount = _as_float(data.get(key))
+        # A zero line is noise, except operating income, which anchors revenue.
+        if amount is None or (amount == 0 and key != "operating_income"):
+            continue
+        sections[side].append({"name": label, "amount": amount})
+    revenue = {"line_items": sections["income"],
+               "total": round(sum(i["amount"] for i in sections["income"]), 2)}
+    expenses = {"line_items": sections["cost"],
+                "total": round(sum(i["amount"] for i in sections["cost"]), 2)}
+    return revenue, expenses
+
+
+def _from_financial_statement(
+    data: Dict[str, Any], chart_hint: Optional[str] = None,
+) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Optional[str]]:
     """KPIs, grouped-bar charts, and line-item tables from nested P&L payloads."""
+    flat = _flat_pnl_sections(data)
+    if flat is not None:
+        data = {**data, "revenue": flat[0], "expenses": flat[1]}
     summary = data.get("summary") if isinstance(data.get("summary"), dict) else {}
     revenue_section = data.get("revenue") if isinstance(data.get("revenue"), dict) else data.get("income")
     expense_section = data.get("expenses") if isinstance(data.get("expenses"), dict) else data.get("expense")
 
+    # Only keys that actually mean revenue / expenses / net profit. Gross or
+    # operating profit is a different figure, so it never stands in for one of
+    # these under their label; it gets its own label below instead.
     rev_total = _section_total(revenue_section)
     if rev_total is None:
-        rev_total = _as_float(
-            summary.get("total_revenue")
-            or summary.get("revenue")
-            or summary.get("totalRevenue")
-            or summary.get("operating_income")
-            or summary.get("operatingIncome")
-            or data.get("total_revenue")
-            or data.get("totalRevenue")
-            or data.get("revenue")
-            or data.get("operating_income")
-            or data.get("operatingIncome")
-            or data.get("grossProfit")
-            or data.get("gross_profit")
-            or data.get("income")
+        rev_total = _first_number(
+            (summary, ("total_revenue", "totalRevenue", "revenue", "total_income", "totalIncome")),
+            (data, ("total_revenue", "totalRevenue", "revenue", "total_income", "totalIncome", "income")),
         )
     exp_total = _section_total(expense_section)
     if exp_total is None:
-        exp_total = _as_float(
-            summary.get("total_expenses")
-            or summary.get("expenses")
-            or summary.get("totalExpenses")
-            or summary.get("total_expense")
-            or summary.get("totalExpense")
-            or summary.get("operating_expense")
-            or summary.get("operatingExpense")
-            or data.get("total_expenses")
-            or data.get("totalExpenses")
-            or data.get("total_expense")
-            or data.get("totalExpense")
-            or data.get("expenses")
-            or data.get("operating_expense")
-            or data.get("operatingExpense")
-            or data.get("expense")
+        exp_total = _first_number(
+            (summary, ("total_expenses", "totalExpenses", "total_expense", "totalExpense", "expenses",
+                       "operating_expense", "operatingExpense")),
+            (data, ("total_expenses", "totalExpenses", "total_expense", "totalExpense", "expenses",
+                    "operating_expense", "operatingExpense", "expense")),
         )
-    net = _as_float(
-        data.get("net_profit")
-        or data.get("netProfitLoss")
-        or data.get("net_profit_loss")
-        or data.get("operatingProfit")
-        or data.get("operating_profit")
-        or summary.get("net_profit")
-        or summary.get("netProfitLoss")
-        or summary.get("net_income")
-        or summary.get("netIncome")
-        or data.get("net_income")
-        or summary.get("net_income")
+    # A statement that only lists months still has totals: the sum of the months,
+    # but only when every month has the figure (a gap would understate it).
+    monthly_rows = _monthly_rows(data)
+    if monthly_rows and (rev_total is None or exp_total is None):
+        for which, hints in (("rev", _REV_KEY_HINTS), ("exp", _EXP_KEY_HINTS)):
+            key = _pick_row_key(monthly_rows[0], hints)
+            values = [_as_float(r.get(key)) for r in monthly_rows] if key else []
+            if values and all(v is not None for v in values):
+                if which == "rev" and rev_total is None:
+                    rev_total = round(sum(values), 2)
+                elif which == "exp" and exp_total is None:
+                    exp_total = round(sum(values), 2)
+    net = _first_number(
+        (data, ("net_profit", "netProfitLoss", "net_profit_loss", "net_income", "netIncome")),
+        (summary, ("net_profit", "netProfitLoss", "net_profit_loss", "net_income", "netIncome")),
     )
+    net_label = "Net Profit"
     if net is None and rev_total is not None and exp_total is not None:
-        net = rev_total - exp_total
-    margin = _as_float(data.get("margin_pct") or summary.get("profit_margin_pct") or summary.get("margin_pct"))
-    if margin is None and rev_total:
-        margin = round(((net or 0) / rev_total) * 100, 1)
+        net = round(rev_total - exp_total, 2)
+    if net is None:
+        net = _first_number(
+            (data, ("operating_profit", "operatingProfit")),
+            (summary, ("operating_profit", "operatingProfit")),
+        )
+        if net is not None:
+            net_label = "Operating Profit"
+    margin = _first_number(
+        (data, ("margin_pct", "profit_margin_pct")),
+        (summary, ("profit_margin_pct", "margin_pct")),
+    )
+    if margin is None and rev_total and net is not None:
+        margin = round((net / rev_total) * 100, 1)
 
     kpis: List[Dict[str, Any]] = []
     if rev_total is not None:
@@ -409,9 +572,15 @@ def _from_financial_statement(data: Dict[str, Any], chart_hint: Optional[str] = 
             "value": rev_total,
             "formatted": _format_metric_display("total_revenue", rev_total)[0],
         })
+    if exp_total is not None:
+        kpis.append({
+            "label": "Total Expenses",
+            "value": exp_total,
+            "formatted": _format_metric_display("total_expenses", exp_total)[0],
+        })
     if net is not None:
         kpis.append({
-            "label": "Net Profit",
+            "label": net_label,
             "value": net,
             "formatted": _format_metric_display("net_profit", net)[0],
         })
@@ -434,10 +603,12 @@ def _from_financial_statement(data: Dict[str, Any], chart_hint: Optional[str] = 
         categories = [str(r.get(label_key) or "-") for r in monthly]
         series: List[Dict[str, Any]] = []
         if rev_key:
-            series.append({"name": "Revenue", "data": [_as_float(r.get(rev_key)) or 0.0 for r in monthly]})
+            series.append({"name": "Revenue", "data": [_as_float(r.get(rev_key)) for r in monthly]})
         if exp_key:
-            series.append({"name": "Expenses", "data": [_as_float(r.get(exp_key)) or 0.0 for r in monthly]})
+            series.append({"name": "Expenses", "data": [_as_float(r.get(exp_key)) for r in monthly]})
         if series:
+            # pie/donut is applied later by apply_chart_hint, which knows how
+            # to turn a monthly series pair into a share-of-total chart.
             ctype = chart_hint if chart_hint in ("line", "area", "bar") else "bar"
             chart = {
                 "chart_type": ctype,
@@ -448,15 +619,8 @@ def _from_financial_statement(data: Dict[str, Any], chart_hint: Optional[str] = 
                 "series": series,
                 "caption": None,
             }
-            if ctype == "bar" and len(series) == 1 and len(categories) > 1:
-                chart["bar_colors"] = [PASTEL_COLORS[i % len(PASTEL_COLORS)] for i in range(len(categories))]
-            if rev_key and len(monthly) >= 2:
-                first = _as_float(monthly[0].get(rev_key)) or 0.0
-                last = _as_float(monthly[-1].get(rev_key)) or 0.0
-                if first:
-                    growth = (last - first) / first * 100
-                    sign = "+" if growth >= 0 else ""
-                    chart["caption"] = f"{sign}{growth:.0f}% revenue growth"
+            # The one-line "so what" is added later from validated values
+            # (insights.chart_takeaway), not here.
             charts.append(chart)
         cols = [{"key": "month", "label": "Month", "align": "left"}]
         raw_rows = []
@@ -473,18 +637,18 @@ def _from_financial_statement(data: Dict[str, Any], chart_hint: Optional[str] = 
             ev = _as_float(r.get(exp_key)) if exp_key else None
             nv = _as_float(r.get(net_key)) if net_key else None
             if nv is None and rv is not None and ev is not None:
-                nv = rv - ev
+                nv = round(rv - ev, 2)
             row = {"month": month}
             raw = {"month": month}
             if rev_key:
-                row["revenue"] = _format_metric_display("revenue", rv or 0)[0]
-                raw["revenue"] = rv or 0
+                row["revenue"] = _money_cell("revenue", rv)
+                raw["revenue"] = rv
             if exp_key:
-                row["expenses"] = _format_metric_display("expenses", ev or 0)[0]
-                raw["expenses"] = ev or 0
+                row["expenses"] = _money_cell("expenses", ev)
+                raw["expenses"] = ev
             if "net_profit" in {c["key"] for c in cols}:
-                row["net_profit"] = _format_metric_display("net_profit", nv or 0)[0]
-                raw["net_profit"] = nv or 0
+                row["net_profit"] = _money_cell("net_profit", nv)
+                raw["net_profit"] = nv
             table_rows.append(row)
             raw_rows.append(raw)
         tables.append({
@@ -497,7 +661,7 @@ def _from_financial_statement(data: Dict[str, Any], chart_hint: Optional[str] = 
         })
 
     if not charts and rev_total is not None and exp_total is not None:
-        ctype = chart_hint if chart_hint in ("bar", "pie", "line", "area") else "bar"
+        ctype = chart_hint if chart_hint in ("bar", "pie", "donut", "line", "area") else "bar"
         charts.append({
             "chart_type": ctype,
             "title": "Revenue vs Expenses",
@@ -513,10 +677,10 @@ def _from_financial_statement(data: Dict[str, Any], chart_hint: Optional[str] = 
     for section_name, section in (("Revenue", revenue_section), ("Expenses", expense_section)):
         for item in _line_items_from_section(section):
             label = str(item.get("name") or item.get("account_name") or item.get("label") or "Item")
-            amount = _as_float(item.get("amount") or item.get("total") or item.get("net_amount") or item.get("value"))
+            amount = _first_number((item, ("amount", "total", "net_amount", "value")))
             if amount is None:
                 continue
-            pct = f"{(amount / rev_total * 100):.1f}%" if rev_total else "—"
+            pct = f"{(amount / rev_total * 100):.1f}%" if rev_total else MISSING_DISPLAY
             line_rows.append({
                 "line_item": label,
                 "amount": _format_metric_display("amount", amount)[0],
@@ -530,10 +694,10 @@ def _from_financial_statement(data: Dict[str, Any], chart_hint: Optional[str] = 
                 if not isinstance(item, dict):
                     continue
                 label = str(item.get("account_name") or item.get("name") or item.get("account_code") or "Item")
-                amount = _as_float(item.get("net_amount") or item.get("amount") or item.get("total"))
+                amount = _first_number((item, ("net_amount", "amount", "total")))
                 if amount is None:
                     continue
-                pct = f"{(abs(amount) / rev_total * 100):.1f}%" if rev_total else "—"
+                pct = f"{(amount / rev_total * 100):.1f}%" if rev_total else MISSING_DISPLAY
                 line_rows.append({
                     "line_item": label,
                     "amount": _format_metric_display("amount", amount)[0],
@@ -549,11 +713,11 @@ def _from_financial_statement(data: Dict[str, Any], chart_hint: Optional[str] = 
         raw_line.insert(0, {"line_item": "Total Revenue", "amount": rev_total, "pct_revenue": "100%"})
     if net is not None:
         line_rows.append({
-            "line_item": "Net Profit",
+            "line_item": net_label,
             "amount": _format_metric_display("net_profit", net)[0],
-            "pct_revenue": f"{margin:.1f}%" if margin is not None else "—",
+            "pct_revenue": f"{margin:.1f}%" if margin is not None else MISSING_DISPLAY,
         })
-        raw_line.append({"line_item": "Net Profit", "amount": net, "pct_revenue": margin})
+        raw_line.append({"line_item": net_label, "amount": net, "pct_revenue": margin})
 
     if line_rows:
         tables.append({
@@ -569,7 +733,70 @@ def _from_financial_statement(data: Dict[str, Any], chart_hint: Optional[str] = 
             "raw_rows": raw_line[:XLSX_MAX_ROWS],
         })
 
-    return kpis, charts, tables
+    # The bridge is always a secondary chart; a "waterfall" request moves it
+    # to the front in apply_chart_hint.
+    bridge, bridge_note = _profit_bridge(rev_total, expense_section, net, net_label)
+    if bridge:
+        charts.append(bridge)
+    return kpis, charts, tables, bridge_note
+
+
+#: Named cost steps in a bridge before the smallest fold into "Other costs".
+_BRIDGE_MAX_STEPS = 6
+
+
+def _profit_bridge(
+    rev_total: Optional[float],
+    expense_section: Any,
+    net: Optional[float],
+    net_label: str,
+) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """Revenue → each cost → net profit, as a waterfall.
+
+    Built only from the statement's own figures. If the costs listed do not
+    close the gap between revenue and net profit, the difference is shown as
+    its own step ("Other income / costs") and a note says so — the bridge
+    always adds up, and never hides the gap.
+    """
+    if rev_total is None or net is None or net_label != "Net Profit":
+        return None, None
+    items = []
+    for item in _line_items_from_section(expense_section):
+        label = str(item.get("name") or item.get("account_name") or item.get("label") or "").strip()
+        if not label or re.search(r"\b(?:sub)?total\b", label, re.IGNORECASE):
+            continue
+        amount = _first_number((item, ("amount", "total", "net_amount", "value")))
+        if amount is not None and amount != 0:
+            items.append((label, abs(amount)))
+    if len(items) < 2:
+        return None, None
+    items.sort(key=lambda p: p[1], reverse=True)
+    if len(items) > _BRIDGE_MAX_STEPS:
+        rest = round(sum(v for _, v in items[_BRIDGE_MAX_STEPS - 1:]), 2)
+        items = items[: _BRIDGE_MAX_STEPS - 1] + [("Other costs", rest)]
+    categories = ["Revenue"] + [label for label, _ in items]
+    values: List[float] = [round(rev_total, 2)] + [-v for _, v in items]
+    note = None
+    residual = round(net - (rev_total - sum(v for _, v in items)), 2)
+    if abs(residual) >= 0.01:
+        categories.append("Other income / costs")
+        values.append(residual)
+        note = (
+            "The profit bridge includes an \"Other income / costs\" step of "
+            f"{format_aed(residual)}: the listed costs do not fully explain the gap between revenue and net profit."
+        )
+    categories.append("Net Profit")
+    values.append(round(net, 2))
+    return {
+        "chart_type": "waterfall",
+        "title": "Profit Bridge",
+        "x_label": "",
+        "y_label": "AED",
+        "categories": categories,
+        "series": [{"name": "Amount", "data": values}],
+        "total_indices": [0, len(values) - 1],
+        "caption": None,
+    }, note
 
 
 def _is_id_label(label: str) -> bool:
@@ -592,27 +819,26 @@ def _chart_from_kpis(kpis: List[Dict[str, Any]], chart_hint: Optional[str] = Non
         and "margin" not in str(k.get("label") or "").lower()
         and not _is_id_label(str(k.get("label") or ""))
     ]
+    if numeric:
+        # One axis, one unit: "Total Income" (AED 1.6M) beside "Invoice Count"
+        # (1,275) would flatten the count to an invisible sliver.
+        first_is_count = _is_count_key(str(numeric[0].get("label") or ""))
+        numeric = [k for k in numeric if _is_count_key(str(k.get("label") or "")) == first_is_count]
     if len(numeric) < 2:
         return None
     cats = [str(k.get("label") or "Value") for k in numeric[:8]]
     vals = [float(k["value"]) for k in numeric[:8]]
-    ctype = "bar"
-    if chart_hint in ("line", "area"):
-        ctype = chart_hint
-    elif chart_hint == "pie" and all(v >= 0 for v in vals) and len(cats) <= MAX_PIE_SLICES:
-        ctype = "pie"
-    chart = {
-        "chart_type": ctype,
-        "title": "Key figures",
+    # line/area/pie across unrelated KPIs is applied (or refused, with a note)
+    # by apply_chart_hint; the builder only states the neutral form.
+    return {
+        "chart_type": "bar",
+        "title": KPI_CHART_TITLE,
         "x_label": "",
         "y_label": "",
         "categories": cats,
         "series": [{"name": "Amount", "data": vals}],
         "caption": None,
     }
-    if ctype == "bar" and len(cats) > 1:
-        chart["bar_colors"] = [PASTEL_COLORS[i % len(PASTEL_COLORS)] for i in range(len(cats))]
-    return chart
 
 
 def _chart_from_block(block: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -626,7 +852,11 @@ def _chart_from_block(block: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             "x_label": block.get("x_label") or "",
             "y_label": block.get("y_label") or "",
             "categories": list(block["categories"]),
-            "series": list(block["series"]),
+            "series": [
+                {"name": s.get("name") or "Value", "data": [_as_float(v) for v in (s.get("data") or [])]}
+                for s in block["series"] if isinstance(s, dict)
+            ],
+            "caption": block.get("caption"),
         }
     data = block.get("data") if isinstance(block.get("data"), dict) else {}
     labels = data.get("labels") or block.get("labels")
@@ -639,7 +869,7 @@ def _chart_from_block(block: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             continue
         series.append({
             "name": ds.get("label") or ds.get("name") or "Value",
-            "data": [_as_float(v) or 0.0 for v in (ds.get("data") or [])[: len(labels)]],
+            "data": [_as_float(v) for v in (ds.get("data") or [])[: len(labels)]],
         })
     if not series:
         return None
@@ -656,7 +886,7 @@ def _chart_from_block(block: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 def _kpis_from_dict(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
     for k, v in data.items():
-        if k in _ENVELOPE_KEYS or k.lower() in {"report", "period"}:
+        if k in _ENVELOPE_KEYS or k.lower() in _META_KEYS:
             continue
         kl = str(k).lower().strip()
         if kl == "id" or kl.endswith("_id") or kl.startswith("id_") or _is_display_noise_key(k):
@@ -667,7 +897,7 @@ def _kpis_from_dict(data: Dict[str, Any]) -> List[Dict[str, Any]]:
                     continue
                 display, raw, numeric = _format_metric_display(sk, sv)
                 items.append({
-                    "label": sk.replace("_", " ").title(),
+                    "label": _humanize(sk),
                     "value": raw if numeric and raw is not None else None,
                     "formatted": display,
                 })
@@ -678,7 +908,7 @@ def _kpis_from_dict(data: Dict[str, Any]) -> List[Dict[str, Any]]:
             continue
         display, raw, numeric = _format_metric_display(k, v)
         items.append({
-            "label": k.replace("_", " ").title(),
+            "label": _humanize(k),
             "value": raw if numeric and raw is not None else None,
             "formatted": display,
         })
@@ -697,11 +927,7 @@ def _chart_from_graph_data(graph: Dict[str, Any], query: str, hint: Optional[str
                 arr = graph.get(k)
                 break
         arr = arr or []
-        out = []
-        for i in range(len(labels)):
-            v = _as_float(arr[i]) if i < len(arr) else 0.0
-            out.append(v if v is not None else 0.0)
-        return out
+        return [_as_float(arr[i]) if i < len(arr) else None for i in range(len(labels))]
 
     series = []
     income = nums(("incomeValues", "income_values", "incomevalues", "income"))
@@ -718,19 +944,19 @@ def _chart_from_graph_data(graph: Dict[str, Any], query: str, hint: Optional[str
         for k, v in graph.items():
             if k == "labels" or not isinstance(v, list):
                 continue
-            data = [_as_float(x) or 0.0 for x in v[: len(labels)]]
+            data = [_as_float(x) for x in v[: len(labels)]]
             if len(data) < len(labels):
-                data += [0.0] * (len(labels) - len(data))
-            series.append({"name": k.replace("_", " ").title(), "data": data[: len(labels)]})
+                data += [None] * (len(labels) - len(data))
+            series.append({"name": _humanize(k), "data": data[: len(labels)]})
     if not series:
         return None
     cats, series = _top_n_with_other(labels, series, MAX_CHART_CATEGORIES)
     chart_type = _pick_chart_type(query, cats, series, hint)
-    if chart_type == "pie" and (len(series) != 1 or len(cats) > MAX_PIE_SLICES):
-        chart_type = "bar"
+    if chart_type in PART_TO_WHOLE and (len(series) != 1 or len(cats) > MAX_PIE_SLICES):
+        chart_type = "bar"  # apply_chart_hint re-shapes it into a real part-to-whole chart
     return {
         "chart_type": chart_type,
-        "title": "Trend",
+        "title": " vs ".join(s["name"] for s in series) if len(series) <= 3 else "Trend",
         "x_label": "Period",
         "y_label": "AED",
         "categories": cats,
@@ -747,15 +973,14 @@ def _chart_from_rows(
         return None
     columns = list(rows[0].keys())
     label_key = _pick_label_key(columns)
-    numeric_keys = _pick_numeric_keys(columns, rows, label_key)
+    numeric_keys = _same_unit(_prefer_queried(_pick_numeric_keys(columns, rows, label_key), query))
     if not label_key or not numeric_keys:
         return None
 
     samples = [str(r.get(label_key) or "") for r in rows[:8]]
-    timeish = _looks_date_label(label_key or "category", samples) or any(
-        any(h in str(c).lower() for h in ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec", "q1", "q2", "q3", "q4"))
-        for c in samples
-    )
+    # Substring month checks ("mar" in "Marketing") used to flag plain
+    # categories as a time axis; only real date values count now.
+    timeish = _looks_date_label(label_key or "category", samples)
 
     explicit_limit = _extract_explicit_count(query)
     working_rows = list(rows)
@@ -774,28 +999,35 @@ def _chart_from_rows(
     series = []
     for nk in numeric_keys:
         series.append({
-            "name": nk.replace("_", " ").title(),
-            "data": [_as_float(r.get(nk)) or 0.0 for r in working_rows],
+            "name": _humanize(nk),
+            "data": [_as_float(r.get(nk)) for r in working_rows],
         })
 
-    if explicit_limit is None:
-        cap = MAX_PIE_SLICES if hint == "pie" else MAX_CHART_CATEGORIES
-        if len(categories) > cap:
-            categories, series = _top_n_with_other(categories, series, cap)
+    # Part-to-whole charts fold their tail in apply_chart_hint, which also
+    # tells the reader how many categories went into "Other".
+    if explicit_limit is None and hint not in PART_TO_WHOLE and len(categories) > MAX_CHART_CATEGORIES:
+        categories, series = _top_n_with_other(categories, series, MAX_CHART_CATEGORIES)
 
     chart_type = _pick_chart_type(query, categories, series, hint)
-    if chart_type == "pie" and (len(series) != 1 or len(categories) > MAX_PIE_SLICES):
-        chart_type = "bar"
+    if chart_type in PART_TO_WHOLE and (len(series) != 1 or len(categories) > MAX_PIE_SLICES):
+        chart_type = "bar"  # apply_chart_hint re-shapes it into a real part-to-whole chart
+    names = [_humanize(k) for k in numeric_keys]
+    # The title names every measure plotted ("VAT Amount and Net Sales by Month").
+    measure = names[0] if len(names) == 1 else (" and ".join(names) if len(names) == 2 else f"{names[0]} and Others")
+    # "customer_name" names a customer: the axis reads "Customer", not "Customer Name".
+    dimension = _humanize(re.sub(r"[_\s]+(?:name|label|title)$", "", label_key, flags=re.IGNORECASE))
     chart = {
         "chart_type": chart_type,
-        "title": numeric_keys[0].replace("_", " ").title() if numeric_keys else "Values",
-        "x_label": label_key.replace("_", " ").title(),
-        "y_label": "AED",
+        "title": f"{measure} by {dimension}",
+        "x_label": dimension,
+        "y_label": "Count" if _is_count_key(numeric_keys[0]) else "AED",
         "categories": categories,
         "series": series,
     }
-    if chart_type == "bar" and len(series) == 1 and len(categories) > 1:
-        chart["bar_colors"] = [PASTEL_COLORS[i % len(PASTEL_COLORS)] for i in range(len(categories))]
+    # "Top 5 customers": the data is five names out of many, so a share of
+    # their sum is a share of the five, not of all revenue.
+    if explicit_limit is not None and not timeish:
+        chart["ranked_subset"] = len(categories)
     return chart
 
 
@@ -859,8 +1091,14 @@ def build_report_spec(
     title: Optional[str] = None,
     chart_hint: Optional[str] = None,
     canvas_rows: int = CANVAS_MAX_ROWS,
+    blocks: Optional[Sequence[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    """Canonical report dict consumed by the live canvas and every file generator."""
+    """Canonical report dict consumed by the live canvas and every file generator.
+
+    `blocks` are the formatter blocks already shown in chat; their charts are
+    merged in before the requested chart type and colors are applied, so the
+    chat card, canvas, and every file agree on the same charts.
+    """
     notes: List[str] = []
     kpis: List[Dict[str, Any]] = []
     charts: List[Dict[str, Any]] = []
@@ -892,13 +1130,14 @@ def build_report_spec(
         if isinstance(graph, dict):
             chart = _chart_from_graph_data(graph, query, chart_hint)
             if chart:
-                if len(chart.get("series") or []) >= 2 and chart_hint not in ("line", "area", "pie"):
+                if len(chart.get("series") or []) >= 2 and chart_hint in (None, "bar"):
                     chart["chart_type"] = "bar"
-                    chart["title"] = "Monthly Revenue vs Expenses"
                 charts.append(chart)
 
         if _looks_like_financial_statement(data):
-            fs_kpis, fs_charts, fs_tables = _from_financial_statement(data, chart_hint=chart_hint)
+            fs_kpis, fs_charts, fs_tables, fs_note = _from_financial_statement(data, chart_hint=chart_hint)
+            if fs_note:
+                notes.append(fs_note)
             if fs_kpis:
                 kpis = fs_kpis
             for ch in fs_charts:
@@ -912,7 +1151,7 @@ def build_report_spec(
         table = _table_from_data(data, max_rows=canvas_rows, max_cols=MAX_CANVAS_COLUMNS, query=query)
         if table:
             tables.append(table)
-            if table["truncated"]:
+            if table["truncated"] and _extract_explicit_count(query) is None:
                 notes.append(
                     f"Showing {len(table['rows'])} of {table['total_rows']} rows. "
                     "Download Excel for the full extract."
@@ -940,7 +1179,7 @@ def build_report_spec(
         if fallback:
             charts.append(fallback)
 
-    return {
+    spec = {
         "title": title or _title_from(data, query),
         "subtitle": org_name or "",
         "entity": (entity or org_name or ""),
@@ -953,6 +1192,8 @@ def build_report_spec(
         "notes": notes,
         "insight": None,
     }
+    merge_chart_blocks(spec, blocks)
+    return apply_chart_hint(spec, chart_hint, query)
 
 
 def spec_has_content(spec: Dict[str, Any]) -> bool:
@@ -982,4 +1223,219 @@ def merge_chart_blocks(spec: Dict[str, Any], blocks: Optional[Sequence[Dict[str,
         seen.add(key)
         rest.append(chart)
     spec["charts"] = from_blocks + rest
+    return spec
+
+
+def _is_time_axis(categories: Sequence[Any]) -> bool:
+    return _looks_date_label("category", [str(c) for c in list(categories)[:8]])
+
+
+def _is_derived_series(name: Any) -> bool:
+    """Net/profit/cash-flow series are computed from the others, so they are
+    not a share of the same whole — slicing them in beside income and expense
+    would double-count."""
+    toks = set(re.split(r"[^a-z]+", str(name or "").lower())) - {""}
+    if toks & {"profit", "cashflow", "margin", "balance"} or {"cash", "flow"} <= toks:
+        return True
+    # "Net" alone, or net income/profit, is a result; "Net Sales" is a real part.
+    return "net" in toks and (toks == {"net"} or bool(toks & {"income", "result"}))
+
+
+def _pick_series_for_query(series: List[Dict[str, Any]], query: str) -> Dict[str, Any]:
+    words = set(re.findall(r"[a-z]+", (query or "").lower()))
+    for s in series:
+        if set(re.split(r"[^a-z]+", str(s.get("name") or "").lower())) & words:
+            return s
+    return series[0]
+
+
+def _to_bar(chart: Dict[str, Any], requested: str, reason: str) -> tuple[Dict[str, Any], str]:
+    chart["chart_type"] = "bar"
+    chart["downgrade_reason"] = reason
+    return chart, f"A {requested} chart was requested, but {reason} It is shown as a bar chart instead."
+
+
+def _as_part_to_whole(chart: Dict[str, Any], hint: str, query: str) -> tuple[Dict[str, Any], List[str]]:
+    """Reshape `chart` into a valid pie/donut, or fall back to bar with a reason.
+
+    Never silent: every reshape that changes what is plotted adds a note.
+    """
+    notes: List[str] = []
+    cats = list(chart.get("categories") or [])
+    series = [s for s in (chart.get("series") or []) if isinstance(s, dict)]
+    if not cats or not series:
+        return chart, notes
+
+    if len(series) > 1 and _is_time_axis(cats):
+        # "Pie of income vs expense" over months: slice the period totals of
+        # each measure, not the months.
+        parts = [s for s in series if not _is_derived_series(s.get("name"))]
+        dropped = [str(s.get("name")) for s in series if s not in parts]
+        if len(parts) >= 2:
+            cats = [str(s.get("name") or "Value") for s in parts]
+            totals = []
+            for s in parts:
+                vals = [float(v) for v in (s.get("data") or []) if v is not None]
+                totals.append(round(sum(vals), 2) if vals else None)
+            series = [{"name": "Total", "data": totals}]
+            chart["title"] = f"Share of total — {' vs '.join(cats)}"
+            if dropped:
+                notes.append(
+                    f"The {hint} chart compares period totals; {', '.join(dropped)} is left out "
+                    "because it is derived from the other figures."
+                )
+    if len(series) > 1:
+        chosen = _pick_series_for_query(series, query)
+        others = [str(s.get("name")) for s in series if s is not chosen]
+        notes.append(
+            f"The {hint} chart shows {chosen.get('name')} only; "
+            f"{', '.join(others)} {'is' if len(others) == 1 else 'are'} in the table."
+        )
+        series = [chosen]
+
+    name = series[0].get("name") or "Value"
+    pairs = [(str(c), float(v)) for c, v in zip(cats, series[0].get("data") or []) if v is not None]
+    if any(v < 0 for _, v in pairs):
+        negatives = [c for c, v in pairs if v < 0][:3]
+        chart, note = _to_bar(chart, hint, f"{name} has negative values ({', '.join(negatives)}), and a slice cannot be negative.")
+        return chart, notes + [note]
+    pairs = [(c, v) for c, v in pairs if v > 0]
+    if not pairs:
+        chart, note = _to_bar(chart, hint, "no category has a value above zero.")
+        return chart, notes + [note]
+
+    other = sum(v for c, v in pairs if c.strip().lower() == "other")
+    pairs = sorted((p for p in pairs if p[0].strip().lower() != "other"), key=lambda p: p[1], reverse=True)
+    limit = MAX_PIE_SLICES - 1
+    if len(pairs) + (1 if other else 0) > MAX_PIE_SLICES:
+        folded = pairs[limit:]
+        other += sum(v for _, v in folded)
+        pairs = pairs[:limit]
+        notes.append(f"The smallest {len(folded)} categories are grouped into Other.")
+    if other:
+        pairs.append(("Other", round(other, 2)))
+
+    chart.update({
+        "chart_type": hint,
+        "categories": [c for c, _ in pairs],
+        "series": [{"name": name, "data": [v for _, v in pairs]}],
+        "x_label": "",
+        "y_label": "",
+    })
+    chart.pop("downgrade_reason", None)
+    return chart, notes
+
+
+def _as_stacked(chart: Dict[str, Any], query: str) -> tuple[Dict[str, Any], List[str]]:
+    """Stacked bars show parts of one whole per category, so the parts must be
+    independent (no derived net/cash-flow series) and not negative."""
+    series = [s for s in chart.get("series") or [] if isinstance(s, dict)]
+    parts = [s for s in series if not _is_derived_series(s.get("name"))]
+    dropped = [str(s.get("name")) for s in series if s not in parts]
+    if len(parts) < 2:
+        chart, note = _to_bar(chart, "stacked", "it needs two or more parts to stack.")
+        return chart, [note]
+    if theme.is_opposing([str(s.get("name")) for s in parts]):
+        chart, note = _to_bar(
+            chart, "stacked",
+            "revenue and expenses are two sides of the result, not parts of one total, so a stacked height would mean nothing.",
+        )
+        return chart, [note.replace("shown as a bar chart", "shown side by side")]
+    if any(v is not None and v < 0 for s in parts for v in s.get("data") or []):
+        chart, note = _to_bar(chart, "stacked", "some parts are negative, and negative parts cannot be stacked.")
+        return chart, [note]
+    chart.update({"chart_type": "stacked_bar", "series": parts})
+    notes = []
+    if dropped:
+        notes.append(
+            f"The stacked chart leaves out {', '.join(dropped)} because it is derived from the other parts."
+        )
+    return chart, notes
+
+
+def _apply_type(chart: Dict[str, Any], hint: str, query: str) -> tuple[Dict[str, Any], List[str]]:
+    chart = dict(chart)
+    chart["requested_type"] = hint
+    if chart.get("chart_type") == "waterfall":
+        return chart, []  # a bridge keeps its form; other requests apply to the other charts
+    if hint in PART_TO_WHOLE:
+        return _as_part_to_whole(chart, hint, query)
+    if hint == "stacked_bar":
+        return _as_stacked(chart, query)
+    if hint == "waterfall":
+        chart, note = _to_bar(
+            chart, "waterfall",
+            "a waterfall needs a starting total, the steps between, and an ending total, which this data does not have.",
+        )
+        return chart, [note]
+    if hint in ("line", "area") and len(chart.get("categories") or []) < 2:
+        chart, note = _to_bar(chart, hint, "there is only one data point, so there is no line to draw.")
+        return chart, [note]
+    chart["chart_type"] = hint
+    return chart, []
+
+
+#: Words that ask for a share of a whole rather than a ranking.
+_SHARE_WORDS = re.compile(
+    r"\b(?:share|breakdown|composition|split|distribution|mix|proportion|percentage of|% of)\b", re.IGNORECASE,
+)
+#: Label length past which vertical bars need rotated, hard-to-read labels.
+_LONG_LABEL = 14
+
+
+def _auto_type(chart: Dict[str, Any], query: str) -> Dict[str, Any]:
+    """Pick the form from the data's job when the user did not name one.
+
+    * share of a whole ("breakdown", "split", "mix"): donut, when every value
+      is positive and it can be shown in 8 slices or fewer;
+    * ranking of many or long-named categories: horizontal bars, largest on top;
+    * everything else keeps the builder's form (line for one trend, grouped
+      bars for a few periods, bars for a short ranking).
+    """
+    if chart.get("chart_type") not in ("bar", None):
+        return chart
+    cats = [str(c) for c in chart.get("categories") or []]
+    series = chart.get("series") or []
+    if not cats or _is_time_axis(cats):
+        return chart
+    if _SHARE_WORDS.search(query or "") and len(series) == 1:
+        vals = [v for v in series[0].get("data") or [] if v is not None]
+        if vals and all(v >= 0 for v in vals) and any(v > 0 for v in vals):
+            shaped, notes = _as_part_to_whole(dict(chart), "donut", query)
+            if shaped.get("chart_type") == "donut":
+                shaped["auto_notes"] = notes
+                return shaped
+    if len(cats) >= 6 or max(len(c) for c in cats) > _LONG_LABEL:
+        return dict(chart, chart_type="hbar")
+    return chart
+
+
+def apply_chart_hint(spec: Dict[str, Any], hint: Optional[str], query: str = "") -> Dict[str, Any]:
+    """Final say on chart type and color, after every chart source is merged.
+
+    The chart type the user named is applied to the primary (first) chart,
+    whatever builder produced it; a "waterfall" request first brings an
+    existing bridge chart to the front. When the data cannot honestly take
+    the requested form, the chart falls back to bar and the reason is added to
+    `notes` — never a silent swap. With no request, `_auto_type` picks the
+    form from the data. Colors are then resolved once, here, for every chart.
+    """
+    charts = list(spec.get("charts") or [])
+    notes = list(spec.get("notes") or [])
+    if hint == "waterfall":
+        bridge = next((i for i, c in enumerate(charts) if c.get("chart_type") == "waterfall"), None)
+        if bridge:
+            charts.insert(0, charts.pop(bridge))
+    if hint and charts:
+        chart, extra = _apply_type(charts[0], hint, query)
+        charts[0] = chart
+        notes += extra
+    else:
+        # No named form: choose it from the data.
+        for i, chart in enumerate(charts):
+            chosen = _auto_type(chart, query)
+            notes += chosen.pop("auto_notes", [])
+            charts[i] = chosen
+    spec["notes"] = notes
+    spec["charts"] = [theme.resolve_chart_colors(dict(c)) for c in charts]
     return spec

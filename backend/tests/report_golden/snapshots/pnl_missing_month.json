@@ -1,0 +1,105 @@
+{
+ "title": "Profit & Loss Statement",
+ "period": null,
+ "currency": "AED",
+ "kpis": [
+  [
+   "Total Expenses",
+   "AED 114,660.00"
+  ]
+ ],
+ "charts": [
+  {
+   "type": "bar",
+   "title": "Monthly Revenue vs Expenses",
+   "categories": [
+    "April",
+    "May",
+    "June"
+   ],
+   "series": [
+    {
+     "name": "Revenue",
+     "data": [
+      52400.0,
+      null,
+      63700.0
+     ]
+    },
+    {
+     "name": "Expenses",
+     "data": [
+      34100.0,
+      36800.0,
+      43760.0
+     ]
+    }
+   ],
+   "series_colors": [
+    "#0E8A75",
+    "#EB6834"
+   ],
+   "point_colors": null,
+   "takeaway": "Revenue was above Expenses in 2 of 2 periods; the widest gap was AED 19.9K in June.",
+   "requested_type": null,
+   "downgrade_reason": null,
+   "total_indices": null
+  }
+ ],
+ "tables": [
+  {
+   "title": "Monthly Breakdown",
+   "columns": [
+    "Month",
+    "Revenue",
+    "Expenses",
+    "Net Profit"
+   ],
+   "first_rows": [
+    {
+     "month": "April",
+     "revenue": "AED 52,400.00",
+     "expenses": "AED 34,100.00",
+     "net_profit": "AED 18,300.00"
+    },
+    {
+     "month": "May",
+     "revenue": "—",
+     "expenses": "AED 36,800.00",
+     "net_profit": "—"
+    },
+    {
+     "month": "June",
+     "revenue": "AED 63,700.00",
+     "expenses": "AED 43,760.00",
+     "net_profit": "AED 19,940.00"
+    }
+   ],
+   "total_rows": 3
+  }
+ ],
+ "callouts": [],
+ "narrative": {
+  "origin": "template",
+  "headline": "Revenue was above Expenses in 2 of 2 periods",
+  "summary": [],
+  "drivers": [
+   "The widest gap was AED 19.9K in June."
+  ],
+  "risks": [],
+  "actions": []
+ },
+ "integrity": {
+  "checks_run": 4,
+  "checks_failed": 0,
+  "figures_checked": 1,
+  "figures_verified": 1,
+  "sentences_removed": 0
+ },
+ "methodology": [
+  "Amounts in AED. A dash (—) marks a value the source did not provide.",
+  "Request: P&L report as pdf",
+  "The summary was generated directly from the verified figures in this report.",
+  "Consistency checks: 4 of 4 passed."
+ ]
+}

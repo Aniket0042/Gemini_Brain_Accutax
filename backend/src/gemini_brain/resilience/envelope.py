@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from .errors import ErrorCode
 from .messages import notice_for
-from .output_guard import sanitize_answer, strip_emojis, strip_invented_turns
+from .output_guard import sanitize_answer, strip_emojis, strip_invented_turns, strip_repeated_lines
 
 _EMPTY_USAGE = {
     "input_tokens": 0,
@@ -174,6 +174,8 @@ def normalize_envelope(result: Dict[str, Any]) -> Dict[str, Any]:
     # reliably suppress them across every model/reasoning path.
     answer = strip_emojis(answer)
     answer = strip_invented_turns(answer)
+    # A looping model repeated its bullets until the token limit; show each once.
+    answer = strip_repeated_lines(answer)
 
     # Apply markdown normalizer if available
     try:
@@ -215,5 +217,10 @@ def normalize_envelope(result: Dict[str, Any]) -> Dict[str, Any]:
         out["sql_traces"] = [{"sql": out["sql"], "duration_ms": 0.0, "row_count": len(out.get("results") or []), "source": "sql"}]
     elif out["sql_traces"] and not out.get("sql"):
         out["sql"] = out["sql_traces"][0]["sql"]
+    if not isinstance(out.get("api_traces"), list):
+        out["api_traces"] = []
+    if not isinstance(out.get("llm_traces"), list):
+        out["llm_traces"] = []
+    out.setdefault("context_window", None)
     out.setdefault("error", None)
     return out

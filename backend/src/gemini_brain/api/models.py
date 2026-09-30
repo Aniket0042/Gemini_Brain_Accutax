@@ -4,7 +4,7 @@ models.py — Pydantic request and response schemas for the Gemini Brain REST AP
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 class UIContext(BaseModel):
     """Contextual metadata injected by the frontend UI."""
@@ -24,8 +24,20 @@ class QueryRequest(BaseModel):
     )
     organization_id: Optional[int] = Field(
         default=None,
-        description="Organization / Tenant ID. If omitted, Gemini Brain attempts to extract it dynamically from the query.",
+        description=(
+            "Organization / Tenant ID for a single-organization query. If neither this "
+            "nor organization_ids is given, the caller's first allowed organization is used."
+        ),
         examples=[27],
+    )
+    organization_ids: Optional[List[int]] = Field(
+        default=None,
+        description=(
+            "Organizations to query together, e.g. for a comparison. Every one must be "
+            "assigned to the caller, or the whole request is refused. When organization_id "
+            "is also given, it must be one of these."
+        ),
+        examples=[None],
     )
     user_id: Optional[int] = Field(
         default=None,
@@ -80,6 +92,25 @@ class QueryRequest(BaseModel):
         description="When true, narration stays to a few short bullets instead of a full write-up.",
     )
 
+    @model_validator(mode="after")
+    def _org_fields_agree(self) -> "QueryRequest":
+        # An explicit empty selection is a client bug, not a request for the default org.
+        if self.organization_ids is not None and not self.organization_ids:
+            raise ValueError("organization_ids must name at least one organization.")
+        if (
+            self.organization_ids is not None
+            and self.organization_id is not None
+            and self.organization_id not in self.organization_ids
+        ):
+            raise ValueError("organization_id must be one of organization_ids when both are given.")
+        return self
+
+    def requested_org_ids(self) -> List[int]:
+        """Every organization this request names; the single-org field is a one-item list."""
+        if self.organization_ids is not None:
+            return list(self.organization_ids)
+        return [self.organization_id] if self.organization_id is not None else []
+
 
 class TokenUsageSchema(BaseModel):
     input_tokens: int = Field(default=0)
@@ -97,6 +128,10 @@ class RoutingInfoSchema(BaseModel):
     api_endpoint: Optional[str] = Field(default=None)
     complexity: Optional[str] = Field(default=None)
     bedrock_model: Optional[str] = Field(default=None)
+    layout: Optional[str] = Field(
+        default=None,
+        description="Multi-organization answers only: metric | multi_metric | series | per_org | merged | overlap | collapsed | direct.",
+    )
 
 
 class NoticeSchema(BaseModel):
@@ -128,7 +163,7 @@ class DataSourceSchema(BaseModel):
 # later phases without a schema migration, and an old client that doesn't
 # recognise a `type` still gets a well-formed dict it can ignore.
 class ResponseBlock(BaseModel):
-    type: str = Field(..., description="markdown | table | kpi_grid | code | chart | canvas | artifact | image")
+    type: str = Field(..., description="markdown | table | kpi_grid | code | chart | canvas | artifact | image | action_button")
 
     model_config = {"extra": "allow"}
 
@@ -148,6 +183,9 @@ class QueryResponse(BaseModel):
     )
     sql: Optional[str] = Field(default=None, description="SQL query executed (if DB fallback path).")
     sql_traces: List[Dict[str, Any]] = Field(default_factory=list, description="SQL queries executed during query evaluation.")
+    api_traces: List[Dict[str, Any]] = Field(default_factory=list, description="Accutax REST API calls (endpoint, params, status) executed during query evaluation.")
+    llm_traces: List[Dict[str, Any]] = Field(default_factory=list, description="Bedrock/Claude LLM calls (model, purpose, tokens, duration) executed during query evaluation.")
+    context_window: Optional[Dict[str, Any]] = Field(default=None, description="Session's cumulative token usage against a fixed budget, independent of the selected model. {used, limit, remaining, percent}.")
     results: List[Any] = Field(default_factory=list, description="Raw structured results list.")
     error: Optional[str] = Field(default=None, description="Error message if processing failed.")
     status: str = Field(default="ok", description="ok | empty | partial | degraded | failed")
@@ -163,6 +201,20 @@ class QueryResponse(BaseModel):
     query_trace: Optional[Dict[str, Any]] = Field(default=None, description="Detailed per-stage latency trace metrics.")
     policy: Optional[PolicySchema] = Field(default=None, description="Model and effort tier used for this request.")
     verification: Optional[VerificationSchema] = Field(default=None, description="Numeric grounding check result.")
+    comparison: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Multi-organization answers on one metric only: the ranking computed in code "
+            "(metric, label, unit, currency, rows with rank/value/share_pct, missing, total)."
+        ),
+    )
+    organizations: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Multi-organization answers only: each organization queried, with its name, "
+            "currency and status (ok | partial | empty | degraded | failed)."
+        ),
+    )
 
 
 class MultiModelQueryResponse(BaseModel):
@@ -317,17 +369,35 @@ class TenantListResponse(BaseModel):
     user_id: int = Field(..., description="Authenticated user ID.")
     email: str = Field(..., description="Authenticated user email.")
     tenants: List[TenantInfo] = Field(default_factory=list, description="List of accessible tenants.")
+    multi_org_enabled: bool = Field(
+        default=False,
+        description="Whether one query may name several organizations. The UI shows multi-select only when true.",
+    )
+    max_orgs_per_query: int = Field(default=1, description="Most organizations one query may name.")
 
 
 class CreateSessionRequest(BaseModel):
     organization_id: Optional[int] = Field(default=None, description="Tenant this thread belongs to.")
+    organization_ids: Optional[List[int]] = Field(
+        default=None,
+        description="Organizations a multi-organization thread belongs to. Fixed for the life of the thread.",
+    )
     session_id: Optional[str] = Field(default=None, description="Optional client-generated UUID.")
+
+    def requested_org_ids(self) -> List[int]:
+        if self.organization_ids:
+            return list(self.organization_ids)
+        return [self.organization_id] if self.organization_id is not None else []
 
 
 class ChatSessionSchema(BaseModel):
     id: str
     user_id: int
     organization_id: Optional[int] = None
+    organization_ids: List[int] = Field(
+        default_factory=list,
+        description="The thread's organization scope, sorted. Empty until its first scoped request.",
+    )
     name: str = "New Chat"
     created_at: Optional[str] = None
     updated_at: Optional[str] = None

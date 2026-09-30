@@ -47,6 +47,17 @@ def test_fast_router_income_chart_uses_profit_loss_api():
     assert "start_date" in res.query_params
 
 
+@pytest.mark.parametrize("query", [
+    "Top 10 customers by revenue in 2025 as a horizontal bar chart",
+    "Show revenue by customer for 2025 as a pie chart",
+])
+def test_fast_router_customer_revenue_chart_is_not_profit_loss(query):
+    """A breakdown named before the revenue phrase must still keep the query
+    off the P&L report, which has no per-customer figures."""
+    res = fast_route(query, organization_id=27)
+    assert res is None or res.endpoint != "/report/profit-loss"
+
+
 def test_fast_router_income_report_uses_profit_loss_api():
     res = fast_route("show me the income report for this year", organization_id=27)
     assert res is not None

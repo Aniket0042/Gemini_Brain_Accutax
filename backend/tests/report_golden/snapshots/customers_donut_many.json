@@ -1,0 +1,115 @@
+{
+ "title": "Sales by Customer",
+ "period": null,
+ "currency": "AED",
+ "kpis": [],
+ "charts": [
+  {
+   "type": "donut",
+   "title": "Sales by Customer",
+   "categories": [
+    "Customer A",
+    "Customer B",
+    "Customer C",
+    "Customer D",
+    "Customer E",
+    "Customer F",
+    "Customer G",
+    "Other"
+   ],
+   "series": [
+    {
+     "name": "Sales",
+     "data": [
+      20000.0,
+      19000.0,
+      18000.0,
+      17000.0,
+      16000.0,
+      15000.0,
+      14000.0,
+      76000.0
+     ]
+    }
+   ],
+   "series_colors": [
+    "#0E8A75"
+   ],
+   "point_colors": [
+    "#0E8A75",
+    "#2A78D6",
+    "#EB6834",
+    "#4A3AA7",
+    "#E87BA4",
+    "#EDA100",
+    "#E34948",
+    "#94A3B8"
+   ],
+   "takeaway": "Customer A is the largest at AED 20.0K, 10.3% of the total. The top three make up 29.2%.",
+   "requested_type": "donut",
+   "downgrade_reason": null,
+   "total_indices": null
+  }
+ ],
+ "tables": [
+  {
+   "title": "Details",
+   "columns": [
+    "Customer Name",
+    "Sales"
+   ],
+   "first_rows": [
+    {
+     "customer_name": "Customer A",
+     "sales": "AED 20,000.00"
+    },
+    {
+     "customer_name": "Customer B",
+     "sales": "AED 19,000.00"
+    },
+    {
+     "customer_name": "Customer C",
+     "sales": "AED 18,000.00"
+    },
+    {
+     "customer_name": "Customer D",
+     "sales": "AED 17,000.00"
+    },
+    {
+     "customer_name": "Customer E",
+     "sales": "AED 16,000.00"
+    }
+   ],
+   "total_rows": 15
+  }
+ ],
+ "callouts": [
+  {
+   "tone": "note",
+   "text": "The smallest 8 categories are grouped into Other."
+  }
+ ],
+ "narrative": {
+  "origin": "template",
+  "headline": "Customer A is the largest at AED 20.0K, 10.3% of the total",
+  "summary": [],
+  "drivers": [
+   "The top three make up 29.2%."
+  ],
+  "risks": [],
+  "actions": []
+ },
+ "integrity": {
+  "checks_run": 2,
+  "checks_failed": 0,
+  "figures_checked": 3,
+  "figures_verified": 3,
+  "sentences_removed": 0
+ },
+ "methodology": [
+  "Amounts in AED. A dash (—) marks a value the source did not provide.",
+  "Request: donut of sales by customer",
+  "The summary was generated directly from the verified figures in this report.",
+  "Consistency checks: 2 of 2 passed."
+ ]
+}

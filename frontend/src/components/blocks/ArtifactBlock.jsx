@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Download, FileText } from 'lucide-react';
+import { downloadArtifact } from './ReportActions';
 
 function remainingSeconds(expiresAt, fallback = 120) {
   if (expiresAt) {
@@ -9,16 +10,23 @@ function remainingSeconds(expiresAt, fallback = 120) {
   return fallback;
 }
 
-function formatClock(secs) {
+function formatClock(secs, expiresAt) {
+  // Links now live for hours: show the expiry time, not a long countdown.
+  if (secs >= 3600) {
+    const t = expiresAt ? new Date(expiresAt) : new Date(Date.now() + secs * 1000);
+    return `until ${t.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
+  }
   const m = Math.floor(secs / 60);
   const s = secs % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 export function ArtifactBlock({ block, token }) {
+  // `current` becomes the regenerated file after an expired one is rebuilt.
+  const [current, setCurrent] = useState(block);
   const [left, setLeft] = useState(() => remainingSeconds(block?.expires_at, block?.expires_in || 120));
   const expired = left <= 0;
-  const filename = block?.filename || 'download';
+  const filename = current?.filename || 'download';
 
   useEffect(() => {
     if (expired) return undefined;
@@ -29,22 +37,12 @@ export function ArtifactBlock({ block, token }) {
   }, [expired]);
 
   const handleDownload = async () => {
-    if (!block?.id || expired) return;
-    const res = await fetch(`/api/v1/artifacts/${block.id}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (res.status === 410) {
-      setLeft(0);
-      return;
+    // An expired file is rebuilt from its report and downloaded (see downloadArtifact).
+    const got = await downloadArtifact(current, token);
+    if (got && got.id !== current?.id) {
+      setCurrent(got);
+      setLeft(remainingSeconds(got.expires_at, got.expires_in || 120));
     }
-    if (!res.ok) return;
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   return (
@@ -53,12 +51,12 @@ export function ArtifactBlock({ block, token }) {
       <div className="artifact-card-meta">
         <div className="artifact-card-name">{filename}</div>
         <div className="artifact-card-status">
-          {expired ? 'Expired — ask again to regenerate' : `Download available · ${formatClock(left)}`}
+          {expired ? 'Expired — download to rebuild it' : `Download available · ${formatClock(left, current?.expires_at)}`}
         </div>
       </div>
-      <button type="button" className="artifact-card-btn" disabled={expired || !block?.id} onClick={handleDownload}>
+      <button type="button" className="artifact-card-btn" disabled={!current?.id} onClick={handleDownload}>
         <Download size={14} />
-        Download
+        {expired ? 'Rebuild & download' : 'Download'}
       </button>
     </div>
   );

@@ -23,6 +23,7 @@ FILE_XLSX = re.compile(
     re.IGNORECASE,
 )
 FILE_CSV = re.compile(r"\bcsv\b", re.IGNORECASE)
+FILE_MD = re.compile(r"\bmarkdown\b|\.md\b", re.IGNORECASE)
 EXPORT_GENERIC = re.compile(
     r"\b(export|download|send me|give me (?:a |the )?file|as a file)\b",
     re.IGNORECASE,
@@ -31,13 +32,21 @@ EXPORT_GENERIC = re.compile(
 CHART_OF_ACCOUNTS = re.compile(r"\bchart of accounts\b", re.IGNORECASE)
 CHART_WORDS = re.compile(
     r"\b(charts?|graphs?|plotted|plots?|visuali[sz]e|visuali[sz]ation|"
-    r"bar charts?|pie charts?|line charts?|area charts?|trend(?:line)?s?)\b",
+    r"bar charts?|pie charts?|line charts?|area charts?|pie|donut|doughnut|waterfall|"
+    r"(?:stacked|horizontal)(?:\s+(?:bar|column))?|"
+    r"(?:profit|p&l|pnl|cash)\s+bridge|bridge\s+(?:chart|graph)|trend(?:line)?s?)\b",
     re.IGNORECASE,
 )
 BAR_HINT = re.compile(r"\b(?:bar|column)(?:\s+(?:chart|graph|plot))?\b", re.IGNORECASE)
 LINE_HINT = re.compile(r"\b(?:line(?:\s+(?:chart|graph|plot))?|trend(?:line)?s?|trending)\b", re.IGNORECASE)
 AREA_HINT = re.compile(r"\barea(?:\s+(?:chart|graph|plot))?\b", re.IGNORECASE)
-PIE_HINT = re.compile(r"\b(?:pie|donut|doughnut)(?:\s+(?:chart|graph|plot))?\b", re.IGNORECASE)
+PIE_HINT = re.compile(r"\bpie(?:\s+(?:chart|graph|plot))?\b", re.IGNORECASE)
+DONUT_HINT = re.compile(r"\b(?:donut|doughnut)(?:\s+(?:chart|graph|plot))?\b", re.IGNORECASE)
+WATERFALL_HINT = re.compile(
+    r"\bwaterfall\b|\b(?:profit|p&l|pnl|cash)\s+bridge\b|\bbridge\s+(?:chart|graph)\b", re.IGNORECASE
+)
+STACKED_HINT = re.compile(r"\bstacked\b", re.IGNORECASE)
+HBAR_HINT = re.compile(r"\bhorizontal(?:\s+(?:bar|column))?\b", re.IGNORECASE)
 
 FILE_PRIORITY = (
     ("csv", FILE_CSV),
@@ -45,6 +54,7 @@ FILE_PRIORITY = (
     ("pptx", FILE_PPTX),
     ("pdf", FILE_PDF),
     ("docx", FILE_DOCX),
+    ("md", FILE_MD),
 )
 
 
@@ -54,7 +64,7 @@ class Delivery:
 
     mode: str  # none | chart | file | both
     format: Optional[str] = None  # pdf | docx | pptx | xlsx | csv
-    chart_hint: Optional[str] = None  # bar | line | area | pie
+    chart_hint: Optional[str] = None  # bar | hbar | stacked_bar | line | area | pie | donut | waterfall
 
     @property
     def wants_chart(self) -> bool:
@@ -66,8 +76,16 @@ class Delivery:
 
 
 def _chart_hint(text: str) -> Optional[str]:
+    if DONUT_HINT.search(text):
+        return "donut"
     if PIE_HINT.search(text):
         return "pie"
+    if WATERFALL_HINT.search(text):
+        return "waterfall"
+    if STACKED_HINT.search(text):
+        return "stacked_bar"
+    if HBAR_HINT.search(text):
+        return "hbar"
     if BAR_HINT.search(text):
         return "bar"
     if AREA_HINT.search(text):
@@ -105,7 +123,9 @@ def detect_delivery(query: str) -> Delivery:
     # treating it as one made the model invent a "User: can you provide the
     # graph?" follow-up and render a chart nobody asked for.
     if file_fmt and (wants_chart or wants_report):
-        return Delivery(mode="both", format=file_fmt, chart_hint=hint or ("bar" if wants_report else None))
+        # No named form: leave the hint empty so the report picks the form from
+        # the data (report_spec._auto_type) instead of a blanket "bar".
+        return Delivery(mode="both", format=file_fmt, chart_hint=hint)
     if file_fmt:
         return Delivery(mode="file", format=file_fmt, chart_hint=hint)
     if wants_chart:

@@ -91,6 +91,16 @@ MEMORY_SUMMARY_TRIGGER_MESSAGES: int = 12
 MEMORY_PROMPT_BUDGET_CHARS: int = 4000
 
 # ─────────────────────────────────────────────────────────────
+# Session context window meter (frontend "355.7k / 1M" style display)
+# ─────────────────────────────────────────────────────────────
+#: Fixed per-session token budget shown to the user, deliberately independent
+#: of whichever model is actually selected (see policy/registry.py — real
+#: context windows range from 200K on Claude models to 1M on Gemini). Set to
+#: the smallest real window in the catalog so the displayed number is never
+#: larger than what any selectable model can actually honor.
+SESSION_CONTEXT_WINDOW_TOKENS: int = 200_000
+
+# ─────────────────────────────────────────────────────────────
 # Timeouts & limits
 # ─────────────────────────────────────────────────────────────
 #: HTTP timeout for Accutax REST API calls (seconds).

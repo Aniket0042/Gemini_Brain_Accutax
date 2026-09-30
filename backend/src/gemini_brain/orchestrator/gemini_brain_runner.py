@@ -18,9 +18,11 @@ longer used here — see `_call_llm` below.
 from __future__ import annotations
 
 import datetime
+import functools
 import json
 import logging
 import os
+import re
 import threading
 import time
 from typing import Any, Callable, Dict, Generator, List, Optional, Tuple
@@ -88,7 +90,9 @@ from gemini_brain.resilience import (
     normalize_envelope,
     new_request_id,
 )
+from gemini_brain.knowledge.guide_loader import guide_context_for, guide_coverage_for
 from gemini_brain.artifacts.attach import attach_delivery
+from gemini_brain.artifacts.ir import provenance_from_result
 from gemini_brain.tools.formatters import render, render_blocks
 from gemini_brain.tools.registry import tool_spec_for_endpoint
 from gemini_brain.utils.json_parser import extract_json
@@ -166,6 +170,31 @@ def _verify_empty_via_sql(
     return None
 
 
+#: Accutax endpoints confirmed in the backend code to filter by user_id alone,
+#: returning every organization's rows. Used when the OpenAPI spec cannot be
+#: read, so the multi-org check still holds for them.
+_KNOWN_UNSCOPED_REST = frozenset({"/income/list", "/income/total"})
+
+
+def _rest_call_is_org_scoped(
+    endpoint: str,
+    accepted_query_params: Optional[set],
+    path_params: Dict[str, Any],
+) -> bool:
+    """Whether a REST call can be limited to one organization.
+
+    True when the org is in the path, or the spec lists an org query parameter.
+    Without the spec, only the endpoints known to ignore the org are refused.
+    """
+    from gemini_brain.api_client.accutax_client import ORG_PARAM_KEYS
+
+    if any(k in ORG_PARAM_KEYS for k in (path_params or {})):
+        return True
+    if accepted_query_params is None:
+        return endpoint not in _KNOWN_UNSCOPED_REST
+    return any(k in accepted_query_params for k in ORG_PARAM_KEYS)
+
+
 def _subject_for(endpoint: Optional[str], tool_spec: Any = None, query: str = "") -> str:
     try:
         from gemini_brain.formatting.empty_answer import subject_for
@@ -174,6 +203,158 @@ def _subject_for(endpoint: Optional[str], tool_spec: Any = None, query: str = ""
         if tool_spec is not None and getattr(tool_spec, "name", ""):
             return str(tool_spec.name).replace("_", " ")
         return "your records"
+
+
+def _record_guide_coverage(qtype: int, query: str) -> Optional[Dict[str, Any]]:
+    """Compute app-guide coverage for a LEFT-path query and record it to METRICS.
+
+    Only meaningful for types 1 (FAQ/How-to) and 2 (App Guidance) — the guide
+    (knowledge/accutax_guide.md) targets those two; concept/advice answers
+    (types 6/7) don't draw on it, so they're left unscored rather than
+    polluting the coverage metric with irrelevant "no_match" noise.
+
+    Returns the coverage dict (see guide_coverage_for) for the caller to
+    attach to agent_trace, or None when not applicable. Never raises.
+    """
+    if qtype not in (1, 2):
+        return None
+    try:
+        coverage = guide_coverage_for(query)
+    except Exception as e:
+        logger.warning("guide_coverage_for failed: %s", e)
+        return None
+    status = coverage.get("status")
+    if status == "verified":
+        METRICS.guide_coverage_verified.inc()
+    elif status == "stub":
+        METRICS.guide_coverage_stub.inc()
+    elif status == "no_match":
+        METRICS.guide_coverage_no_match.inc()
+    elif status == "guide_missing":
+        METRICS.guide_coverage_missing.inc()
+    return coverage
+
+
+def _guide_link_block(coverage: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Build an action-button block linking into the live Accutax app, when
+    the guide matched a linkable section. Deterministic, never LLM-generated
+    — the model never sees or invents the URL, so it can't be hallucinated
+    or pointed at the wrong route.
+
+    Rendered by the frontend's BlockRenderer (frontend/src/components/blocks)
+    — registered under "action_button" — as a real button below the answer
+    text, same position/timing as every other block type (table, chart):
+    it appears once the answer's typewriter reveal finishes, not mid-type.
+
+    Returns None when there's no match, the section has no mapped route
+    (stub, or a page that needs a runtime ID), or accutax_app_url isn't
+    configured. Never raises.
+    """
+    if not coverage:
+        return None
+    url = coverage.get("app_url")
+    if not url:
+        return None
+    return {"type": "action_button", "label": "Open in Accutax", "url": url}
+
+
+NO_GUIDE_MATCH_RULE: str = """
+The verified Accutax App Guide does not cover this question. Give general guidance only:
+- Do not state exact menu paths, button names, field names or screen titles as fact — you have not been given verified ones for this topic.
+- Point the user to the most likely area using the sidebar layout above (e.g. "under Purchases in the sidebar") and say the exact labels may differ.
+- If you are not sure Accutax has this feature, say so plainly instead of describing it."""
+
+
+#: Phrasings that ask for a procedure or a location in the app, not a figure.
+#: "how much" / "how many" are deliberately absent — those want numbers.
+_HOW_TO_RE = re.compile(
+    r"^\s*(?:"
+    r"how\s+(?:do|can|should|would|could|shall)\s+(?:i|we|you|one|someone)\b"
+    r"|how\s+to\b"
+    r"|where\s+(?:do|can|is|are|would|should|could)\b"
+    r"|where'?s\b"
+    r"|(?:what\s+are\s+the\s+)?steps\s+(?:to|for)\b"
+    r"|show\s+me\s+how\b"
+    r"|walk\s+me\s+through\b"
+    r"|guide\s+me\b"
+    r"|teach\s+me\b"
+    r"|is\s+there\s+(?:a\s+way|an?\s+option)\b"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _how_to_guide_section(query: str) -> Optional[str]:
+    """Heading of the verified guide section a how-to question is about, or
+    None. Checked before the fast router: otherwise "how do I see overdue
+    invoices" or "where can I see the balance sheet" matched a data regex and
+    returned figures instead of steps (measured: 6 of 10 such phrasings).
+    Only fires for how-to phrasing AND a verified guide match, so data
+    questions ("show me P&L this month", "how much did we sell") still reach
+    the data path. Never raises.
+    """
+    if not query or not _HOW_TO_RE.search(query):
+        return None
+    try:
+        coverage = guide_coverage_for(query)
+    except Exception as e:
+        logger.warning("how-to guide pre-route failed: %s", e)
+        return None
+    if coverage.get("status") != "verified":
+        return None
+    return coverage.get("matched_section")
+
+
+_FOLLOW_UP_WORDS = frozenset({
+    "it", "that", "this", "those", "these", "there", "then", "step", "steps",
+    "next", "above", "same", "again", "after", "before", "else",
+})
+
+
+def _effective_guide_query(query: str, session_state: Optional[Dict[str, Any]]) -> str:
+    """Query to match against the guide. A referential follow-up ("what
+    about step 3?", "where is that button?") names no topic, so it is
+    matched using the previous user question instead — otherwise the
+    no-match guardrail would fire mid-conversation. Only applies when the
+    follow-up has referential words; a new uncovered question ("how do I do
+    payroll") keeps its own no-match result and its guardrail.
+    """
+    if guide_coverage_for(query).get("status") != "no_match":
+        return query
+    words = set(re.findall(r"[a-z]+", (query or "").lower()))
+    if not (words & _FOLLOW_UP_WORDS):
+        return query
+    current = (query or "").strip()
+    for msg in reversed((session_state or {}).get("_memory_messages") or []):
+        if (msg.get("role") or "").strip().lower() != "user":
+            continue
+        text = (msg.get("content") or "").strip()
+        if not text or text == current:
+            continue
+        if guide_coverage_for(text).get("status") == "verified":
+            return text
+        break
+    return query
+
+
+def _guide_prompt_block(query: str, coverage: Optional[Dict[str, Any]]) -> str:
+    """Text appended to the direct-answer system prompt: the guide sections
+    relevant to `query` (not the whole guide), plus the no-match guardrail
+    when a how-to query matched no verified section.
+
+    Without the guardrail the model answered uncovered how-to questions with
+    confident, invented menu paths (seen live: a vendor advance payment flow
+    described as "Purchases > Bills > + Add Bill > Payments tab", none of
+    which exists). `coverage` is None for non how-to types (6/7), which get
+    the context but no guardrail.
+    """
+    block = ""
+    context = guide_context_for(query)
+    if context:
+        block += "\n\nAccutax App Guide (source of truth for navigation/steps):\n" + context
+    if coverage and coverage.get("status") in ("no_match", "stub", "guide_missing"):
+        block += "\n" + NO_GUIDE_MATCH_RULE
+    return block
 
 
 DIRECT_ANSWER_SYSTEM_PROMPT: str = """You are an expert, helpful AI assistant for Accutax — a cloud-based ERP and accounting platform used across the Middle East (UAE, AED currency, 5% VAT).
@@ -188,7 +369,10 @@ Guidelines:
   "the assistant", "the AI", or any other variant — the name is fixed across every response.
 - Prefer short paragraphs and numbered or bulleted lists. Never a wall of prose.
 - Answer only the current question. Never invent a User: follow-up or continue as a script.
-- For procedures and how-tos, provide clear, numbered steps.
+- For procedures and how-tos, provide clear, numbered steps. When a step has
+  several fields or sub-items to fill in (e.g. a form's fields), nest them as
+  an indented sub-list under that step — never list them as flat, same-level
+  bullets alongside the steps themselves.
 - For concepts and comparisons, use bullet points and clear examples.
 - Do not fabricate specific company financial figures or database numbers unless provided.
 - You remember this thread. Prior turns are in the conversation messages and in CONVERSATION SO FAR. If the user asks what they asked earlier, quote that turn. Never say this is the start of the conversation when prior turns are present.
@@ -230,6 +414,7 @@ class GeminiBrainRunner:
         user_message: Optional[str] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         messages: Optional[List[Dict[str, Any]]] = None,
+        purpose: str = "",
         **kwargs: Any,
     ) -> Tuple[str, int, int]:
         """Call Bedrock Claude Haiku 4.5 for routing/classification/direct-answer text generation.
@@ -239,6 +424,13 @@ class GeminiBrainRunner:
         Gemini. ``thinking_budget`` is accepted for call-site compatibility but has
         no Bedrock equivalent and is ignored. Retry/backoff on throttling is handled
         internally by ``BedrockAdapter.converse``.
+
+        `purpose` is call-site metadata (e.g. "classify_intent", "endpoint_select",
+        "auto_title") recorded into the LLM trace (SHOW_LLM_TRACES) so a query's
+        3+ separate Bedrock calls can be told apart there — it has no effect on
+        the call itself. Callers that go through classify_intent/select_endpoint/
+        maybe_auto_title bind it via functools.partial before passing this method
+        in as their call_llm callback.
         """
         sys_inst = system_prompt if system_prompt is not None else system
         u_text = user_message if user_message is not None else user_text
@@ -253,6 +445,7 @@ class GeminiBrainRunner:
                     tools=tools,
                     temperature=0.0,
                     max_tokens=max_tokens,
+                    purpose=purpose,
                 )
                 from gemini_brain.reasoning.bedrock_client import extract_tool_calls, extract_text
                 t_calls = extract_tool_calls(resp)
@@ -266,6 +459,7 @@ class GeminiBrainRunner:
                     messages=chat_messages,
                     temperature=0.0,
                     max_tokens=max_tokens,
+                    purpose=purpose,
                 )
             tu = adapter.get_token_usage()
             return text, tu.get("input_tokens", 0), tu.get("output_tokens", 0)
@@ -305,7 +499,7 @@ class GeminiBrainRunner:
             raw_query,
             answer,
             agent_trace=agent_trace,
-            call_llm=self._call_llm,
+            call_llm=functools.partial(self._call_llm, purpose="conversation_summary"),
             db_name=db_name,
         )
 
@@ -315,7 +509,7 @@ class GeminiBrainRunner:
             return
         threading.Thread(
             target=maybe_roll_summary,
-            args=(session_id, self._call_llm, db_name),
+            args=(session_id, functools.partial(self._call_llm, purpose="conversation_summary"), db_name),
             daemon=True,
             name=f"chat-summary-{(session_id or '')[:8]}",
         ).start()
@@ -387,11 +581,34 @@ class GeminiBrainRunner:
         if not endpoint:
             return Retrieved(Outcome.INVALID, reason="no_endpoint_selected")
 
-        cache_key = make_cache_key(organization_id, endpoint, sel.get("query_params", {}))
+        # Multi-org runs keep their own cache entries. The same endpoint answers
+        # differently there (an org-ignoring REST call is swapped for an
+        # org-filtered report), so a shared key would hand single-org the
+        # report, or hand multi-org a cached cross-org REST payload before the
+        # org check runs. Single-org keys are unchanged.
+        cache_endpoint = (
+            f"{endpoint}#org-scoped" if getattr(self, "_org_scoped_rest_only", False) else endpoint
+        )
+        cache_key = make_cache_key(organization_id, cache_endpoint, sel.get("query_params", {}))
         cached = result_cache.get_sync(cache_key)
         if cached is not None:
             res = classify_payload(cached, tier="cache", endpoint=endpoint)
             logger.info("Result cache hit for %s (outcome=%s)", endpoint, res.outcome.value)
+            try:
+                from gemini_brain.observability.api_tracer import record_api_trace
+                record_api_trace(
+                    endpoint=endpoint,
+                    method="CACHE",
+                    path_params=sel.get("path_params", {}),
+                    query_params=sel.get("query_params", {}),
+                    status_code=None,
+                    outcome="cache_hit",
+                    duration_ms=0.0,
+                    row_count=getattr(res, "row_count", 0) or 0,
+                    source="cache",
+                )
+            except Exception as e:
+                logger.warning("Cache-hit trace recording failed for %s: %s", endpoint, e)
             return res
 
         if endpoint.startswith("rpt_"):
@@ -417,13 +634,24 @@ class GeminiBrainRunner:
                     db_name=db_name,
                 )
         else:
+            from gemini_brain.api_client.accutax_client import force_org_params
             from gemini_brain.config.accutax_openapi import (
                 normalize_query_params,
                 path_exists,
+                query_param_names,
             )
 
             exists = path_exists(endpoint)
-            query_params = dict(sel.get("query_params", {}) or {})
+            accepted = query_param_names(endpoint) if exists is True else None
+            # Every REST call carries the verified org, whatever the selection
+            # (model, fast router, retry or widening) wrote into its params.
+            path_params, query_params = force_org_params(
+                sel.get("path_params", {}),
+                sel.get("query_params", {}),
+                organization_id,
+                accepted,
+            )
+            sel = {**sel, "path_params": path_params, "query_params": query_params}
             if exists is False:
                 logger.info(
                     "Skipping HTTP for %s — path is not in Accutax OpenAPI",
@@ -434,6 +662,20 @@ class GeminiBrainRunner:
                     tier="live_api",
                     endpoint=endpoint,
                     reason="not_in_accutax_openapi",
+                )
+            elif getattr(self, "_org_scoped_rest_only", False) and not _rest_call_is_org_scoped(
+                endpoint, accepted, path_params
+            ):
+                # Multi-org runs only: an endpoint with no organization parameter
+                # returns the user's data across all their orgs, which would land
+                # under this one org's label. Treated as unavailable, so the run
+                # falls back to another endpoint or to org-filtered SQL.
+                logger.info("Skipping HTTP for %s — no organization parameter (multi-org run)", endpoint)
+                res = Retrieved(
+                    Outcome.UNAVAILABLE,
+                    tier="live_api",
+                    endpoint=endpoint,
+                    reason="not_org_scoped",
                 )
             else:
                 if exists is True:
@@ -446,10 +688,16 @@ class GeminiBrainRunner:
                     )
             # Prefer the live report API; only build from SQL when that API is down.
             if res.outcome not in (Outcome.OK, Outcome.PARTIAL, Outcome.EMPTY, Outcome.DENIED):
-                from gemini_brain.reports.definitions import REST_TO_SQL_REPORT
+                from gemini_brain.reports.definitions import (
+                    ORG_SCOPED_SUBSTITUTES,
+                    REST_TO_SQL_REPORT,
+                )
                 from gemini_brain.reports.engine import run_report_safe
 
-                sql_key = REST_TO_SQL_REPORT.get(endpoint)
+                # A multi-org run that skipped an endpoint for ignoring the org
+                # uses the org-filtered SQL report with the same meaning.
+                substitute = res.reason == "not_org_scoped" and endpoint in ORG_SCOPED_SUBSTITUTES
+                sql_key = ORG_SCOPED_SUBSTITUTES[endpoint] if substitute else REST_TO_SQL_REPORT.get(endpoint)
                 if sql_key:
                     with trace.stage("sql_report_fallback", endpoint=sql_key, failed_api=endpoint):
                         fallback = run_report_safe(
@@ -459,7 +707,9 @@ class GeminiBrainRunner:
                             db_name=db_name,
                         )
                     if fallback.usable or fallback.outcome is Outcome.EMPTY:
-                        fallback.endpoint = endpoint
+                        # A substitute's payload is the report's shape, not the
+                        # REST one, so it keeps the report's name for formatting.
+                        fallback.endpoint = sql_key if substitute else endpoint
                         fallback.tier = "sql_report_fallback"
                         logger.info(
                             "REST %s unavailable (%s); used SQL report %s",
@@ -494,9 +744,27 @@ class GeminiBrainRunner:
         rows, or (None, None) when widening does not apply or every attempt is
         still empty — in which case the caller keeps today's confirmed-zero answer.
 
+        Skipped entirely when the endpoint has a registered SQL verifier (see
+        get_endpoint_sql_verifiers / _EMPTY_RESULT_SQL_VERIFIERS): that verifier
+        already runs a cheap, deterministic SQL cross-check on the EMPTY result
+        (_verify_empty_via_sql), so burning 2 extra REST round trips against an
+        endpoint that has already returned zero rows once buys nothing — the SQL
+        check is both cheaper and authoritative. This is what keeps a single
+        empty REST call from fanning out into 3 (1 original + 2 widened) against
+        the same endpoint — see the API trace card.
+
         Never raises: a failure here must degrade to the normal empty result, not
         break a query that already had a valid (if unhelpful) answer.
         """
+        endpoint = sel.get("endpoint") or ""
+        if endpoint in _EMPTY_RESULT_SQL_VERIFIERS:
+            logger.info(
+                "Skipping REST window widening for %s — SQL verifier registered, "
+                "deferring to _verify_empty_via_sql instead of extra REST calls",
+                endpoint,
+            )
+            return None, None
+
         query_params = sel.get("query_params") or {}
         try:
             plans = plan_widenings(query_params)
@@ -617,7 +885,10 @@ class GeminiBrainRunner:
         )
         if verified is not None:
             formatted_table = render("row_table", verified.payload, query=raw_query)
-            formatted_blocks = render_blocks("row_table", verified.payload, query=raw_query)
+            formatted_blocks = render_blocks(
+                "row_table", verified.payload, query=raw_query,
+                organization_id=organization_id, db_name=db_name,
+            )
             answer, b_label, bi_new, bo_new, narration_degraded = self._narrate_or_fallback(
                 query=query,
                 data=verified.payload,
@@ -871,7 +1142,9 @@ class GeminiBrainRunner:
             intent=intent,
             save_message_by_session=save_message_by_session,
             update_conversation_state_hybrid_by_session=update_conversation_state_hybrid_by_session,
-            maybe_auto_title=lambda sid, q: maybe_auto_title(sid, q, self._call_llm),
+            maybe_auto_title=lambda sid, q: maybe_auto_title(
+                sid, q, functools.partial(self._call_llm, purpose="auto_title")
+            ),
             conversation_memory=conversation_memory,
         )
 
@@ -929,6 +1202,7 @@ class GeminiBrainRunner:
                 messages=[{"role": "user", "content": [{"text": user_msg}]}],
                 temperature=0.0,
                 max_tokens=narration_max_tokens,
+                purpose="sql_fallback_narration",
             )
             cleaned = (answer or "").strip()
             er["answer"] = cleaned or er.get("answer") or ""
@@ -967,7 +1241,9 @@ class GeminiBrainRunner:
                 raw_user_question=raw_query or query,
                 save_message_by_session=save_message_by_session,
                 update_conversation_state_hybrid_by_session=update_conversation_state_hybrid_by_session,
-                maybe_auto_title=lambda sid, q: maybe_auto_title(sid, q, self._call_llm),
+                maybe_auto_title=lambda sid, q: maybe_auto_title(
+                sid, q, functools.partial(self._call_llm, purpose="auto_title")
+            ),
                 conversation_memory=conversation_memory,
             ):
                 yield chunk
@@ -984,7 +1260,9 @@ class GeminiBrainRunner:
             intent=intent,
             save_message_by_session=save_message_by_session,
             update_conversation_state_hybrid_by_session=update_conversation_state_hybrid_by_session,
-            maybe_auto_title=lambda sid, q: maybe_auto_title(sid, q, self._call_llm),
+            maybe_auto_title=lambda sid, q: maybe_auto_title(
+                sid, q, functools.partial(self._call_llm, purpose="auto_title")
+            ),
             conversation_memory=conversation_memory,
         )
 
@@ -1039,6 +1317,7 @@ class GeminiBrainRunner:
                 messages=[{"role": "user", "content": [{"text": user_msg}]}],
                 temperature=0.0,
                 max_tokens=narration_max_tokens,
+                purpose="sql_fallback_narration",
             )
             er["answer"] = answer.strip()
 
@@ -1193,6 +1472,7 @@ class GeminiBrainRunner:
                 blocks.append(block)
             elif hasattr(block, "model_dump"):
                 blocks.append(block.model_dump())
+        answer_text = result.get("answer")
         result["blocks"] = attach_delivery(
             query,
             self._payload_for_delivery(result),
@@ -1201,6 +1481,8 @@ class GeminiBrainRunner:
             user_id=user_id,
             organization_id=organization_id,
             session_id=session_id,
+            answer_text=answer_text if isinstance(answer_text, str) else None,
+            provenance=provenance_from_result(result),
         )
         if session_id:
             try:
@@ -1215,6 +1497,8 @@ class GeminiBrainRunner:
         result: Dict[str, Any],
         policy: Any,
         organization_id: Optional[int] = None,
+        session_id: Optional[str] = None,
+        db_name: str = "",
     ) -> Dict[str, Any]:
         """Attach the execution policy and the numeric grounding report."""
         if not isinstance(result, dict):
@@ -1239,6 +1523,19 @@ class GeminiBrainRunner:
                 result["answer"] = (result.get("answer") or "") + strictness_note(report)
                 if result.get("status") == "ok":
                     result["status"] = "partial"
+
+        usage = result.get("token_usage") or {}
+        try:
+            from gemini_brain.memory.context_window import track_context_window_usage
+            result["context_window"] = track_context_window_usage(
+                session_id,
+                usage.get("input_tokens", 0),
+                usage.get("output_tokens", 0),
+                db_name=db_name,
+            )
+        except Exception as e:
+            logger.warning("Context-window meter update failed: %s", e)
+            result["context_window"] = None
         return result
 
     def run(
@@ -1256,9 +1553,16 @@ class GeminiBrainRunner:
         effort: Optional[str] = None,
         ui_context: Optional[dict] = None,
         brief: bool = False,
+        org_scoped_rest_only: bool = False,
     ) -> Dict[str, Any]:
-        """Resolve the execution policy, run the pipeline, verify the figures."""
+        """Resolve the execution policy, run the pipeline, verify the figures.
+
+        ``org_scoped_rest_only`` is set by the multi-org fan-out: REST
+        endpoints that cannot be limited to one organization are skipped.
+        Single-org queries leave it off and keep their existing behaviour.
+        """
         self._answer_brief = bool(brief)
+        self._org_scoped_rest_only = bool(org_scoped_rest_only)
         policy = choose_policy(query, requested_model=model, requested_effort=effort)
         explicit_model_key = policy.model_key if (model and model != "auto") else None
         result = self._run_inner(
@@ -1283,7 +1587,7 @@ class GeminiBrainRunner:
             organization_id=organization_id,
             session_id=session_id,
         )
-        return self._decorate(result, policy, organization_id)
+        return self._decorate(result, policy, organization_id, session_id=session_id, db_name=db_name)
 
     def run_stream(
         self,
@@ -1300,9 +1604,11 @@ class GeminiBrainRunner:
         effort: Optional[str] = None,
         ui_context: Optional[dict] = None,
         brief: bool = False,
+        org_scoped_rest_only: bool = False,
     ) -> Generator[Dict[str, Any], None, None]:
         """Streaming counterpart of run(); emits the policy before any work starts."""
         self._answer_brief = bool(brief)
+        self._org_scoped_rest_only = bool(org_scoped_rest_only)
         policy = choose_policy(query, requested_model=model, requested_effort=effort)
         explicit_model_key = policy.model_key if (model and model != "auto") else None
         yield {"policy": policy.to_public()}
@@ -1331,7 +1637,8 @@ class GeminiBrainRunner:
                     session_id=session_id,
                 )
                 chunk["final_result"] = self._decorate(
-                    chunk["final_result"], policy, organization_id
+                    chunk["final_result"], policy, organization_id,
+                    session_id=session_id, db_name=db_name,
                 )
             yield chunk
 
@@ -1402,6 +1709,12 @@ class GeminiBrainRunner:
             reason = "Question about this chat's prior messages"
             type_lbl = self._type_label(qtype)
             logger.info("GeminiBrain conversation-meta → direct answer (skip API/SQL)")
+        elif (how_to_section := _how_to_guide_section(query)) is not None:
+            router_source = "how_to_guide"
+            qtype = 2
+            reason = f"How-to phrasing matched app guide section: {how_to_section}"
+            type_lbl = self._type_label(qtype)
+            logger.info("GeminiBrain how-to → app guidance (%s), skip fast router/API", how_to_section)
         else:
             if use_api:
                 fast_hit = fast_route(query, organization_id, user_id=str(user_id), session_state=session_state)
@@ -1417,7 +1730,12 @@ class GeminiBrainRunner:
                 METRICS.llm_router_calls.inc()
                 # 1. Classify intent via Gemini Flash
                 with trace.stage("classification"):
-                    routing, ri, ro = classify_intent(query, self._call_llm, self._parse_json, session_state=session_state)
+                    routing, ri, ro = classify_intent(
+                        query,
+                        functools.partial(self._call_llm, purpose="classify_intent"),
+                        self._parse_json,
+                        session_state=session_state,
+                    )
                 bi += int(ri or 0)
                 bo += int(ro or 0)
                 llm_calls += 1
@@ -1434,8 +1752,12 @@ class GeminiBrainRunner:
         # below so the advice is grounded in real numbers instead of the
         # model refusing or bluffing without data.
         if qtype in LEFT_PATH_TYPES and not (qtype == 7 and sel is not None):
+            guide_coverage = None
             try:
                 system = append_memory_block(DIRECT_ANSWER_SYSTEM_PROMPT, session_state)
+                guide_query = _effective_guide_query(query, session_state)
+                guide_coverage = _record_guide_coverage(qtype, guide_query)
+                system += _guide_prompt_block(guide_query, guide_coverage)
                 if getattr(self, "_answer_brief", False):
                     system += (
                         "\nThe user asked for a brief answer. Use at most five short "
@@ -1468,11 +1790,14 @@ class GeminiBrainRunner:
                             messages=answer_messages,
                             temperature=0.0,
                             max_tokens=1500,
+                            purpose="direct_answer",
                         )
                         tu = selected_adapter.get_token_usage()
                         ai, ao = tu.get("input_tokens", 0), tu.get("output_tokens", 0)
                     else:
-                        answer, ai, ao = self._call_llm(system, query, max_tokens=1500, messages=answer_messages)
+                        answer, ai, ao = self._call_llm(
+                            system, query, max_tokens=1500, messages=answer_messages, purpose="direct_answer"
+                        )
                         if not answer:
                             logger.info("Bedrock direct answer returned empty, retrying with a fresh adapter...")
                             bedrock = BedrockAdapter(model_id=HAIKU45_ID)
@@ -1481,6 +1806,7 @@ class GeminiBrainRunner:
                                 messages=answer_messages,
                                 temperature=0.0,
                                 max_tokens=1500,
+                                purpose="direct_answer",
                             )
                             tu = bedrock.get_token_usage()
                             bi += tu.get("input_tokens", 0)
@@ -1497,6 +1823,7 @@ class GeminiBrainRunner:
                         messages=answer_messages,
                         temperature=0.0,
                         max_tokens=1500,
+                        purpose="direct_answer",
                     )
                     tu = bedrock.get_token_usage()
                     bi += tu.get("input_tokens", 0)
@@ -1513,6 +1840,8 @@ class GeminiBrainRunner:
                 err_res["query_trace"] = trace.emit()
                 return err_res
 
+            guide_block = _guide_link_block(guide_coverage)
+
             elapsed = round(time.time() - t0, 2)
             trace_events = []
             if is_redacted:
@@ -1521,6 +1850,8 @@ class GeminiBrainRunner:
                     "status": "redacted",
                     "counts": redaction_counts,
                 })
+            if guide_coverage is not None:
+                trace_events.append({"step": "app_guide_coverage", **guide_coverage})
             trace_events.extend([
                 {
                     "step": "gemini_router",
@@ -1558,6 +1889,7 @@ class GeminiBrainRunner:
                 "notice": None,
                 "data_source": None,
                 "table_markdown": None,
+                "blocks": [guide_block] if guide_block else [],
                 "request_id": new_request_id(),
                 "pii_redacted": is_redacted,
                 "pii_redactions": redaction_counts,
@@ -1584,7 +1916,7 @@ class GeminiBrainRunner:
                 sel, ri, ro = select_endpoint(
                     query,
                     organization_id,
-                    self._call_llm,
+                    functools.partial(self._call_llm, purpose="endpoint_select"),
                     self._parse_json,
                     user_id=str(user_id),
                     session_state=session_state,
@@ -1608,7 +1940,7 @@ class GeminiBrainRunner:
                 sel_retry, ri_retry, ro_retry = select_endpoint(
                     query,
                     organization_id,
-                    self._call_llm,
+                    functools.partial(self._call_llm, purpose="endpoint_select_retry"),
                     self._parse_json,
                     user_id=str(user_id),
                     session_state=session_state,
@@ -1647,7 +1979,10 @@ class GeminiBrainRunner:
             results_payload = data if isinstance(data, list) else ([data] if isinstance(data, dict) else [])
             formatter_name = tool_spec.formatter if tool_spec else "row_table"
             formatted_table = render(formatter_name, data, query=query)
-            formatted_blocks = render_blocks(formatter_name, data, query=query)
+            formatted_blocks = render_blocks(
+                formatter_name, data, query=query,
+                organization_id=organization_id, db_name=db_name,
+            )
 
             with trace.stage("bedrock_reasoning", intent=qtype):
                 answer, b_label, bi_new, bo_new, narration_degraded = self._narrate_or_fallback(
@@ -1966,6 +2301,12 @@ class GeminiBrainRunner:
             reason = "Question about this chat's prior messages"
             type_lbl = self._type_label(qtype)
             logger.info("GeminiBrain streaming conversation-meta → direct answer (skip API/SQL)")
+        elif (how_to_section := _how_to_guide_section(query)) is not None:
+            router_source = "how_to_guide"
+            qtype = 2
+            reason = f"How-to phrasing matched app guide section: {how_to_section}"
+            type_lbl = self._type_label(qtype)
+            logger.info("GeminiBrain streaming how-to → app guidance (%s), skip fast router/API", how_to_section)
         else:
             if use_api:
                 fast_hit = fast_route(query, organization_id, user_id=str(user_id), session_state=session_state)
@@ -1982,7 +2323,12 @@ class GeminiBrainRunner:
                 # 1. Classify
                 yield {"status": "Understanding request", "type": "classification"}
                 with trace.stage("classification"):
-                    routing, ri, ro = classify_intent(query, self._call_llm, self._parse_json, session_state=session_state)
+                    routing, ri, ro = classify_intent(
+                        query,
+                        functools.partial(self._call_llm, purpose="classify_intent"),
+                        self._parse_json,
+                        session_state=session_state,
+                    )
                 bi += int(ri or 0)
                 bo += int(ro or 0)
                 llm_calls += 1
@@ -2000,8 +2346,12 @@ class GeminiBrainRunner:
         # model refusing or bluffing without data.
         if qtype in LEFT_PATH_TYPES and not (qtype == 7 and sel is not None):
             yield {"status": "Generating response", "type": "generation"}
+            guide_coverage = None
             try:
                 system = append_memory_block(DIRECT_ANSWER_SYSTEM_PROMPT, session_state)
+                guide_query = _effective_guide_query(query, session_state)
+                guide_coverage = _record_guide_coverage(qtype, guide_query)
+                system += _guide_prompt_block(guide_query, guide_coverage)
                 if getattr(self, "_answer_brief", False):
                     system += (
                         "\nThe user asked for a brief answer. Use at most five short "
@@ -2034,6 +2384,7 @@ class GeminiBrainRunner:
                             messages=answer_messages,
                             temperature=0.0,
                             max_tokens=1500,
+                            purpose="direct_answer",
                         )
                         tu = selected_adapter.get_token_usage()
                         ai, ao = tu.get("input_tokens", 0), tu.get("output_tokens", 0)
@@ -2046,6 +2397,7 @@ class GeminiBrainRunner:
                                 messages=answer_messages,
                                 temperature=0.0,
                                 max_tokens=1500,
+                                purpose="direct_answer",
                             ):
                                 chunks.append(token)
                                 yield {"type": "token", "token": token, "status": "Generating response"}
@@ -2067,6 +2419,7 @@ class GeminiBrainRunner:
                         messages=answer_messages,
                         temperature=0.0,
                         max_tokens=1500,
+                        purpose="direct_answer",
                     )
                     tu = bedrock.get_token_usage()
                     bi += tu.get("input_tokens", 0)
@@ -2082,6 +2435,8 @@ class GeminiBrainRunner:
                     }
                     yield {"final_result": err_res}
                     return
+
+            guide_block = _guide_link_block(guide_coverage)
 
             yield {"status": "Finalizing response", "type": "finalization"}
             elapsed = round(time.time() - t0, 2)
@@ -2100,6 +2455,8 @@ class GeminiBrainRunner:
                     "tokens_out": ao,
                 },
             ]
+            if guide_coverage is not None:
+                trace_events.append({"step": "app_guide_coverage", **guide_coverage})
             if session_id:
                 with trace.stage("memory_write"):
                     self._persist_conversation(
@@ -2119,6 +2476,7 @@ class GeminiBrainRunner:
                     "sql": None,
                     "results": [],
                     "error": None,
+                    "blocks": [guide_block] if guide_block else [],
                     "token_usage": {
                         "input_tokens": gi,
                         "output_tokens": go,
@@ -2145,7 +2503,7 @@ class GeminiBrainRunner:
                 sel, ri, ro = select_endpoint(
                     query,
                     organization_id,
-                    self._call_llm,
+                    functools.partial(self._call_llm, purpose="endpoint_select"),
                     self._parse_json,
                     user_id=str(user_id),
                     session_state=session_state,
@@ -2170,7 +2528,7 @@ class GeminiBrainRunner:
                 sel_retry, ri_retry, ro_retry = select_endpoint(
                     query,
                     organization_id,
-                    self._call_llm,
+                    functools.partial(self._call_llm, purpose="endpoint_select_retry"),
                     self._parse_json,
                     user_id=str(user_id),
                     session_state=session_state,
@@ -2209,7 +2567,10 @@ class GeminiBrainRunner:
             results_payload = data if isinstance(data, list) else ([data] if isinstance(data, dict) else [])
             formatter_name = tool_spec.formatter if tool_spec else "row_table"
             formatted_table = render(formatter_name, data, query=query)
-            formatted_blocks = render_blocks(formatter_name, data, query=query)
+            formatted_blocks = render_blocks(
+                formatter_name, data, query=query,
+                organization_id=organization_id, db_name=db_name,
+            )
 
             # Emit data table immediately so frontend can paint table before narration starts
             yield {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { LoginPage } from './components/LoginPage';
 import { QueryInput } from './components/QueryInput';
+import { ContextWindowButton } from './components/ContextWindowMeter';
 import { ResponseView } from './components/ResponseView';
 import { TenantLoginModal } from './components/TenantLoginModal';
 import { Sidebar } from './components/Sidebar';
@@ -76,6 +77,9 @@ function mapApiTranscript(messages = []) {
 
 const DELETED_SESSIONS_KEY = 'accutax_deleted_sessions';
 const ACTIVE_SESSION_KEY = 'accutax_active_session';
+// One list across every org scope, so a busy org must not evict the history
+// of the others.
+const HISTORY_LIMIT = 100;
 const CANVAS_WIDTH_KEY = 'accutax_canvas_width';
 const CANVAS_WIDTH_MIN = 360;
 const CANVAS_WIDTH_MAX = 920;
@@ -168,6 +172,41 @@ function sanitizeSensitiveQueryParams({ includeHandoff = false } = {}) {
   }
 }
 
+// The sorted org ids a saved chat belongs to, as a comparable key. Entries
+// saved before multi-org support carry only organizationId.
+function entryScopeKey(entry) {
+  const ids = entry?.organizationIds?.length
+    ? entry.organizationIds
+    : (entry?.organizationId != null ? [entry.organizationId] : []);
+  return [...new Set(ids.map(Number))].sort((a, b) => a - b).join(',');
+}
+
+function entryScopeIds(entry) {
+  const key = entryScopeKey(entry);
+  return key ? key.split(',').map(Number) : [];
+}
+
+const tenantIdOf = (t) => Number(t?.id ?? t?.organization_id);
+const tenantNameOf = (t) =>
+  t?.display_name || t?.name || t?.org_name || `Organization ${tenantIdOf(t)}`;
+
+function readSavedOrgIds() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('gemini_brain_active_orgs') || '[]');
+    return Array.isArray(saved) ? saved.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+// Multi-select is offered only when the backend enables it and allows more
+// than one org per query; anything else is the single-org dropdown.
+function multiOrgFlags(data) {
+  const max = Number(data?.max_orgs_per_query) || 1;
+  const enabled = Boolean(data?.multi_org_enabled) && max > 1;
+  return { enabled, max: enabled ? max : 1 };
+}
+
 function stripSessionIdFromUrl() {
   sanitizeSensitiveQueryParams({ includeHandoff: true });
 }
@@ -179,6 +218,32 @@ export default function App() {
   // Active Tenant Context State
   const [activeTenant, setActiveTenant] = useState(null);
   const [availableTenants, setAvailableTenants] = useState(DEFAULT_ORGANIZATIONS);
+  // Every org the next query covers. activeTenant stays the first of them, so
+  // the single-org code paths below keep working unchanged.
+  const [selectedOrgIds, setSelectedOrgIds] = useState([]);
+  const [multiOrg, setMultiOrg] = useState({ enabled: false, max: 1 });
+
+  const activeOrgId = activeTenant?.organization_id ?? activeTenant?.id ?? null;
+  const scopeOrgIds = useMemo(() => {
+    const ids = selectedOrgIds.length
+      ? selectedOrgIds
+      : (activeOrgId != null && activeOrgId !== '' ? [activeOrgId] : []);
+    return [...new Set(ids.map(Number))].sort((a, b) => a - b);
+  }, [selectedOrgIds, activeOrgId]);
+  const scopeKey = scopeOrgIds.join(',');
+
+  // activeTenant is also set outside the switcher (login, handoff, the tenant
+  // modal). Any org chosen that way replaces a multi-org selection it is not
+  // part of, so the two can never disagree.
+  useEffect(() => {
+    if (activeOrgId == null || activeOrgId === '') {
+      setSelectedOrgIds((prev) => (prev.length ? [] : prev));
+      return;
+    }
+    setSelectedOrgIds((prev) =>
+      prev.map(String).includes(String(activeOrgId)) ? prev : [Number(activeOrgId)],
+    );
+  }, [activeOrgId]);
 
   // UI Modals State
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -489,7 +554,7 @@ export default function App() {
         : [entryData, ...prev];
       const updated = withEntry
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-        .slice(0, 30);
+        .slice(0, HISTORY_LIMIT);
       localStorage.setItem('accutax_chat_history', JSON.stringify(updated));
       return updated;
     });
@@ -561,7 +626,7 @@ export default function App() {
           return;
         }
         await createChatSession(
-          activeTenant.organization_id,
+          scopeOrgIds.length > 1 ? scopeOrgIds : activeTenant.organization_id,
           currentUser.access_token,
           widgetSessionId,
         );
@@ -592,7 +657,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [widgetSessionId, currentUser?.access_token, activeTenant?.organization_id]);
+  }, [widgetSessionId, currentUser?.access_token, activeTenant?.organization_id, scopeKey]);
 
   // Older sidebar entries had no org stamp. Attach them to the org that is
   // selected when they are first seen so they do not leak across tenants.
@@ -636,6 +701,22 @@ export default function App() {
       const data = await fetchTenants(token);
       if (data && data.tenants && data.tenants.length > 0) {
         setAvailableTenants(data.tenants);
+        const flags = multiOrgFlags(data);
+        setMultiOrg(flags);
+        if (flags.enabled) {
+          const saved = readSavedOrgIds();
+          const restored = data.tenants
+            .map((t) => t.id ?? t.organization_id)
+            .filter((id) => saved.includes(String(id)))
+            .slice(0, flags.max)
+            .map(Number);
+          if (restored.length > 1) {
+            const primary = data.tenants.find((t) => Number(t.id ?? t.organization_id) === restored[0]);
+            setActiveTenant({ ...primary, organization_id: restored[0] });
+            setSelectedOrgIds(restored);
+            return;
+          }
+        }
         const savedOrgId = localStorage.getItem('gemini_brain_active_org');
         const matched = data.tenants.find((t) => String(t.id || t.organization_id) === String(savedOrgId)) || data.tenants[0];
         setActiveTenant({
@@ -674,12 +755,32 @@ export default function App() {
     });
   };
 
-  // Handle Switch Tenant from Dropdown
-  const handleSelectTenant = (tenantObj) => {
-    const orgId = tenantObj.id || tenantObj.organization_id;
-    if (String(orgId) === String(activeTenant?.organization_id || activeTenant?.id)) return;
+  // Switch the org selection. One id is the classic single-org switch; several
+  // start a multi-org chat. Either way a new selection means a new chat: the
+  // backend fixes each thread to the orgs it started with.
+  const handleSelectOrgs = (ids, primaryTenant = null) => {
+    const next = [...new Set((ids || []).map(Number))].filter((n) => !Number.isNaN(n));
+    if (next.length === 0) return;
+    if ([...next].sort((a, b) => a - b).join(',') === scopeKey) return;
     persistCurrentConversation();
-    const previousOrgId = activeTenant?.organization_id ?? activeTenant?.id;
+    if (!applyScope(next, primaryTenant)) return;
+    setConversation([]);
+    setActiveHistoryId(null);
+    setHistoryDirty(false);
+    setWidgetSessionId(null);
+    setResponseData(null);
+    setStreamLogs([]);
+    setIsLoading(false);
+  };
+
+  // Point the org selection at `next` without touching the open conversation.
+  // Returns false when the primary org is not one the user can access.
+  const applyScope = (next, primaryTenant = null) => {
+    const primary =
+      primaryTenant ||
+      availableTenants.find((t) => tenantIdOf(t) === next[0]);
+    if (!primary) return false;
+    const previousOrgId = activeOrgId;
     if (previousOrgId != null) {
       setChatHistory((prev) => {
         const updated = prev.map((e) =>
@@ -689,19 +790,25 @@ export default function App() {
         return updated;
       });
     }
-    const fullTenant = {
-      ...tenantObj,
-      organization_id: orgId,
-    };
-    setActiveTenant(fullTenant);
-    localStorage.setItem('gemini_brain_active_org', String(orgId));
-    setConversation([]);
-    setActiveHistoryId(null);
-    setHistoryDirty(false);
-    setWidgetSessionId(null);
-    setResponseData(null);
-    setStreamLogs([]);
-    setIsLoading(false);
+    setActiveTenant({ ...primary, organization_id: next[0] });
+    setSelectedOrgIds(next);
+    localStorage.setItem('gemini_brain_active_org', String(next[0]));
+    localStorage.setItem('gemini_brain_active_orgs', JSON.stringify(next));
+    return true;
+  };
+
+  // A saved chat can reopen only while the user still has every org in it,
+  // and multi-org chats only while multi-org querying is on.
+  const isScopeAccessible = (ids) => {
+    if (ids.length === 0) return false;
+    if (ids.length > 1 && (!multiOrg.enabled || ids.length > multiOrg.max)) return false;
+    const allowed = new Set(availableTenants.map(tenantIdOf));
+    return ids.every((id) => allowed.has(id));
+  };
+
+  // Handle Switch Tenant from Dropdown
+  const handleSelectTenant = (tenantObj) => {
+    handleSelectOrgs([tenantObj.id || tenantObj.organization_id], tenantObj);
   };
 
   // Handle successful login
@@ -715,6 +822,11 @@ export default function App() {
 
     localStorage.setItem('gemini_brain_user', JSON.stringify(userSession));
     setCurrentUser(userSession);
+
+    // The login response carries no feature flags; /tenants does.
+    fetchTenants(userSession.access_token)
+      .then((data) => setMultiOrg(multiOrgFlags(data)))
+      .catch(() => setMultiOrg({ enabled: false, max: 1 }));
 
     if (authResponse.tenants && authResponse.tenants.length > 0) {
       setAvailableTenants(authResponse.tenants);
@@ -743,6 +855,7 @@ export default function App() {
     accutaxSsoAppliedRef.current = false;
     setCurrentUser(null);
     setActiveTenant(null);
+    setMultiOrg({ enabled: false, max: 1 });
     setResponseData(null);
     setStreamLogs([]);
     setConversation([]);
@@ -805,6 +918,7 @@ export default function App() {
       conversation, // full transcript, not just a title/preview snippet
       sessionId: widgetSessionId || null,
       organizationId: activeTenant?.organization_id ?? activeTenant?.id ?? null,
+      organizationIds: scopeOrgIds,
     };
 
     setChatHistory(prev => {
@@ -814,7 +928,7 @@ export default function App() {
         : [{ id: targetId, ...entryData }, ...prev];
       const updated = withEntry
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-        .slice(0, 30); // keep max 30
+        .slice(0, HISTORY_LIMIT);
       try {
         localStorage.setItem('accutax_chat_history', JSON.stringify(updated));
       } catch { /* ignore */ }
@@ -850,9 +964,12 @@ export default function App() {
     persistCurrentConversation();
     const entry = chatHistory.find(e => e.id === id);
     if (!entry) return;
-    const orgId = activeTenant?.organization_id ?? activeTenant?.id;
-    if (entry.organizationId != null && String(entry.organizationId) !== String(orgId)) {
-      return;
+    // A chat from another org selection reopens with the orgs it started
+    // with, since the backend fixes each thread to its scope.
+    const entryKey = entryScopeKey(entry);
+    if (entryKey && entryKey !== scopeKey) {
+      const ids = entryScopeIds(entry);
+      if (!isScopeAccessible(ids) || !applyScope(ids)) return;
     }
     isSwitchingSessionRef.current = true;
     setConversation(entry.conversation || []);
@@ -980,10 +1097,10 @@ export default function App() {
   };
 
   const handleSubmitQuery = async (queryText, overrides = {}) => {
-    const orgId = activeTenant?.organization_id ?? activeTenant?.id;
     if (activeHistoryId) {
       const openEntry = chatHistory.find((e) => e.id === activeHistoryId);
-      if (openEntry?.organizationId != null && String(openEntry.organizationId) !== String(orgId)) {
+      const openKey = entryScopeKey(openEntry);
+      if (openKey && openKey !== scopeKey) {
         return;
       }
     }
@@ -1031,13 +1148,14 @@ export default function App() {
         timestamp: new Date(userTurn.timestamp).toISOString(),
         conversation: nextConversation,
         organizationId: activeTenant?.organization_id ?? activeTenant?.id ?? null,
+        organizationIds: scopeOrgIds,
       };
 
       setChatHistory((prev) => {
         const withoutOld = prev.filter((e) => e.id !== currentHistoryId);
         const updated = [newSessionEntry, ...withoutOld]
           .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-          .slice(0, 30);
+          .slice(0, HISTORY_LIMIT);
         try {
           localStorage.setItem('accutax_chat_history', JSON.stringify(updated));
         } catch { /* ignore */ }
@@ -1060,7 +1178,9 @@ export default function App() {
 
     const payload = {
       query: queryText,
-      organization_id: activeTenant?.organization_id,
+      ...(scopeOrgIds.length > 1
+        ? { organization_ids: scopeOrgIds }
+        : { organization_id: activeTenant?.organization_id }),
       session_id: widgetSessionId || undefined,
       use_api: true,
       model: overrides.model || selectedModel,
@@ -1181,16 +1301,20 @@ export default function App() {
             });
             setResponseData(chunk.final_result);
           } else if (chunk.status) {
+            // Multi-org per-organization progress ("Org4: done") only drives the
+            // live status line; listing ten of them under Agent steps is noise.
+            const isOrgProgress = chunk.type === 'multi_org' && chunk.organization_id != null;
             setConversation((prev) => {
               const updated = [...prev];
               const lastIdx = updated.length - 1;
               if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+                const steps = updated[lastIdx].agentSteps || [];
                 updated[lastIdx] = {
                   ...updated[lastIdx],
                   latestStatus: chunk.status,
-                  agentSteps: [...(updated[lastIdx].agentSteps || []), chunk.status].filter(
-                    (step, i, arr) => step && step !== arr[i - 1],
-                  ),
+                  agentSteps: isOrgProgress
+                    ? steps
+                    : [...steps, chunk.status].filter((step, i, arr) => step && step !== arr[i - 1]),
                 };
               }
               return updated;
@@ -1298,13 +1422,38 @@ export default function App() {
     }
   };
 
-  const visibleChatHistory = useMemo(() => {
-    const orgId = activeTenant?.organization_id ?? activeTenant?.id;
-    if (orgId == null || orgId === '') return [];
-    return chatHistory.filter(
-      (e) => e.organizationId != null && String(e.organizationId) === String(orgId),
-    );
-  }, [chatHistory, activeTenant?.organization_id, activeTenant?.id]);
+  // Every saved chat stays listed: those for the current org selection first,
+  // the rest under "Other organizations" with a label naming their orgs.
+  const historySections = useMemo(() => {
+    const inScope = [];
+    const otherScope = [];
+    if (!scopeKey) return { inScope, otherScope };
+    const names = new Map(availableTenants.map((t) => [tenantIdOf(t), tenantNameOf(t)]));
+    for (const entry of chatHistory) {
+      const key = entryScopeKey(entry);
+      if (!key || key === scopeKey) {
+        inScope.push(entry);
+        continue;
+      }
+      const ids = entryScopeIds(entry);
+      const orgNames = ids.map((id) => names.get(id) || `Organization ${id}`);
+      const accessible = isScopeAccessible(ids);
+      otherScope.push({
+        ...entry,
+        scopeLabel: orgNames.length > 1 ? `${orgNames[0]} +${orgNames.length - 1}` : orgNames[0],
+        scopeTitle: accessible
+          ? orgNames.join(', ')
+          : 'You no longer have access to every organization in this chat',
+        scopeAccessible: accessible,
+      });
+    }
+    return { inScope, otherScope };
+  }, [chatHistory, scopeKey, availableTenants, multiOrg.enabled, multiOrg.max]);
+
+  const currentScopeNames = useMemo(() => {
+    const names = new Map(availableTenants.map((t) => [tenantIdOf(t), tenantNameOf(t)]));
+    return scopeOrgIds.map((id) => names.get(id) || `Organization ${id}`);
+  }, [availableTenants, scopeOrgIds]);
 
   // If user is not logged in, render the production LoginPage
   if (!currentUser) {
@@ -1321,6 +1470,17 @@ export default function App() {
   const hasStartedChat = conversation.length > 0;
   const userName = currentUser?.email?.split('@')[0] || 'there';
   const showCanvas = canvasOpen && (canvasSpec || canvasArtifact);
+  // Most recent assistant turn's context_window snapshot (cumulative session
+  // usage against the fixed budget) — scan from the end since not every turn
+  // necessarily carries one (e.g. an error envelope built without calling run()).
+  // Defaults to a zero-usage snapshot (mirrors backend SESSION_CONTEXT_WINDOW_TOKENS
+  // in config/constants.py) so the meter is visible from the very first render,
+  // not only after the first response comes back.
+  let latestContextWindow = { used: 0, limit: 200_000, percent: 0 };
+  for (let i = conversation.length - 1; i >= 0; i--) {
+    const cw = conversation[i]?.responseData?.context_window;
+    if (cw) { latestContextWindow = cw; break; }
+  }
 
 
 
@@ -1330,7 +1490,9 @@ export default function App() {
       <div className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <Sidebar
           onNewSession={handleClearConversation}
-          chatHistory={visibleChatHistory}
+          chatHistory={historySections.inScope}
+          otherScopeHistory={historySections.otherScope}
+          scopeNames={currentScopeNames}
           activeHistoryId={activeHistoryId}
           onSelectHistory={handleSelectHistory}
           onDeleteHistory={handleDeleteHistory}
@@ -1350,6 +1512,10 @@ export default function App() {
           activeTenant={activeTenant}
           availableTenants={availableTenants}
           onSelectTenant={handleSelectTenant}
+          selectedOrgIds={selectedOrgIds}
+          onSelectOrgs={handleSelectOrgs}
+          multiOrgEnabled={multiOrg.enabled}
+          maxOrgs={multiOrg.max}
           onOpenHealthModal={() => setShowHealthModal(true)}
         />
         <div className="main-stage">
@@ -1400,10 +1566,15 @@ export default function App() {
             brief={brief}
             onBriefChange={handleBriefChange}
           />
+          <div style={styles.composerFooter}>
+            <p style={styles.composerFooterText}>
+              AccuTax AI · AccuTax Pro · Data is processed securely
+            </p>
+            <div style={styles.composerFooterMeter}>
+              <ContextWindowButton contextWindow={latestContextWindow} />
+            </div>
+          </div>
         </div>
-        <p style={{ textAlign: 'center', fontSize: '0.65rem', color: 'var(--ink-faint)', marginTop: '12px' }}>
-          AccuTax AI · AccuTax Pro · Data is processed securely
-        </p>
       </div>
         </div>
 
@@ -1534,5 +1705,28 @@ const styles = {
     maxWidth: '850px',
     width: '100%',
     margin: '0 auto',
+  },
+  composerFooter: {
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '20px',
+    marginTop: '6px',
+    maxWidth: 'var(--content-width)',
+    width: '100%',
+    margin: '6px auto 0',
+  },
+  composerFooterText: {
+    textAlign: 'center',
+    fontSize: '0.65rem',
+    color: 'var(--ink-faint)',
+    margin: 0,
+  },
+  composerFooterMeter: {
+    position: 'absolute',
+    right: '6px',
+    top: '50%',
+    transform: 'translateY(-50%)',
   },
 };

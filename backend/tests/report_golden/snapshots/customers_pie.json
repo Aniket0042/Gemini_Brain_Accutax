@@ -1,0 +1,115 @@
+{
+ "title": "Sales by Customer",
+ "period": null,
+ "currency": "AED",
+ "kpis": [],
+ "charts": [
+  {
+   "type": "pie",
+   "title": "Sales by Customer",
+   "categories": [
+    "Apex Retail Trading LLC",
+    "Falcon Energy",
+    "Al Habtoor Group",
+    "Marina Foods",
+    "Desert Labs",
+    "Gulf Motors",
+    "Nakheel Co",
+    "Other"
+   ],
+   "series": [
+    {
+     "name": "Sales",
+     "data": [
+      220500.0,
+      191310.0,
+      181755.0,
+      96400.0,
+      72210.0,
+      51000.0,
+      33000.0,
+      34000.0
+     ]
+    }
+   ],
+   "series_colors": [
+    "#0E8A75"
+   ],
+   "point_colors": [
+    "#0E8A75",
+    "#2A78D6",
+    "#EB6834",
+    "#4A3AA7",
+    "#E87BA4",
+    "#EDA100",
+    "#E34948",
+    "#94A3B8"
+   ],
+   "takeaway": "Apex Retail Trading LLC is the largest at AED 220.5K, 25.1% of the total. The top three make up 67.4%.",
+   "requested_type": "pie",
+   "downgrade_reason": null,
+   "total_indices": null
+  }
+ ],
+ "tables": [
+  {
+   "title": "Details",
+   "columns": [
+    "Customer Name",
+    "Sales"
+   ],
+   "first_rows": [
+    {
+     "customer_name": "Apex Retail Trading LLC",
+     "sales": "AED 220,500.00"
+    },
+    {
+     "customer_name": "Falcon Energy",
+     "sales": "AED 191,310.00"
+    },
+    {
+     "customer_name": "Al Habtoor Group",
+     "sales": "AED 181,755.00"
+    },
+    {
+     "customer_name": "Marina Foods",
+     "sales": "AED 96,400.00"
+    },
+    {
+     "customer_name": "Desert Labs",
+     "sales": "AED 72,210.00"
+    }
+   ],
+   "total_rows": 10
+  }
+ ],
+ "callouts": [
+  {
+   "tone": "note",
+   "text": "The smallest 3 categories are grouped into Other."
+  }
+ ],
+ "narrative": {
+  "origin": "template",
+  "headline": "Apex Retail Trading LLC is the largest at AED 220.5K, 25.1% of the total",
+  "summary": [],
+  "drivers": [
+   "The top three make up 67.4%."
+  ],
+  "risks": [],
+  "actions": []
+ },
+ "integrity": {
+  "checks_run": 2,
+  "checks_failed": 0,
+  "figures_checked": 3,
+  "figures_verified": 3,
+  "sentences_removed": 0
+ },
+ "methodology": [
+  "Amounts in AED. A dash (—) marks a value the source did not provide.",
+  "Request: pie chart of sales by customer",
+  "The summary was generated directly from the verified figures in this report.",
+  "Consistency checks: 2 of 2 passed."
+ ]
+}

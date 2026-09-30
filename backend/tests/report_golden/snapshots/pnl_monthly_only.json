@@ -1,0 +1,138 @@
+{
+ "title": "Profit & Loss Statement",
+ "period": null,
+ "currency": "AED",
+ "kpis": [
+  [
+   "Total Revenue",
+   "AED 174,300.00"
+  ],
+  [
+   "Total Expenses",
+   "AED 114,660.00"
+  ],
+  [
+   "Net Profit",
+   "AED 59,640.00"
+  ],
+  [
+   "Margin",
+   "34.2%"
+  ]
+ ],
+ "charts": [
+  {
+   "type": "bar",
+   "title": "Monthly Revenue vs Expenses",
+   "categories": [
+    "April",
+    "May",
+    "June"
+   ],
+   "series": [
+    {
+     "name": "Revenue",
+     "data": [
+      52400.0,
+      58200.0,
+      63700.0
+     ]
+    },
+    {
+     "name": "Expenses",
+     "data": [
+      34100.0,
+      36800.0,
+      43760.0
+     ]
+    }
+   ],
+   "series_colors": [
+    "#0E8A75",
+    "#EB6834"
+   ],
+   "point_colors": null,
+   "takeaway": "Revenue was above Expenses in 3 of 3 periods; the widest gap was AED 21.4K in May.",
+   "requested_type": null,
+   "downgrade_reason": null,
+   "total_indices": null
+  }
+ ],
+ "tables": [
+  {
+   "title": "Monthly Breakdown",
+   "columns": [
+    "Month",
+    "Revenue",
+    "Expenses",
+    "Net Profit"
+   ],
+   "first_rows": [
+    {
+     "month": "April",
+     "revenue": "AED 52,400.00",
+     "expenses": "AED 34,100.00",
+     "net_profit": "AED 18,300.00"
+    },
+    {
+     "month": "May",
+     "revenue": "AED 58,200.00",
+     "expenses": "AED 36,800.00",
+     "net_profit": "AED 21,400.00"
+    },
+    {
+     "month": "June",
+     "revenue": "AED 63,700.00",
+     "expenses": "AED 43,760.00",
+     "net_profit": "AED 19,940.00"
+    }
+   ],
+   "total_rows": 3
+  },
+  {
+   "title": "Line Items",
+   "columns": [
+    "Line Item",
+    "Amount",
+    "% of Revenue"
+   ],
+   "first_rows": [
+    {
+     "line_item": "Total Revenue",
+     "amount": "AED 174,300.00",
+     "pct_revenue": "100%"
+    },
+    {
+     "line_item": "Net Profit",
+     "amount": "AED 59,640.00",
+     "pct_revenue": "34.2%"
+    }
+   ],
+   "total_rows": 2
+  }
+ ],
+ "callouts": [],
+ "narrative": {
+  "origin": "template",
+  "headline": "Net Profit of AED 59,640.00 on revenue of AED 174,300.00, a 34.2% margin",
+  "summary": [],
+  "drivers": [
+   "Revenue was above Expenses in 3 of 3 periods; the widest gap was AED 21.4K in May."
+  ],
+  "risks": [],
+  "actions": []
+ },
+ "integrity": {
+  "checks_run": 7,
+  "checks_failed": 0,
+  "figures_checked": 4,
+  "figures_verified": 4,
+  "sentences_removed": 0
+ },
+ "methodology": [
+  "Amounts in AED. A dash (—) marks a value the source did not provide.",
+  "Request: P&L report as pdf",
+  "The summary was generated directly from the verified figures in this report.",
+  "Consistency checks: 7 of 7 passed."
+ ]
+}

@@ -101,11 +101,14 @@ ROUTING_RULES: List[RoutingRule] = [
     RoutingRule(
         # Charts / "income report" need the P&L API (monthly + line items), not
         # the scalar income-total SQL report. Must sit above income_total.
+        # The guard is anchored at the start so a breakdown named anywhere in
+        # the query ("Top 10 customers by revenue … chart") is excluded, not
+        # only one named after the revenue phrase.
         name="income_chart_or_report",
         patterns=[
             re.compile(
-                r"\b(?!(?:.*?\b(?:customers?|clients?|vendors?|suppliers?|items?|products?|categor(?:y|ies))\b))"
-                r"((?:total\s+)?(?:sales|revenue|income).{0,48}"
+                r"^(?!.*?\b(?:customers?|clients?|vendors?|suppliers?|items?|products?|categor(?:y|ies))\b)"
+                r".*?\b((?:total\s+)?(?:sales|revenue|income).{0,48}"
                 r"(?:charts?|graphs?|reports?|trend(?:line)?s?|visuali[sz]e)|"
                 r"(?:charts?|graphs?|reports?|trend(?:line)?s?|visuali[sz]e).{0,48}"
                 r"(?:sales|revenue|income))\b",

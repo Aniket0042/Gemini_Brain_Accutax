@@ -1,0 +1,83 @@
+{
+ "title": "Balance by Account",
+ "period": null,
+ "currency": "AED",
+ "kpis": [],
+ "charts": [
+  {
+   "type": "bar",
+   "title": "Balance by Account",
+   "categories": [
+    "Bank",
+    "Cash",
+    "Loan"
+   ],
+   "series": [
+    {
+     "name": "Balance",
+     "data": [
+      12400.0,
+      1250.5,
+      -8000.0
+     ]
+    }
+   ],
+   "series_colors": [
+    "#0E8A75"
+   ],
+   "point_colors": null,
+   "takeaway": "Bank is the largest at AED 12.4K; Loan is negative at AED -8,000.",
+   "requested_type": null,
+   "downgrade_reason": null,
+   "total_indices": null
+  }
+ ],
+ "tables": [
+  {
+   "title": "Details",
+   "columns": [
+    "Balance",
+    "Account Name"
+   ],
+   "first_rows": [
+    {
+     "account_name": "Bank",
+     "balance": "AED 12,400.00"
+    },
+    {
+     "account_name": "Cash",
+     "balance": "1,250.50"
+    },
+    {
+     "account_name": "Loan",
+     "balance": "(8,000.00)"
+    }
+   ],
+   "total_rows": 3
+  }
+ ],
+ "callouts": [],
+ "narrative": {
+  "origin": "template",
+  "headline": "Bank is the largest at AED 12.4K",
+  "summary": [],
+  "drivers": [
+   "Loan is negative at AED -8,000."
+  ],
+  "risks": [],
+  "actions": []
+ },
+ "integrity": {
+  "checks_run": 1,
+  "checks_failed": 0,
+  "figures_checked": 2,
+  "figures_verified": 2,
+  "sentences_removed": 0
+ },
+ "methodology": [
+  "Amounts in AED. A dash (—) marks a value the source did not provide.",
+  "Request: chart of balance by account",
+  "The summary was generated directly from the verified figures in this report.",
+  "Consistency checks: 1 of 1 passed."
+ ]
+}

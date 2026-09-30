@@ -71,25 +71,54 @@ def verify_session_ownership(
                 pass
 
 
+def session_scope(rec: Optional[Dict[str, Any]]) -> List[int]:
+    """The sorted organization IDs a thread belongs to; [] when it has none yet."""
+    if not rec:
+        return []
+    ids = rec.get("organization_ids")
+    if ids:
+        return sorted({int(o) for o in ids})
+    org = rec.get("organization_id")
+    return [int(org)] if org is not None else []
+
+
+def _scope_columns(scope: List[int]) -> Tuple[Optional[int], List[int]]:
+    """(organization_id, organization_ids) column values for a scope."""
+    return (scope[0] if len(scope) == 1 else None), scope
+
+
 def ensure_session(
     session_id: str,
     user_id: int,
     organization_id: Optional[int] = None,
     db_name: str = "",
+    organization_ids: Optional[List[int]] = None,
 ) -> bool:
     """Create the session row if it does not exist so message inserts satisfy the FK.
 
-    Returns True when the session exists and belongs to ``user_id``.
+    Returns True when the session exists and belongs to ``user_id``. A thread's
+    organization scope is fixed by its first scoped request: a later request
+    for a different set of organizations is refused, and a thread with no
+    scope yet takes the requested one.
     """
     if not is_valid_uuid(session_id):
         return False
+    if organization_ids:
+        scope: Optional[List[int]] = sorted({int(o) for o in organization_ids})
+    elif organization_id is not None:
+        scope = [int(organization_id)]
+    else:
+        scope = None
     conn = None
     cur = None
     try:
         conn = get_connection(db_name)
         cur = conn.cursor()
         cur.execute(
-            "SELECT user_id, organization_id FROM public.model_arena_chat_sessions WHERE id = %s;",
+            """
+            SELECT user_id, organization_id, organization_ids
+            FROM public.model_arena_chat_sessions WHERE id = %s;
+            """,
             (session_id,),
         )
         row = cur.fetchone()
@@ -101,28 +130,33 @@ def ensure_session(
                     session_id, owner_id, user_id,
                 )
                 return False
-            stored_org = int(row[1]) if row[1] is not None else None
-            if organization_id is not None and stored_org is not None and stored_org != int(organization_id):
+            stored = session_scope({"organization_id": row[1], "organization_ids": row[2]})
+            if scope is not None and stored and stored != scope:
                 logger.warning(
-                    "ensure_session refused: session %s is org %s not %s",
-                    session_id, stored_org, organization_id,
+                    "ensure_session refused: session %s is orgs %s not %s",
+                    session_id, stored, scope,
                 )
                 return False
-            if organization_id is not None and stored_org is None:
+            if scope is not None and not stored:
                 cur.execute(
-                    "UPDATE public.model_arena_chat_sessions SET organization_id = %s WHERE id = %s;",
-                    (int(organization_id), session_id),
+                    """
+                    UPDATE public.model_arena_chat_sessions
+                    SET organization_id = %s, organization_ids = %s
+                    WHERE id = %s;
+                    """,
+                    (*_scope_columns(scope), session_id),
                 )
                 conn.commit()
             return True
 
+        org_col, ids_col = _scope_columns(scope or [])
         cur.execute(
             """
-            INSERT INTO public.model_arena_chat_sessions (id, user_id, organization_id, name)
-            VALUES (%s, %s, %s, 'New Chat')
+            INSERT INTO public.model_arena_chat_sessions (id, user_id, organization_id, organization_ids, name)
+            VALUES (%s, %s, %s, %s, 'New Chat')
             ON CONFLICT (id) DO NOTHING;
             """,
-            (session_id, int(user_id), int(organization_id) if organization_id is not None else None),
+            (session_id, int(user_id), org_col, ids_col or None),
         )
         conn.commit()
         return True
@@ -161,7 +195,8 @@ def get_session_record(
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT id, user_id, organization_id, name, conversation_state, created_at, updated_at
+            SELECT id, user_id, organization_id, name, conversation_state, created_at, updated_at,
+                   organization_ids
             FROM public.model_arena_chat_sessions
             WHERE id = %s;
             """,
@@ -178,6 +213,7 @@ def get_session_record(
             "conversation_state": row[4] or {},
             "created_at": row[5].isoformat() if row[5] else None,
             "updated_at": row[6].isoformat() if row[6] else None,
+            "organization_ids": session_scope({"organization_id": row[2], "organization_ids": row[7]}),
         }
     except Exception as e:
         logger.error("Failed to get session %s: %s", session_id, e)
@@ -238,53 +274,62 @@ def list_sessions_for_user_org(
     organization_id: Optional[int],
     limit: int = 20,
     db_name: str = "",
+    organization_ids: Optional[List[int]] = None,
+    allowed_org_ids: Optional[List[int]] = None,
 ) -> List[Dict[str, Any]]:
-    """Most recently updated threads for this user (and org when provided)."""
+    """Most recently updated threads for this user.
+
+    ``organization_ids`` lists threads whose scope is exactly that set;
+    ``organization_id`` lists single-org threads for that org. With
+    ``allowed_org_ids``, a thread is listed only when every organization in its
+    scope is still allowed, so threads from revoked organizations disappear.
+    Threads with no scope yet hold no organization data and are always listed.
+    """
+    scope_sql = (
+        "COALESCE(s.organization_ids, "
+        "CASE WHEN s.organization_id IS NULL THEN NULL ELSE ARRAY[s.organization_id] END)"
+    )
+    where = ["s.user_id = %s"]
+    params: List[Any] = [int(user_id)]
+    if organization_ids:
+        where.append(f"{scope_sql} = %s::int[]")
+        params.append(sorted({int(o) for o in organization_ids}))
+    elif organization_id is not None:
+        where.append("s.organization_id = %s")
+        params.append(int(organization_id))
+    if allowed_org_ids is not None:
+        where.append(f"({scope_sql} IS NULL OR {scope_sql} <@ %s::int[])")
+        params.append([int(o) for o in allowed_org_ids])
+    params.append(int(limit))
+
     conn = None
     cur = None
     try:
         conn = get_connection(db_name)
         cur = conn.cursor()
-        if organization_id is not None:
-            cur.execute(
-                """
-                SELECT s.id, s.user_id, s.organization_id, s.name, s.created_at, s.updated_at,
-                       COALESCE(m.cnt, 0) AS message_count
-                FROM public.model_arena_chat_sessions s
-                LEFT JOIN (
-                    SELECT session_id, COUNT(*) AS cnt
-                    FROM public.model_arena_chat_messages
-                    GROUP BY session_id
-                ) m ON m.session_id = s.id
-                WHERE s.user_id = %s AND s.organization_id = %s
-                ORDER BY s.updated_at DESC
-                LIMIT %s;
-                """,
-                (int(user_id), int(organization_id), int(limit)),
-            )
-        else:
-            cur.execute(
-                """
-                SELECT s.id, s.user_id, s.organization_id, s.name, s.created_at, s.updated_at,
-                       COALESCE(m.cnt, 0) AS message_count
-                FROM public.model_arena_chat_sessions s
-                LEFT JOIN (
-                    SELECT session_id, COUNT(*) AS cnt
-                    FROM public.model_arena_chat_messages
-                    GROUP BY session_id
-                ) m ON m.session_id = s.id
-                WHERE s.user_id = %s
-                ORDER BY s.updated_at DESC
-                LIMIT %s;
-                """,
-                (int(user_id), int(limit)),
-            )
+        cur.execute(
+            f"""
+            SELECT s.id, s.user_id, s.organization_id, s.name, s.created_at, s.updated_at,
+                   COALESCE(m.cnt, 0) AS message_count, s.organization_ids
+            FROM public.model_arena_chat_sessions s
+            LEFT JOIN (
+                SELECT session_id, COUNT(*) AS cnt
+                FROM public.model_arena_chat_messages
+                GROUP BY session_id
+            ) m ON m.session_id = s.id
+            WHERE {" AND ".join(where)}
+            ORDER BY s.updated_at DESC
+            LIMIT %s;
+            """,
+            tuple(params),
+        )
         rows = cur.fetchall()
         return [
             {
                 "id": str(r[0]),
                 "user_id": int(r[1]),
                 "organization_id": int(r[2]) if r[2] is not None else None,
+                "organization_ids": session_scope({"organization_id": r[2], "organization_ids": r[7]}),
                 "name": r[3],
                 "created_at": r[4].isoformat() if r[4] else None,
                 "updated_at": r[5].isoformat() if r[5] else None,

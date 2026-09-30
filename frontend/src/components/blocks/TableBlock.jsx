@@ -147,7 +147,7 @@ export function TableBlock({ block }) {
           </tbody>
         </table>
       </div>
-      {block.truncated && (
+      {block.truncated && !block.hide_total_note && (
         <p style={styles.truncated}>Showing {rows.length} of {block.total_rows} total records.</p>
       )}
     </div>

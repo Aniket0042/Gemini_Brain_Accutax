@@ -149,7 +149,7 @@ class CapturingAdapter:
         self.system_prompt = None
         self.label = "CapturingAdapter"
 
-    def converse(self, system_prompt, messages, temperature=0.0, max_tokens=None):
+    def converse(self, system_prompt, messages, temperature=0.0, max_tokens=None, purpose=""):
         self.system_prompt = system_prompt
         self.max_tokens = max_tokens
         return "narrated answer"

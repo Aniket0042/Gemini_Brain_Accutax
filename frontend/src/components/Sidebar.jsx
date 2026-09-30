@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Sparkles, Plus, ArrowLeft, Trash2, ChevronDown, MoreVertical, Pin, PinOff, Pencil } from 'lucide-react';
+import { Sparkles, Plus, ArrowLeft, Trash2, ChevronDown, MoreVertical, Pin, PinOff, Pencil, Building2, Lock } from 'lucide-react';
 
 /**
  * Groups chat history entries into time-based sections (Today, Yesterday, This Week, Earlier).
@@ -46,9 +46,27 @@ function groupByTime(entries) {
   return result;
 }
 
+const HISTORY_FILTER_KEY = 'accutax_history_filter';
+
+function readHistoryFilter() {
+  try {
+    return localStorage.getItem(HISTORY_FILTER_KEY) === 'scope' ? 'scope' : 'all';
+  } catch {
+    return 'all';
+  }
+}
+
+function describeScope(names) {
+  if (names.length === 0) return 'this selection';
+  if (names.length <= 2) return names.join(' and ');
+  return `${names[0]} and ${names.length - 1} more`;
+}
+
 export const Sidebar = ({
   onNewSession,
   chatHistory = [],
+  otherScopeHistory = [],
+  scopeNames = [],
   activeHistoryId = null,
   onSelectHistory,
   onDeleteHistory,
@@ -60,6 +78,9 @@ export const Sidebar = ({
   const [menuOpenSessionId, setMenuOpenSessionId] = useState(null);
   const [editingSessionId, setEditingSessionId] = useState(null);
   const [editingTitle, setEditingTitle] = useState('');
+  // 'all' lists chats from other org selections too; 'scope' hides them.
+  const [historyFilter, setHistoryFilter] = useState(readHistoryFilter);
+  const [otherCollapsed, setOtherCollapsed] = useState(false);
   const dropdownRef = useRef(null);
   const menuRef = useRef(null);
 
@@ -110,7 +131,129 @@ export const Sidebar = ({
     setMenuOpenSessionId(null);
   };
 
+  const changeHistoryFilter = (next) => {
+    setHistoryFilter(next);
+    try {
+      localStorage.setItem(HISTORY_FILTER_KEY, next);
+    } catch { /* ignore */ }
+  };
+
   const groupedHistory = useMemo(() => groupByTime(chatHistory), [chatHistory]);
+  const showOther = historyFilter === 'all' && otherScopeHistory.length > 0;
+  const scopeDescription = describeScope(scopeNames);
+
+  const renderHistoryItem = (item, { showScope = false } = {}) => {
+    const isEditing = editingSessionId === item.id;
+    const isMenuOpen = menuOpenSessionId === item.id;
+    const isActive = item.id === activeHistoryId;
+    const isLocked = showScope && item.scopeAccessible === false;
+
+    return (
+      <div
+        key={item.id}
+        className={`history-item ${isActive ? 'active' : ''} ${isMenuOpen ? 'menu-open' : ''}`}
+        style={{
+          ...styles.historyItem,
+          ...(showScope ? styles.historyItemWithScope : {}),
+          ...(isLocked ? styles.historyItemLocked : {}),
+        }}
+        aria-disabled={isLocked || undefined}
+        onClick={() => {
+          if (!isEditing && !isLocked && onSelectHistory) {
+            onSelectHistory(item.id);
+          }
+        }}
+      >
+        {item.isPinned && (
+          <Pin size={12} style={styles.pinnedIndicator} />
+        )}
+        {isEditing ? (
+          <input
+            type="text"
+            className="history-rename-input"
+            value={editingTitle}
+            autoFocus
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => setEditingTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleSaveRename(item.id);
+              } else if (e.key === 'Escape') {
+                setEditingSessionId(null);
+              }
+            }}
+            onBlur={() => handleSaveRename(item.id)}
+          />
+        ) : (
+          <div style={styles.historyText}>
+            <span
+              className="history-title"
+              style={{
+                ...styles.historyTitle,
+                ...(isActive ? styles.historyTitleActive : {}),
+              }}
+              title={item.title}
+            >
+              {item.title}
+            </span>
+            {showScope && item.scopeLabel && (
+              <span style={styles.scopeLabel} title={item.scopeTitle}>
+                {isLocked ? <Lock size={10} style={{ flexShrink: 0 }} /> : <Building2 size={10} style={{ flexShrink: 0 }} />}
+                <span style={styles.scopeLabelText}>{item.scopeLabel}</span>
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Three dots menu button & dropdown */}
+        {!isEditing && (
+          <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+            <button
+              className={`history-menu-btn ${isMenuOpen ? 'active' : ''}`}
+              title="Options"
+              aria-label="Session options"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpenSessionId((prev) => (prev === item.id ? null : item.id));
+              }}
+            >
+              <MoreVertical size={16} strokeWidth={2} />
+            </button>
+
+            {isMenuOpen && (
+              <div ref={menuRef} className="session-context-menu">
+                <button
+                  type="button"
+                  className="context-menu-item"
+                  onClick={() => handleTogglePin(item)}
+                >
+                  {item.isPinned ? <PinOff size={15} /> : <Pin size={15} />}
+                  <span>{item.isPinned ? 'Unpin' : 'Pin'}</span>
+                </button>
+                <button
+                  type="button"
+                  className="context-menu-item"
+                  onClick={() => handleStartRename(item)}
+                >
+                  <Pencil size={15} />
+                  <span>Rename</span>
+                </button>
+                <div style={styles.menuDivider} />
+                <button
+                  type="button"
+                  className="context-menu-item danger"
+                  onClick={() => handleDeleteClick(item)}
+                >
+                  <Trash2 size={15} />
+                  <span>Delete</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div style={styles.sidebar}>
@@ -181,119 +324,81 @@ export const Sidebar = ({
         </div>
       </div>
 
-      {/* Dynamic Chat History — flat rows, one line each, no per-item icon
-          or preview snippet. Matches how ChatGPT/Claude/Gemini render a
-          history list: the title is the only thing shown until you open it. */}
+      {/* Chat history. Chats for the current org selection come first; chats
+          from other selections follow under "Other organizations", labelled
+          with their orgs, so switching orgs never makes history vanish. */}
       <div style={styles.historyList}>
-        <h2 style={styles.recentHeading}>Recent chats</h2>
+        <div style={styles.recentHeaderRow}>
+          <h2 style={styles.recentHeading}>Recent chats</h2>
+          {otherScopeHistory.length > 0 && (
+            <div style={styles.filterToggle} role="group" aria-label="Filter chats">
+              <button
+                type="button"
+                style={{ ...styles.filterBtn, ...(historyFilter === 'scope' ? styles.filterBtnActive : {}) }}
+                aria-pressed={historyFilter === 'scope'}
+                title="Only chats for the organizations selected now"
+                onClick={() => changeHistoryFilter('scope')}
+              >
+                Selected
+              </button>
+              <button
+                type="button"
+                style={{ ...styles.filterBtn, ...(historyFilter === 'all' ? styles.filterBtnActive : {}) }}
+                aria-pressed={historyFilter === 'all'}
+                title="Chats for every organization"
+                onClick={() => changeHistoryFilter('all')}
+              >
+                All
+              </button>
+            </div>
+          )}
+        </div>
+
         {groupedHistory.length === 0 ? (
           <div style={styles.emptyHistory}>
-            <span>No conversations yet</span>
+            {otherScopeHistory.length === 0 ? (
+              <span>No conversations yet</span>
+            ) : (
+              <>
+                <span>No chats for {scopeDescription} yet.</span>
+                {historyFilter === 'scope' && (
+                  <button
+                    type="button"
+                    style={styles.emptyLink}
+                    onClick={() => changeHistoryFilter('all')}
+                  >
+                    Show {otherScopeHistory.length} from other organizations
+                  </button>
+                )}
+              </>
+            )}
           </div>
         ) : (
           groupedHistory.map((group) => (
             <div key={group.section} style={styles.historyGroup}>
               <h3 style={styles.groupTitle}>{group.section}</h3>
-              {group.items.map((item) => {
-                const isEditing = editingSessionId === item.id;
-                const isMenuOpen = menuOpenSessionId === item.id;
-                const isActive = item.id === activeHistoryId;
-
-                return (
-                  <div
-                    key={item.id}
-                    className={`history-item ${isActive ? 'active' : ''} ${isMenuOpen ? 'menu-open' : ''}`}
-                    style={styles.historyItem}
-                    onClick={() => {
-                      if (!isEditing && onSelectHistory) {
-                        onSelectHistory(item.id);
-                      }
-                    }}
-                  >
-                    {item.isPinned && (
-                      <Pin size={12} style={styles.pinnedIndicator} />
-                    )}
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        className="history-rename-input"
-                        value={editingTitle}
-                        autoFocus
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => setEditingTitle(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            handleSaveRename(item.id);
-                          } else if (e.key === 'Escape') {
-                            setEditingSessionId(null);
-                          }
-                        }}
-                        onBlur={() => handleSaveRename(item.id)}
-                      />
-                    ) : (
-                      <span
-                        className="history-title"
-                        style={{
-                          ...styles.historyTitle,
-                          ...(isActive ? styles.historyTitleActive : {}),
-                        }}
-                        title={item.title}
-                      >
-                        {item.title}
-                      </span>
-                    )}
-
-                    {/* Three dots menu button & dropdown */}
-                    {!isEditing && (
-                      <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
-                        <button
-                          className={`history-menu-btn ${isMenuOpen ? 'active' : ''}`}
-                          title="Options"
-                          aria-label="Session options"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setMenuOpenSessionId((prev) => (prev === item.id ? null : item.id));
-                          }}
-                        >
-                          <MoreVertical size={16} strokeWidth={2} />
-                        </button>
-
-                        {isMenuOpen && (
-                          <div ref={menuRef} className="session-context-menu">
-                            <button
-                              type="button"
-                              className="context-menu-item"
-                              onClick={() => handleTogglePin(item)}
-                            >
-                              {item.isPinned ? <PinOff size={15} /> : <Pin size={15} />}
-                              <span>{item.isPinned ? 'Unpin' : 'Pin'}</span>
-                            </button>
-                            <button
-                              type="button"
-                              className="context-menu-item"
-                              onClick={() => handleStartRename(item)}
-                            >
-                              <Pencil size={15} />
-                              <span>Rename</span>
-                            </button>
-                            <div style={styles.menuDivider} />
-                            <button
-                              type="button"
-                              className="context-menu-item danger"
-                              onClick={() => handleDeleteClick(item)}
-                            >
-                              <Trash2 size={15} />
-                              <span>Delete</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              {group.items.map((item) => renderHistoryItem(item))}
             </div>
           ))
+        )}
+
+        {showOther && (
+          <div style={styles.historyGroup}>
+            <button
+              type="button"
+              style={styles.otherHeader}
+              aria-expanded={!otherCollapsed}
+              onClick={() => setOtherCollapsed((v) => !v)}
+            >
+              <span>Other organizations</span>
+              <span style={styles.otherCount}>{otherScopeHistory.length}</span>
+              <ChevronDown
+                size={13}
+                style={{ marginLeft: 'auto', transform: otherCollapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s' }}
+              />
+            </button>
+            {!otherCollapsed && otherScopeHistory.map((item) => renderHistoryItem(item, { showScope: true }))}
+          </div>
         )}
       </div>
 
@@ -510,19 +615,116 @@ const styles = {
     overflowY: 'auto',
     padding: '6px 8px',
   },
+  recentHeaderRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
+    margin: '6px 8px 10px',
+  },
   recentHeading: {
     fontSize: '0.95rem',
     fontWeight: 500,
     color: 'var(--ink)',
-    margin: '6px 8px 10px',
+    margin: 0,
     letterSpacing: '-0.01em',
+  },
+  filterToggle: {
+    display: 'flex',
+    padding: '2px',
+    gap: '2px',
+    borderRadius: '999px',
+    border: '1px solid var(--border-soft)',
+    backgroundColor: 'var(--surface-2)',
+  },
+  filterBtn: {
+    border: 'none',
+    background: 'none',
+    cursor: 'pointer',
+    padding: '2px 8px',
+    borderRadius: '999px',
+    fontSize: '0.6875rem',
+    fontWeight: 500,
+    color: 'var(--ink-soft)',
+    lineHeight: 1.5,
+  },
+  filterBtnActive: {
+    backgroundColor: 'var(--surface)',
+    color: 'var(--ink)',
+    boxShadow: '0 0 0 1px var(--border)',
   },
   emptyHistory: {
     display: 'flex',
-    justifyContent: 'center',
-    padding: '28px 0',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '28px 12px',
     color: 'var(--ink-faint)',
     fontSize: 'var(--text-sm)',
+    textAlign: 'center',
+    lineHeight: 1.4,
+  },
+  emptyLink: {
+    border: 'none',
+    background: 'none',
+    cursor: 'pointer',
+    padding: 0,
+    color: 'var(--accent)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 500,
+  },
+  otherHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    width: 'calc(100% - 8px)',
+    margin: '14px 4px 6px',
+    padding: '4px',
+    border: 'none',
+    borderTop: '1px solid var(--border-soft)',
+    paddingTop: '12px',
+    background: 'none',
+    cursor: 'pointer',
+    fontSize: '0.75rem',
+    fontWeight: 650,
+    color: 'var(--ink-soft)',
+    letterSpacing: '0.04em',
+    textTransform: 'uppercase',
+  },
+  otherCount: {
+    fontSize: '0.6875rem',
+    fontWeight: 500,
+    color: 'var(--ink-faint)',
+    letterSpacing: 0,
+  },
+  historyText: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    flex: 1,
+    minWidth: 0,
+  },
+  historyItemWithScope: {
+    minHeight: '44px',
+    padding: '6px 10px',
+  },
+  historyItemLocked: {
+    opacity: 0.5,
+    cursor: 'not-allowed',
+  },
+  scopeLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    minWidth: 0,
+    fontSize: '0.6875rem',
+    color: 'var(--ink-faint)',
+    lineHeight: 1.2,
+  },
+  scopeLabelText: {
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   historyGroup: {
     marginBottom: '10px',

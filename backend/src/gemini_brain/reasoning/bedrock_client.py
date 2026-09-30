@@ -169,9 +169,17 @@ class BedrockAdapter:
         messages: List[Dict[str, Any]],
         temperature: float = 0.0,
         max_tokens: int = settings.bedrock_max_tokens,
+        purpose: str = "",
     ) -> str:
-        """Text-in / text-out call (no tool calling)."""
+        """Text-in / text-out call (no tool calling).
+
+        `purpose` (e.g. "classify_intent", "narration", "direct_answer") is
+        optional call-site metadata recorded into the per-request LLM trace
+        (see observability/llm_tracer.py, SHOW_LLM_TRACES) alongside model,
+        tokens and duration — it does not affect the call itself.
+        """
         system = self._build_system_array(system_prompt)
+        call_usage: Dict[str, Any] = {}
 
         def _call():
             client = get_bedrock_client()
@@ -184,21 +192,42 @@ class BedrockAdapter:
             if any(self.model_id.startswith(p) for p in CROSS_REGION_PREFIXES):
                 kwargs["toolConfig"] = PASS_THROUGH_TOOL_CONFIG
             resp = client.converse(**kwargs)
-            self._track_usage(resp.get("usage", {}))
+            usage = resp.get("usage", {})
+            call_usage.update(usage)
+            self._track_usage(usage)
             content = resp.get("output", {}).get("message", {}).get("content", [])
             return _extract_text_with_passthrough_fallback(content)
 
+        t0 = time.perf_counter()
         try:
-            return retry_with_backoff(_call)
-        except Exception as e:
-            err = str(e).lower()
-            if "cachepoint" in err or "cache_point" in err or "prompt caching" in err:
-                BedrockAdapter._cache_point_enabled = False
-                logger.warning("Prompt caching not supported for %s — disabling", self.model_id)
-                plain = system_prompt if isinstance(system_prompt, str) else ""
-                system[:] = [{"text": plain}]
+            try:
                 return retry_with_backoff(_call)
-            raise
+            except Exception as e:
+                err = str(e).lower()
+                if "cachepoint" in err or "cache_point" in err or "prompt caching" in err:
+                    BedrockAdapter._cache_point_enabled = False
+                    logger.warning("Prompt caching not supported for %s — disabling", self.model_id)
+                    plain = system_prompt if isinstance(system_prompt, str) else ""
+                    system[:] = [{"text": plain}]
+                    return retry_with_backoff(_call)
+                raise
+        finally:
+            self._record_trace(purpose, call_usage, t0)
+
+    def _record_trace(self, purpose: str, usage: Dict[str, Any], t0: float) -> None:
+        """Best-effort LLM trace write — never lets tracing break a real call."""
+        try:
+            from gemini_brain.observability.llm_tracer import record_llm_trace
+            record_llm_trace(
+                model_id=self.model_id,
+                label=self.label,
+                purpose=purpose,
+                input_tokens=usage.get("inputTokens", 0),
+                output_tokens=usage.get("outputTokens", 0),
+                duration_ms=(time.perf_counter() - t0) * 1000,
+            )
+        except Exception as e:
+            logger.warning("LLM trace recording failed for %s: %s", self.model_id, e)
 
     def converse_stream(
         self,
@@ -206,6 +235,7 @@ class BedrockAdapter:
         messages: List[Dict[str, Any]],
         temperature: float = 0.0,
         max_tokens: int = settings.bedrock_max_tokens,
+        purpose: str = "",
     ) -> Generator[str, None, None]:
         """Stream text tokens using Bedrock converse_stream API."""
         system = self._build_system_array(system_prompt)
@@ -219,29 +249,35 @@ class BedrockAdapter:
         if any(self.model_id.startswith(p) for p in CROSS_REGION_PREFIXES):
             kwargs["toolConfig"] = PASS_THROUGH_TOOL_CONFIG
 
+        t0 = time.perf_counter()
+        call_usage: Dict[str, Any] = {}
         try:
-            resp = client.converse_stream(**kwargs)
-        except Exception as e:
-            err = str(e).lower()
-            if "cachepoint" in err or "cache_point" in err or "prompt caching" in err:
-                BedrockAdapter._cache_point_enabled = False
-                logger.warning("Prompt caching not supported for %s — disabling", self.model_id)
-                plain = system_prompt if isinstance(system_prompt, str) else ""
-                kwargs["system"] = [{"text": plain}]
+            try:
                 resp = client.converse_stream(**kwargs)
-            else:
-                raise
+            except Exception as e:
+                err = str(e).lower()
+                if "cachepoint" in err or "cache_point" in err or "prompt caching" in err:
+                    BedrockAdapter._cache_point_enabled = False
+                    logger.warning("Prompt caching not supported for %s — disabling", self.model_id)
+                    plain = system_prompt if isinstance(system_prompt, str) else ""
+                    kwargs["system"] = [{"text": plain}]
+                    resp = client.converse_stream(**kwargs)
+                else:
+                    raise
 
-        stream = resp.get("stream")
-        if stream:
-            for event in stream:
-                if "contentBlockDelta" in event:
-                    delta = event["contentBlockDelta"].get("delta", {})
-                    if "text" in delta:
-                        yield delta["text"]
-                elif "metadata" in event:
-                    usage = event["metadata"].get("usage", {})
-                    self._track_usage(usage)
+            stream = resp.get("stream")
+            if stream:
+                for event in stream:
+                    if "contentBlockDelta" in event:
+                        delta = event["contentBlockDelta"].get("delta", {})
+                        if "text" in delta:
+                            yield delta["text"]
+                    elif "metadata" in event:
+                        usage = event["metadata"].get("usage", {})
+                        call_usage.update(usage)
+                        self._track_usage(usage)
+        finally:
+            self._record_trace(purpose, call_usage, t0)
 
     def converse_with_tools(
         self,
@@ -250,9 +286,14 @@ class BedrockAdapter:
         tools: List[Dict[str, Any]],
         temperature: float = 0.0,
         max_tokens: int = settings.bedrock_max_tokens,
+        purpose: str = "",
     ) -> Dict[str, Any]:
-        """Tool-calling Converse call. Returns Bedrock-native response dict."""
+        """Tool-calling Converse call. Returns Bedrock-native response dict.
+
+        See `converse()` above for what `purpose` does.
+        """
         system = self._build_system_array(system_prompt)
+        call_usage: Dict[str, Any] = {}
 
         def _call():
             client = get_bedrock_client()
@@ -265,20 +306,26 @@ class BedrockAdapter:
             if tools:
                 kwargs["toolConfig"] = {"tools": tools}
             resp = client.converse(**kwargs)
-            self._track_usage(resp.get("usage", {}))
+            usage = resp.get("usage", {})
+            call_usage.update(usage)
+            self._track_usage(usage)
             return resp
 
+        t0 = time.perf_counter()
         try:
-            return retry_with_backoff(_call)
-        except Exception as e:
-            err = str(e).lower()
-            if "cachepoint" in err or "cache_point" in err or "prompt caching" in err:
-                BedrockAdapter._cache_point_enabled = False
-                logger.warning("Prompt caching not supported for %s — disabling", self.model_id)
-                plain = system_prompt if isinstance(system_prompt, str) else ""
-                system[:] = [{"text": plain}]
+            try:
                 return retry_with_backoff(_call)
-            raise
+            except Exception as e:
+                err = str(e).lower()
+                if "cachepoint" in err or "cache_point" in err or "prompt caching" in err:
+                    BedrockAdapter._cache_point_enabled = False
+                    logger.warning("Prompt caching not supported for %s — disabling", self.model_id)
+                    plain = system_prompt if isinstance(system_prompt, str) else ""
+                    system[:] = [{"text": plain}]
+                    return retry_with_backoff(_call)
+                raise
+        finally:
+            self._record_trace(purpose, call_usage, t0)
 
     def get_token_usage(self) -> Dict[str, Any]:
         """Return token counts and calculated cost for this adapter instance."""
@@ -368,15 +415,34 @@ def get_request_token_usage() -> Dict[str, Any]:
 get_token_usage = get_request_token_usage
 
 
+def _record_module_trace(model_id: str, purpose: str, usage: Dict[str, Any], t0: float) -> None:
+    """Same best-effort LLM trace write as BedrockAdapter._record_trace, for the
+    module-level agents/ helpers below (no adapter instance to hang it off)."""
+    try:
+        from gemini_brain.observability.llm_tracer import record_llm_trace
+        record_llm_trace(
+            model_id=model_id,
+            label=model_id,
+            purpose=purpose,
+            input_tokens=usage.get("inputTokens", 0),
+            output_tokens=usage.get("outputTokens", 0),
+            duration_ms=(time.perf_counter() - t0) * 1000,
+        )
+    except Exception as e:
+        logger.warning("LLM trace recording failed for %s: %s", model_id, e)
+
+
 def converse(
     system_prompt: str,
     messages: List[Dict[str, Any]],
     temperature: float = 0.0,
     max_tokens: int = settings.bedrock_max_tokens,
     model_id: Optional[str] = None,
+    purpose: str = "sql_agent",
 ) -> str:
     """Simple text-in / text-out Converse call used by leaf agents."""
     _model = model_id or MODEL_ID
+    call_usage: Dict[str, Any] = {}
 
     def _call():
         client = get_bedrock_client()
@@ -390,11 +456,16 @@ def converse(
             kwargs["toolConfig"] = PASS_THROUGH_TOOL_CONFIG
         resp = client.converse(**kwargs)
         usage = resp.get("usage", {})
+        call_usage.update(usage)
         add_token_usage(usage.get("inputTokens", 0), usage.get("outputTokens", 0), model_id=_model)
         content = resp.get("output", {}).get("message", {}).get("content", [])
         return "\n".join(b["text"] for b in content if "text" in b)
 
-    return retry_with_backoff(_call)
+    t0 = time.perf_counter()
+    try:
+        return retry_with_backoff(_call)
+    finally:
+        _record_module_trace(_model, purpose, call_usage, t0)
 
 
 def converse_tools(
@@ -404,9 +475,11 @@ def converse_tools(
     temperature: float = 0.0,
     max_tokens: int = settings.bedrock_max_tokens,
     model_id: Optional[str] = None,
+    purpose: str = "sql_agent",
 ) -> Dict[str, Any]:
     """Module-level tool-calling Converse (agents / coordinator)."""
     _model = model_id or MODEL_ID
+    call_usage: Dict[str, Any] = {}
 
     def _call():
         client = get_bedrock_client()
@@ -420,10 +493,15 @@ def converse_tools(
             kwargs["toolConfig"] = {"tools": tools}
         resp = client.converse(**kwargs)
         usage = resp.get("usage", {})
+        call_usage.update(usage)
         add_token_usage(usage.get("inputTokens", 0), usage.get("outputTokens", 0), model_id=_model)
         return resp
 
-    return retry_with_backoff(_call)
+    t0 = time.perf_counter()
+    try:
+        return retry_with_backoff(_call)
+    finally:
+        _record_module_trace(_model, purpose, call_usage, t0)
 
 
 # Alias matching the old agents.bedrock_client.converse_with_tools name

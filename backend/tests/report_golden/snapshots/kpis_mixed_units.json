@@ -1,0 +1,73 @@
+{
+ "title": "Summary of Totals",
+ "period": null,
+ "currency": "AED",
+ "kpis": [
+  [
+   "Total Income",
+   "AED 1,612,654.50"
+  ],
+  [
+   "Invoice Count",
+   "1,275"
+  ],
+  [
+   "Total Expense",
+   "AED 902,330.25"
+  ]
+ ],
+ "charts": [
+  {
+   "type": "bar",
+   "title": "Key figures",
+   "categories": [
+    "Total Income",
+    "Total Expense"
+   ],
+   "series": [
+    {
+     "name": "Amount",
+     "data": [
+      1612654.5,
+      902330.25
+     ]
+    }
+   ],
+   "series_colors": [
+    "#0E8A75"
+   ],
+   "point_colors": [
+    "#0E8A75",
+    "#EB6834"
+   ],
+   "takeaway": null,
+   "requested_type": null,
+   "downgrade_reason": null,
+   "total_indices": null
+  }
+ ],
+ "tables": [],
+ "callouts": [],
+ "narrative": {
+  "origin": "template",
+  "headline": "Total Income was AED 1,612,654.50",
+  "summary": [
+   "Headline figures: Total Income AED 1,612,654.50, Invoice Count 1,275, Total Expense AED 902,330.25."
+  ],
+  "drivers": [],
+  "risks": [],
+  "actions": []
+ },
+ "integrity": {
+  "checks_run": 0,
+  "checks_failed": 0,
+  "figures_checked": 4,
+  "figures_verified": 4,
+  "sentences_removed": 0
+ },
+ "methodology": [
+  "Amounts in AED. A dash (—) marks a value the source did not provide.",
+  "Request: summary of totals chart",
+  "The summary was generated directly from the verified figures in this report."
+ ]
+}

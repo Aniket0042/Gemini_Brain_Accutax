@@ -246,10 +246,18 @@ export const fetchSessionMessages = async (sessionId, token = '', limit = 50) =>
   return data;
 };
 
+// `organizationId` may be one id or an array of ids. A multi-org thread is
+// created with its whole selection, which the backend then fixes for the
+// thread's lifetime.
 export const createChatSession = async (organizationId, token = '', sessionId) => {
   const headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
-  const body = { organization_id: organizationId ? Number(organizationId) : undefined };
+  const ids = (Array.isArray(organizationId) ? organizationId : [organizationId])
+    .filter((o) => o != null && o !== '')
+    .map(Number);
+  const body = ids.length > 1
+    ? { organization_ids: ids }
+    : { organization_id: ids.length === 1 ? ids[0] : undefined };
   if (sessionId) body.session_id = sessionId;
   const response = await fetch('/api/v1/sessions', {
     method: 'POST',

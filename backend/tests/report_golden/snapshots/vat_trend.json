@@ -1,0 +1,96 @@
+{
+ "title": "VAT by Month",
+ "period": null,
+ "currency": "AED",
+ "kpis": [],
+ "charts": [
+  {
+   "type": "line",
+   "title": "VAT Amount and Net Sales by Month",
+   "categories": [
+    "April",
+    "May",
+    "June"
+   ],
+   "series": [
+    {
+     "name": "VAT Amount",
+     "data": [
+      2620.0,
+      2910.0,
+      3185.0
+     ]
+    },
+    {
+     "name": "Net Sales",
+     "data": [
+      52400.0,
+      58200.0,
+      63700.0
+     ]
+    }
+   ],
+   "series_colors": [
+    "#0E8A75",
+    "#0E8A75"
+   ],
+   "point_colors": null,
+   "takeaway": "Net Sales was above VAT Amount in 3 of 3 periods; the widest gap was AED 60.5K in June.",
+   "requested_type": "line",
+   "downgrade_reason": null,
+   "total_indices": null
+  }
+ ],
+ "tables": [
+  {
+   "title": "Details",
+   "columns": [
+    "Month",
+    "Vat Amount",
+    "Net Sales"
+   ],
+   "first_rows": [
+    {
+     "net_sales": "AED 52,400.00",
+     "vat_amount": "AED 2,620.00",
+     "month": "April"
+    },
+    {
+     "net_sales": "AED 58,200.00",
+     "vat_amount": "AED 2,910.00",
+     "month": "May"
+    },
+    {
+     "net_sales": "AED 63,700.00",
+     "vat_amount": "AED 3,185.00",
+     "month": "June"
+    }
+   ],
+   "total_rows": 3
+  }
+ ],
+ "callouts": [],
+ "narrative": {
+  "origin": "template",
+  "headline": "Net Sales was above VAT Amount in 3 of 3 periods",
+  "summary": [],
+  "drivers": [
+   "The widest gap was AED 60.5K in June."
+  ],
+  "risks": [],
+  "actions": []
+ },
+ "integrity": {
+  "checks_run": 2,
+  "checks_failed": 0,
+  "figures_checked": 1,
+  "figures_verified": 1,
+  "sentences_removed": 0
+ },
+ "methodology": [
+  "Amounts in AED. A dash (—) marks a value the source did not provide.",
+  "Request: VAT by month line chart",
+  "The summary was generated directly from the verified figures in this report.",
+  "Consistency checks: 2 of 2 passed."
+ ]
+}

@@ -42,3 +42,9 @@ env/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Live multi-org evaluation reports (scripts/eval/multi_org_eval.py)
+backend/scripts/eval/multi_org_eval_*.json
+
+# Multi-org plan log (gemini_brain/orchestrator/multi_org_log.py)
+backend/logs/

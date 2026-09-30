@@ -58,10 +58,17 @@ def test_every_registered_report_has_a_definition():
         spec.endpoint for spec in REGISTRY.values() if spec.endpoint.startswith("rpt_")
     }
     rpt_from_rest = set(defs.REST_TO_SQL_REPORT.values())
-    covered = rpt_from_registry | rpt_from_rest
+    # Reached only when a multi-org run skips a REST endpoint that ignores the org.
+    rpt_from_substitutes = set(defs.ORG_SCOPED_SUBSTITUTES.values())
+    # Reached when a multi-org question asks for one comparable metric.
+    from gemini_brain.orchestrator.multi_org_metrics import CONTACT_TOTALS_REPORTS, METRICS
+    rpt_from_metrics = ({m.report for m in METRICS} | set(CONTACT_TOTALS_REPORTS.values())
+                        | {"rpt_metric_series"}  # figures over time (series_selection)
+                        | {"rpt_document_list"})  # invoice and bill lists (multi_org_lists)
+    covered = rpt_from_registry | rpt_from_rest | rpt_from_substitutes | rpt_from_metrics
     assert covered == set(defs.REPORTS), (
-        "registry REST tools + remaining rpt_ tools must cover every SQL report "
-        "in reports/definitions.py"
+        "registry REST tools + remaining rpt_ tools + org-scoped substitutes must "
+        "cover every SQL report in reports/definitions.py"
     )
     for rest_ep, sql_key in defs.REST_TO_SQL_REPORT.items():
         assert sql_key in defs.REPORTS, sql_key

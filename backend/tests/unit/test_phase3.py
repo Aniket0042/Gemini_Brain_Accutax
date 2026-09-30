@@ -67,7 +67,7 @@ def test_format_aed():
     assert format_aed(1234567.89) == "AED 1,234,567.89"
     assert format_aed("50000") == "AED 50,000.00"
     assert format_aed(0) == "AED 0.00"
-    assert format_aed(None) == "AED 0.00"
+    assert format_aed(None) == "—"  # missing is not zero
 
 
 def test_formatters_render_markdown():

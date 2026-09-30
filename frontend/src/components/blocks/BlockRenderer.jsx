@@ -7,6 +7,8 @@ import { ChartBlock } from './ChartBlock';
 import { ImageBlock } from './ImageBlock';
 import { CanvasBlock } from './CanvasBlock';
 import { ArtifactBlock } from './ArtifactBlock';
+import { ActionButtonBlock } from './ActionButtonBlock';
+import { CollapsibleGroupBlock } from './CollapsibleGroupBlock';
 
 /**
  * BLOCK_REGISTRY — the one place a new block type gets wired up.
@@ -20,6 +22,8 @@ const BLOCK_REGISTRY = {
   image: ImageBlock,
   canvas: CanvasBlock,
   artifact: ArtifactBlock,
+  action_button: ActionButtonBlock,
+  collapsible_group: CollapsibleGroupBlock,
 };
 
 /**
@@ -69,6 +73,6 @@ export function chatFacingBlocks(blocks) {
   return blocks.filter((b) => {
     if (b?.type === 'canvas' || b?.type === 'artifact') return false;
     if (hasTable && b?.type === 'kpi_grid') return false;
-    return ['markdown', 'chart', 'table', 'kpi_grid'].includes(b?.type);
+    return ['markdown', 'chart', 'table', 'kpi_grid', 'collapsible_group'].includes(b?.type);
   });
 }

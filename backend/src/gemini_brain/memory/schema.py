@@ -20,6 +20,27 @@ from gemini_brain.sql_fallback.db_connection import get_connection
 logger = logging.getLogger("gemini_brain.memory.schema")
 
 
+def _index_exists(cur, name: str) -> bool:
+    cur.execute(
+        "SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = %s)",
+        (name,),
+    )
+    return bool(cur.fetchone()[0])
+
+
+def _column_exists(cur, table: str, column: str) -> bool:
+    cur.execute(
+        """
+        SELECT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = %s AND column_name = %s
+        )
+        """,
+        (table, column),
+    )
+    return bool(cur.fetchone()[0])
+
+
 def initialize_tables(db_name: str = "") -> None:
     """Create session state, messages, projects, and project files tables if they do not exist."""
     conn = get_connection(db_name)
@@ -120,11 +141,15 @@ def initialize_tables(db_name: str = "") -> None:
             );
         """)
 
-        # 5. Message index for fast chronological sorting
-        cur.execute("""
-            CREATE INDEX IF NOT EXISTS idx_model_arena_messages_session_time 
-            ON public.model_arena_chat_messages (session_id, created_at ASC);
-        """)
+        # 5. Message index for fast chronological sorting. Every DDL below is
+        # checked first: Postgres demands table ownership for CREATE INDEX and
+        # ALTER TABLE even when IF NOT EXISTS makes them no-ops, and the app's
+        # DML-only role would otherwise fail the whole init on every start.
+        if not _index_exists(cur, "idx_model_arena_messages_session_time"):
+            cur.execute("""
+                CREATE INDEX idx_model_arena_messages_session_time
+                ON public.model_arena_chat_messages (session_id, created_at ASC);
+            """)
 
         # 6. Per-tenant session listing (user + org, most recently active first)
         cur.execute("""
@@ -140,9 +165,24 @@ def initialize_tables(db_name: str = "") -> None:
             cur.execute(
                 "ALTER TABLE public.model_arena_chat_sessions ADD COLUMN organization_id INT;"
             )
+        if not _index_exists(cur, "idx_model_arena_sessions_user_org_updated"):
+            cur.execute("""
+                CREATE INDEX idx_model_arena_sessions_user_org_updated
+                ON public.model_arena_chat_sessions (user_id, organization_id, updated_at DESC);
+            """)
+
+        # 6b. The full organization scope of a thread, sorted. A single-org
+        # thread holds a one-item array; organization_id stays set for those
+        # and is NULL for multi-org threads, so per-org listing never shows them.
+        if not _column_exists(cur, "model_arena_chat_sessions", "organization_ids"):
+            cur.execute("""
+                ALTER TABLE public.model_arena_chat_sessions
+                ADD COLUMN organization_ids INT[];
+            """)
         cur.execute("""
-            CREATE INDEX IF NOT EXISTS idx_model_arena_sessions_user_org_updated
-            ON public.model_arena_chat_sessions (user_id, organization_id, updated_at DESC);
+            UPDATE public.model_arena_chat_sessions
+            SET organization_ids = ARRAY[organization_id]
+            WHERE organization_ids IS NULL AND organization_id IS NOT NULL;
         """)
 
         cur.execute("""

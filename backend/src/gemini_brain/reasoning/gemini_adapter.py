@@ -87,6 +87,7 @@ class GeminiAdapter:
         messages: List[Dict[str, Any]],
         temperature: float = 0.0,
         max_tokens: int = 2000,
+        purpose: str = "",  # accepted for BedrockAdapter parity; unused here
     ) -> str:
         """Text-in / text-out call."""
         from google.genai import types
@@ -109,6 +110,7 @@ class GeminiAdapter:
         messages: List[Dict[str, Any]],
         temperature: float = 0.0,
         max_tokens: int = 2000,
+        purpose: str = "",  # accepted for BedrockAdapter parity; unused here
     ) -> Generator[str, None, None]:
         """Stream text chunks as they are generated."""
         from google.genai import types

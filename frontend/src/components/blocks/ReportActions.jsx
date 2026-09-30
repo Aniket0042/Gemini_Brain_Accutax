@@ -1,41 +1,64 @@
 import React from 'react';
 import { Eye, Download } from 'lucide-react';
 
-function remainingSeconds(expiresAt, fallback = 120) {
-  if (expiresAt) {
-    const t = Date.parse(expiresAt);
-    if (!Number.isNaN(t)) return Math.max(0, Math.ceil((t - Date.now()) / 1000));
-  }
-  return fallback;
-}
-
+/**
+ * Download a generated file. An expired file (HTTP 410) whose report is still
+ * kept is rebuilt from that report on the server and downloaded in the same
+ * click, so an old link keeps working instead of dead-ending.
+ * Returns the block that was downloaded (the regenerated one, if any) or null.
+ */
 export async function downloadArtifact(block, token) {
-  if (!block?.id) return false;
-  const res = await fetch(`/api/v1/artifacts/${block.id}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  if (!res.ok) return false;
+  if (!block?.id) return null;
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  let current = block;
+  let res = await fetch(`/api/v1/artifacts/${current.id}`, { headers });
+  if (res.status === 410) {
+    const body = await res.json().catch(() => ({}));
+    if (!body?.detail?.regenerate) return null;
+    const regen = await fetch(`/api/v1/artifacts/${current.id}/regenerate`, { method: 'POST', headers });
+    if (!regen.ok) return null;
+    current = { ...current, ...(await regen.json()) };
+    res = await fetch(`/api/v1/artifacts/${current.id}`, { headers });
+  }
+  if (!res.ok) return null;
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = block.filename || 'download';
+  a.download = current.filename || 'download';
   a.click();
   URL.revokeObjectURL(url);
-  return true;
+  return current;
 }
 
-function artifactKind(block) {
+export function artifactKind(block) {
   if (block?.kind) return String(block.kind).toLowerCase();
   const name = String(block?.filename || block?.mime || '').toLowerCase();
   if (name.includes('pdf')) return 'pdf';
   if (name.includes('csv')) return 'csv';
   if (name.includes('xlsx') || name.includes('excel') || name.includes('spreadsheet')) return 'xlsx';
+  if (name.includes('docx') || name.includes('word')) return 'docx';
+  if (name.includes('pptx') || name.includes('powerpoint')) return 'pptx';
+  if (name.includes('md') || name.includes('markdown')) return 'md';
   return '';
 }
 
+export const KIND_LABEL = {
+  pdf: 'Download PDF',
+  csv: 'Export CSV',
+  xlsx: 'Download Excel',
+  docx: 'Download Word',
+  pptx: 'Download PowerPoint',
+  md: 'Download Markdown',
+};
+
 /**
- * Preview / Download PDF / Export CSV row from the P&L mock.
+ * Preview + download button(s) for the chat card. If the user named a format
+ * ("as csv", "as markdown"), the backend flags that one artifact `primary`
+ * (see attach.py) and this shows only that button — not the pdf/csv bonus
+ * files minted alongside it (those stay reachable from the canvas preview).
+ * A plain chart request has no primary artifact, so it falls back to one
+ * button per kind, same as before.
  */
 export function ReportActions({ blocks, onOpenCanvas, token }) {
   if (!Array.isArray(blocks)) return null;
@@ -43,10 +66,26 @@ export function ReportActions({ blocks, onOpenCanvas, token }) {
   const artifacts = blocks.filter((b) => b?.type === 'artifact');
   if (!canvas && artifacts.length === 0) return null;
 
-  const pdf = artifacts.find((a) => artifactKind(a) === 'pdf');
-  const csv = artifacts.find((a) => artifactKind(a) === 'csv' || artifactKind(a) === 'xlsx') || artifacts.find((a) => artifactKind(a) !== 'pdf');
+  const primary = artifacts.find((a) => a?.primary === true);
+  let ordered;
+  if (primary) {
+    ordered = [primary];
+  } else {
+    // One button per kind (first artifact of that kind wins); PDF/CSV lead
+    // to keep the familiar order, then whatever else came back.
+    const seen = new Set();
+    ordered = [
+      ...artifacts.filter((a) => artifactKind(a) === 'pdf'),
+      ...artifacts.filter((a) => artifactKind(a) === 'csv'),
+      ...artifacts.filter((a) => !['pdf', 'csv'].includes(artifactKind(a))),
+    ].filter((a) => {
+      const k = artifactKind(a);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }
 
-  const expired = (block) => remainingSeconds(block?.expires_at, block?.expires_in || 120) <= 0;
 
   return (
     <div className="report-actions">
@@ -60,28 +99,17 @@ export function ReportActions({ blocks, onOpenCanvas, token }) {
           Preview Full Report
         </button>
       )}
-      {pdf && (
+      {ordered.map((artifact) => (
         <button
+          key={artifact.id || artifactKind(artifact)}
           type="button"
           className="report-action"
-          disabled={expired(pdf)}
-          onClick={() => downloadArtifact(pdf, token)}
+          onClick={() => downloadArtifact(artifact, token)}
         >
           <Download size={14} />
-          Download PDF
+          {KIND_LABEL[artifactKind(artifact)] || `Download ${(artifactKind(artifact) || 'file').toUpperCase()}`}
         </button>
-      )}
-      {csv && (
-        <button
-          type="button"
-          className="report-action"
-          disabled={expired(csv)}
-          onClick={() => downloadArtifact(csv, token)}
-        >
-          <Download size={14} />
-          Export CSV
-        </button>
-      )}
+      ))}
     </div>
   );
 }

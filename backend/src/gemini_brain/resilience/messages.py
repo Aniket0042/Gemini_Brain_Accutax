@@ -29,6 +29,17 @@ NOTICES: Dict[str, Dict[str, Any]] = {
             "Ask for a specific period if you need it scoped differently",
         ],
     },
+    "PARTIAL_ORGS": {
+        "kind": "partial",
+        "title": "Some organizations are missing",
+        "message": (
+            "I could not retrieve figures for {subject}, so the comparison below "
+            "leaves them out rather than guessing."
+        ),
+        "suggestions": [
+            "Ask again in a moment to include them",
+        ],
+    },
     "PARTIAL_DATA": {
         "kind": "partial",
         "title": "Showing a partial view",

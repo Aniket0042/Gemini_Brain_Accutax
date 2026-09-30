@@ -1,8 +1,101 @@
-import React, { useRef, useState } from 'react';
-import { X, Download, Share2, Eye, FileSpreadsheet } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { X, Download, Share2, Eye, FileSpreadsheet, ChevronDown, Check } from 'lucide-react';
 import { LiveChart } from './LiveChart';
 import { TableBlock } from '../blocks/TableBlock';
-import { downloadArtifact } from '../blocks/ReportActions';
+import { downloadArtifact, artifactKind, KIND_LABEL } from '../blocks/ReportActions';
+import { DocxPreview } from './DocxPreview';
+import { SheetPreview } from './SheetPreview';
+import { MdPreview } from './MdPreview';
+
+function shortLabel(kind) {
+  if (kind === 'summary') return 'Summary';
+  return (KIND_LABEL[kind] || kind.toUpperCase()).replace(/^(Download|Export)\s+/, '');
+}
+
+/**
+ * Shared header dropdown for the preview-format and download-format pickers.
+ * Portaled to <body> with fixed coordinates (same technique as TenantSwitcher)
+ * since the canvas toolbar sits inside an overflow-clipped panel — an
+ * absolutely-positioned menu here would get cut off at the panel edge.
+ */
+function ToolbarMenu({ triggerClassName, icon, label, items, onSelect, ariaLabel }) {
+  const [open, setOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState(null);
+  const triggerRef = useRef(null);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => {
+      if (
+        triggerRef.current && !triggerRef.current.contains(e.target)
+        && menuRef.current && !menuRef.current.contains(e.target)
+      ) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  if (!items.length) return null;
+
+  const toggleOpen = () => {
+    if (!open && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setMenuPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+    }
+    setOpen((v) => !v);
+  };
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`${triggerClassName} ${open ? 'is-open' : ''}`}
+        onClick={toggleOpen}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={ariaLabel}
+        title={ariaLabel}
+      >
+        {icon}
+        {label && <span>{label}</span>}
+        {label && <ChevronDown size={13} className="pp-caret" />}
+      </button>
+      {open && menuPos && createPortal(
+        <div
+          ref={menuRef}
+          className="pp-menu pp-menu-down"
+          style={{ position: 'fixed', top: menuPos.top, right: menuPos.right, left: 'auto', bottom: 'auto' }}
+          role="listbox"
+        >
+          {items.map((item) => (
+            <button
+              type="button"
+              key={item.key}
+              className={`pp-row ${item.selected ? 'is-selected' : ''}`}
+              role="option"
+              aria-selected={!!item.selected}
+              onClick={() => { onSelect(item); setOpen(false); }}
+            >
+              <span className="pp-row-label">{item.label}</span>
+              {item.selected && <Check size={15} className="pp-row-check" />}
+            </button>
+          ))}
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
 
 const CANVAS_MIN = 360;
 const CANVAS_MAX = 920;
@@ -77,7 +170,7 @@ function CanvasResizer({ width, onWidthChange }) {
 
 /**
  * AnswerCanvas — live document preview matching the P&L sidebar mock:
- * header toolbar, KPI tiles, optional chart, monthly table, insight callout.
+ * header toolbar, every KPI, the executive summary, every chart and table, callouts.
  */
 export function AnswerCanvas({ spec, artifact, artifacts, token, width, onWidthChange, onClose }) {
   const charts = spec?.charts || [];
@@ -85,18 +178,47 @@ export function AnswerCanvas({ spec, artifact, artifacts, token, width, onWidthC
   const kpis = spec?.kpis || [];
   const notes = spec?.notes || [];
   const allArtifacts = artifacts?.length ? artifacts : (artifact ? [artifact] : []);
-  const pdf = allArtifacts.find((a) => String(a?.kind || a?.mime || a?.filename || '').toLowerCase().includes('pdf'));
-  const downloadable = pdf || allArtifacts[0];
+  const seenKinds = new Set();
+  const distinctArtifacts = allArtifacts.filter((a) => {
+    const k = artifactKind(a);
+    if (!k || seenKinds.has(k)) return false;
+    seenKinds.add(k);
+    return true;
+  });
+  // PPTX has no browser-side renderer (no parser lib for it) — download only.
+  const previewableArtifacts = distinctArtifacts.filter((a) => artifactKind(a) !== 'pptx');
+  const pdf = distinctArtifacts.find((a) => artifactKind(a) === 'pdf');
 
-  const monthly = tables.find((t) =>
-    String(t.title || '').toLowerCase().includes('month')
-    || (t.columns || []).some((c) => c.key === 'month'),
-  );
-  const bodyTable = monthly || tables[0];
-  const insight = spec?.insight || notes[0];
+  // Callouts come from the validated report document: window caveats,
+  // chart-type fallbacks, dropped sections. Older specs only carry `notes`.
+  const callouts = spec?.callouts || notes.map((text) => ({ tone: 'note', text }));
+  // The report narrator's analysis (headline, summary, drivers, risks,
+  // actions). Older specs only carry a one-line insight.
+  const analysis = spec?.narrative_parts;
+  const insight = analysis ? null : spec?.insight;
 
-  const [showPdf, setShowPdf] = useState(false);
-  const isPdf = Boolean(pdf?.id);
+  const [activeView, setActiveView] = useState('summary');
+  const artifactIdsKey = distinctArtifacts.map((a) => a?.id).join('|');
+  useEffect(() => {
+    const kinds = new Set(previewableArtifacts.map((a) => artifactKind(a)));
+    setActiveView((prev) => (prev !== 'summary' && !kinds.has(prev) ? 'summary' : prev));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [artifactIdsKey]);
+
+  const previewItems = [
+    { key: 'summary', label: 'Summary', selected: activeView === 'summary' },
+    ...previewableArtifacts.map((a) => ({
+      key: artifactKind(a),
+      label: shortLabel(artifactKind(a)),
+      selected: activeView === artifactKind(a),
+    })),
+  ];
+  const downloadItems = distinctArtifacts.map((a) => ({
+    key: artifactKind(a),
+    label: KIND_LABEL[artifactKind(a)] || `Download ${(artifactKind(a) || 'file').toUpperCase()}`,
+    artifact: a,
+  }));
+  const activeArtifact = distinctArtifacts.find((a) => artifactKind(a) === activeView);
   const paneWidth = width || 480;
 
   return (
@@ -112,25 +234,24 @@ export function AnswerCanvas({ spec, artifact, artifacts, token, width, onWidthC
           </div>
         </div>
         <div className="answer-canvas-toolbar-actions">
-          {isPdf && (
-            <button type="button" className="answer-canvas-text-btn" onClick={() => setShowPdf((v) => !v)}>
-              <Eye size={14} />
-              {showPdf ? 'View Summary' : 'View Full Report'}
-            </button>
-          )}
+          <ToolbarMenu
+            triggerClassName="answer-canvas-text-btn pp-trigger"
+            ariaLabel="Preview format"
+            icon={<Eye size={14} />}
+            label={shortLabel(activeView)}
+            items={previewItems}
+            onSelect={(item) => setActiveView(item.key)}
+          />
           <button type="button" className="answer-canvas-icon-btn" aria-label="Share" disabled>
             <Share2 size={15} />
           </button>
-          {downloadable && (
-            <button
-              type="button"
-              className="answer-canvas-icon-btn"
-              aria-label="Download"
-              onClick={() => downloadArtifact(downloadable, token)}
-            >
-              <Download size={15} />
-            </button>
-          )}
+          <ToolbarMenu
+            triggerClassName="answer-canvas-icon-btn"
+            ariaLabel="Download"
+            icon={<Download size={15} />}
+            items={downloadItems}
+            onSelect={(item) => downloadArtifact(item.artifact, token)}
+          />
           <button type="button" className="answer-canvas-icon-btn" onClick={onClose} aria-label="Close canvas">
             <X size={16} />
           </button>
@@ -138,8 +259,16 @@ export function AnswerCanvas({ spec, artifact, artifacts, token, width, onWidthC
       </header>
 
       <div className="answer-canvas-body">
-        {showPdf && isPdf ? (
+        {activeView === 'pdf' && pdf ? (
           <PdfPreview artifact={pdf} token={token} />
+        ) : activeView === 'docx' && activeArtifact ? (
+          <DocxPreview artifact={activeArtifact} token={token} />
+        ) : activeView === 'xlsx' && activeArtifact ? (
+          <SheetPreview artifact={activeArtifact} token={token} format="xlsx" />
+        ) : activeView === 'csv' && activeArtifact ? (
+          <SheetPreview artifact={activeArtifact} token={token} format="csv" />
+        ) : activeView === 'md' && activeArtifact ? (
+          <MdPreview artifact={activeArtifact} token={token} />
         ) : (
           <article className="answer-canvas-doc">
             <h2 className="answer-canvas-doc-heading">{spec?.title || 'Profit & Loss Statement'}</h2>
@@ -153,7 +282,7 @@ export function AnswerCanvas({ spec, artifact, artifacts, token, width, onWidthC
 
             {kpis.length > 0 && (
               <div className="answer-canvas-kpis">
-                {kpis.slice(0, 3).map((k) => (
+                {kpis.map((k) => (
                   <div key={k.label} className="answer-canvas-kpi">
                     <span className="answer-canvas-kpi-label">{k.label}</span>
                     <span className="answer-canvas-kpi-value">{k.formatted || k.value}</span>
@@ -167,24 +296,53 @@ export function AnswerCanvas({ spec, artifact, artifacts, token, width, onWidthC
               </div>
             )}
 
-            {charts[0] && (
-              <LiveChart chart={charts[0]} height={220} variant="canvas" />
-            )}
-
-            {bodyTable && (
-              <section className="answer-canvas-section">
-                <h3 className="answer-canvas-section-title">{bodyTable.title || 'Details'}</h3>
-                <TableBlock block={bodyTable} />
+            {analysis && (
+              <section className="answer-canvas-analysis" aria-label="Executive summary">
+                {analysis.headline && <p className="answer-canvas-headline">{analysis.headline}</p>}
+                {analysis.summary?.length > 0 && <p className="answer-canvas-summary">{analysis.summary.join(' ')}</p>}
+                {[['Key drivers', analysis.drivers], ['Risks and watch-points', analysis.risks], ['Recommended actions', analysis.actions]]
+                  .filter(([, items]) => items?.length)
+                  .map(([title, items]) => (
+                    <div key={title} className="answer-canvas-analysis-group">
+                      <h4>{title}</h4>
+                      <ul>
+                        {items.map((item) => <li key={item}>{item}</li>)}
+                      </ul>
+                    </div>
+                  ))}
               </section>
             )}
+
+            {/* Every chart in the report, each with its takeaway — the P&L
+                bridge used to be exported but never previewed. */}
+            {charts.map((chart, i) => (
+              <LiveChart key={`${chart.title || 'chart'}-${i}`} chart={chart} height={220} variant="canvas" />
+            ))}
+
+            {/* Every table, as in the exported files (the canvas used to show one). */}
+            {tables.map((table, i) => (
+              <section key={`${table.title || 'table'}-${i}`} className="answer-canvas-section">
+                <h3 className="answer-canvas-section-title">{table.title || 'Details'}</h3>
+                <TableBlock block={table} />
+              </section>
+            ))}
 
             {insight && (
               <div className="answer-canvas-insight">{insight}</div>
             )}
 
+            {callouts.length > 0 && (
+              <ul className="answer-canvas-callouts">
+                {callouts.map((c) => (
+                  <li key={c.text} className={`answer-canvas-callout is-${c.tone || 'note'}`}>{c.text}</li>
+                ))}
+              </ul>
+            )}
+
             <p className="answer-canvas-footer">
               Generated by AccuTax AI{formatGenerated(spec?.generated_at) ? ` · ${formatGenerated(spec.generated_at)}` : ''}
             </p>
+            {spec?.source && <p className="answer-canvas-footer">{spec.source}</p>}
           </article>
         )}
       </div>
