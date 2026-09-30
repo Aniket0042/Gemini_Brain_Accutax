@@ -314,7 +314,7 @@ def test_report_metric_marks_fast_router_plans():
 
     with patch.object(multi_org_plan, "_how_to_guide_section", return_value=None), \
          patch.object(multi_org_plan, "match_metrics", return_value=[]), \
-         patch.object(multi_org_plan, "match_series", return_value=None), \
+         patch.object(multi_org_plan, "match_series_metrics", return_value=None), \
          patch.object(multi_org_plan, "fast_route", return_value=Hit()):
         plan = plan_query("some wording no rule understands", 5, object(), 1)
     assert (plan.source, plan.metric) == ("fast", "revenue")
@@ -323,7 +323,7 @@ def test_report_metric_marks_fast_router_plans():
 def test_report_metric_marks_model_selected_plans():
     with patch.object(multi_org_plan, "_how_to_guide_section", return_value=None), \
          patch.object(multi_org_plan, "match_metrics", return_value=[]), \
-         patch.object(multi_org_plan, "match_series", return_value=None), \
+         patch.object(multi_org_plan, "match_series_metrics", return_value=None), \
          patch.object(multi_org_plan, "fast_route", return_value=None), \
          patch.object(multi_org_plan, "classify_intent", return_value=({"type": 4}, 1, 1)), \
          patch.object(multi_org_plan, "select_endpoint",

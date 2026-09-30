@@ -30,13 +30,14 @@ from gemini_brain.orchestrator.multi_org_metrics import (
     build_comparison,
     build_multi_comparison,
     build_series,
+    build_series_set,
     computed_answer,
     computed_view,
     limit_rows,
 )
 from gemini_brain.orchestrator import multi_org_followup as followup
 from gemini_brain.orchestrator.multi_org_log import record_plan
-from gemini_brain.orchestrator.multi_org_plan import DIRECT, UNSUPPORTED, fetch_for_org
+from gemini_brain.orchestrator.multi_org_plan import DIRECT, REPLY, UNSUPPORTED, fetch_for_org
 from gemini_brain.orchestrator.multi_org_present import (
     build_presentation,
     collapsed_org_sections,
@@ -318,7 +319,7 @@ def run_multi_org_stream(
         yield {"final_result": final}
         return
 
-    if plan is not None and plan.kind == UNSUPPORTED:
+    if plan is not None and plan.kind in (UNSUPPORTED, REPLY):
         final = _unsupported_answer(plan, [runs[oid] for oid in org_ids], t0)
         if session_id:
             _persist_turn(session_id, int(run_kwargs.get("user_id") or 0), thread_org_ids, query, final, compare_runner, db_name)
@@ -402,8 +403,12 @@ def _build_comparison(plan: Any, runs: List["OrgRun"], question: str) -> Optiona
     if plan is None:
         return None
     if plan.series and plan.series.get("metric") in METRICS_BY_KEY:
-        return build_series(METRICS_BY_KEY[plan.series["metric"]], plan.series["grain"], runs,
-                            period=(plan.selection or {}).get("query_params"))
+        period = (plan.selection or {}).get("query_params")
+        series_keys = [k for k in plan.series.get("metrics") or [plan.series["metric"]] if k in METRICS_BY_KEY]
+        if len(series_keys) > 1:
+            return build_series_set([METRICS_BY_KEY[k] for k in series_keys], plan.series["grain"], runs,
+                                    period=period)
+        return build_series(METRICS_BY_KEY[plan.series["metric"]], plan.series["grain"], runs, period=period)
     keys = [k for k in (plan.metrics or ([plan.metric] if plan.metric else [])) if k in METRICS_BY_KEY]
     if len(keys) > 1:
         metrics = [METRICS_BY_KEY[k] for k in keys]
@@ -429,8 +434,11 @@ def _list_title(plan: Any) -> str:
 
 
 def _unsupported_answer(plan: Any, runs: List["OrgRun"], t0: float) -> Dict[str, Any]:
-    """The question asks only for figures no report can compute: say which, and what is available."""
-    answer = "\n".join(f"- {line}" for line in plan.notes)
+    """An answer written in code with no data: figures no report can compute, or a greeting."""
+    if plan.kind == REPLY:
+        answer = "\n".join(plan.notes)
+    else:
+        answer = "\n".join(f"- {line}" for line in plan.notes)
     final = normalize_envelope({
         "answer": answer,
         "status": "ok",
@@ -441,7 +449,7 @@ def _unsupported_answer(plan: Any, runs: List["OrgRun"], t0: float) -> Dict[str,
                         "elapsed_seconds": round(time.time() - t0, 2)},
         "agent_trace": [plan.trace_step()],
         "routing_info": {"type": plan.intent, "type_label": "Data query", "reason": plan.reason,
-                         "path": "multi_org", "layout": "unsupported"},
+                         "path": "multi_org", "layout": "greeting" if plan.kind == REPLY else "unsupported"},
         "organizations": [r.public() for r in runs],
     })
     return final

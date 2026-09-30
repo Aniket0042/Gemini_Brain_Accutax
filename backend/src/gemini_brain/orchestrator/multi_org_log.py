@@ -26,7 +26,8 @@ logger = logging.getLogger("gemini_brain.multi_org.plan_log")
 #: Rotate the log file past this size (one backup kept).
 MAX_BYTES = 5 * 1024 * 1024
 #: Layouts the rules produced on their own; anything else is a gap to look at.
-MATCHED_LAYOUTS = {"metric", "multi_metric", "series", "per_org", "merged", "overlap", "direct", "unsupported"}
+MATCHED_LAYOUTS = {"metric", "multi_metric", "series", "series_set", "per_org", "merged", "overlap", "direct",
+                   "unsupported", "greeting"}
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[3]
 _lock = threading.Lock()

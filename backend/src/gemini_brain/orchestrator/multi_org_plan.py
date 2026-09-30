@@ -32,7 +32,7 @@ from gemini_brain.orchestrator.multi_org_metrics import (
     contact_totals_selection,
     is_scorecard_question,
     match_metrics,
-    match_series,
+    match_series_metrics,
     metrics_selections,
     selection_key,
     series_selection,
@@ -59,6 +59,31 @@ logger = logging.getLogger("gemini_brain.orchestrator.multi_org_plan")
 DATA = "data"      # fetch the same selection for every organization
 DIRECT = "direct"  # no data needed (how-to, FAQ, chat meta): answer once
 UNSUPPORTED = "unsupported"  # only figures no report can compute: say so, fetch nothing
+REPLY = "reply"  # small talk ("hi", "thanks"): a fixed reply, no data and no model call
+
+#: Greetings and thanks with nothing else in them. They cost three model calls
+#: (classify, then answer) for a one-line reply.
+_SMALL_TALK = re.compile(
+    r"^\s*(hi+|hello+|hey+|hiya|yo|good\s+(morning|afternoon|evening|day)|greetings|namaste|salaam|"
+    r"how\s+are\s+(you|u)(\s+doing)?|how'?s\s+it\s+going|what'?s\s+up|thanks?(\s+you)?|thank\s+you(\s+so\s+much)?|"
+    r"thx|ty|ok(ay)?|cool|great|nice|bye|good\s*bye)"
+    r"(\s+(there|claude|team|all|guys|again|a\s+lot))?\s*[!.?,]*\s*$",
+    re.IGNORECASE,
+)
+_THANKS = re.compile(r"\b(thanks?|thank\s+you|thx|ty)\b", re.IGNORECASE)
+_BYE = re.compile(r"\b(bye|good\s*bye)\b", re.IGNORECASE)
+
+
+def small_talk_reply(query: str) -> Optional[str]:
+    """A fixed reply for a message that is only a greeting or thanks; None otherwise."""
+    if not _SMALL_TALK.match(query or ""):
+        return None
+    if _THANKS.search(query):
+        return "You're welcome. Ask me anything else about the selected organizations."
+    if _BYE.search(query):
+        return "Goodbye. Your conversation is saved in this thread."
+    return ("Hi. I can compare the selected organizations, for example: \"Compare revenue this year\", "
+            "\"Which company is performing best overall?\", or \"List unpaid invoices older than 90 days per org\".")
 
 #: Wait before retrying an unavailable planned fetch once.
 RETRY_DELAY_SECONDS = 0.5
@@ -86,7 +111,7 @@ class QueryPlan:
     #: Every metric asked for, in question order; more than one is a multi-metric table.
     metrics: List[str] = field(default_factory=list)
     #: {"metric": key, "grain": "month" | "quarter"} for a figure over time.
-    series: Optional[Dict[str, str]] = None
+    series: Optional[Dict[str, Any]] = None
     #: Every report call per organization; `selection` is the first of them.
     selections: List[Dict[str, Any]] = field(default_factory=list)
     #: Lines added to the answer, e.g. a figure in the question that cannot be computed.
@@ -140,6 +165,9 @@ def plan_query(query: str, primary_org: int, runner: Any, user_id: int) -> Optio
 
     `query` must already be PII-redacted: the plan call is a model call.
     """
+    reply = small_talk_reply(query)
+    if reply is not None:
+        return QueryPlan(REPLY, source="greeting", notes=[reply], reason="Small talk")
     if is_conversation_meta_query(query):
         return QueryPlan(DIRECT, source="conversation_meta")
     if _how_to_guide_section(query) is not None:
@@ -158,14 +186,17 @@ def plan_query(query: str, primary_org: int, runner: Any, user_id: int) -> Optio
     terms = [] if rows_wanted else unsupported_terms(query)
     notes = unsupported_note(terms)
 
-    # A figure over time per organization ("revenue by month").
-    series = match_series(query)
+    # Figures over time per organization ("revenue by month", "P&L by month":
+    # one series fetch per figure).
+    series = match_series_metrics(query)
     if series is not None:
-        metric, grain = series
-        selection = series_selection(metric, grain, query)
-        return QueryPlan(DATA, selection=selection, selections=[selection], intent=4, source="series",
-                         series={"metric": metric.key, "grain": grain}, notes=notes,
-                         reason=f"Series: {metric.label} by {grain}")
+        series_metrics, grain = series
+        selections = [series_selection(m, grain, query) for m in series_metrics]
+        return QueryPlan(DATA, selection=selections[0], selections=selections, intent=4, source="series",
+                         series={"metric": series_metrics[0].key, "metrics": [m.key for m in series_metrics],
+                                 "grain": grain},
+                         notes=notes,
+                         reason="Series: " + ", ".join(m.label for m in series_metrics) + f" by {grain}")
 
     # Figures per organization (revenue, cash, receivables... or several of
     # them, or a statement): a fixed, org-filtered source per metric, and the

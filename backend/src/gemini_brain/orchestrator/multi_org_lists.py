@@ -22,7 +22,7 @@ def _p(expr: str) -> "re.Pattern[str]":
 _BILL = _p(r"\b(bills?|payables?|purchases?|purchase\s+invoices?|supplier\s+invoices?|vendor\s+invoices?)\b")
 _INVOICE = _p(r"\b(invoices?|receivables?|sales\s+invoices?)\b")
 
-_OPEN = _p(r"\b(unpaid|outstanding|open|pending|not\s+(?:yet\s+)?paid)\b|\bdue\b(?!\s+dates?)")
+_OPEN = _p(r"\b(unpaid|outstanding|open|pending|not\s+(?:yet\s+)?paid|owe[sd]?|owing)\b|\bdue\b(?!\s+dates?)")
 _OVERDUE = _p(r"\b(overdue|past\s+due|late)\b")
 _PAID = _p(r"\b(fully\s+)?paid\s+(invoices?|bills?)\b|\b(invoices?|bills?)\s+(that\s+(are|were)\s+)?paid\b")
 _CANCELLED = _p(r"\b(cancell?ed|voided)\b")
@@ -64,15 +64,41 @@ def _days(number: str, unit: str) -> int:
 _SUPPLIER_INVOICE = _p(r"\b(supplier|vendor|purchase)\s+invoices?\b")
 
 
+_VENDOR = _p(r"\b(vendors?|suppliers?|payees?)\b")
+_CUSTOMER = _p(r"\b(customers?|clients?|debtors?)\b")
+
+#: Contacts ranked or broken down by an amount: "top 5 vendors", "by customer".
+_GROUP_BY_CONTACT = _p(
+    r"\b(top|largest|biggest|highest|lowest|smallest)\s+\d*\s*(vendors?|suppliers?|customers?|clients?)\b"
+    r"|\b(by|per|each)\s+(vendor|supplier|customer|client)\b"
+    r"|\bwhich\s+(vendors?|suppliers?|customers?|clients?)\s+(owe|have|are|with)\b"
+)
+#: Words that make a contact question about documents (their amounts or state).
+_DOCUMENT_STATE = _p(r"\b(overdue|past\s+due|unpaid|outstanding|open|owe[sd]?|due|paid|invoices?|bills?|spend|spent)\b")
+
+
 def document_kind(question: str) -> Optional[str]:
-    """ "bill" or "invoice" when the question is about exactly one of them."""
+    """ "bill" or "invoice" when the question is about exactly one of them.
+
+    Vendors and suppliers are paid through bills, whatever word the question
+    uses: "top 5 vendors with their overdue invoices" is about bills. It used
+    to list customer invoices because of the word "invoices".
+    """
     q = question or ""
     if _SUPPLIER_INVOICE.search(q):
         return "bill"
+    vendor, customer = bool(_VENDOR.search(q)), bool(_CUSTOMER.search(q))
+    if vendor != customer and _DOCUMENT_STATE.search(q):
+        return "bill" if vendor else "invoice"
     bill, invoice = bool(_BILL.search(q)), bool(_INVOICE.search(q))
     if bill and invoice:
         return None
     return "bill" if bill else "invoice" if invoice else None
+
+
+def groups_by_contact(question: str) -> bool:
+    """Whether the question ranks vendors or customers rather than documents."""
+    return bool(_GROUP_BY_CONTACT.search(question or ""))
 
 
 def document_filters(question: str) -> Dict[str, Any]:
@@ -140,6 +166,10 @@ def document_list_selection(question: str) -> Optional[Dict[str, Any]]:
         return None
     params: Dict[str, Any] = {"kind": kind, **document_filters(question)}
     params.update(_window(question) or {})
+    if groups_by_contact(question):
+        params["group_by"] = "contact"
+        if params.get("order") in ("date_desc", "date_asc"):
+            params["order"] = "amount_desc"  # contacts are ranked by amount
     return {
         "endpoint": "rpt_document_list",
         "path_params": {},
@@ -168,6 +198,8 @@ def describe(params: Dict[str, Any]) -> str:
         parts.append(f"under {params['max_amount']:,.2f}")
     if params.get("start_date"):
         parts.append(f"from {params['start_date']} to {params['end_date']}")
+    if params.get("group_by") == "contact":
+        parts.append("totals per " + ("vendor" if params.get("kind") == "bill" else "customer"))
     order = {"amount_desc": "largest first", "amount_asc": "smallest first",
              "date_desc": "newest first", "date_asc": "oldest first"}.get(str(params.get("order") or ""), "")
     if order:

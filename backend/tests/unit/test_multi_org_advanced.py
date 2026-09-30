@@ -83,7 +83,8 @@ def test_planner_prefers_series_then_metrics_with_no_model_calls():
         series = plan_query("Revenue by month for each organization", 5, object(), 1)
         multi = plan_query("Compare revenue, expenses and cash this year", 5, object(), 1)
     fast.assert_not_called()
-    assert (series.source, series.series, series.llm_calls) == ("series", {"metric": "revenue", "grain": "month"}, 0)
+    assert (series.source, series.series, series.llm_calls) == (
+        "series", {"metric": "revenue", "metrics": ["revenue"], "grain": "month"}, 0)
     assert multi.metrics == ["revenue", "expenses", "cash_balance"] and multi.metric is None
     assert len(multi.all_selections()) == 3
 

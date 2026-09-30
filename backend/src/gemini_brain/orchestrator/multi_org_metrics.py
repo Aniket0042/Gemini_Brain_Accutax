@@ -380,13 +380,28 @@ _QUARTER_WORDS = _p(r"\bquarter(ly|s)?\b")
 
 def match_series(question: str) -> Optional[Tuple[Metric, str]]:
     """(metric, grain) for "revenue by month"-style questions, or None."""
+    found = match_series_metrics(question)
+    return (found[0][0], found[1]) if found else None
+
+
+#: A statement asked for over time: every figure of it that has a series.
+_PNL = _p(r"\bp\s*&\s*l\b|\bprofit\s+(?:and|&)\s+loss\b|\bincome\s+statements?\b")
+
+
+def match_series_metrics(question: str) -> Optional[Tuple[List[Metric], str]]:
+    """([metrics], grain) for figures over time, or None.
+
+    "P&L by month" is revenue, expenses and net profit per month; it used to
+    come back as net profit alone (the first figure the words matched).
+    """
     if not question or not _SERIES_WORDS.search(question) or is_concept_question(question):
         return None
     grain = "quarter" if _QUARTER_WORDS.search(question) and not re.search(r"\bmonth", question, re.I) else "month"
-    for metric in _raw_matches(_mask_unsupported(question)):
-        if metric.key in SERIES_METRICS:
-            return metric, grain
-    return None
+    masked = _mask_unsupported(question)
+    if _PNL.search(masked):
+        return [BY_KEY[k] for k in SERIES_METRICS], grain
+    metrics = [m for m in _raw_matches(masked) if m.key in SERIES_METRICS]
+    return (metrics, grain) if metrics else None
 
 
 def _window(question: str) -> Tuple[str, str]:
@@ -457,13 +472,21 @@ def metrics_selections(metrics: List[Metric], question: str) -> List[Dict[str, A
     return list(seen.values())
 
 
+_SERIES_BASE = {"revenue": "income", "expenses": "expenses", "net_profit": "profit"}
+
+
+def series_key(metric: Metric, grain: str) -> str:
+    """The payload key of one metric's series fetch."""
+    return f"rpt_metric_series:{_SERIES_BASE[metric.key]}:{grain}"
+
+
 def series_selection(metric: Metric, grain: str, question: str) -> Dict[str, Any]:
     """The per-period data for `metric` over the question's window."""
     start, end = _window(question)
-    base = {"revenue": "income", "expenses": "expenses", "net_profit": "profit"}[metric.key]
+    base = _SERIES_BASE[metric.key]
     return {
         "endpoint": "rpt_metric_series",
-        "key": f"rpt_metric_series:{base}:{grain}",
+        "key": series_key(metric, grain),
         "path_params": {},
         "query_params": {"start_date": start, "end_date": end, "base": base, "grain": grain},
         "reason": f"Series: {metric.key} by {grain}",
@@ -933,12 +956,18 @@ def build_series(
     per_org: List[Dict[str, Any]] = []
     missing: List[Dict[str, str]] = []
     period_order: List[str] = []
+    key = series_key(metric, grain)
     for run in runs:
         payload = None
         if run.answered:
             payloads = (run.result or {}).get("payloads") or {}
-            payload = next(iter(payloads.values()), None) if payloads else next(
-                (r for r in (run.result or {}).get("results") or [] if isinstance(r, dict) and "series" in r), None)
+            if key in payloads:
+                payload = payloads[key]  # one of several series fetched per org
+            elif len(payloads) == 1:
+                payload = next(iter(payloads.values()))
+            elif not payloads:
+                payload = next(
+                    (r for r in (run.result or {}).get("results") or [] if isinstance(r, dict) and "series" in r), None)
         points = (payload or {}).get("series") if isinstance(payload, dict) else None
         if not points:
             missing.append({"organization": run.name, "organization_id": run.org_id,
@@ -964,6 +993,17 @@ def build_series(
         "organizations": per_org,
         "missing": missing,
     }
+
+
+def build_series_set(
+    metrics: List[Metric],
+    grain: str,
+    runs: List[Any],
+    period: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Several figures over time ("P&L by month"): one series per figure."""
+    return {"kind": "series_set", "grain": grain, "period": period_label(period),
+            "items": [build_series(m, grain, runs, period) for m in metrics]}
 
 
 def series_block(series: Dict[str, Any]) -> Dict[str, Any]:
@@ -1166,6 +1206,8 @@ def limit_rows(comparison: Dict[str, Any], question: str) -> Dict[str, Any]:
         return comparison
     n, bottom = int(m.group(2)), m.group(1).lower() in ("bottom", "lowest", "worst", "smallest")
     kind = comparison.get("kind", "metric")
+    if kind == "series_set":
+        return {**comparison, "items": [limit_rows(item, question) for item in comparison["items"]]}
     if kind == "series":
         field_name, value = "organizations", (lambda r: r["total"])
         rankable = comparison.get("comparable")
@@ -1190,6 +1232,14 @@ def limit_rows(comparison: Dict[str, Any], question: str) -> Dict[str, Any]:
 def computed_answer(comparison: Dict[str, Any]) -> str:
     """The answer for a computed comparison, written entirely from its figures."""
     kind = comparison.get("kind", "metric")
+    if kind == "series_set":
+        items = comparison["items"]
+        compared = max((len(i["organizations"]) + len(i["missing"]) for i in items), default=0)
+        label = ", ".join(i["label"] for i in items) + f" by {comparison['grain']}"
+        parts = [_heading(label, comparison.get("period") or "", compared)]
+        for item in items:
+            parts.append(f"**{item['label']}**\n" + "\n".join(f"- {line}" for line in _series_answer(item)))
+        return "\n\n".join(parts)
     if kind == "series":
         compared = len(comparison["organizations"]) + len(comparison["missing"])
         label = f"{comparison['label']} by {comparison['grain']}"
@@ -1210,6 +1260,17 @@ def computed_answer(comparison: Dict[str, Any]) -> str:
 def computed_view(comparison: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], str, List[Dict[str, Any]]]:
     """(blocks, summary prompt, result rows) for any computed comparison."""
     kind = comparison.get("kind", "metric")
+    if kind == "series_set":
+        # A table and a line chart per figure, in statement order.
+        blocks: List[Dict[str, Any]] = []
+        prompts: List[str] = []
+        rows: List[Dict[str, Any]] = []
+        for item in comparison["items"]:
+            item_blocks, item_prompt, item_rows = computed_view(item)
+            blocks += item_blocks
+            prompts.append(item_prompt)
+            rows += [{"metric": item["metric"], **r} for r in item_rows]
+        return blocks, "\n\n".join(prompts), rows
     if kind == "series":
         blocks = [series_block(comparison)]
         chart = series_chart(comparison)

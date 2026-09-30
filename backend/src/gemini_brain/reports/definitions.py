@@ -1159,6 +1159,42 @@ def document_list(params: Dict[str, Any], org_id: int, db_name: str = "") -> Dic
             GROUP  BY d.id, d.{number}, c.name, c.organization_name, d.{date_col}, d.due_date, st.value, d.amount_paid
         ) docs
     """
+    if str(params.get("group_by") or "") == "contact":
+        # "Top 5 vendors with overdue bills": the matching documents summed per
+        # contact, largest first; the summary counts contacts, not documents.
+        grouped = query(
+            f"""SELECT {contact}, COUNT(*) AS documents, SUM(amount) AS amount
+                FROM ({per_doc}) t {amount_sql}
+                GROUP BY {contact} ORDER BY amount {'ASC' if order == 'amount_asc' else 'DESC'} LIMIT %s""",
+            (*args, *amount_args, limit),
+            org_id,
+            db_name,
+        )
+        totals = query(
+            f"""SELECT COUNT(DISTINCT {contact}) AS contact_count, COUNT(*) AS document_count,
+                       COALESCE(SUM(amount), 0) AS matched_amount
+                FROM ({per_doc}) t {amount_sql}""",
+            (*args, *amount_args),
+            org_id,
+            db_name,
+        )
+        agg = totals[0] if totals else {}
+        return {
+            "report": "Invoices by Customer" if kind == "invoice" else "Bills by Vendor",
+            "summary": {
+                "match_count": int(agg.get("contact_count") or 0),
+                "document_count": int(agg.get("document_count") or 0),
+                "matched_amount": round(float(agg.get("matched_amount") or 0), 2),
+                "listed": len(grouped),
+                "amount_key": basis,
+                "name_key": contact,
+                "order": "amount_asc" if order == "amount_asc" else "amount_desc",
+                "sorted": True,
+            },
+            f"{contact}s": [{contact: r.get(contact), "documents": int(r.get("documents") or 0),
+                             basis: round(float(r.get("amount") or 0), 2)} for r in grouped],
+        }
+
     rows = query(
         f"SELECT * FROM ({per_doc}) t {amount_sql} ORDER BY {order_by} LIMIT %s",
         (*args, *amount_args, limit),
