@@ -104,7 +104,7 @@ class FactSheet:
         So Cost of Goods' 30% share of revenue cannot back "Payroll was 30% of
         revenue", while "income declined 10% over the period" still can.
         """
-        text = f" {re.sub(r'[_\s]+', ' ', sentence.lower())} "
+        text = " " + re.sub(r"[_\s]+", " ", sentence.lower()) + " "
         if text in self._scopes:
             return self._scopes[text]  # None: names no subject; a set: the facts that may back it
         named = {sub for sub, aliases in self.aliases.items() if any(_mentioned(a, text) for a in aliases)}
