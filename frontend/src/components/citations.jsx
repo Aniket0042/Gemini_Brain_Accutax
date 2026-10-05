@@ -12,7 +12,6 @@ import { ExternalLink } from 'lucide-react';
  */
 
 export const CITE_PREFIX = '#fta-cite-';
-const REPEAT = '.r';
 
 /** The cited-source list of a response, or null when the answer has none. */
 export function citationSources(blocks) {
@@ -21,30 +20,26 @@ export function citationSources(blocks) {
   return block && Array.isArray(block.sources) && block.sources.length ? block.sources : null;
 }
 
-const MARKER = /\[(\d{1,2}(?:\s*,\s*\d{1,2})*)\](?!\()|【(\d{1,2})】/g;
+const MARKER = /([ \t]*)(?:\[(\d{1,2}(?:\s*,\s*\d{1,2})*)\](?!\()|【(\d{1,2})】)/g;
 
 /**
- * Replace citation markers with "[n](#fta-cite-n)" links. A source cited again later gets a
- * compact chip, and the same source repeated within one marker group ("[1][1]") is shown once.
- * Markers with no matching source stay as text.
+ * Replace citation markers with "[n](#fta-cite-n)" links. Each source gets one chip, at its
+ * first citation; later citations of the same source are dropped (with the space before
+ * them), so a step-by-step answer does not repeat the same chip on every line. The full list
+ * stays in the sources dropdown. Markers with no matching source stay as text.
  */
 export function linkCitations(text, sources) {
   if (!text || !sources) return text;
   const known = new Set(sources.map((s) => String(s.n)));
   const seen = new Set();
-  const linked = text.replace(MARKER, (whole, list, single) => {
+  return text.replace(MARKER, (whole, space, list, single) => {
     const numbers = (list || single).split(',').map((n) => n.trim());
     if (!numbers.every((n) => known.has(n))) return whole;
-    return numbers
-      .map((n) => {
-        const href = `${CITE_PREFIX}${n}${seen.has(n) ? REPEAT : ''}`;
-        seen.add(n);
-        return `[${n}](${href})`;
-      })
-      .join('');
+    const fresh = numbers.filter((n, i) => !seen.has(n) && numbers.indexOf(n) === i);
+    fresh.forEach((n) => seen.add(n));
+    if (!fresh.length) return '';
+    return space + fresh.map((n) => `[${n}](${CITE_PREFIX}${n})`).join('');
   });
-  // "[1](#fta-cite-1)[1](#fta-cite-1.r)" -> keep the first
-  return linked.replace(/(\[(\d{1,2})\]\(#fta-cite-\2(?:\.r)?\))(?:\[\2\]\(#fta-cite-\2\.r\))+/g, '$1');
 }
 
 function shortTitle(title, max = 30) {
@@ -64,9 +59,9 @@ const CARD_HEIGHT = 240;
 
 /**
  * One citation chip: a link to the FTA document (new tab). The summary card shows on hover and on
- * keyboard focus. `compact` draws only the number, for a source already cited earlier in the answer.
+ * keyboard focus.
  */
-export function CitationChip({ source, compact = false }) {
+export function CitationChip({ source }) {
   const [place, setPlace] = React.useState('');
   const ref = React.useRef(null);
   const cardId = `fta-cite-card-${React.useId()}`;
@@ -84,7 +79,7 @@ export function CitationChip({ source, compact = false }) {
   return (
     <span ref={ref} className={`fta-cite ${place}`} onMouseEnter={position} onFocus={position}>
       <a
-        className={`fta-cite-chip${compact ? ' is-compact' : ''}`}
+        className="fta-cite-chip"
         href={source.url}
         target="_blank"
         rel="noopener noreferrer"
@@ -93,7 +88,7 @@ export function CitationChip({ source, compact = false }) {
         onKeyDown={(e) => { if (e.key === 'Escape') e.currentTarget.blur(); }}
       >
         <span className="fta-cite-n">{source.n}</span>
-        {!compact && <span className="fta-cite-label">{shortTitle(source.title)}</span>}
+        <span className="fta-cite-label">{shortTitle(source.title)}</span>
       </a>
       <span className="fta-cite-card" role="tooltip" id={cardId}>
         <span className="fta-cite-card-title">{source.title}</span>
@@ -116,9 +111,8 @@ export function citationLinkRenderer(sources) {
   return function CitationAwareLink({ node, href, children, ...props }) {
     if (href && href.startsWith(CITE_PREFIX)) {
       const ref = href.slice(CITE_PREFIX.length);
-      const compact = ref.endsWith(REPEAT);
-      const source = byNumber.get(compact ? ref.slice(0, -REPEAT.length) : ref);
-      if (source) return <CitationChip source={source} compact={compact} />;
+      const source = byNumber.get(ref);
+      if (source) return <CitationChip source={source} />;
       return <>{children}</>;
     }
     return <a href={href} {...props}>{children}</a>;
