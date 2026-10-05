@@ -20,7 +20,8 @@ export function citationSources(blocks) {
   return block && Array.isArray(block.sources) && block.sources.length ? block.sources : null;
 }
 
-const MARKER = /([ \t]*)(?:\[(\d{1,2}(?:\s*,\s*\d{1,2})*)\](?!\()|【(\d{1,2})】)/g;
+// [1], [2][3], [1, 2], 【1】 and gpt-oss's "【3†L1-L4】" (source 3, lines 1-4)
+const MARKER = /([ \t]*)(?:\[(\d{1,2}(?:\s*,\s*\d{1,2})*)\](?!\()|[【[](\d{1,2})(?:†[^】\]\n]*)?[】\]])/g;
 
 /**
  * Replace citation markers with "[n](#fta-cite-n)" links. Each source gets one chip, at its

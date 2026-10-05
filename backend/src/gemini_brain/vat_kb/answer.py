@@ -211,13 +211,16 @@ _APP_SENTENCE = re.compile(r"(?<=[.!?:])[ \t]*[^.!?\n]*\bAccutax\b[^.!?\n]*[.!?]
                            re.I | re.M)
 _CALC_CITE = re.compile(r"\s*\[CALCULATIONS?\]", re.I)   # the model now and then cites the calculations
 _LABELLED = re.compile(r"^(\*\*|[-*+] |\d+[.)] |#)")   # "**What to do:** ...", list items, headings
+# gpt-oss cites in its own trained style, "【3†L1-L4】" (source 3, lines 1-4): turn it into "[3]".
+_OAI_CITE = re.compile(r"[【\[](\d{1,2})†[^】\]\n]*[】\]]|【(\d{1,2})】")
 
 
 def tidy_answer(answer: str) -> str:
     """Drop a lead-in first paragraph ("Let me explain ...", "Based on ..., here are ...:") and an uncited
     closing remark ("This is a major change ..."). The prompt asks for neither, but the model still adds
     them now and then; neither carries a fact (neither has a citation)."""
-    answer = _SELF_INTRO.sub("", _CALC_CITE.sub("", answer or ""))
+    answer = _OAI_CITE.sub(lambda m: f"[{m.group(1) or m.group(2)}]", answer or "")
+    answer = _SELF_INTRO.sub("", _CALC_CITE.sub("", answer))
     answer = _APP_SENTENCE.sub("", answer)
     paras = [p for p in re.split(r"\n\s*\n", answer.strip()) if p.strip()]
     if len(paras) > 1 and "\n" not in paras[0].strip() and _LEAD_IN.match(paras[0].strip()) \

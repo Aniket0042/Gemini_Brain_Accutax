@@ -511,3 +511,11 @@ def test_vat_law_question_is_not_rewritten_in_a_multi_org_thread(monkeypatch):
     assert needs_rewrite("and for exports?") and needs_rewrite("What about free zones?")
     monkeypatch.setattr(settings, "vat_kb_enabled", False)
     assert needs_rewrite("How do I value a deemed supply of services?")      # switch off: as before
+
+
+def test_tidy_answer_turns_gpt_oss_citations_into_source_numbers():
+    from gemini_brain.vat_kb.answer import tidy_answer
+    # gpt-oss writes "【3†L1-L4】" (source 3, lines 1-4); the chips need "[3]"
+    out = tidy_answer("Not claimable [3].\n\n- Residential only 【3†L1-L4】.\n- Within 12 months 【3†L5-L7】【1】.")
+    assert "†" not in out and "【" not in out
+    assert "Residential only [3]." in out and "Within 12 months [3][1]." in out
