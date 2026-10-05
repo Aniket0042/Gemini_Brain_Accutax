@@ -251,6 +251,32 @@ class GeminiBrainSettings(BaseSettings):
         ),
     )
 
+    # ── UAE VAT knowledge base (docs/product/VAT_KNOWLEDGE_BASE_PLAN.md) ──
+    vat_kb_enabled: bool = Field(
+        default=False,
+        description="Answer UAE VAT law questions from the FTA document knowledge base, with cited sources.",
+    )
+    vat_kb_shadow: bool = Field(
+        default=False,
+        description=(
+            "Detect and search VAT law questions in the background and log what would be used, "
+            "without changing any answer. Ignored when vat_kb_enabled is on."
+        ),
+    )
+    vat_kb_dir: str = Field(
+        default="",
+        description="Knowledge-base directory (documents.csv, pdfs/, builds/, CURRENT). Empty = feature unavailable.",
+    )
+    vat_kb_model_id: str = Field(
+        default="",
+        description="Bedrock model for VAT law answers. Empty = BEDROCK_MODEL_ID (the primary Sonnet model).",
+    )
+    vat_kb_timeout_seconds: float = Field(
+        default=3.0,
+        ge=0.1,
+        description="Longest the knowledge-base search may take before the answer falls back to the normal path.",
+    )
+
     model_config = {
         # Anchored to the repository root rather than the process working
         # directory. A relative ".env" silently falls back to the defaults

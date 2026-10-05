@@ -53,6 +53,8 @@ from gemini_brain.classification.intent_classifier import classify_intent
 from gemini_brain.tools.formatters import render_blocks
 from gemini_brain.tools.registry import tool_spec_for_endpoint
 
+from gemini_brain.vat_kb.augment import answers_without_org_data as vat_kb_answers_without_org_data
+
 logger = logging.getLogger("gemini_brain.orchestrator.multi_org_plan")
 
 #: Plan kinds.
@@ -172,6 +174,10 @@ def plan_query(query: str, primary_org: int, runner: Any, user_id: int) -> Optio
         return QueryPlan(DIRECT, source="conversation_meta")
     if _how_to_guide_section(query) is not None:
         return QueryPlan(DIRECT, source="how_to_guide")
+    # A UAE VAT law question ("What changed in UAE VAT from 2026?") is answered once from the VAT
+    # knowledge base, not as a per-organization VAT figure. Off unless settings.vat_kb_enabled.
+    if vat_kb_answers_without_org_data(query):
+        return QueryPlan(DIRECT, source="vat_kb", reason="UAE VAT law question (VAT knowledge base)")
 
     # Matching across organizations that no report does ("paid by more than
     # one entity in the same week"): say so, list or not.

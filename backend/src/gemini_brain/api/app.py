@@ -111,6 +111,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Artifact TTL sweeper failed to start: %s", e)
 
+    # UAE VAT knowledge base: load the build and embedding model in the background so the
+    # first VAT question is not slowed by it. Does nothing unless VAT_KB_ENABLED / VAT_KB_SHADOW.
+    try:
+        from gemini_brain.vat_kb.augment import warm_up_in_background
+        warm_up_in_background()
+    except Exception as e:
+        logger.warning("VAT knowledge base warm-up skipped: %s", e)
+
     yield
     try:
         from gemini_brain.artifacts.store import stop_sweeper

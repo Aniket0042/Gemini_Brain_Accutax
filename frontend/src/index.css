@@ -2107,3 +2107,213 @@ body.is-canvas-resizing .live-chart {
 
 /* Model picker's "Dev" badge (e.g. the All Models entry) — reuses .pp-tag's
    layout, just needs no special styling beyond what that class already has. */
+
+/* ==========================================================================
+   UAE VAT knowledge base — inline citation chips and the FTA sources bar
+   (components/citations.jsx, components/blocks/FtaSourcesBlock.jsx)
+   ========================================================================== */
+.fta-cite {
+  position: relative;
+  display: inline-block;
+  vertical-align: baseline;
+  margin: 0 2px;
+  line-height: 1;
+}
+.fta-cite-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 260px;
+  padding: 2px 8px 2px 3px;
+  border: 1px solid rgba(var(--accent-rgb), 0.25);
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1.4;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.fta-cite-chip:hover { border-color: var(--accent); text-decoration: none; }
+/* A source already cited earlier in the answer: number only. */
+.fta-cite-chip.is-compact { gap: 0; padding: 2px 3px; }
+.fta-cite-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.fta-cite-n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.fta-cite-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.fta-cite-card {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 8px);
+  left: 0;
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  padding: 12px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  line-height: 1.5;
+  text-align: left;
+  white-space: normal;
+}
+/* Invisible bridge over the gap, so moving the pointer from chip to card keeps it open. */
+.fta-cite-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -9px;
+  height: 9px;
+}
+.fta-cite.is-right .fta-cite-card { left: auto; right: 0; }
+.fta-cite.is-up .fta-cite-card { top: auto; bottom: calc(100% + 8px); }
+.fta-cite.is-up .fta-cite-card::before { top: auto; bottom: -9px; }
+.fta-cite:hover .fta-cite-card,
+.fta-cite:focus-within .fta-cite-card { display: flex; }
+
+.fta-cite-card-title { font-weight: 600; color: var(--ink); }
+.fta-cite-card-meta {
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.fta-cite-card-excerpt {
+  color: var(--ink-soft);
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.fta-cite-card-link,
+.fta-source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  color: var(--accent-ink);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-decoration: none;
+}
+.fta-cite-card-link:hover,
+.fta-source-link:hover { text-decoration: underline; }
+
+.fta-sources {
+  border-top: 1px solid var(--border-soft);
+  padding-top: 10px;
+}
+.fta-sources-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.fta-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--ink-soft);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.fta-badge-official {
+  border-color: rgba(var(--success-rgb), 0.35);
+  background: var(--success-soft);
+  color: var(--success-ink);
+}
+.fta-sources-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.fta-sources-toggle:hover { color: var(--ink); border-color: var(--border-strong); }
+.fta-sources-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.fta-sources-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.fta-source-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.fta-source-head {
+  display: flex;
+  gap: 6px;
+  font-size: var(--text-ui);
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.4;
+}
+.fta-source-n { color: var(--accent-ink); font-variant-numeric: tabular-nums; }
+.fta-source-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+}
+.fta-source-excerpt {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+.fta-source-title { color: inherit; text-decoration: none; }
+.fta-source-title:hover { color: var(--accent-ink); text-decoration: underline; }

@@ -45,6 +45,7 @@ from gemini_brain.orchestrator.multi_org_present import (
 )
 from gemini_brain.policy.verifier import unverified_note, verify_answer, verify_attributed
 from gemini_brain.resilience import new_request_id, normalize_envelope, notice_for
+from gemini_brain.vat_kb.augment import stands_alone as vat_kb_stands_alone
 
 logger = logging.getLogger("gemini_brain.orchestrator.multi_org")
 
@@ -114,6 +115,8 @@ def needs_rewrite(query: str) -> bool:
     different phrasing can take a different path. Questions that lean on the
     earlier turns ("and Q2?", "same for payables") are rewritten.
     """
+    if vat_kb_stands_alone(query):
+        return False
     if _FOLLOW_UP.search(query or ""):
         return True
     from gemini_brain.orchestrator.multi_org_metrics import (

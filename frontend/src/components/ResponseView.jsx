@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { NoticeCard } from './NoticeCard';
 import { AnswerProvenance } from './AnswerProvenance';
 import { BlockRenderer, hasPortedBlocks, chatFacingBlocks } from './blocks/BlockRenderer';
+import { citationSources, linkCitations, citationLinkRenderer } from './citations';
 import { ReportActions } from './blocks/ReportActions';
 import { CodeChrome } from './blocks/CodeBlock';
 import { SqlTraceCard } from './SqlTraceCard';
@@ -86,7 +87,7 @@ const customMarkdownComponents = {
  * PacedMarkdownStream — Streams text smoothly word-by-word at natural reading speed
  * with an active glowing cursor at the leading edge.
  */
-const PacedMarkdownStream = ({ text, isStreaming }) => {
+const PacedMarkdownStream = ({ text, isStreaming, sources }) => {
   // Messages loaded from saved history (or any already-finished answer) arrive
   // with isStreaming false/undefined from the start — those should render as
   // static text immediately, not replay the live-typing animation meant only
@@ -153,11 +154,17 @@ const PacedMarkdownStream = ({ text, isStreaming }) => {
   const displayLength = isStreaming ? Math.min(revealedLength, fullLength) : fullLength;
   const isStillPacing = isStreaming && displayLength < fullLength;
   const currentSlice = text ? text.slice(0, displayLength) : '';
+  // Citation chips only on the finished answer: the source list arrives with it.
+  const cite = !isStillPacing && sources;
+  const components = useMemo(
+    () => (sources ? { ...customMarkdownComponents, a: citationLinkRenderer(sources) } : customMarkdownComponents),
+    [sources],
+  );
 
   return (
     <div className="markdown-body" style={styles.markdownWrapper}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={customMarkdownComponents}>
-        {currentSlice}
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={cite ? components : customMarkdownComponents}>
+        {cite ? linkCitations(currentSlice, sources) : currentSlice}
       </ReactMarkdown>
       {isStillPacing && <span className="streaming-cursor" />}
     </div>
@@ -191,6 +198,7 @@ const AssistantResponseCard = ({
   // as before — this is additive, not a behaviour change for those.
   const blocks = responseData?.blocks;
   const showBlocks = !isStreaming && hasPortedBlocks(blocks);
+  const sources = isStreaming ? null : citationSources(blocks);
   const isSecurityError = Boolean(!notice && (responseData?.error || (responseData?.answer && responseData.answer.startsWith('Error:'))));
   const isError = Boolean(msg.isError || isSecurityError || responseData?.status === 'failed');
 
@@ -255,7 +263,7 @@ const AssistantResponseCard = ({
               </div>
             </div>
           ) : content ? (
-            <PacedMarkdownStream text={content} isStreaming={isStreaming} />
+            <PacedMarkdownStream text={content} isStreaming={isStreaming} sources={sources} />
           ) : null}
 
           {showBlocks ? (
@@ -415,6 +423,11 @@ const ModelAnswerCard = ({ response }) => {
   const content = (response?.answer || '').trim();
   const blocks = response?.blocks;
   const showBlocks = hasPortedBlocks(blocks);
+  const sources = citationSources(blocks);
+  const answerComponents = useMemo(
+    () => (sources ? { ...customMarkdownComponents, a: citationLinkRenderer(sources) } : customMarkdownComponents),
+    [sources],
+  );
   const tableMarkdown = response?.table_markdown;
   const isError = Boolean(response?.error || response?.status === 'failed');
   const modelLabel = response?.policy?.model_label || response?.policy?.model || 'Model';
@@ -452,8 +465,8 @@ const ModelAnswerCard = ({ response }) => {
 
       {content ? (
         <div className="markdown-body" style={styles.markdownWrapper}>
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={customMarkdownComponents}>
-            {content}
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={answerComponents}>
+            {linkCitations(content, sources)}
           </ReactMarkdown>
         </div>
       ) : (

@@ -71,6 +71,9 @@ from gemini_brain.memory.state_extractor import (
 from gemini_brain.observability import METRICS, QueryTrace
 from gemini_brain.pii.redactor import redact_pii
 from gemini_brain.reasoning.bedrock_client import BedrockAdapter
+from gemini_brain.vat_kb.answer import tidy_answer as vat_kb_tidy
+from gemini_brain.vat_kb.augment import augment as vat_kb_augment
+from gemini_brain.vat_kb.augment import reroute as vat_kb_reroute
 from gemini_brain.reasoning.claude_reasoner import (
     reason_over_data,
     reason_over_data_stream,
@@ -436,7 +439,9 @@ class GeminiBrainRunner:
         u_text = user_message if user_message is not None else user_text
         chat_messages = messages or [{"role": "user", "content": [{"text": u_text}]}]
 
-        adapter = BedrockAdapter(model_id=HAIKU45_ID, label="Claude Haiku 4.5")
+        # model_id/model_label are passed only for VAT knowledge-base answers (vat_kb.augment).
+        adapter = BedrockAdapter(model_id=kwargs.get("model_id") or HAIKU45_ID,
+                                 label=kwargs.get("model_label") or "Claude Haiku 4.5")
         try:
             if tools:
                 resp = adapter.converse_with_tools(
@@ -1506,11 +1511,19 @@ class GeminiBrainRunner:
 
         result["policy"] = policy.to_public()
         self._explain_empty(result, organization_id)
+        if any(isinstance(b, dict) and b.get("type") == "fta_sources" for b in (result.get("blocks") or [])):
+            result["answer"] = vat_kb_tidy(result.get("answer") or "")
 
         if policy.effort.verify_grounding:
+            evidence: Any = result.get("results") or []
+            # A VAT knowledge-base answer quotes figures from the cited FTA passages, not data rows.
+            vat_numbers = [n for b in (result.get("blocks") or []) if isinstance(b, dict)
+                           and b.get("type") == "fta_sources" for n in (b.get("evidence_numbers") or [])]
+            if vat_numbers:
+                evidence = [evidence, vat_numbers]
             report = verify_answer(
                 result.get("answer") or "",
-                result.get("results") or [],
+                evidence,
                 enforce=settings.verify_enforce,
             )
             result["verification"] = report.to_public()
@@ -1743,6 +1756,12 @@ class GeminiBrainRunner:
                 reason = routing.get("reason", "")
                 type_lbl = self._type_label(qtype)
                 logger.info("GeminiBrain type=%d (%s) - %s", qtype, type_lbl, reason)
+                # A UAE VAT law question the classifier sent to a data path (it has amounts)
+                # goes to the knowledge base instead. Off unless settings.vat_kb_enabled.
+                vat_type = vat_kb_reroute(query, qtype, router_source)
+                if vat_type is not None:
+                    reason = f"UAE VAT law question (VAT knowledge base); classifier said type {qtype}: {reason}"
+                    qtype, type_lbl = vat_type, self._type_label(vat_type)
 
         # 2a. LEFT PATH: Gemini direct
         # Type 7 (Summary & Advice) is normally LEFT (no data), but when the
@@ -1753,6 +1772,7 @@ class GeminiBrainRunner:
         # model refusing or bluffing without data.
         if qtype in LEFT_PATH_TYPES and not (qtype == 7 and sel is not None):
             guide_coverage = None
+            vat = None
             try:
                 system = append_memory_block(DIRECT_ANSWER_SYSTEM_PROMPT, session_state)
                 guide_query = _effective_guide_query(query, session_state)
@@ -1778,7 +1798,12 @@ class GeminiBrainRunner:
                                 for msg in chat["messages"]:
                                     system += f"{msg['role'].capitalize()}: {msg['content']}\n"
 
-                with trace.stage("gemini_direct", model=selected_model_key or "Claude Haiku 4.5"):
+                # UAE VAT law questions get FTA sources (off unless settings.vat_kb_enabled).
+                vat = vat_kb_augment(query, qtype, system)
+                system = vat.system
+                answer_model_label = selected_model_key or (vat.model_label if vat.model_id else None) or "Claude Haiku 4.5"
+
+                with trace.stage("gemini_direct", model=answer_model_label):
                     if (
                         selected_model_key
                         and selected_model_key != "gemini_brain"
@@ -1795,8 +1820,12 @@ class GeminiBrainRunner:
                         tu = selected_adapter.get_token_usage()
                         ai, ao = tu.get("input_tokens", 0), tu.get("output_tokens", 0)
                     else:
+                        model_override = (
+                            {"model_id": vat.model_id, "model_label": vat.model_label} if vat.model_id else {}
+                        )
                         answer, ai, ao = self._call_llm(
-                            system, query, max_tokens=1500, messages=answer_messages, purpose="direct_answer"
+                            system, query, max_tokens=vat.max_tokens, messages=answer_messages, purpose="direct_answer",
+                            **model_override,
                         )
                         if not answer:
                             logger.info("Bedrock direct answer returned empty, retrying with a fresh adapter...")
@@ -1841,6 +1870,8 @@ class GeminiBrainRunner:
                 return err_res
 
             guide_block = _guide_link_block(guide_coverage)
+            if vat is not None and vat.model_id:
+                guide_block = None   # a VAT law answer from FTA sources: no "Open in Accutax" app-guide button
 
             elapsed = round(time.time() - t0, 2)
             trace_events = []
@@ -1862,11 +1893,13 @@ class GeminiBrainRunner:
                 },
                 {
                     "step": "gemini_answer",
-                    "model": selected_model_key or "Claude Haiku 4.5",
+                    "model": selected_model_key or (vat.model_label if vat is not None and vat.model_id else None) or "Claude Haiku 4.5",
                     "tokens_in": ai,
                     "tokens_out": ao,
                 },
             ])
+            if vat is not None and vat.trace_event:
+                trace_events.append(vat.trace_event)
             if session_id:
                 with trace.stage("memory_write"):
                     self._persist_conversation(
@@ -1889,7 +1922,7 @@ class GeminiBrainRunner:
                 "notice": None,
                 "data_source": None,
                 "table_markdown": None,
-                "blocks": [guide_block] if guide_block else [],
+                "blocks": ([guide_block] if guide_block else []) + (vat.blocks if vat is not None else []),
                 "request_id": new_request_id(),
                 "pii_redacted": is_redacted,
                 "pii_redactions": redaction_counts,
@@ -2336,6 +2369,12 @@ class GeminiBrainRunner:
                 reason = routing.get("reason", "")
                 type_lbl = self._type_label(qtype)
                 logger.info("GeminiBrain type=%d (%s) — %s", qtype, type_lbl, reason)
+                # A UAE VAT law question the classifier sent to a data path (it has amounts)
+                # goes to the knowledge base instead. Off unless settings.vat_kb_enabled.
+                vat_type = vat_kb_reroute(query, qtype, router_source)
+                if vat_type is not None:
+                    reason = f"UAE VAT law question (VAT knowledge base); classifier said type {qtype}: {reason}"
+                    qtype, type_lbl = vat_type, self._type_label(vat_type)
 
         # 2a. LEFT PATH: Gemini direct
         # Type 7 (Summary & Advice) is normally LEFT (no data), but when the
@@ -2347,6 +2386,7 @@ class GeminiBrainRunner:
         if qtype in LEFT_PATH_TYPES and not (qtype == 7 and sel is not None):
             yield {"status": "Generating response", "type": "generation"}
             guide_coverage = None
+            vat = None
             try:
                 system = append_memory_block(DIRECT_ANSWER_SYSTEM_PROMPT, session_state)
                 guide_query = _effective_guide_query(query, session_state)
@@ -2372,7 +2412,12 @@ class GeminiBrainRunner:
                                 for msg in chat["messages"]:
                                     system += f"{msg['role'].capitalize()}: {msg['content']}\n"
 
-                with trace.stage("gemini_direct", model=selected_model_key or "Claude Haiku 4.5"):
+                # UAE VAT law questions get FTA sources (off unless settings.vat_kb_enabled).
+                vat = vat_kb_augment(query, qtype, system)
+                system = vat.system
+                answer_model_label = selected_model_key or (vat.model_label if vat.model_id else None) or "Claude Haiku 4.5"
+
+                with trace.stage("gemini_direct", model=answer_model_label):
                     if (
                         selected_model_key
                         and selected_model_key != "gemini_brain"
@@ -2390,13 +2435,16 @@ class GeminiBrainRunner:
                         ai, ao = tu.get("input_tokens", 0), tu.get("output_tokens", 0)
                     else:
                         try:
-                            adapter = BedrockAdapter(model_id=HAIKU45_ID, label="Claude Haiku 4.5")
+                            adapter = BedrockAdapter(
+                                model_id=vat.model_id or HAIKU45_ID,
+                                label=vat.model_label if vat.model_id else "Claude Haiku 4.5",
+                            )
                             chunks = []
                             for token in adapter.converse_stream(
                                 system_prompt=system,
                                 messages=answer_messages,
                                 temperature=0.0,
-                                max_tokens=1500,
+                                max_tokens=vat.max_tokens,
                                 purpose="direct_answer",
                             ):
                                 chunks.append(token)
@@ -2437,6 +2485,8 @@ class GeminiBrainRunner:
                     return
 
             guide_block = _guide_link_block(guide_coverage)
+            if vat is not None and vat.model_id:
+                guide_block = None   # a VAT law answer from FTA sources: no "Open in Accutax" app-guide button
 
             yield {"status": "Finalizing response", "type": "finalization"}
             elapsed = round(time.time() - t0, 2)
@@ -2450,13 +2500,15 @@ class GeminiBrainRunner:
                 },
                 {
                     "step": "gemini_answer",
-                    "model": selected_model_key or "Claude Haiku 4.5",
+                    "model": selected_model_key or (vat.model_label if vat is not None and vat.model_id else None) or "Claude Haiku 4.5",
                     "tokens_in": ai,
                     "tokens_out": ao,
                 },
             ]
             if guide_coverage is not None:
                 trace_events.append({"step": "app_guide_coverage", **guide_coverage})
+            if vat is not None and vat.trace_event:
+                trace_events.append(vat.trace_event)
             if session_id:
                 with trace.stage("memory_write"):
                     self._persist_conversation(
@@ -2476,7 +2528,7 @@ class GeminiBrainRunner:
                     "sql": None,
                     "results": [],
                     "error": None,
-                    "blocks": [guide_block] if guide_block else [],
+                    "blocks": ([guide_block] if guide_block else []) + (vat.blocks if vat is not None else []),
                     "token_usage": {
                         "input_tokens": gi,
                         "output_tokens": go,

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import threading
 import time
 from typing import Any, Dict, Generator, List, Optional, Union
@@ -26,6 +27,15 @@ from gemini_brain.config.pricing import bedrock_price_for_model
 from gemini_brain.config.settings import settings
 
 logger = logging.getLogger("gemini_brain.reasoning.bedrock_client")
+
+# Newer Claude models on Bedrock reject `temperature` ("temperature is deprecated for this model").
+_NO_TEMPERATURE = re.compile(r"claude-(sonnet|opus|haiku)-[5-9]|claude-fable", re.I)
+
+
+def _inference_config(model_id: str, max_tokens: int, temperature: float) -> Dict[str, Any]:
+    if _NO_TEMPERATURE.search(model_id or ""):
+        return {"maxTokens": max_tokens}
+    return {"maxTokens": max_tokens, "temperature": temperature}
 
 # ── Singleton boto3 Bedrock client ───────────────────────────────────────────
 _client_lock = threading.Lock()
@@ -187,7 +197,7 @@ class BedrockAdapter:
                 modelId=self.model_id,
                 system=system,
                 messages=messages,
-                inferenceConfig={"maxTokens": max_tokens, "temperature": temperature},
+                inferenceConfig=_inference_config(self.model_id, max_tokens, temperature),
             )
             if any(self.model_id.startswith(p) for p in CROSS_REGION_PREFIXES):
                 kwargs["toolConfig"] = PASS_THROUGH_TOOL_CONFIG
@@ -244,7 +254,7 @@ class BedrockAdapter:
             modelId=self.model_id,
             system=system,
             messages=messages,
-            inferenceConfig={"maxTokens": max_tokens, "temperature": temperature},
+            inferenceConfig=_inference_config(self.model_id, max_tokens, temperature),
         )
         if any(self.model_id.startswith(p) for p in CROSS_REGION_PREFIXES):
             kwargs["toolConfig"] = PASS_THROUGH_TOOL_CONFIG
@@ -301,7 +311,7 @@ class BedrockAdapter:
                 modelId=self.model_id,
                 system=system,
                 messages=messages,
-                inferenceConfig={"maxTokens": max_tokens, "temperature": temperature},
+                inferenceConfig=_inference_config(self.model_id, max_tokens, temperature),
             )
             if tools:
                 kwargs["toolConfig"] = {"tools": tools}
@@ -450,7 +460,7 @@ def converse(
             modelId=_model,
             system=[{"text": system_prompt}],
             messages=messages,
-            inferenceConfig={"maxTokens": max_tokens, "temperature": temperature},
+            inferenceConfig=_inference_config(_model, max_tokens, temperature),
         )
         if any(_model.startswith(p) for p in CROSS_REGION_PREFIXES):
             kwargs["toolConfig"] = PASS_THROUGH_TOOL_CONFIG
@@ -487,7 +497,7 @@ def converse_tools(
             modelId=_model,
             system=[{"text": system_prompt}],
             messages=messages,
-            inferenceConfig={"maxTokens": max_tokens, "temperature": temperature},
+            inferenceConfig=_inference_config(_model, max_tokens, temperature),
         )
         if tools:
             kwargs["toolConfig"] = {"tools": tools}
