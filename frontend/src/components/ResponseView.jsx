@@ -291,7 +291,11 @@ const AssistantResponseCard = ({
             <ReportActions blocks={blocks} onOpenCanvas={onOpenCanvas} token={token} />
           )}
 
-          {!content && !notice && !tableMarkdown && !showBlocks && (
+          {msg.stopped ? (
+            <div style={styles.emptyNotice}>
+              <span>Stopped thinking</span>
+            </div>
+          ) : !content && !notice && !tableMarkdown && !showBlocks && (
             <div style={styles.emptyNotice}>
               <span>No response generated. Please try again.</span>
             </div>

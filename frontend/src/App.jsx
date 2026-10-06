@@ -252,6 +252,9 @@ export default function App() {
   // Execution & Streaming State
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(true);
+  // AbortController of the query in flight, so the composer's Stop button
+  // can cancel it. Null when nothing is running.
+  const queryControllerRef = useRef(null);
   const [responseData, setResponseData] = useState(null);
   const [streamLogs, setStreamLogs] = useState([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -1105,6 +1108,11 @@ export default function App() {
       }
     }
 
+    // A query left running (e.g. after switching chats) would otherwise keep
+    // writing its chunks into this new turn.
+    queryControllerRef.current?.abort();
+    queryControllerRef.current = null;
+
     setIsLoading(true);
     setResponseData(null);
     setStreamLogs([]);
@@ -1192,11 +1200,22 @@ export default function App() {
 
     const token = currentUser?.access_token || '';
 
+    // Only the request that still owns queryControllerRef may clear loading —
+    // a stopped request's late finally must not touch a newer one.
+    const releaseQuery = (controller) => {
+      if (queryControllerRef.current !== controller) return;
+      queryControllerRef.current = null;
+      setIsLoading(false);
+    };
+
     if (payload.model === 'all') {
       // Dev comparison option: one request to /query/all, no streaming —
       // wait for every model, then render every answer at once.
+      const controller = new AbortController();
+      queryControllerRef.current = controller;
       try {
-        const res = await fetchAllModelsResponse(payload, token);
+        const res = await fetchAllModelsResponse(payload, token, controller.signal);
+        if (controller.signal.aborted) return;
         setConversation((prev) => {
           const updated = [...prev];
           const lastIdx = updated.length - 1;
@@ -1211,6 +1230,7 @@ export default function App() {
           return updated;
         });
       } catch (err) {
+        if (controller.signal.aborted) return;
         const errorRes = {
           answer: `Error: ${err.message}`,
           error: err.message,
@@ -1231,16 +1251,17 @@ export default function App() {
           return updated;
         });
       } finally {
-        setIsLoading(false);
+        releaseQuery(controller);
       }
       return;
     }
 
     if (isStreaming) {
       // Live Server-Sent Events (SSE) Streaming
-      streamQueryResponse(
+      const controller = streamQueryResponse(
         payload,
         (chunk) => {
+          if (controller.signal.aborted) return;
           if (chunk.type === 'data_table' || chunk.table) {
             const tableMarkdown = chunk.table || '';
             setConversation((prev) => {
@@ -1357,9 +1378,10 @@ export default function App() {
             return updated;
           });
           setResponseData(errorRes);
-          setIsLoading(false);
+          releaseQuery(controller);
         },
         () => {
+          if (controller.signal.aborted) return;
           setConversation((prev) => {
             const updated = [...prev];
             const lastIdx = updated.length - 1;
@@ -1372,15 +1394,19 @@ export default function App() {
             updateActiveHistoryEntry(updated, updated[lastIdx]?.streamingText || updated[lastIdx]?.responseData?.answer);
             return updated;
           });
-          setIsLoading(false);
+          releaseQuery(controller);
         },
         token
       );
+      queryControllerRef.current = controller;
     }
  else {
       // Synchronous API Call
+      const controller = new AbortController();
+      queryControllerRef.current = controller;
       try {
-        const res = await fetchQueryResponse(payload, token);
+        const res = await fetchQueryResponse(payload, token, controller.signal);
+        if (controller.signal.aborted) return;
         setConversation((prev) => {
           const updated = [...prev];
           const lastIdx = updated.length - 1;
@@ -1396,6 +1422,7 @@ export default function App() {
         });
         setResponseData(res);
       } catch (err) {
+        if (controller.signal.aborted) return;
         const errorRes = {
           answer: `Error: ${err.message}`,
           error: err.message,
@@ -1417,9 +1444,32 @@ export default function App() {
         });
         setResponseData(errorRes);
       } finally {
-        setIsLoading(false);
+        releaseQuery(controller);
       }
     }
+  };
+
+  // Stop button: cancel the query in flight and keep whatever text has
+  // streamed in so far, marked as stopped.
+  const handleStopQuery = () => {
+    const controller = queryControllerRef.current;
+    if (!controller) return;
+    queryControllerRef.current = null;
+    controller.abort();
+    setConversation((prev) => {
+      const updated = [...prev];
+      const lastIdx = updated.length - 1;
+      if (lastIdx >= 0 && updated[lastIdx].role === 'assistant' && updated[lastIdx].isStreaming) {
+        updated[lastIdx] = {
+          ...updated[lastIdx],
+          isStreaming: false,
+          stopped: true,
+        };
+        updateActiveHistoryEntry(updated, updated[lastIdx].streamingText || 'Response stopped');
+      }
+      return updated;
+    });
+    setIsLoading(false);
   };
 
   // Every saved chat stays listed: those for the current org selection first,
@@ -1554,6 +1604,7 @@ export default function App() {
         <div style={styles.inputInnerWrapper}>
           <QueryInput
             onSubmitQuery={handleSubmitQuery}
+            onStop={handleStopQuery}
             isLoading={isLoading}
             isStreaming={isStreaming}
             setIsStreaming={setIsStreaming}

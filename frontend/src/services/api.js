@@ -21,7 +21,7 @@ export const loginUser = async (email, password) => {
   return await response.json();
 };
 
-export const fetchQueryResponse = async (payload, token = '') => {
+export const fetchQueryResponse = async (payload, token = '', signal = undefined) => {
   const headers = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -34,6 +34,7 @@ export const fetchQueryResponse = async (payload, token = '') => {
     method: 'POST',
     headers,
     body: JSON.stringify(payload),
+    signal,
   });
 
   const responseData = await response.json().catch(() => null);
@@ -54,7 +55,7 @@ export const fetchQueryResponse = async (payload, token = '') => {
  * { responses: [...] }, one QueryResponse-shaped entry per model. No
  * streaming variant — waits for every model before returning.
  */
-export const fetchAllModelsResponse = async (payload, token = '') => {
+export const fetchAllModelsResponse = async (payload, token = '', signal = undefined) => {
   const headers = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -67,6 +68,7 @@ export const fetchAllModelsResponse = async (payload, token = '') => {
     method: 'POST',
     headers,
     body: JSON.stringify(payload),
+    signal,
   });
 
   const responseData = await response.json().catch(() => null);

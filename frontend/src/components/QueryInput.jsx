@@ -1,5 +1,5 @@
 import React, { useState, useRef, useLayoutEffect } from 'react';
-import { ArrowUp, Sparkles, Paperclip } from 'lucide-react';
+import { ArrowUp, Square, Paperclip } from 'lucide-react';
 import { ModelMenu } from './PolicyPicker';
 
 /**
@@ -18,6 +18,7 @@ import { ModelMenu } from './PolicyPicker';
  */
 export const QueryInput = ({
   onSubmitQuery,
+  onStop = () => {},
   isLoading,
   variant = 'compact',
   catalog = null,
@@ -147,25 +148,34 @@ export const QueryInput = ({
               onModelChange={onModelChange}
             />
             <span style={styles.divider} />
-            <button
-              type="submit"
-              style={{
-                ...styles.sendCircle,
-                backgroundColor: hasText ? 'var(--accent)' : 'var(--surface-2)',
-                color: hasText ? '#ffffff' : 'var(--ink-faint)',
-                cursor: hasText && !isLoading ? 'pointer' : 'default',
-                boxShadow: hasText ? '0 2px 8px var(--accent-glow)' : 'none',
-                opacity: hasText || isLoading ? 1 : 0.6,
-              }}
-              disabled={isLoading || !hasText}
-              title={hasText ? 'Send Message (Enter)' : 'Enter your question'}
-            >
-              {isLoading ? (
-                <Sparkles size={16} color="#ffffff" className="pulse-animation" />
-              ) : (
+            {isLoading ? (
+              // While a query runs, the send button becomes Stop.
+              <button
+                type="button"
+                style={{ ...styles.sendCircle, ...styles.stopCircle }}
+                onClick={onStop}
+                title="Stop Answering"
+                aria-label="Stop Answering"
+              >
+                <Square size={11} fill="currentColor" strokeWidth={0} />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                style={{
+                  ...styles.sendCircle,
+                  backgroundColor: hasText ? 'var(--accent)' : 'var(--surface-2)',
+                  color: hasText ? '#ffffff' : 'var(--ink-faint)',
+                  cursor: hasText ? 'pointer' : 'default',
+                  boxShadow: hasText ? '0 2px 8px var(--accent-glow)' : 'none',
+                  opacity: hasText ? 1 : 0.6,
+                }}
+                disabled={!hasText}
+                title={hasText ? 'Send Message (Enter)' : 'Enter your question'}
+              >
                 <ArrowUp size={16} strokeWidth={2.5} color={hasText ? '#ffffff' : 'var(--ink-faint)'} />
-              )}
-            </button>
+              </button>
+            )}
           </div>
         </div>
       </form>
@@ -277,5 +287,10 @@ const styles = {
     justifyContent: 'center',
     transition: 'background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease)',
     flexShrink: 0,
+  },
+  stopCircle: {
+    backgroundColor: 'var(--ink)',
+    color: 'var(--surface)',
+    cursor: 'pointer',
   },
 };
