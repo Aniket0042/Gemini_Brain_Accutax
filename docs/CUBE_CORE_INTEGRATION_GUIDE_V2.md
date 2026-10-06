@@ -4,7 +4,7 @@ Date: 6 October 2026
 Supersedes: the v1 guide (deleted 7 Oct 2026; its defects and their fixes are listed in section 1.2)
 Related: [`ai-architecture-review-2026-10.md`](./ai-architecture-review-2026-10.md)
 Audience: the engineers building the semantic layer, the DBA, and finance (section 4 only).
-Status: **Phase 1 in progress** (7 Oct 2026). Step 1 is done (section 5.1). The model, security config, client, tool, shadow hook and tests are written (section 16). Step 2 (database role) is done. Cube has not run yet: Step 3 (deploy on the VM) waits on an explicit go-ahead. Finance sign-off (section 1.3) is still needed before Cube answers users.
+Status: **Phase 1 deployed in shadow mode** (7 Oct 2026). Steps 1–3 are done (sections 5.1, 16). The model, security config, client, tool, shadow hook and tests are written (section 16). Cube runs on the VM and is compared against the SQL path on real questions; users still get the SQL answers. Finance sign-off (section 1.3) is still needed before Cube answers users.
 
 The code was written against the Accutax entity definitions, Gemini Brain's own SQL reports, and the Cube docs for v1.7.50. Each cube's SQL and measures have been run read-only against the live database for the test orgs (`scripts/eval/cube_model_check.py`). Cube's own compilation of the model is verified at the Step 3 smoke tests.
 
@@ -346,7 +346,13 @@ The VM runs rootless Podman under a dedicated `cube` user, as Quadlet units that
 cd /opt/accutax-ai && git pull && cp semantic/cube.env.example semantic/cube.env && chmod 600 semantic/cube.env
 ```
 
-Fill in `semantic/cube.env`, then install and start:
+Fill in `semantic/cube.env`. On a first install, run the script without `--start`, then pull the images as `cube` (about 1.3 GB), so the first start does not hit the unit's 300 s start timeout:
+
+```bash
+sudo -u cube XDG_RUNTIME_DIR=/run/user/$(id -u cube) podman pull docker.io/cubejs/cube:v1.7.50 docker.io/cubejs/cubestore:v1.7.50
+```
+
+Then install and start:
 
 ```bash
 bash /opt/accutax-ai/semantic/deploy/install_rootless.sh --start
@@ -363,7 +369,7 @@ curl -s -o /dev/null -w '%{http_code}
 ' http://127.0.0.1:4000/cubejs-api/v1/meta
 ```
 
-The second must print `403`: no token, no answer. From another machine, `curl -m 5 http://106.51.80.81:4000/readyz` must fail to connect. Do not add a `/cubejs-api` location to nginx. Then, with `CUBE_API_SECRET` set in `/opt/accutax-ai/.env`, run the isolation suite (11.2) and the reconciliation (11.3) on the VM before setting `METRICS_BACKEND=shadow`.
+The second must print `403`: no token, no answer. From another machine, `curl -m 5 http://106.51.80.81:4000/readyz` must fail to connect. Do not add a `/cubejs-api` location to nginx. Then, with `CUBE_API_SECRET` set in `/opt/accutax-ai/.env`, run the isolation suite (11.2) and the reconciliation (11.3) on the VM before setting `METRICS_BACKEND=shadow`. The production venv has no pytest; install it outside the venv for the run (`/opt/accutax-ai/venv/bin/pip install --target /tmp/pytest_pkgs pytest`, then `PYTHONPATH=/tmp/pytest_pkgs`) and delete it afterwards.
 
 ---
 
@@ -700,13 +706,14 @@ These came up while checking v1 against the code. They are not Cube tasks; they 
 |---|---|
 | 1. Verify the data | Done (5.1) |
 | 2. DBA prerequisites | Done 7 Oct 2026: `cube_reader` created as `postgres` per [`cube_reader.sql`](../semantic/dba/cube_reader.sql) and verified (UTC time zone, read-only, 20 s timeout, reads the granted tables only, cannot create or write). Credentials and a generated API secret are in the git-ignored `semantic/cube.env` on the dev machine |
-| 3. Deploy Cube | Files ready (7.1, 7.5). Waiting on a go-ahead to install on the VM; copy `semantic/cube.env` there |
+| 3. Deploy Cube | Done 7 Oct 2026 on 106.51.80.81: rootless Podman (user `cube`, Quadlet units, starts on boot), images v1.7.50, `cube-api` healthy on 127.0.0.1:4000, `/v1/meta` refuses requests without a token (403), port 4000 unreachable from outside. `CUBE_API_SECRET` added to `/opt/accutax-ai/.env` (backup: `.env.bak-pre-cube-20261007`) |
 | 4. Data model | Built; SQL checked read-only against the test orgs; Cube compilation checked at deploy |
 | 5. Python client | Built and unit-tested |
 | 6. `query_metrics` tool | Built and unit-tested; the agent loop is Phase 2 |
-| 7. Tests | Unit tests pass (11.1). The isolation suite and reconciliation run on the VM after deploy |
-| Shadow mode | Built; turn on with `METRICS_BACKEND=shadow` once 11.2 and 11.3 pass |
+| 7. Tests | Unit tests pass (11.1). On the VM: isolation suite **17/17** (11.2); reconciliation **0 differences** against `/report/profit-loss-with-accounts` across 12 windows × orgs 24–33 × 4 figures, and every org's balance sheet balances (11.3); demo-01 → orgs 24, 25 in 0.12 s and demo-02 → orgs 26, 28–33 in 0.36 s through Cube |
+| Shadow mode | **On** since 7 Oct 2026 (`METRICS_BACKEND=shadow`, `accutax-ai-api` restarted). Users still get SQL answers; comparisons go to `backend/logs/metrics_shadow.jsonl` on the VM. Review after a week of real questions (12.2) |
 | Finance sign-off | Open: section 4, D1, and the ACCEPTED/RECEIVED question (4.1) |
+| Cold-start latency | Open: on a cold database cache a P&L query exceeded Cube's 20 s limit three times (once locally, twice on the VM); warm, the same query takes 0.2–0.3 s. Proposed fix for the DBA, before Cube answers users: `CREATE INDEX CONCURRENTLY idx_journal_entries_org_date_posted ON journal_entries (organization_id, transaction_date) WHERE is_posted;` (today the planner ANDs a 3.2 million-entry date-index scan into every query). Rollups in Phase 3 remove the rest |
 
 ---
 
