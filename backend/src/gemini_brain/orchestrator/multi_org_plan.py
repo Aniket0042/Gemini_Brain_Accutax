@@ -287,7 +287,7 @@ def plan_query(query: str, primary_org: int, runner: Any, user_id: int) -> Optio
 
 def _retrieve_with_retry(runner: Any, selection: Dict[str, Any], org_id: int, db_name: str, auth_token: str):
     retrieved = runner._retrieve(dict(selection), org_id, db_name, QueryTrace(org_id=org_id), auth_token=auth_token)
-    if retrieved.outcome is Outcome.UNAVAILABLE and retrieved.reason != "not_org_scoped":
+    if retrieved.outcome is Outcome.UNAVAILABLE and retrieved.reason not in ("not_org_scoped", "org_ignored"):
         # One retry for a timeout or a busy backend: the fallback is a full
         # pipeline run with several model calls, far costlier than a retry.
         time.sleep(RETRY_DELAY_SECONDS)

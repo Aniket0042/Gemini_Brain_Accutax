@@ -21,16 +21,39 @@ GEMINI_MODEL: str = "gemini-3.5-flash"
 # Bedrock / Claude model identifiers
 # ─────────────────────────────────────────────────────────────
 HAIKU3_ID: str = "anthropic.claude-3-haiku-20240307-v1:0"
-HAIKU45_ID: str = "anthropic.claude-3-haiku-20240307-v1:0"
+# India-region inference profiles keep requests in-region. Commit d018596 pointed
+# HAIKU45_ID at Claude 3 Haiku to get past an InvalidSignatureException on the VM;
+# its clock is NTP-synced now, and both IDs below were verified from the VM on
+# 2026-10-07 (the global. profiles work too).
+HAIKU45_ID: str = "in.anthropic.claude-haiku-4-5-20251001-v1:0"
+SONNET5_ID: str = "in.anthropic.claude-sonnet-5"
+#: Legacy; no longer selected anywhere. Kept so old traces still price and label correctly.
 SONNET35_ID: str = "apac.anthropic.claude-3-5-sonnet-20241022-v2:0"
+
+#: Display labels by model-ID substring, most specific first. Labels come from
+#: the ID actually called, so the UI can never claim a model that is not running.
+MODEL_LABELS: tuple[tuple[str, str], ...] = (
+    ("claude-sonnet-5-5", "Claude Sonnet 5.5"),
+    ("claude-sonnet-5", "Claude Sonnet 5"),
+    ("claude-haiku-4-5", "Claude Haiku 4.5"),
+    ("claude-3-5-sonnet", "Claude Sonnet 3.5"),
+    ("claude-3-haiku", "Claude Haiku 3"),
+)
+
+
+def model_label(model_id: str) -> str:
+    """Human label for a Bedrock model ID; the ID itself when unknown."""
+    mid = (model_id or "").lower()
+    return next((label for key, label in MODEL_LABELS if key in mid), model_id)
+
 
 # ─────────────────────────────────────────────────────────────
 # Complexity → model mapping
 # ─────────────────────────────────────────────────────────────
 COMPLEXITY_MODEL_MAP: dict[str, tuple[str, str]] = {
-    "SIMPLE":  (HAIKU3_ID,   "Claude 3 Haiku"),
-    "MEDIUM":  (HAIKU3_ID,   "Claude 3 Haiku"),
-    "COMPLEX": (SONNET35_ID, "Claude 3.5 Sonnet"),
+    "SIMPLE":  (HAIKU45_ID, model_label(HAIKU45_ID)),
+    "MEDIUM":  (HAIKU45_ID, model_label(HAIKU45_ID)),
+    "COMPLEX": (SONNET5_ID, model_label(SONNET5_ID)),
 }
 
 # ─────────────────────────────────────────────────────────────

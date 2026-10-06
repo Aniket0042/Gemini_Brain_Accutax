@@ -588,7 +588,7 @@ def health_check() -> HealthResponse:
     tags=["Health & Diagnostics"],
     summary="Check All AI Models & Services Health",
     description=(
-        "Pings Google Gemini 2.5 Flash, AWS Bedrock Claude 3.5 Sonnet, AWS Bedrock Claude 3 Haiku, "
+        "Pings Google Gemini 2.5 Flash, the two configured AWS Bedrock Claude models, "
         "Accutax REST API, and PostgreSQL DB. Measures latency and returns diagnostic status & sample responses."
     ),
 )
@@ -821,6 +821,7 @@ def stream_query(
         start_sql_trace(trace_id=rid)
         start_api_trace(trace_id=rid)
         start_llm_trace(trace_id=rid)
+        chunks = None
         try:
             if len(orgs) > 1:
                 chunks = run_multi_org_stream(
@@ -885,6 +886,15 @@ def stream_query(
             yield f"data: {json.dumps({'type': 'error', 'notice': err_notice})}\n\n"
             yield f"data: {json.dumps({'final_result': err_env})}\n\n"
         finally:
+            # Stop or a dropped connection closes this generator; close the
+            # pipeline's too, so its cleanup (cancelling queued per-org work)
+            # runs now rather than whenever it is garbage-collected.
+            close = getattr(chunks, "close", None)
+            if close is not None:
+                try:
+                    close()
+                except Exception as e:
+                    logger.debug("stream pipeline close failed: %s", e)
             clear_sql_trace(trace_id=rid)
             clear_api_trace(trace_id=rid)
             clear_llm_trace(trace_id=rid)

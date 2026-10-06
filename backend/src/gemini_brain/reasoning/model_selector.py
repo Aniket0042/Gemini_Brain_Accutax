@@ -1,7 +1,7 @@
 """
 model_selector.py — Pure function model selection replacing LLM complexity judge.
 
-Phase 1 optimization: Selects the appropriate Bedrock reasoning model (Haiku 4.5 vs Sonnet 3.5)
+Phase 1 optimization: Selects the appropriate Bedrock reasoning model (Haiku 4.5 vs Sonnet 5)
 deterministically based on intent type and payload token size, eliminating a full LLM call (~1.2s).
 """
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from typing import Any, Tuple
 
-from gemini_brain.config.constants import HAIKU45_ID, SONNET35_ID
+from gemini_brain.config.constants import HAIKU45_ID, SONNET5_ID, model_label
 from gemini_brain.config.settings import settings
 
 
@@ -39,11 +39,11 @@ def pick_model(intent: int, payload_or_tokens: Any = 0) -> Tuple[str, str]:
     else:
         tokens = 0
 
-    sonnet_id = getattr(settings, "bedrock_model_id", SONNET35_ID) or SONNET35_ID
+    sonnet_id = getattr(settings, "bedrock_model_id", SONNET5_ID) or SONNET5_ID
     haiku_id = getattr(settings, "bedrock_model_id_fast", HAIKU45_ID) or HAIKU45_ID
 
     # Route multi-period forecasts (5) and strategic summary/advice (7) or large payloads to Sonnet;
     # everything else routes to ultra-fast Haiku.
     if intent in (5, 7) or tokens > 1200:
-        return sonnet_id, "Claude Sonnet 3.5"
-    return haiku_id, "Claude Haiku 4.5"
+        return sonnet_id, model_label(sonnet_id)
+    return haiku_id, model_label(haiku_id)

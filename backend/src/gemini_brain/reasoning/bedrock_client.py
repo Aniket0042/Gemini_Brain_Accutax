@@ -16,6 +16,7 @@ import time
 from typing import Any, Dict, Generator, List, Optional, Union
 
 import boto3
+from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from gemini_brain.config.constants import (
@@ -49,7 +50,17 @@ def get_bedrock_client(region: str = "") -> Any:
     if _bedrock_client is None:
         with _client_lock:
             if _bedrock_client is None:
-                _bedrock_client = boto3.client("bedrock-runtime", region_name=r)
+                # boto3's defaults (60 s read timeout, up to 5 legacy-mode attempts)
+                # let one stuck call hold a request for minutes.
+                _bedrock_client = boto3.client(
+                    "bedrock-runtime",
+                    region_name=r,
+                    config=Config(
+                        connect_timeout=settings.bedrock_connect_timeout_seconds,
+                        read_timeout=settings.bedrock_read_timeout_seconds,
+                        retries={"max_attempts": settings.bedrock_max_attempts, "mode": "standard"},
+                    ),
+                )
     return _bedrock_client
 
 

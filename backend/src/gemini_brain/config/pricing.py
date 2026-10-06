@@ -24,6 +24,10 @@ GEMINI_OUTPUT_PRICE: float = 0.60  # $ per million output tokens
 # Keys are model-ID substrings matched against the full model ID.
 # ─────────────────────────────────────────────────────────────
 BEDROCK_MODEL_PRICING: dict[str, dict[str, float]] = {
+    # Anthropic list prices, checked 2026-10-07 (claude.com/pricing). Bedrock
+    # regional (in./apac.) profiles can carry a small premium over these.
+    "claude-haiku-4-5":  {"input": 1.00, "output":  5.00},
+    "claude-sonnet-5":   {"input": 2.00, "output": 10.00},  # also matches claude-sonnet-5-5 (same price)
     "claude-3-5-sonnet": {"input": 3.00, "output": 15.00},
     "claude-3-7-sonnet": {"input": 3.00, "output": 15.00},
     "claude-3-haiku":    {"input": 0.25, "output":  1.25},
@@ -77,12 +81,9 @@ def gemini_brain_cost(
     # Gemini cost (Flash pricing)
     gc = (gemini_input / 1e6) * GEMINI_INPUT_PRICE + (gemini_output / 1e6) * GEMINI_OUTPUT_PRICE
 
-    # Bedrock cost — branching on model substring (original behaviour preserved)
-    if "haiku-20240307" in bedrock_model_id:
-        bc = (bedrock_input / 1e6) * 0.25 + (bedrock_output / 1e6) * 1.25
-    elif "haiku-4-5" in bedrock_model_id:
-        bc = (bedrock_input / 1e6) * 0.80 + (bedrock_output / 1e6) * 4.00
-    else:
-        bc = (bedrock_input / 1e6) * 3.00 + (bedrock_output / 1e6) * 15.00
+    # Bedrock cost from the same table as everything else, so a model change
+    # cannot leave the cost shown on an answer at another model's rates.
+    rates = bedrock_price_for_model(bedrock_model_id)
+    bc = (bedrock_input / 1e6) * rates["input"] + (bedrock_output / 1e6) * rates["output"]
 
     return round(gc + bc, 6)

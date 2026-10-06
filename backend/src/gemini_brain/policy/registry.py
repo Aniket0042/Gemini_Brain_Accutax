@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from gemini_brain.config.constants import HAIKU3_ID, HAIKU45_ID, SONNET35_ID
+from gemini_brain.config.constants import HAIKU3_ID, HAIKU45_ID, SONNET5_ID
 from gemini_brain.config.pricing import GEMINI_INPUT_PRICE, GEMINI_OUTPUT_PRICE
 from gemini_brain.config.settings import settings
 
@@ -70,21 +70,21 @@ MODEL_REGISTRY: Dict[str, ModelSpec] = {
         primary=True,
         description="Best for lookups, lists and straightforward reports.",
         model_id=HAIKU45_ID,
-        cost_in_per_mtok=0.80,
-        cost_out_per_mtok=4.00,
+        cost_in_per_mtok=1.00,
+        cost_out_per_mtok=5.00,
         latency_class="fast",
         efforts=["quick", "standard", "thorough"],
     ),
-    "sonnet-3.5": ModelSpec(
-        key="sonnet-3.5",
-        label="Claude Sonnet 3.5",
+    "sonnet-5": ModelSpec(
+        key="sonnet-5",
+        label="Claude Sonnet 5",
         primary=True,
         description="Multi-period analysis, forecasting and strategic summaries.",
-        model_id=SONNET35_ID,
+        model_id=SONNET5_ID,
         max_output=8_192,
         supports_thinking=True,
-        cost_in_per_mtok=3.00,
-        cost_out_per_mtok=15.00,
+        cost_in_per_mtok=2.00,
+        cost_out_per_mtok=10.00,
         latency_class="slow",
         efforts=["standard", "thorough", "exhaustive"],
     ),
@@ -93,6 +93,7 @@ MODEL_REGISTRY: Dict[str, ModelSpec] = {
         label="Claude Haiku 3",
         description="Lowest cost. Simple single-figure lookups only.",
         model_id=HAIKU3_ID,
+        deprecated=True,
         context_window=200_000,
         max_output=4_096,
         cost_in_per_mtok=0.25,
@@ -172,10 +173,15 @@ def build_adapter(spec: ModelSpec) -> Any:
     return BedrockAdapter(model_id=spec.model_id, label=spec.label)
 
 
+#: Keys that were renamed; saved preferences and old clients keep working.
+_ALIASES = {"sonnet-3.5": "sonnet-5"}
+
+
 def resolve_model(key: Optional[str]) -> ModelSpec:
     """Resolve a model key to its spec, falling back to the default."""
     if not key or key in (AUTO_KEY, "gemini_brain"):
         return MODEL_REGISTRY[_DEFAULT_KEY]
+    key = _ALIASES.get(key, key)
     return MODEL_REGISTRY.get(key, MODEL_REGISTRY[_DEFAULT_KEY])
 
 

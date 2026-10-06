@@ -20,6 +20,7 @@ import logging
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError as FuturesTimeout
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Generator, List, Optional
 
@@ -354,29 +355,46 @@ def run_multi_org_stream(
 
     yield {"status": f"Querying {len(org_ids)} organizations", "type": "multi_org"}
 
+    from gemini_brain.config.settings import settings
+
+    budget = settings.multi_org_fetch_deadline_seconds
     # Bounded: ten simultaneous report calls overload the Accutax backend and
     # time out, which pushes orgs onto the slow full-pipeline fallback.
-    with ThreadPoolExecutor(max_workers=min(len(org_ids), MAX_PARALLEL_ORGS), thread_name_prefix="multi-org") as pool:
+    pool = ThreadPoolExecutor(max_workers=min(len(org_ids), MAX_PARALLEL_ORGS), thread_name_prefix="multi-org")
+    try:
         # Each task gets its own copy of the request context, so the auth token
         # and trace ids set by the route reach every worker thread.
         futures = {
             pool.submit(contextvars.copy_context().run, _run_one, oid): oid
             for oid in org_ids
         }
-        for future in as_completed(futures):
-            oid = futures[future]
-            run = runs[oid]
-            try:
-                run.result = future.result()
-            except Exception as e:
-                # The message stays in the log; the user sees only the org name.
-                logger.warning("multi_org: organization %s failed: %s", oid, e)
-                run.error = type(e).__name__
-            yield {
-                "status": f"{run.name}: {'done' if run.answered else 'no result'}",
-                "type": "multi_org",
-                "organization_id": oid,
-            }
+        try:
+            for future in as_completed(futures, timeout=max(1.0, t0 + budget - time.time())):
+                oid = futures[future]
+                run = runs[oid]
+                try:
+                    run.result = future.result()
+                except Exception as e:
+                    # The message stays in the log; the user sees only the org name.
+                    logger.warning("multi_org: organization %s failed: %s", oid, e)
+                    run.error = type(e).__name__
+                yield {
+                    "status": f"{run.name}: {'done' if run.answered else 'no result'}",
+                    "type": "multi_org",
+                    "organization_id": oid,
+                }
+        except FuturesTimeout:
+            late = [runs[oid] for f, oid in futures.items() if not f.done()]
+            for run in late:
+                run.error = "TimeoutError"
+            logger.warning("multi_org: stopped waiting after %.0fs for orgs %s", budget, [r.org_id for r in late])
+            scope_notes.append(f"Not answered within {budget:.0f} seconds: {', '.join(r.name for r in late)}.")
+            yield {"status": f"Stopped waiting for {len(late)} organization(s)", "type": "multi_org"}
+    finally:
+        # On a deadline, Stop or a dropped connection (the route closes this
+        # generator), queued organizations are cancelled instead of awaited.
+        # Ones already running finish in the background; nothing reads them.
+        pool.shutdown(wait=False, cancel_futures=True)
 
     ordered = [runs[oid] for oid in org_ids]
     comparison = _computed_comparison(plan, ordered, question)
@@ -414,9 +432,12 @@ def _shadow_metrics(plan: Any, runs: List["OrgRun"], question: str, user_id: int
 
 
 def _computed_comparison(plan: Any, runs: List["OrgRun"], question: str) -> Optional[Dict[str, Any]]:
-    """The comparison computed in code, cut to the question's top/bottom N; None when no plan computes one."""
+    """The comparison computed in code, filtered on the question's conditions ("margin above 20%")
+    and cut to its top/bottom N; None when no plan computes one."""
+    from gemini_brain.orchestrator.multi_org_conditions import apply_conditions
+
     comparison = _build_comparison(plan, runs, question)
-    return limit_rows(comparison, question) if comparison is not None else None
+    return limit_rows(apply_conditions(comparison, question), question) if comparison is not None else None
 
 
 def _build_comparison(plan: Any, runs: List["OrgRun"], question: str) -> Optional[Dict[str, Any]]:

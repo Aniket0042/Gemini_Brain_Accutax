@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 import requests
 import psycopg2
 
-from gemini_brain.config.constants import GEMINI_MODEL
+from gemini_brain.config.constants import GEMINI_MODEL, model_label
 from gemini_brain.config.settings import settings
 from gemini_brain.reasoning.bedrock_client import BedrockAdapter
 
@@ -172,8 +172,9 @@ def check_all_models_and_services(test_prompt: str = "Respond with 'OK'") -> Dic
     # 1. AI Models Diagnostics
     models_status = [
         check_gemini_model(test_prompt),
-        check_bedrock_model(settings.bedrock_model_id, "AWS Bedrock Claude 3.5 Sonnet", test_prompt),
-        check_bedrock_model(settings.bedrock_model_id_fast, "AWS Bedrock Claude 3 Haiku", test_prompt),
+        check_bedrock_model(settings.bedrock_model_id, f"AWS Bedrock {model_label(settings.bedrock_model_id)}", test_prompt),
+        check_bedrock_model(settings.bedrock_model_id_fast, f"AWS Bedrock {model_label(settings.bedrock_model_id_fast)}",
+                            test_prompt),
     ]
 
     # 2. Services Diagnostics

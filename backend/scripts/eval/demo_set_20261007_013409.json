@@ -1,0 +1,1439 @@
+{
+  "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+  ],
+  "passed": 30,
+  "total": 30,
+  "cases": [
+    {
+      "id": "d01_margin_above_20",
+      "question": "Which of the organizations have profit margin above 20%?",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "metric",
+          "want": "metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 79,
+          "want": "<= 220"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 2.4,
+          "want": "<= 15"
+        },
+        "metric": {
+          "ok": true,
+          "got": "profit_margin",
+          "want": "profit_margin"
+        },
+        "figures": {
+          "ok": true,
+          "mismatches": [],
+          "checked": true
+        },
+        "condition": {
+          "ok": true,
+          "got": [
+            24,
+            25,
+            26,
+            27,
+            28,
+            30,
+            31,
+            32,
+            33
+          ],
+          "want": [
+            24,
+            25,
+            26,
+            27,
+            28,
+            30,
+            31,
+            32,
+            33
+          ]
+        }
+      },
+      "elapsed_seconds": 2.4,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 79,
+      "answer": "**Profit margin**, 1 Jan 2026 \u2013 7 Oct 2026 \u00b7 9 of 10 organizations with profit margin above 20%\n\n- Highest: Agriculture & Forestry_User1_Org1, 100.00%.\n- Lowest: Construction & Real Estate_User1_Org2, 44.23%.\n- Gap between the highest and the second (Professional & Consulting Services_User1_Org4): 10.25 percentage points.\n- Gap between the highest and the lowest: 55.77 percentage points.\n- Organizations without a figure (for a margin: no revenue in the period) cannot meet the condition and are listed separately."
+    },
+    {
+      "id": "d02_negative_profit",
+      "question": "List all the organizations which are making negative profit",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "metric",
+          "want": "metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 42,
+          "want": "<= 220"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.3,
+          "want": "<= 15"
+        },
+        "metric": {
+          "ok": true,
+          "got": "net_profit",
+          "want": "net_profit"
+        },
+        "figures": {
+          "ok": true,
+          "mismatches": [],
+          "checked": true
+        },
+        "condition": {
+          "ok": true,
+          "got": [
+            29
+          ],
+          "want": [
+            29
+          ]
+        }
+      },
+      "elapsed_seconds": 0.3,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 42,
+      "answer": "**Net profit**, 1 Jan 2026 \u2013 7 Oct 2026 \u00b7 1 of 10 organizations with net profit below zero\n\n- Highest: Professional & Consulting Services_User1_Org6, -39,760.00 AED.\n- Negative for 1 of 1: Professional & Consulting Services_User1_Org6.\n- Combined total: 25,944,099.00 AED."
+    },
+    {
+      "id": "d03_loss_making",
+      "question": "Which organizations are loss-making this year?",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "metric",
+          "want": "metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 42,
+          "want": "<= 220"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.1,
+          "want": "<= 30"
+        },
+        "metric": {
+          "ok": true,
+          "got": "net_profit",
+          "want": "net_profit"
+        },
+        "figures": {
+          "ok": true,
+          "mismatches": [],
+          "checked": true
+        },
+        "condition": {
+          "ok": true,
+          "got": [
+            29
+          ],
+          "want": [
+            29
+          ]
+        }
+      },
+      "elapsed_seconds": 0.1,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 42,
+      "answer": "**Net profit**, 1 Jan 2026 \u2013 7 Oct 2026 \u00b7 1 of 10 organizations with net profit below zero\n\n- Highest: Professional & Consulting Services_User1_Org6, -39,760.00 AED.\n- Negative for 1 of 1: Professional & Consulting Services_User1_Org6.\n- Combined total: 25,944,099.00 AED."
+    },
+    {
+      "id": "d04_profitable",
+      "question": "Which organizations are profitable this year?",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "metric",
+          "want": "metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 62,
+          "want": "<= 220"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.0,
+          "want": "<= 30"
+        },
+        "metric": {
+          "ok": true,
+          "got": "net_profit",
+          "want": "net_profit"
+        },
+        "figures": {
+          "ok": true,
+          "mismatches": [],
+          "checked": true
+        },
+        "condition": {
+          "ok": true,
+          "got": [
+            24,
+            25,
+            26,
+            27,
+            28,
+            30,
+            31,
+            32,
+            33
+          ],
+          "want": [
+            24,
+            25,
+            26,
+            27,
+            28,
+            30,
+            31,
+            32,
+            33
+          ]
+        }
+      },
+      "elapsed_seconds": 0.0,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 62,
+      "answer": "**Net profit**, 1 Jan 2026 \u2013 7 Oct 2026 \u00b7 9 of 10 organizations with net profit above zero\n\n- Highest: Professional & Consulting Services_User1_Org4, 11,247,951.00 AED.\n- Lowest: Technology & Software_User1_Org9, 562,821.00 AED.\n- Gap between the highest and the second (Agriculture & Forestry_User1_Org1): 6,752,516.00 AED.\n- Gap between the highest and the lowest: 10,685,130.00 AED.\n- Combined total: 25,944,099.00 AED."
+    },
+    {
+      "id": "d05_revenue_above_2m",
+      "question": "Which organizations have revenue above 2 million this year?",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "metric",
+          "want": "metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 74,
+          "want": "<= 220"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.4,
+          "want": "<= 30"
+        },
+        "metric": {
+          "ok": true,
+          "got": "revenue",
+          "want": "revenue"
+        },
+        "figures": {
+          "ok": true,
+          "mismatches": [],
+          "checked": true
+        },
+        "condition": {
+          "ok": true,
+          "got": [
+            24,
+            25,
+            27,
+            28,
+            33
+          ],
+          "want": [
+            24,
+            25,
+            27,
+            28,
+            33
+          ]
+        }
+      },
+      "elapsed_seconds": 0.4,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 74,
+      "answer": "**Total revenue**, 1 Jan 2026 \u2013 7 Oct 2026 \u00b7 5 of 10 organizations with total revenue above 2,000,000\n\n- Highest: Professional & Consulting Services_User1_Org4, 12,532,259.00 AED.\n- Professional & Consulting Services_User1_Org4 holds 36.1% of the combined total.\n- Lowest: Agriculture & Forestry_User1_Org10, 2,275,451.00 AED.\n- Gap between the highest and the second (Construction & Real Estate_User1_Org2): 7,622,461.00 AED.\n- Gap between the highest and the lowest: 10,256,808.00 AED.\n- Combined total: 34,713,683.00 AED."
+    },
+    {
+      "id": "d06_expenses_below_500k",
+      "question": "Show organizations with expenses less than 500k this year",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "metric",
+          "want": "metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 78,
+          "want": "<= 220"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.3,
+          "want": "<= 30"
+        },
+        "metric": {
+          "ok": true,
+          "got": "expenses",
+          "want": "expenses"
+        },
+        "figures": {
+          "ok": true,
+          "mismatches": [],
+          "checked": true
+        },
+        "condition": {
+          "ok": true,
+          "got": [
+            26,
+            31,
+            32,
+            33
+          ],
+          "want": [
+            26,
+            31,
+            32,
+            33
+          ]
+        }
+      },
+      "elapsed_seconds": 0.3,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 78,
+      "answer": "**Total expenses**, 1 Jan 2026 \u2013 7 Oct 2026 \u00b7 4 of 9 organizations with total expenses below 500,000\n\n- Highest: Technology & Software_User1_Org9, 450,071.00 AED.\n- Technology & Software_User1_Org9 holds 5.1% of the combined total.\n- Lowest: Professional & Consulting Services_User1_Org8, 364,271.00 AED.\n- Gap between the highest and the second (Agriculture & Forestry_User1_Org10): 33,226.00 AED.\n- Gap between the highest and the lowest: 85,800.00 AED.\n- Combined total: 8,769,584.00 AED.\n- Nothing recorded: Agriculture & Forestry_User1_Org1."
+    },
+    {
+      "id": "d07_margin_between",
+      "question": "Which organizations have a profit margin between 10% and 60%?",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "metric",
+          "want": "metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 81,
+          "want": "<= 220"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.0,
+          "want": "<= 30"
+        },
+        "metric": {
+          "ok": true,
+          "got": "profit_margin",
+          "want": "profit_margin"
+        },
+        "figures": {
+          "ok": true,
+          "mismatches": [],
+          "checked": true
+        },
+        "condition": {
+          "ok": true,
+          "got": [
+            25,
+            28,
+            32
+          ],
+          "want": [
+            25,
+            28,
+            32
+          ]
+        }
+      },
+      "elapsed_seconds": 0.0,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 81,
+      "answer": "**Profit margin**, 1 Jan 2026 \u2013 7 Oct 2026 \u00b7 3 of 10 organizations with profit margin between 10% and 60%\n\n- Highest: Construction & Real Estate_User1_Org5, 57.71%.\n- Lowest: Construction & Real Estate_User1_Org2, 44.23%.\n- Gap between the highest and the second (Technology & Software_User1_Org9): 2.14 percentage points.\n- Gap between the highest and the lowest: 13.48 percentage points.\n- Organizations without a figure (for a margin: no revenue in the period) cannot meet the condition and are listed separately."
+    },
+    {
+      "id": "d08_receivables_over_1m",
+      "question": "Which organizations have outstanding receivables over AED 1,000,000?",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "metric",
+          "want": "metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 72,
+          "want": "<= 220"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.5,
+          "want": "<= 30"
+        },
+        "metric": {
+          "ok": true,
+          "got": "receivables",
+          "want": "receivables"
+        },
+        "figures": {
+          "ok": true,
+          "mismatches": [],
+          "checked": true
+        },
+        "condition": {
+          "ok": true,
+          "got": [
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33
+          ],
+          "want": [
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33
+          ]
+        }
+      },
+      "elapsed_seconds": 0.5,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 72,
+      "answer": "**Outstanding receivables**, as of 7 Oct 2026 \u00b7 8 of 10 organizations with outstanding receivables above 1,000,000\n\n- Highest: Professional & Consulting Services_User1_Org4, 14,530,419.00 AED.\n- Professional & Consulting Services_User1_Org4 holds 33.3% of the combined total.\n- Lowest: Hospitality & Tourism_User1_Org3, 2,063,635.00 AED.\n- Gap between the highest and the second (Construction & Real Estate_User1_Org5): 3,727,514.00 AED.\n- Gap between the highest and the lowest: 12,466,784.00 AED.\n- Combined total: 43,591,699.00 AED."
+    },
+    {
+      "id": "d09_compare_revenue",
+      "question": "Compare total revenue this year",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "metric",
+          "want": "metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 67,
+          "want": "<= 220"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.0,
+          "want": "<= 30"
+        },
+        "metric": {
+          "ok": true,
+          "got": "revenue",
+          "want": "revenue"
+        },
+        "figures": {
+          "ok": true,
+          "mismatches": [],
+          "checked": true
+        }
+      },
+      "elapsed_seconds": 0.0,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 67,
+      "answer": "**Total revenue**, 1 Jan 2026 \u2013 7 Oct 2026 \u00b7 10 organizations\n\n- Highest: Professional & Consulting Services_User1_Org4, 12,532,259.00 AED.\n- Professional & Consulting Services_User1_Org4 holds 36.1% of the combined total.\n- Lowest: Technology & Software_User1_Org9, 1,012,892.00 AED.\n- Gap between the highest and the second (Construction & Real Estate_User1_Org2): 7,622,461.00 AED.\n- Gap between the highest and the lowest: 11,519,367.00 AED.\n- Combined total: 34,713,683.00 AED."
+    },
+    {
+      "id": "d10_rank_profit_low",
+      "question": "Rank the organizations by net profit, lowest first",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "metric",
+          "want": "metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 66,
+          "want": "<= 220"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.1,
+          "want": "<= 30"
+        },
+        "metric": {
+          "ok": true,
+          "got": "net_profit",
+          "want": "net_profit"
+        },
+        "figures": {
+          "ok": true,
+          "mismatches": [],
+          "checked": true
+        },
+        "order": {
+          "ok": true,
+          "got": "ascending",
+          "want": "ascending"
+        }
+      },
+      "elapsed_seconds": 0.1,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 66,
+      "answer": "**Net profit**, 1 Jan 2026 \u2013 7 Oct 2026 \u00b7 10 organizations\n\n- Lowest: Professional & Consulting Services_User1_Org6, -39,760.00 AED.\n- Highest: Professional & Consulting Services_User1_Org4, 11,247,951.00 AED.\n- Gap between the highest and the second (Agriculture & Forestry_User1_Org1): 6,752,516.00 AED.\n- Gap between the highest and the lowest: 11,287,711.00 AED.\n- Negative for 1 of 10: Professional & Consulting Services_User1_Org6.\n- Combined total: 25,944,099.00 AED."
+    },
+    {
+      "id": "d11_top3_revenue",
+      "question": "Top 3 organizations by revenue this year",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "metric",
+          "want": "metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 74,
+          "want": "<= 220"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.2,
+          "want": "<= 30"
+        },
+        "metric": {
+          "ok": true,
+          "got": "revenue",
+          "want": "revenue"
+        },
+        "figures": {
+          "ok": true,
+          "mismatches": [],
+          "checked": true
+        }
+      },
+      "elapsed_seconds": 0.2,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 74,
+      "answer": "**Total revenue**, 1 Jan 2026 \u2013 7 Oct 2026 \u00b7 top 3 of 10 organizations\n\n- Highest: Professional & Consulting Services_User1_Org4, 12,532,259.00 AED.\n- Professional & Consulting Services_User1_Org4 holds 36.1% of the combined total.\n- Lowest: Agriculture & Forestry_User1_Org1, 4,495,435.00 AED.\n- Gap between the highest and the second (Construction & Real Estate_User1_Org2): 7,622,461.00 AED.\n- Gap between the highest and the lowest: 8,036,824.00 AED.\n- Combined total of all 10 organizations: 34,713,683.00 AED."
+    },
+    {
+      "id": "d12_highest_receivables",
+      "question": "Which organization has the highest outstanding receivables?",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "metric",
+          "want": "metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 66,
+          "want": "<= 220"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.1,
+          "want": "<= 30"
+        },
+        "metric": {
+          "ok": true,
+          "got": "receivables",
+          "want": "receivables"
+        },
+        "figures": {
+          "ok": true,
+          "mismatches": [],
+          "checked": true
+        }
+      },
+      "elapsed_seconds": 0.1,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 66,
+      "answer": "**Outstanding receivables**, as of 7 Oct 2026 \u00b7 10 organizations\n\n- Highest: Professional & Consulting Services_User1_Org4, 14,530,419.00 AED.\n- Professional & Consulting Services_User1_Org4 holds 33.3% of the combined total.\n- Lowest: Construction & Real Estate_User1_Org2, 0.00 AED.\n- Gap between the highest and the second (Construction & Real Estate_User1_Org5): 3,727,514.00 AED.\n- Gap between the highest and the lowest: 14,530,419.00 AED.\n- Combined total: 43,591,699.00 AED."
+    },
+    {
+      "id": "d13_overdue_payables",
+      "question": "Which organization has the most overdue payables?",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "metric",
+          "want": "metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 53,
+          "want": "<= 220"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.4,
+          "want": "<= 30"
+        },
+        "metric": {
+          "ok": true,
+          "got": "overdue_payables",
+          "want": "overdue_payables"
+        },
+        "figures": {
+          "ok": true,
+          "mismatches": [],
+          "checked": true
+        }
+      },
+      "elapsed_seconds": 0.4,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 53,
+      "answer": "**Overdue payables**, as of 7 Oct 2026 \u00b7 10 organizations\n\n- Highest: Agriculture & Forestry_User1_Org1, 0.00 AED.\n- Lowest: Agriculture & Forestry_User1_Org10, 0.00 AED.\n- Gap between the highest and the second (Construction & Real Estate_User1_Org2): 0.00 AED.\n- Gap between the highest and the lowest: 0.00 AED.\n- Combined total: 0.00 AED."
+    },
+    {
+      "id": "d14_compare_expenses",
+      "question": "Compare total expenses this year",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "metric",
+          "want": "metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 74,
+          "want": "<= 220"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.1,
+          "want": "<= 30"
+        },
+        "metric": {
+          "ok": true,
+          "got": "expenses",
+          "want": "expenses"
+        },
+        "figures": {
+          "ok": true,
+          "mismatches": [],
+          "checked": true
+        }
+      },
+      "elapsed_seconds": 0.1,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 74,
+      "answer": "**Total expenses**, 1 Jan 2026 \u2013 7 Oct 2026 \u00b7 10 organizations\n\n- Highest: Construction & Real Estate_User1_Org2, 2,737,953.00 AED.\n- Construction & Real Estate_User1_Org2 holds 31.2% of the combined total.\n- Lowest: Professional & Consulting Services_User1_Org8, 364,271.00 AED.\n- Gap between the highest and the second (Construction & Real Estate_User1_Org5): 1,398,882.00 AED.\n- Gap between the highest and the lowest: 2,373,682.00 AED.\n- Combined total: 8,769,584.00 AED.\n- Nothing recorded: Agriculture & Forestry_User1_Org1."
+    },
+    {
+      "id": "d15_cash",
+      "question": "Compare cash balance across organizations",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "metric",
+          "want": "metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 88,
+          "want": "<= 220"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.6,
+          "want": "<= 30"
+        },
+        "metric": {
+          "ok": true,
+          "got": "cash_balance",
+          "want": "cash_balance"
+        },
+        "figures": {
+          "ok": true,
+          "mismatches": [],
+          "checked": false
+        }
+      },
+      "elapsed_seconds": 0.6,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 88,
+      "answer": "**Cash balance**, as of 7 Oct 2026 \u00b7 10 organizations\n\n- Highest: Professional & Consulting Services_User1_Org4, 765,692.00 AED.\n- Lowest: Construction & Real Estate_User1_Org2, -13,652,073.00 AED.\n- Gap between the highest and the second (Agriculture & Forestry_User1_Org10): 302,045.00 AED.\n- Gap between the highest and the lowest: 14,417,765.00 AED.\n- Negative for 3 of 9: Technology & Software_User1_Org9, Construction & Real Estate_User1_Org5, Construction & Real Estate_User1_Org2.\n- Combined total: -12,693,801.00 AED.\n- No cash or bank postings in the ledger (or accounts in several currencies): Agriculture & Forestry_User1_Org1."
+    },
+    {
+      "id": "d16_vat_payable",
+      "question": "Net VAT payable by organization this year",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "metric",
+          "want": "metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 77,
+          "want": "<= 220"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.9,
+          "want": "<= 30"
+        },
+        "metric": {
+          "ok": true,
+          "got": "vat_payable",
+          "want": "vat_payable"
+        },
+        "figures": {
+          "ok": true,
+          "mismatches": [],
+          "checked": true
+        }
+      },
+      "elapsed_seconds": 0.9,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 77,
+      "answer": "**Net VAT payable**, 1 Jan 2026 \u2013 7 Oct 2026 \u00b7 10 organizations\n\n- Highest: Agriculture & Forestry_User1_Org1, 356,234.17 AED.\n- Agriculture & Forestry_User1_Org1 holds 68.6% of the combined total.\n- Lowest: Construction & Real Estate_User1_Org2, 162,710.62 AED.\n- Gap between the highest and the lowest: 193,523.55 AED.\n- Combined total: 518,944.79 AED.\n- Nothing recorded: Hospitality & Tourism_User1_Org3, Professional & Consulting Services_User1_Org4, Construction & Real Estate_User1_Org5, Professional & Consulting Services_User1_Org6, Agriculture & Forestry_User1_Org7 and 3 more."
+    },
+    {
+      "id": "d17_output_vat",
+      "question": "Compare output VAT this year",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "metric",
+          "want": "metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 77,
+          "want": "<= 220"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.0,
+          "want": "<= 30"
+        },
+        "metric": {
+          "ok": true,
+          "got": "output_vat",
+          "want": "output_vat"
+        },
+        "figures": {
+          "ok": true,
+          "mismatches": [],
+          "checked": true
+        }
+      },
+      "elapsed_seconds": 0.0,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 77,
+      "answer": "**Output VAT**, 1 Jan 2026 \u2013 7 Oct 2026 \u00b7 10 organizations\n\n- Highest: Construction & Real Estate_User1_Org2, 391,381.65 AED.\n- Construction & Real Estate_User1_Org2 holds 52.4% of the combined total.\n- Lowest: Agriculture & Forestry_User1_Org1, 356,234.17 AED.\n- Gap between the highest and the lowest: 35,147.48 AED.\n- Combined total: 747,615.82 AED.\n- Nothing recorded: Hospitality & Tourism_User1_Org3, Professional & Consulting Services_User1_Org4, Construction & Real Estate_User1_Org5, Professional & Consulting Services_User1_Org6, Agriculture & Forestry_User1_Org7 and 3 more."
+    },
+    {
+      "id": "d18_equity",
+      "question": "Compare total equity across organizations",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "metric",
+          "want": "metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 79,
+          "want": "<= 220"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.7,
+          "want": "<= 30"
+        },
+        "metric": {
+          "ok": true,
+          "got": "total_equity",
+          "want": "total_equity"
+        },
+        "figures": {
+          "ok": true,
+          "mismatches": [],
+          "checked": true
+        }
+      },
+      "elapsed_seconds": 0.7,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 79,
+      "answer": "**Total equity**, as of 7 Oct 2026 \u00b7 10 organizations\n\n- Highest: Agriculture & Forestry_User1_Org1, 62,932,377.00 AED.\n- Lowest: Construction & Real Estate_User1_Org5, -9,447,591.00 AED.\n- Gap between the highest and the second (Construction & Real Estate_User1_Org2): 19,646,990.00 AED.\n- Gap between the highest and the lowest: 72,379,968.00 AED.\n- Negative for 8 of 10: Agriculture & Forestry_User1_Org10, Hospitality & Tourism_User1_Org3, Technology & Software_User1_Org9, Professional & Consulting Services_User1_Org8, Agriculture & Forestry_User1_Org7 and 3 more.\n- Combined total: 68,309,489.00 AED."
+    },
+    {
+      "id": "d19_balance_sheet",
+      "question": "Compare the balance sheet",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "multi_metric",
+          "want": "multi_metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 139,
+          "want": "<= 260"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.0,
+          "want": "<= 30"
+        }
+      },
+      "elapsed_seconds": 0.0,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 139,
+      "answer": "**Total assets, Total liabilities, Total equity**, as of 7 Oct 2026 \u00b7 10 organizations\n\n- Ordered by total assets, highest first.\n- Total assets: Highest: Agriculture & Forestry_User1_Org1, 67,947,177.87 AED. Lowest: Agriculture & Forestry_User1_Org7, 881,936.00 AED.\n- Total liabilities: Highest: Construction & Real Estate_User1_Org2, 11,510,325.50 AED. Lowest: Agriculture & Forestry_User1_Org10, 3,932,821.00 AED.\n- Total equity: Highest: Agriculture & Forestry_User1_Org1, 62,932,377.00 AED. Lowest: Construction & Real Estate_User1_Org5, -9,447,591.00 AED. Negative for 8 of 10: Agriculture & Forestry_User1_Org10, Hospitality & Tourism_User1_Org3, Technology & Software_User1_Org9, Professional & Consulting Services_User1_Org8, Agriculture & Forestry_User1_Org7 and 3 more.\n- Warning signs: Professional & Consulting Services_User1_Org6 (negative equity); Professional & Consulting Services_User1_Org4 (negative equity); Professional & Consulting Services_User1_Org8 (negative equity); Technology & Software_User1_Org9 (negative equity); Hospitality & Tourism_User1_Org3 (negative equity); Agriculture & Forestry_User1_Org10 (negative equity); Construction & Real Estate_User1_Org5 (negative equity); Agriculture & Forestry_User1_Org7 (negative equity)."
+    },
+    {
+      "id": "d20_pnl",
+      "question": "Compare the P&L statement",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "multi_metric",
+          "want": "multi_metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 125,
+          "want": "<= 260"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.0,
+          "want": "<= 30"
+        }
+      },
+      "elapsed_seconds": 0.0,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 125,
+      "answer": "**Total revenue, Total expenses, Net profit, Profit margin**, 1 Jan 2026 \u2013 7 Oct 2026 \u00b7 10 organizations\n\n- Ordered by total revenue, highest first.\n- Total revenue: Highest: Professional & Consulting Services_User1_Org4, 12,532,259.00 AED. Lowest: Technology & Software_User1_Org9, 1,012,892.00 AED.\n- Total expenses: Highest: Construction & Real Estate_User1_Org2, 2,737,953.00 AED. Lowest: Professional & Consulting Services_User1_Org8, 364,271.00 AED.\n- Total expenses not available for: Agriculture & Forestry_User1_Org1.\n- Net profit: Highest: Professional & Consulting Services_User1_Org4, 11,247,951.00 AED. Lowest: Professional & Consulting Services_User1_Org6, -39,760.00 AED. Negative for 1 of 10: Professional & Consulting Services_User1_Org6.\n- Profit margin: Highest: Agriculture & Forestry_User1_Org1, 100.00%. Lowest: Professional & Consulting Services_User1_Org6, -3.85%. Negative for 1 of 10: Professional & Consulting Services_User1_Org6.\n- Warning signs: Professional & Consulting Services_User1_Org6 (net loss)."
+    },
+    {
+      "id": "d21_revenue_by_month",
+      "question": "Revenue by month for each organization this year",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "series",
+          "want": "series"
+        },
+        "length": {
+          "ok": true,
+          "got": 126,
+          "want": "<= 260"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.4,
+          "want": "<= 30"
+        }
+      },
+      "elapsed_seconds": 0.4,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 126,
+      "answer": "**Total revenue by month**, 1 Jan 2026 \u2013 7 Oct 2026 \u00b7 10 organizations\n\n- Highest total: Professional & Consulting Services_User1_Org4, 12,532,259.00 AED.\n- Lowest total: Technology & Software_User1_Org9, 1,012,892.00 AED.\n- Agriculture & Forestry_User1_Org1: best month 2026-05 (1,206,601.00 AED).\n- Construction & Real Estate_User1_Org2: best month 2026-05 (1,372,269.00 AED).\n- Hospitality & Tourism_User1_Org3: best month 2026-03 (458,549.00 AED).\n- Professional & Consulting Services_User1_Org4: best month 2026-01 (2,466,087.00 AED).\n- Construction & Real Estate_User1_Org5: best month 2026-01 (820,176.00 AED).\n- Professional & Consulting Services_User1_Org6: best month 2026-01 (424,680.00 AED).\n- Agriculture & Forestry_User1_Org7: best month 2026-06 (475,308.00 AED).\n- Professional & Consulting Services_User1_Org8: best month 2026-02 (684,090.00 AED).\n- Technology & Software_User1_Org9: best month 2026-02 (221,382.00 AED).\n- Agriculture & Forestry_User1_Org10: best month 2026-01 (655,090.00 AED)."
+    },
+    {
+      "id": "d22_growth",
+      "question": "Show revenue and profit growth vs last year",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "multi_metric",
+          "want": "multi_metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 136,
+          "want": "<= 260"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 2.4,
+          "want": "<= 30"
+        }
+      },
+      "elapsed_seconds": 2.4,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 136,
+      "answer": "**Revenue growth, Profit growth**, 1 Jan 2025 \u2013 31 Dec 2025 vs the same period last year \u00b7 10 organizations\n\n- Ordered by revenue growth, highest first.\n- Revenue growth: Highest: Agriculture & Forestry_User1_Org10, 70.58%. Lowest: Hospitality & Tourism_User1_Org3, -22.11%. Negative for 5 of 10: Agriculture & Forestry_User1_Org1, Professional & Consulting Services_User1_Org4, Construction & Real Estate_User1_Org2, Construction & Real Estate_User1_Org5, Hospitality & Tourism_User1_Org3.\n- Profit growth: Highest: Professional & Consulting Services_User1_Org6, 143.47%. Lowest: Hospitality & Tourism_User1_Org3, -39.85%. Negative for 5 of 10: Agriculture & Forestry_User1_Org1, Professional & Consulting Services_User1_Org4, Construction & Real Estate_User1_Org2, Construction & Real Estate_User1_Org5, Hospitality & Tourism_User1_Org3.\n- Warning signs: Agriculture & Forestry_User1_Org1 (revenue down 1.09%); Professional & Consulting Services_User1_Org4 (revenue down 2.78%); Construction & Real Estate_User1_Org2 (revenue down 8.73%); Construction & Real Estate_User1_Org5 (revenue down 16.89%); Hospitality & Tourism_User1_Org3 (revenue down 22.11%)."
+    },
+    {
+      "id": "d23_shared_vendors",
+      "question": "Which vendors do the organizations share?",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "overlap",
+          "want": "overlap"
+        },
+        "length": {
+          "ok": true,
+          "got": 53,
+          "want": "<= 220"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.5,
+          "want": "<= 30"
+        }
+      },
+      "elapsed_seconds": 0.5,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 53,
+      "answer": "- 211 found in more than one organization (names matched exactly).\n- Theodore: 3 organizations, combined 1,077,289.00 AED.\n- Mohini: 3 organizations, combined 757,782.00 AED.\n- Manbir: 3 organizations, combined 730,378.00 AED.\n- Vidhi: 3 organizations, combined 716,967.00 AED.\n- Gopal: 3 organizations, combined 698,068.00 AED.\n- No rows from: Agriculture & Forestry_User1_Org1."
+    },
+    {
+      "id": "d24_unpaid_invoices",
+      "question": "List unpaid invoices older than 90 days in each organization",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "per_org",
+          "want": "per_org"
+        },
+        "length": {
+          "ok": true,
+          "got": 130,
+          "want": "<= 300"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 1.2,
+          "want": "<= 30"
+        }
+      },
+      "elapsed_seconds": 1.2,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 130,
+      "answer": "**Unpaid invoices, dated more than 90 days ago, largest first**\n\n- All organizations: 5784 items, 41,876,581.00 AED.\n- Agriculture & Forestry_User1_Org1: none found.\n- Construction & Real Estate_User1_Org2: none found.\n- Hospitality & Tourism_User1_Org3: 275 items, total 1,992,592.00 AED; largest: Laksh, 23,679.00.\n- Professional & Consulting Services_User1_Org4: 2077 items, total 13,861,135.00 AED; largest: Jyoti, 19,803.00.\n- Construction & Real Estate_User1_Org5: 1250 items, total 10,438,233.00 AED; largest: Aarini, 18,096.00.\n- Professional & Consulting Services_User1_Org6: 380 items, total 2,469,543.00 AED; largest: Riya, 13,478.00.\n- Agriculture & Forestry_User1_Org7: 312 items, total 2,580,621.00 AED; largest: Patrick, 16,301.00.\n- Professional & Consulting Services_User1_Org8: 521 items, total 3,486,386.00 AED; largest: Yochana, 15,967.00.\n- Technology & Software_User1_Org9: 599 items, total 4,125,316.00 AED; largest: Chakradev, 18,576.00.\n- Agriculture & Forestry_User1_Org10: 370 items, total 2,922,755.00 AED; largest: Gaurav, 16,440.00."
+    },
+    {
+      "id": "d25_vendors_overdue",
+      "question": "List vendors with overdue bills in each organization",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "per_org",
+          "want": "per_org"
+        },
+        "length": {
+          "ok": true,
+          "got": 145,
+          "want": "<= 300"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 1,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 5.9,
+          "want": "<= 30"
+        }
+      },
+      "elapsed_seconds": 5.9,
+      "llm_calls": 1,
+      "cost_usd": 0.001668,
+      "answer_words": 145,
+      "answer": "Based on the data retrieved, **none of the organizations have vendors with overdue bills**:\n\n- **Agriculture & Forestry_User1_Org1**: No overdue vendor bills\n- **Construction & Real Estate_User1_Org2**: No overdue vendor bills\n- **Hospitality & Tourism_User1_Org3**: No overdue vendor bills\n- **Professional & Consulting Services_User1_Org4**: No overdue vendor bills\n- **Construction & Real Estate_User1_Org5**: No overdue vendor bills\n- **Professional & Consulting Services_User1_Org6**: No overdue vendor bills\n- **Agriculture & Forestry_User1_Org7**: No overdue vendor bills\n- **Professional & Consulting Services_User1_Org8**: No overdue vendor bills\n- **Technology & Software_User1_Org9**: No overdue vendor bills\n- **Agriculture & Forestry_User1_Org10**: No overdue vendor bills\n\nAll organizations are current on their vendor payments.\n\n_No records found: Agriculture & Forestry_User1_Org1, Construction & Real Estate_User1_Org2, Hospitality & Tourism_User1_Org3, Professional & Consulting Services_User1_Org4, Construction & Real Estate_User1_Org5, Professional & Consulting Services_User1_Org6, Agriculture & Forestry_User1_Org7, Professional & Consulting Services_User1_Org8, Technology & Software_User1_Org9, Agriculture & Forestry_User1_Org10._"
+    },
+    {
+      "id": "d26_what_is_vat",
+      "question": "What is VAT?",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "direct",
+          "want": "direct"
+        },
+        "length": {
+          "ok": true,
+          "got": 218,
+          "want": "<= 320"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 3,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 15.3,
+          "want": "<= 30"
+        }
+      },
+      "elapsed_seconds": 15.3,
+      "llm_calls": 3,
+      "cost_usd": 0.000477,
+      "answer_words": 218,
+      "answer": "VAT is a **transaction\u2011based indirect tax levied on most supplies of goods and services in the UAE**, collected by registered businesses at each stage of the supply chain and ultimately borne by the final consumer\u202f[1][5].\n\n**What is VAT?** \n- **Scope:** Applies to any supply of goods or services made for consideration by a person conducting business in the UAE, provided the supplier is a taxable person (registered or required to register)\u202f[1][5]. \n- **Taxable supply vs. exempt:** A taxable supply triggers VAT; exempt supplies do not attract VAT and the supplier cannot recover input tax\u202f[1][3]. \n- **Rates:** The UAE has two VAT rates \u2013 the **standard rate of 5\u202f%** and a **zero rate of 0\u202f%** for specified supplies. Certain supplies are exempt from VAT altogether\u202f[1]. \n- **Mechanism:** At each transaction, the supplier charges VAT on the net value of the supply, remits the collected VAT to the Federal Tax Authority, and may recover VAT incurred on business expenses (input tax) related to taxable supplies\u202f[1][2]. \n- **Final consumer:** While businesses collect and remit the tax, the economic burden ultimately falls on the end\u2011consumer who pays the VAT\u2011inclusive price\u202f[1].\n\n**Action:** Determine whether your supplies fall within the taxable\u2011supply definition and, if so, register for VAT and apply the appropriate rate to your invoices."
+    },
+    {
+      "id": "d27_how_invoice",
+      "question": "How do I create an invoice?",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "direct",
+          "want": "direct"
+        },
+        "length": {
+          "ok": true,
+          "got": 266,
+          "want": "<= 320"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 1,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 4.0,
+          "want": "<= 30"
+        }
+      },
+      "elapsed_seconds": 4.0,
+      "llm_calls": 1,
+      "cost_usd": 0.0,
+      "answer_words": 266,
+      "answer": "# Creating an Invoice in Accutax\n\nHere's how to create an invoice step by step:\n\n## 1. Navigate to Invoices\nGo to **Sales > Invoice(s)** and click **Create Invoice** (top right), or click **Create Invoice** on the dashboard.\n\n## 2. Fill Customer Details\n- **Select Customer** (required)\n- **Invoice Number** \u2014 auto-filled from your organization's invoice number template\n- **Select Currency** (defaults to AED)\n- **Select Payment Type** (Bank Transfer, PayPal, Stripe, Credit Card, Cash, Cheque, etc.)\n- **Invoice Date** (defaults to today)\n- **Select Due Date**\n- Purchase Order Number, Reference, Select Project \u2014 all optional\n\n## 3. Add Line Items\nClick into a row under **Add Line Items** and fill:\n- **Product/Service** \u2014 search your Items catalog; you can also type free text if nothing matches\n- **Description** (required)\n- **Account** (required) \u2014 search your chart of accounts (e.g., type \"Sales\" to find \"4000 - Sales Revenue\")\n- **Qty** and **Price** (required) \u2014 Item Amount calculates automatically\n- Optional per line: **+ Cost center**, **+ Tax rate**, **+ Discount**\n- Click **+ Add New Item** to add another line\n\n## 4. Review Summary\nThe **Summary** panel shows Subtotal, Total VAT, and Total \u2014 it updates live as you add tax rates.\n\n## 5. Add Optional Details\n- Toggle **Is this a recurring invoice?** if needed\n- Fill **Additional Notes / Payment Instructions** and **Terms & Conditions** (optional)\n- A live preview renders on the right as you fill the form\n\n## 6. Save\nClick **Save As Draft** or **Save & Send** (top right).\n\nNeed help with invoice numbering or customizing how your invoices look?"
+    },
+    {
+      "id": "d28_ebitda",
+      "question": "What is the EBITDA of each organization?",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "unsupported",
+          "want": "unsupported"
+        },
+        "length": {
+          "ok": true,
+          "got": 22,
+          "want": "<= 160"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.0,
+          "want": "<= 30"
+        }
+      },
+      "elapsed_seconds": 0.0,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 22,
+      "answer": "- EBITDA / operating profit is not available: expenses are not split into depreciation, amortisation, interest and tax. Closest available: net profit."
+    },
+    {
+      "id": "d29_above_average",
+      "question": "Which organizations have profit margin above average?",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "metric",
+          "want": "metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 82,
+          "want": "<= 220"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.0,
+          "want": "<= 30"
+        },
+        "metric": {
+          "ok": true,
+          "got": "profit_margin",
+          "want": "profit_margin"
+        },
+        "figures": {
+          "ok": true,
+          "mismatches": [],
+          "checked": true
+        }
+      },
+      "elapsed_seconds": 0.0,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 82,
+      "answer": "**Profit margin**, 1 Jan 2026 \u2013 7 Oct 2026 \u00b7 10 organizations\n\n- Highest: Agriculture & Forestry_User1_Org1, 100.00%.\n- Lowest: Professional & Consulting Services_User1_Org6, -3.85%.\n- Gap between the highest and the second (Professional & Consulting Services_User1_Org4): 10.25 percentage points.\n- Gap between the highest and the lowest: 103.85 percentage points.\n- Negative for 1 of 10: Professional & Consulting Services_User1_Org6.\n- The condition 'above average' was not applied: comparisons with an average are not supported yet, so every organization is shown."
+    },
+    {
+      "id": "d30_payables",
+      "question": "Compare outstanding payables",
+      "passed": true,
+      "checks": {
+        "layout": {
+          "ok": true,
+          "got": "metric",
+          "want": "metric"
+        },
+        "length": {
+          "ok": true,
+          "got": 66,
+          "want": "<= 220"
+        },
+        "llm_calls": {
+          "ok": true,
+          "got": 0,
+          "want": "<= 3"
+        },
+        "status": {
+          "ok": true,
+          "got": "ok"
+        },
+        "seconds": {
+          "ok": true,
+          "got": 0.0,
+          "want": "<= 30"
+        },
+        "metric": {
+          "ok": true,
+          "got": "payables",
+          "want": "payables"
+        },
+        "figures": {
+          "ok": true,
+          "mismatches": [],
+          "checked": true
+        }
+      },
+      "elapsed_seconds": 0.0,
+      "llm_calls": 0,
+      "cost_usd": 0.0,
+      "answer_words": 66,
+      "answer": "**Outstanding payables**, as of 7 Oct 2026 \u00b7 10 organizations\n\n- Highest: Professional & Consulting Services_User1_Org4, 2,311,843.00 AED.\n- Professional & Consulting Services_User1_Org4 holds 22.5% of the combined total.\n- Lowest: Construction & Real Estate_User1_Org2, 0.00 AED.\n- Gap between the highest and the second (Construction & Real Estate_User1_Org5): 123,336.00 AED.\n- Gap between the highest and the lowest: 2,311,843.00 AED.\n- Combined total: 10,284,080.00 AED."
+    }
+  ]
+}

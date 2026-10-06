@@ -86,12 +86,12 @@ def test_auto_defaults_to_exhaustive_for_simple_lookups():
     # DEFAULT_EFFORT is 'exhaustive' -- there is no more "cheap" tier for a
     # plain lookup with no escalation signals; every query runs at the
     # highest effort its chosen model supports. 'exhaustive' prefers
-    # sonnet-3.5 (only sonnet-3.5/gemini-2.5-pro actually support it), so a
-    # simple lookup with no explicit model now resolves to sonnet-3.5 rather
+    # sonnet-5 (only sonnet-5/gemini-2.5-pro actually support it), so a
+    # simple lookup with no explicit model now resolves to sonnet-5 rather
     # than haiku-4.5.
     p = choose_policy("total revenue this year")
     assert p.effort.name == "exhaustive"
-    assert p.model_key == "sonnet-3.5"
+    assert p.model_key == "sonnet-5"
 
 
 def test_auto_escalates_analytical_questions():
@@ -217,3 +217,20 @@ def test_plain_ranking_is_left_alone(question):
 def test_non_ranking_rules_are_never_redirected():
     assert redirect_for_aging("profit_loss", "overdue profit and loss") is None
     assert redirect_for_aging("ap_aging", "overdue bills 90 days") is None
+
+
+def test_renamed_sonnet_key_still_resolves():
+    from gemini_brain.policy.registry import resolve_model
+
+    assert resolve_model("sonnet-3.5").key == "sonnet-5"
+
+
+def test_labels_and_prices_follow_the_model_id():
+    from gemini_brain.config.constants import HAIKU45_ID, SONNET5_ID, model_label
+    from gemini_brain.config.pricing import gemini_brain_cost
+
+    assert model_label(HAIKU45_ID) == "Claude Haiku 4.5"
+    assert model_label(SONNET5_ID) == "Claude Sonnet 5"
+    assert model_label("anthropic.claude-3-haiku-20240307-v1:0") == "Claude Haiku 3"
+    assert gemini_brain_cost(0, 0, 1_000_000, 1_000_000, HAIKU45_ID) == 6.0
+    assert gemini_brain_cost(0, 0, 1_000_000, 1_000_000, SONNET5_ID) == 12.0

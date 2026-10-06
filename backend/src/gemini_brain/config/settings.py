@@ -44,14 +44,33 @@ class GeminiBrainSettings(BaseSettings):
     # ── AWS Bedrock ────────────────────────────────────────────
     bedrock_region: str = Field(default="ap-south-1")
     bedrock_model_id: str = Field(
-        default="apac.anthropic.claude-3-5-sonnet-20241022-v2:0",
-        description="Primary Bedrock model (Sonnet-class).",
+        default="in.anthropic.claude-sonnet-5",
+        description="Primary Bedrock model (Sonnet-class). India-region profile.",
     )
     bedrock_model_id_fast: str = Field(
-        default="anthropic.claude-3-haiku-20240307-v1:0",
-        description="Fast/cheap Bedrock model (Haiku-class).",
+        default="in.anthropic.claude-haiku-4-5-20251001-v1:0",
+        description="Fast/cheap Bedrock model (Haiku-class). India-region profile.",
     )
     bedrock_max_tokens: int = Field(default=2000)
+    bedrock_connect_timeout_seconds: float = Field(default=5.0, gt=0)
+    bedrock_read_timeout_seconds: float = Field(
+        default=45.0,
+        gt=0,
+        description="Longest wait for a Bedrock response (or the next stream chunk). boto3's default is 60 s.",
+    )
+    bedrock_max_attempts: int = Field(
+        default=2,
+        ge=1,
+        description="Total attempts per Bedrock call at the SDK level (boto3's legacy default is 5).",
+    )
+    multi_org_fetch_deadline_seconds: float = Field(
+        default=40.0,
+        gt=0,
+        description=(
+            "How long a multi-org answer waits for the organizations' data. Organizations still "
+            "running are reported as not answered in time, and their queued work is cancelled."
+        ),
+    )
 
     # ── Accutax Backend API ────────────────────────────────────
     accutax_base_url: str = Field(default="http://13.127.157.108:8081")
@@ -109,6 +128,15 @@ class GeminiBrainSettings(BaseSettings):
     #: produced and logged either way, but only enforcement alters the answer.
     verify_enforce: bool = Field(default=False)
 
+    db_pool_enabled: bool = Field(
+        default=True,
+        description="Reuse database connections (sql_fallback/db_connection.py). False opens one per query.",
+    )
+    db_pool_max: int = Field(
+        default=10,
+        ge=1,
+        description="Pooled connections per database. When all are busy, a caller gets a direct connection.",
+    )
     db_user: str = Field(default="accutax_llm_user")
     db_password: Optional[str] = Field(
         default=None,

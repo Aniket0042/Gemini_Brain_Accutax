@@ -1278,6 +1278,24 @@ REPORTS: Dict[str, Callable[[Dict[str, Any], int, str], Dict[str, Any]]] = {
     "rpt_customer_totals": customer_totals,
 }
 
+#: Accutax report endpoints that accept organization_id but ignore it: the
+#: service takes the organization from user_id instead, and with no user_id it
+#: reads every tenant. Checked on 2026-10-07 against the build running on the VM
+#: (/root/Accutax_1.4/backend-latest/dist): the consolidated reports and the
+#: supplier statement now honour organization_id; these seven do not. They are
+#: never called, single-org or multi-org; REST_TO_SQL_REPORT answers the two
+#: project reports from org-filtered SQL, the rest are reported as unavailable.
+#: Remove an entry once Accutax filters by organization_id in that method.
+ORG_IGNORED_REST = frozenset({
+    "/report/profit-loss-by-branch",
+    "/report/profit-loss-by-project",
+    "/report/sales-by-branch",
+    "/report/sales-by-project",
+    "/report/expenses-by-branch",
+    "/report/bills-by-branch",
+    "/report/cash-flow-indirect",
+})
+
 #: REST endpoints that ignore organization_id -> org-filtered SQL report with
 #: the same meaning. Used only when a multi-org run skips the REST call
 #: (reason "not_org_scoped"); single-org queries never reach it.

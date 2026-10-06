@@ -101,7 +101,7 @@ EFFORT_TIERS: Dict[str, EffortTier] = {
         decompose=True,
         dual_compute=False,
         show_plan=True,
-        preferred_model="sonnet-3.5",
+        preferred_model="sonnet-5",
         target_latency="10–20s",
     ),
     "exhaustive": EffortTier(
@@ -116,7 +116,7 @@ EFFORT_TIERS: Dict[str, EffortTier] = {
         decompose=True,
         dual_compute=True,
         show_plan=True,
-        preferred_model="sonnet-3.5",
+        preferred_model="sonnet-5",
         target_latency="30–90s",
     ),
 }

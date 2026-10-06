@@ -334,13 +334,34 @@ def _growth_matches(question: str) -> List[Metric]:
     return [BY_KEY[_GROWTH_FOR_BASE[m.key]] for m in bases]
 
 
+#: Plain listing words. With organizations and a condition ("list the organizations
+#: making a loss") the rows wanted are organizations, so it is a figure per org.
+_GENERIC_LIST = _p(r"\blist\b|\bshow\s+(me\s+)?all\b")
+#: Organizations as the thing listed: "list (all) the organizations", "which of the companies".
+#: "List overdue bills ... in each org" lists bills, not organizations.
+_ORGS_LISTED = _p(
+    r"\b(list|show\s+(me\s+)?|which|what)\s+(of\s+)?(all\s+)?(the\s+|my\s+|our\s+)?"
+    r"(organi[sz]ations?|orgs?|compan(y|ies)|entit(y|ies)|businesses|subsidiar(y|ies))\b"
+)
+
+
+def _organizations_with_condition(question: str) -> bool:
+    """"List the organizations with margin above 20%": a list of organizations, filtered on a figure."""
+    from gemini_brain.orchestrator.multi_org_conditions import has_condition
+
+    return (bool(_ORGS_LISTED.search(question)) and has_condition(question)
+            and not _LIST_OR_BREAKDOWN.search(_GENERIC_LIST.sub(" ", question)))
+
+
 def match_metrics(question: str) -> List[Metric]:
     """The figures per organization a question asks for; [] when it wants something else.
 
     Unsupported figures ("gross margin", "fixed assets") are blanked first so
     their words never select a different metric.
     """
-    if not question or _LIST_OR_BREAKDOWN.search(question) or is_concept_question(question):
+    if not question or is_concept_question(question):
+        return []
+    if _LIST_OR_BREAKDOWN.search(question) and not _organizations_with_condition(question):
         return []
     question = _mask_unsupported(question)
     for pattern, keys in METRIC_GROUPS:
@@ -355,6 +376,12 @@ def match_metrics(question: str) -> List[Metric]:
     if _BARE_GROWTH.search(question):
         # "growth and margin", "compare growth": growth with no figure named is revenue growth.
         found = [BY_KEY["revenue_growth"]] + found
+    if not found:
+        # "Which organizations are loss-making": net profit, named only by its sign.
+        from gemini_brain.orchestrator.multi_org_conditions import implied_metric
+
+        implied = implied_metric(question)
+        found = [implied] if implied is not None else []
     return found
 
 
@@ -1239,6 +1266,7 @@ def computed_answer(comparison: Dict[str, Any]) -> str:
         parts = [_heading(label, comparison.get("period") or "", compared)]
         for item in items:
             parts.append(f"**{item['label']}**\n" + "\n".join(f"- {line}" for line in _series_answer(item)))
+        parts += [f"- {note}" for note in comparison.get("condition_notes") or []]
         return "\n\n".join(parts)
     if kind == "series":
         compared = len(comparison["organizations"]) + len(comparison["missing"])
@@ -1249,9 +1277,19 @@ def computed_answer(comparison: Dict[str, Any]) -> str:
         label = comparison["label"]
         body = _multi_answer(comparison) if kind == "multi_metric" else _metric_answer(comparison)
     heading = _heading(label, comparison.get("period") or "", compared)
+    condition = comparison.get("condition")
+    if condition:
+        # See multi_org_conditions.apply_conditions: rows are the orgs that meet it.
+        text = condition["text"][0].lower() + condition["text"][1:]
+        heading = (heading.rsplit(" · ", 1)[0]
+                   + f" · {condition['matched']} of {condition['of']} organizations with {text}")
+        if not comparison["rows"]:
+            body = [f"No organization has {text}."] + _missing_lines(comparison["missing"])
     shown = comparison.get("shown")
     if shown:
-        heading = heading.rsplit(" · ", 1)[0] + f" · {shown['end']} {shown['n']} of {shown['of']} organizations"
+        heading = (heading if condition else heading.rsplit(" · ", 1)[0]) + \
+            f" · {shown['end']} {shown['n']} of {shown['of']}" + ("" if condition else " organizations")
+    body = list(body) + list(comparison.get("condition_notes") or [])
     return heading + "\n\n" + "\n".join(f"- {line}" for line in body)
 
 

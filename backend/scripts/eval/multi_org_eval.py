@@ -12,14 +12,19 @@ against the configured database and Bedrock, then checks each answer for:
   length      answer word count within the layout's limit
   llm_calls   model calls within budget (3 + one per org whose planned fetch fell back)
   status      not "failed"
+  condition   for cases with a "condition", exactly the orgs whose independent figure meets it
+  seconds     end-to-end time within the case's (or the file's) "max_seconds", when set
 
 Costs real Bedrock calls: about one to three per case.
 
 Usage (from backend/):
   .venv/Scripts/python scripts/eval/multi_org_eval.py --orgs 27,29
   .venv/Scripts/python scripts/eval/multi_org_eval.py --orgs 24,25,26,27,28,29,30,31,32,33 --only s1_,s4_
-Writes a JSON report next to this script (multi_org_eval_<timestamp>.json) and
-exits non-zero when any case fails.
+The demo set (Phase 0.8 of the 2026-10 review) runs the same way:
+  .venv/Scripts/python scripts/eval/multi_org_eval.py --cases tests/data/demo_set.json --orgs 24,25,26,27,28,29,30,31,32,33
+
+Writes a JSON report and a Markdown pass/fail sheet next to this script
+(<cases>_<timestamp>.json / .md) and exits non-zero when any case fails.
 """
 from __future__ import annotations
 
@@ -93,6 +98,10 @@ def expected_value(metric_key: str, org_id: int, question: str, cur: Any) -> Opt
         income = expected_value("revenue", org_id, question, cur)
         expenses = expected_value("expenses", org_id, question, cur)
         return round(income - expenses, 2)
+    if metric_key == "profit_margin":
+        income = expected_value("revenue", org_id, question, cur)
+        expenses = expected_value("expenses", org_id, question, cur)
+        return round(100.0 * (income - expenses) / income, 2) if income else None
     base = metric_key.replace("overdue_", "")
     if base in _OPEN_TABLES:
         table, items, fk, date_col = _OPEN_TABLES[base]
@@ -112,8 +121,19 @@ def layout_of(result: Dict[str, Any]) -> str:
     return routing.get("layout") or "unknown"
 
 
+def _meets(value: Optional[float], condition: Dict[str, Any]) -> bool:
+    """Whether an independent figure meets a case's condition (written apart from the app's parser)."""
+    if value is None:
+        return False
+    op, want = condition["op"], condition["value"]
+    if op == "between":
+        low, high = sorted(want)
+        return low <= value <= high
+    return {"gt": value > want, "gte": value >= want, "lt": value < want, "lte": value <= want}[op]
+
+
 def evaluate_case(case: Dict[str, Any], orgs: List[int], meta: Dict[int, Dict[str, Any]],
-                  word_limits: Dict[str, int], cur: Any) -> Dict[str, Any]:
+                  word_limits: Dict[str, int], cur: Any, max_seconds: Optional[float] = None) -> Dict[str, Any]:
     t0 = time.time()
     result = run_multi_org(
         case["question"], orgs, meta,
@@ -137,6 +157,9 @@ def evaluate_case(case: Dict[str, Any], orgs: List[int], meta: Dict[int, Dict[st
     checks["llm_calls"] = {"ok": int(usage.get("llm_calls") or 0) <= budget,
                            "got": usage.get("llm_calls"), "want": f"<= {budget}"}
     checks["status"] = {"ok": result.get("status") != "failed", "got": result.get("status")}
+    limit_s = case.get("max_seconds", max_seconds)
+    if limit_s:
+        checks["seconds"] = {"ok": elapsed <= limit_s, "got": elapsed, "want": f"<= {limit_s}"}
 
     comparison = result.get("comparison")
     if case["layout"] == "metric":
@@ -153,6 +176,15 @@ def evaluate_case(case: Dict[str, Any], orgs: List[int], meta: Dict[int, Dict[st
             if case.get("order"):
                 checks["order"] = {"ok": comparison.get("order") == case["order"],
                                    "got": comparison.get("order"), "want": case["order"]}
+            if case.get("condition"):
+                # An org the answer lists as "nothing recorded" has no figure to compare;
+                # the answer names it separately, so it is not expected among the matches.
+                empty = {int(m["organization_id"]) for m in comparison.get("missing") or []
+                         if m.get("reason") == "nothing recorded"}
+                want_orgs = sorted(o for o in orgs if o not in empty
+                                   and _meets(expected_value(case["metric"], o, case["question"], cur), case["condition"]))
+                got_orgs = sorted(int(r["organization_id"]) for r in comparison["rows"])
+                checks["condition"] = {"ok": got_orgs == want_orgs, "got": got_orgs, "want": want_orgs}
 
     return {
         "id": case["id"],
@@ -171,10 +203,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--orgs", required=True, help="Comma-separated organization IDs, e.g. 27,29")
     parser.add_argument("--only", default="", help="Comma-separated case-id prefixes to run")
+    parser.add_argument("--cases", default=str(CASES_FILE), help="Cases file (default: the multi-org eval cases)")
     args = parser.parse_args()
 
     orgs = [int(o) for o in args.orgs.split(",") if o.strip()]
-    spec = json.loads(CASES_FILE.read_text(encoding="utf-8"))
+    cases_file = Path(args.cases)
+    spec = json.loads(cases_file.read_text(encoding="utf-8"))
     prefixes = [p for p in args.only.split(",") if p]
     cases = [c for c in spec["cases"] if not prefixes or any(c["id"].startswith(p) for p in prefixes)]
 
@@ -186,7 +220,7 @@ def main() -> int:
     report: List[Dict[str, Any]] = []
     for case in cases:
         try:
-            outcome = evaluate_case(case, orgs, meta, spec["word_limits"], cur)
+            outcome = evaluate_case(case, orgs, meta, spec["word_limits"], cur, spec.get("max_seconds"))
         except Exception as e:  # one broken case must not hide the others
             outcome = {"id": case["id"], "question": case["question"], "passed": False,
                        "checks": {"error": {"ok": False, "got": f"{type(e).__name__}: {e}"}}}
@@ -201,11 +235,30 @@ def main() -> int:
     total_cost = round(sum(r.get("cost_usd") or 0 for r in report), 4)
     print(f"\n{passed}/{len(report)} passed · {len(orgs)} orgs · est. cost ${total_cost}")
     stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    out = Path(__file__).with_name(f"multi_org_eval_{stamp}.json")
+    name = "multi_org_eval" if cases_file == CASES_FILE else cases_file.stem
+    out = Path(__file__).with_name(f"{name}_{stamp}.json")
     out.write_text(json.dumps({"orgs": orgs, "passed": passed, "total": len(report), "cases": report},
                               indent=2, default=str), encoding="utf-8")
-    print(f"Report: {out}")
+    out.with_suffix(".md").write_text(_sheet(name, stamp, orgs, report), encoding="utf-8")
+    print(f"Report: {out}\nSheet:  {out.with_suffix('.md')}")
     return 0 if passed == len(report) else 1
+
+
+def _sheet(name: str, stamp: str, orgs: List[int], report: List[Dict[str, Any]]) -> str:
+    """A pass/fail sheet to keep with each demo build."""
+    passed = sum(1 for r in report if r["passed"])
+    times = sorted(r["elapsed_seconds"] for r in report if isinstance(r.get("elapsed_seconds"), (int, float)))
+    p95 = times[min(len(times) - 1, int(0.95 * len(times)))] if times else None
+    lines = [f"# {name} — {stamp}", "",
+             f"Orgs: {', '.join(map(str, orgs))} · **{passed}/{len(report)} passed** · p95 {p95}s", "",
+             "| # | Case | Question | Result | Failed checks | Seconds |", "|---|---|---|---|---|---|"]
+    for i, r in enumerate(report, 1):
+        failed = ", ".join(f"{k} (got {v.get('got')}, want {v.get('want', '')})"
+                           for k, v in r["checks"].items() if not v["ok"])
+        question = str(r["question"]).replace("|", "/")
+        lines.append(f"| {i} | {r['id']} | {question} | {'PASS' if r['passed'] else '**FAIL**'} "
+                     f"| {failed.replace('|', '/')} | {r.get('elapsed_seconds', '-')} |")
+    return "\n".join(lines) + "\n"
 
 
 if __name__ == "__main__":

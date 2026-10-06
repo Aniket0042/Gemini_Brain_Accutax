@@ -8,10 +8,13 @@ Hardened in Phase 1 with statement timeouts and resilient outcome return values.
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from contextvars import ContextVar
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import psycopg2
+from psycopg2 import extensions
 
 from gemini_brain.config.settings import settings
 
@@ -39,13 +42,7 @@ def _allowed_databases() -> set[str]:
     return {settings.db_name} | extra
 
 
-def get_connection(db_name: str = "") -> Any:
-    """Return a psycopg2 connection.
-
-    ``db_name`` reaches this function from the request body, so it is checked
-    against an allowlist rather than passed through — otherwise any caller
-    could point the engine at an arbitrary database on the same host.
-    """
+def _resolve_db(db_name: str) -> str:
     requested = db_name if (db_name and db_name != _PLACEHOLDER_DB) else (active_dbname.get() or "")
     resolved = requested or settings.db_name
 
@@ -56,16 +53,201 @@ def get_connection(db_name: str = "") -> Any:
             resolved, settings.db_name,
         )
         resolved = settings.db_name
+    return resolved
 
-    return psycopg2.connect(
+
+def _connect_kwargs(dbname: str) -> Dict[str, Any]:
+    return dict(
         host=settings.db_host,
         port=settings.db_port,
-        dbname=resolved,
+        dbname=dbname,
         user=settings.db_user,
         password=settings.db_password,
         connect_timeout=3,
         options="-c statement_timeout=20000",   # matches constants.SQL_TIMEOUT_MS
+        # Find connections the server or a VPN hop dropped while pooled.
+        keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=3,
     )
+
+
+# ── Connection pool ──────────────────────────────────────────────────────────
+# A new connection cost ~0.4 s plus several round trips per query (measured
+# over the VPN, 6 Oct 2026); the SQL itself was usually faster than that.
+# Callers keep their `conn = get_connection()` ... `conn.close()` shape:
+# close() hands the connection back, rolled back to a clean state.
+#
+# psycopg2's own pool keeps a returned connection only while fewer than
+# `minconn` sit idle, so with lazy creation (minconn=0) it closes every one.
+# This pool opens connections on demand and keeps up to db_pool_max.
+
+#: A pooled connection idle longer than this is pinged before reuse.
+_PING_AFTER_IDLE_SECONDS = 60.0
+
+
+class _Pool:
+    def __init__(self, dbname: str, maxconn: int):
+        self.dbname = dbname
+        self.maxconn = max(1, maxconn)
+        self.idle: List[Tuple[Any, float]] = []  # (connection, released at)
+        self.in_use = 0
+        self.lock = threading.Lock()
+
+    def get(self) -> Optional[Any]:
+        """A live connection, or None when all `maxconn` are in use."""
+        while True:
+            with self.lock:
+                if self.idle:
+                    conn, released_at = self.idle.pop()
+                elif self.in_use < self.maxconn:
+                    conn, released_at = None, 0.0
+                else:
+                    return None
+                self.in_use += 1
+            if conn is None:
+                try:
+                    return psycopg2.connect(**_connect_kwargs(self.dbname))
+                except Exception:
+                    with self.lock:
+                        self.in_use -= 1
+                    raise
+            if _alive(conn, released_at):
+                return conn
+            _close_quietly(conn)
+            with self.lock:
+                self.in_use -= 1
+
+    def put(self, conn: Any, broken: bool) -> None:
+        with self.lock:
+            self.in_use -= 1
+            if not broken and not conn.closed and len(self.idle) < self.maxconn:
+                self.idle.append((conn, time.monotonic()))
+                return
+        _close_quietly(conn)
+
+    def close_all(self) -> None:
+        with self.lock:
+            idle, self.idle = self.idle, []
+        for conn, _ in idle:
+            _close_quietly(conn)
+
+
+_pools: Dict[str, _Pool] = {}
+_pools_lock = threading.Lock()
+
+
+def _pool_for(dbname: str) -> _Pool:
+    with _pools_lock:
+        p = _pools.get(dbname)
+        if p is None:
+            p = _pools[dbname] = _Pool(dbname, settings.db_pool_max)
+        return p
+
+
+def close_pools() -> None:
+    """Close every idle pooled connection (shutdown, tests)."""
+    with _pools_lock:
+        pools = list(_pools.values())
+        _pools.clear()
+    for p in pools:
+        p.close_all()
+
+
+def _close_quietly(conn: Any) -> None:
+    try:
+        conn.close()
+    except Exception:
+        pass
+
+
+def _alive(conn: Any, released_at: float) -> bool:
+    """A cheap check for a connection that sat idle in the pool."""
+    if conn.closed:
+        return False
+    if time.monotonic() - released_at < _PING_AFTER_IDLE_SECONDS:
+        return True
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+        conn.rollback()
+        return True
+    except Exception:
+        return False
+
+
+class PooledConnection:
+    """A psycopg2 connection on loan from the pool; close() returns it.
+
+    Everything else passes through to the real connection. On return, an open
+    or failed transaction is rolled back (as closing a plain connection would
+    discard it) and autocommit is reset; a broken connection is discarded.
+    """
+
+    __slots__ = ("_conn", "_pool", "_released")
+
+    def __init__(self, conn: Any, pool: Optional[_Pool]):
+        object.__setattr__(self, "_conn", conn)
+        object.__setattr__(self, "_pool", pool)
+        object.__setattr__(self, "_released", False)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._conn, name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        setattr(self._conn, name, value)
+
+    def __enter__(self) -> "PooledConnection":
+        self._conn.__enter__()
+        return self
+
+    def __exit__(self, *exc: Any) -> Any:
+        return self._conn.__exit__(*exc)
+
+    def close(self) -> None:
+        if self._released:
+            return
+        object.__setattr__(self, "_released", True)
+        conn, pool = self._conn, self._pool
+        if pool is None:  # a direct connection, opened when the pool was full
+            _close_quietly(conn)
+            return
+        broken = bool(conn.closed)
+        if not broken:
+            try:
+                status = conn.get_transaction_status()
+                if status in (extensions.TRANSACTION_STATUS_INTRANS, extensions.TRANSACTION_STATUS_INERROR):
+                    conn.rollback()
+                elif status != extensions.TRANSACTION_STATUS_IDLE:
+                    broken = True  # a command still running, or the link is gone
+                if not broken and conn.autocommit:
+                    conn.autocommit = False
+            except Exception:
+                broken = True
+        pool.put(conn, broken)
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            pass
+
+
+def get_connection(db_name: str = "") -> Any:
+    """Return a psycopg2 connection (pooled unless DB_POOL_ENABLED is off).
+
+    ``db_name`` reaches this function from the request body, so it is checked
+    against an allowlist rather than passed through — otherwise any caller
+    could point the engine at an arbitrary database on the same host.
+    """
+    resolved = _resolve_db(db_name)
+    if not settings.db_pool_enabled:
+        return psycopg2.connect(**_connect_kwargs(resolved))
+    pool = _pool_for(resolved)
+    conn = pool.get()
+    if conn is None:
+        # Every pooled connection is in use: serve this caller directly rather than fail or wait.
+        logger.info("DB pool for %s is full (%d); opening a direct connection", resolved, pool.maxconn)
+        return PooledConnection(psycopg2.connect(**_connect_kwargs(resolved)), None)
+    return PooledConnection(conn, pool)
 
 
 #: Cache of org-id → exists, so the check costs one query per org per process.

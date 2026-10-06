@@ -109,7 +109,7 @@ def choose_policy(
     else:
         spec = resolve_model(tier.preferred_model)
         if payload_tokens > 1200 and "thorough" in spec.efforts:
-            spec = resolve_model("sonnet-3.5")
+            spec = resolve_model("sonnet-5")
             reasons.append("large result set")
 
     # A model may not be used above the effort tiers it declares.

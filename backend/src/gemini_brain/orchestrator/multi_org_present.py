@@ -36,7 +36,10 @@ OPEN_SECTIONS_MAX = 10
 _OVERLAP = re.compile(
     # "all organizations" alone is not an overlap ("top customers across all
     # organizations" is a merged list); "common to all…" matches via "common".
-    r"\b(both|in\s+common|common|shared|overlap(ping)?)\b",
+    r"\b(both|in\s+common|common|shared|overlap(ping)?)\b"
+    # The verb "share" only with contacts: "which vendors do they share", not "share capital".
+    r"|\bshare\b(?=.*\b(vendors?|suppliers?|customers?|clients?|payees?)\b)"
+    r"|\b(vendors?|suppliers?|customers?|clients?|payees?)\b.*\bshare\b",
     re.IGNORECASE,
 )
 _MERGED = re.compile(

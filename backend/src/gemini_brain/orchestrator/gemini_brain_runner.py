@@ -7,7 +7,7 @@ Orchestrates:
   2. LEFT PATH: Direct answer via Bedrock Claude Haiku 4.5 for types 1, 2, 6, 7
   3. RIGHT PATH: API endpoint selection via Bedrock Claude Haiku 4.5 for types 3, 4, 5
   4. Live REST API call against Accutax backend
-  5. Model selection for narration (Haiku 4.5 vs Sonnet 3.5, deterministic — see model_selector.py)
+  5. Model selection for narration (Haiku 4.5 vs Sonnet 5, deterministic — see model_selector.py)
   6. Claude reasoning over live API data using AWS Bedrock
   7. SQL fallback engine execution when API endpoints are missing or fail
   8. Session state persistence and titling
@@ -657,6 +657,8 @@ class GeminiBrainRunner:
                 accepted,
             )
             sel = {**sel, "path_params": path_params, "query_params": query_params}
+            from gemini_brain.reports.definitions import ORG_IGNORED_REST
+
             if exists is False:
                 logger.info(
                     "Skipping HTTP for %s — path is not in Accutax OpenAPI",
@@ -667,6 +669,16 @@ class GeminiBrainRunner:
                     tier="live_api",
                     endpoint=endpoint,
                     reason="not_in_accutax_openapi",
+                )
+            elif endpoint in ORG_IGNORED_REST:
+                # Accepts organization_id but ignores it: the answer would be
+                # another organization's figures, or every tenant's. Never called.
+                logger.warning("Skipping HTTP for %s — Accutax ignores organization_id there", endpoint)
+                res = Retrieved(
+                    Outcome.UNAVAILABLE,
+                    tier="live_api",
+                    endpoint=endpoint,
+                    reason="org_ignored",
                 )
             elif getattr(self, "_org_scoped_rest_only", False) and not _rest_call_is_org_scoped(
                 endpoint, accepted, path_params

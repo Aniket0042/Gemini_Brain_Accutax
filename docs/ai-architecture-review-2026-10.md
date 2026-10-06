@@ -342,6 +342,19 @@ That is one SQL query, expected under 1 second.
 | 0.7 | Add a request deadline, Bedrock client timeouts, and cancellation on Stop or disconnect. Cancel queued per-organization work too. | Gemini | No request runs past the deadline. Stop ends backend work. |
 | 0.8 | Agree a 30-question demo set with expected answers. Run it before every demo. | Both | A pass/fail sheet exists for each demo build. |
 
+**Phase 0 status, 7 Oct 2026** (built and tested locally; not yet deployed to the VM):
+
+| # | State |
+|---|---|
+| 0.1 | Done. `in.` Haiku 4.5 and `in.` Sonnet 5, verified from the VM (clock NTP-synced). Labels and prices now follow the model ID (`constants.model_label`, `pricing.py`); `sonnet-3.5` stays as an alias for saved preferences. The VM's `.env` still sets the old `BEDROCK_MODEL_ID*` and must be updated at deploy. |
+| 0.2 | Done. In the Accutax build running on the VM, 4 of the 11 methods now honour `organization_id` (the three consolidated reports and the supplier statement). The other 7 are in `reports/definitions.ORG_IGNORED_REST` and are never called, single-org or multi-org; the two project reports answer from org-filtered SQL. |
+| 0.3 | Open (Accutax owner): fix the 7 methods listed in `ORG_IGNORED_REST`. |
+| 0.4 | Done. `orchestrator/multi_org_conditions.py`: above/below/at least/at most/between, negative/positive, loss-making/profitable, amounts with k/m/AED, percentages. "List the organizations …" with a condition is a metric question. |
+| 0.5 | Done. A condition that cannot be applied (on an average, a percentage on an amount, a series) is stated in the answer; organizations without a figure are listed separately. |
+| 0.6 | Done. Lazy connection pool in `sql_fallback/db_connection.py` (kill switch `DB_POOL_ENABLED`). Report time halved over the VPN (0.32 s → 0.16 s per report). |
+| 0.7 | Partly done. Bedrock: 45 s read timeout, 2 attempts (was 60 s × up to 5). Multi-org: 40 s fetch deadline, then late organizations are named; Stop or a dropped connection cancels queued per-org work. Not done: an overall deadline for single-organization requests. |
+| 0.8 | Done. `tests/data/demo_set.json` (30 questions), run with `scripts/eval/multi_org_eval.py --cases tests/data/demo_set.json`; figures and condition matches are checked against independent SQL, and each run writes a Markdown pass/fail sheet. First full run: **30/30**, p95 5.9 s. Both demo questions: 2.0–2.5 s and 0.1 s (were 18.8 s and 2–3 minutes). |
+
 ### Phase 1: governed metric definitions
 
 - Define the metrics and dimensions in general-ledger terms, agreed with finance (section 6.1).
