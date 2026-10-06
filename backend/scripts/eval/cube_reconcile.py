@@ -62,12 +62,19 @@ def accutax_pnl(org: int, start: str, end: str) -> Optional[Dict[str, Decimal]]:
     return out
 
 
-def cube_pnl(orgs: List[int], start: str, end: str) -> Dict[int, Dict[str, Decimal]]:
-    result = cube_client.load(
-        {"measures": list(PNL_FIELDS), "dimensions": ["pnl.organization_id"],
-         "timeDimensions": [{"dimension": "pnl.transaction_date", "dateRange": [start, end]}]},
-        organization_ids=orgs, subject="reconcile", deadline=time.monotonic() + 50)
-    return {int(r["pnl.organization_id"]): {m: Decimal(str(r.get(m) or 0)) for m in PNL_FIELDS} for r in result.rows}
+def cube_pnl(orgs: List[int], start: str, end: str) -> Optional[Dict[int, Dict[str, Decimal]]]:
+    """Cube's P&L per org; one retry, since a cold first read can exceed Cube's 20 s query timeout."""
+    query = {"measures": list(PNL_FIELDS), "dimensions": ["pnl.organization_id"],
+             "timeDimensions": [{"dimension": "pnl.transaction_date", "dateRange": [start, end]}]}
+    for attempt in (1, 2):
+        try:
+            result = cube_client.load(query, organization_ids=orgs, subject="reconcile",
+                                      deadline=time.monotonic() + 50)
+            return {int(r["pnl.organization_id"]): {m: Decimal(str(r.get(m) or 0)) for m in PNL_FIELDS}
+                    for r in result.rows}
+        except cube_client.CubeError as e:
+            print(f"  Cube attempt {attempt} failed for {start}..{end}: {str(e)[:160]}")
+    return None
 
 
 def main() -> int:
@@ -80,6 +87,9 @@ def main() -> int:
 
     for label, start, end in windows(dt.date.today()):
         cube = cube_pnl(orgs, start, end)
+        if cube is None:
+            diffs.append([label, "all", "cube_query", "", "", "failed"])
+            continue
         for org in orgs:
             accutax = accutax_pnl(org, start, end)
             if accutax is None:

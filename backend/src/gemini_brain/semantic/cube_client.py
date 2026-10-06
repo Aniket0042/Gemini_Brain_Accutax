@@ -30,7 +30,9 @@ _audit = logging.getLogger("gemini_brain.audit.org_access")
 #: Cube's queryRewrite refuses tokens that live longer than 120 s.
 TOKEN_TTL_SECONDS = 60
 _RETRY_PAUSE_SECONDS = 0.25
-_PER_CALL_TIMEOUT_SECONDS = 10.0
+#: One HTTP call may wait this long. Cube holds a slow request before answering
+#: "Continue wait", and its own query timeout is 20 s; the request deadline still bounds every call.
+_PER_CALL_TIMEOUT_SECONDS = 30.0
 _MIN_SECRET_LENGTH = 32
 
 
