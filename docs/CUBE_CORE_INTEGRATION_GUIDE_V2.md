@@ -1,10 +1,10 @@
 # Cube Core Integration Guide (v2)
 
 Date: 6 October 2026
-Supersedes: [`CUBE_CORE_INTEGRATION_GUIDE.md`](./CUBE_CORE_INTEGRATION_GUIDE.md) (v1)
+Supersedes: the v1 guide (deleted 7 Oct 2026; its defects and their fixes are listed in section 1.2)
 Related: [`ai-architecture-review-2026-10.md`](./ai-architecture-review-2026-10.md)
 Audience: the engineers building the semantic layer, the DBA, and finance (section 4 only).
-Status: **Phase 1 in progress** (7 Oct 2026). Step 1 is done (section 5.1). The model, security config, client, tool, shadow hook and tests are written (section 16). Cube has not run yet: Step 2 waits on the DBA, and Step 3 (deploy on the VM) waits on Step 2 and an explicit go-ahead. Finance sign-off (section 1.3) is still needed before Cube answers users.
+Status: **Phase 1 in progress** (7 Oct 2026). Step 1 is done (section 5.1). The model, security config, client, tool, shadow hook and tests are written (section 16). Step 2 (database role) is done. Cube has not run yet: Step 3 (deploy on the VM) waits on an explicit go-ahead. Finance sign-off (section 1.3) is still needed before Cube answers users.
 
 The code was written against the Accutax entity definitions, Gemini Brain's own SQL reports, and the Cube docs for v1.7.50. Each cube's SQL and measures have been run read-only against the live database for the test orgs (`scripts/eval/cube_model_check.py`). Cube's own compilation of the model is verified at the Step 3 smoke tests.
 
@@ -242,7 +242,7 @@ The model's SQL also ran read-only against the test orgs (`scripts/eval/cube_mod
 
 The shared database is changed only by the DBA, on explicit approval. Hand over [`semantic/dba/cube_reader.sql`](../semantic/dba/cube_reader.sql); do not run it from Gemini Brain.
 
-After Step 1 only the role is needed. Row-level security is off, so the policy below is not needed. `idx_journal_entries_org_id` already exists, so the index below is not needed for Phase 1; keep it in mind for Phase 3. The server time zone is Asia/Kolkata, so the role's `timezone = 'UTC'` setting is required. The original SQL follows for reference.
+**Done 7 Oct 2026**: the role was created as `postgres` (the password reaches the server only as a hash) and verified; see section 16. After Step 1 only the role is needed. Row-level security is off, so the policy below is not needed. `idx_journal_entries_org_id` already exists, so the index below is not needed for Phase 1; keep it in mind for Phase 3. The server time zone is Asia/Kolkata, so the role's `timezone = 'UTC'` setting is required. The original SQL follows for reference.
 
 ```sql
 -- Run as a superuser or CREATEROLE role. Generate the password; store it only in semantic/cube.env on the VM.
@@ -699,8 +699,8 @@ These came up while checking v1 against the code. They are not Cube tasks; they 
 | Step | State |
 |---|---|
 | 1. Verify the data | Done (5.1) |
-| 2. DBA prerequisites | Waiting: hand [`cube_reader.sql`](../semantic/dba/cube_reader.sql) to the DBA |
-| 3. Deploy Cube | Files ready (7.1, 7.5). Waiting on step 2, the secret, and a go-ahead to install on the VM |
+| 2. DBA prerequisites | Done 7 Oct 2026: `cube_reader` created as `postgres` per [`cube_reader.sql`](../semantic/dba/cube_reader.sql) and verified (UTC time zone, read-only, 20 s timeout, reads the granted tables only, cannot create or write). Credentials and a generated API secret are in the git-ignored `semantic/cube.env` on the dev machine |
+| 3. Deploy Cube | Files ready (7.1, 7.5). Waiting on a go-ahead to install on the VM; copy `semantic/cube.env` there |
 | 4. Data model | Built; SQL checked read-only against the test orgs; Cube compilation checked at deploy |
 | 5. Python client | Built and unit-tested |
 | 6. `query_metrics` tool | Built and unit-tested; the agent loop is Phase 2 |
