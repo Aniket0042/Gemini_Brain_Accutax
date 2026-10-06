@@ -1,0 +1,111 @@
+# Lines of issued purchase documents (guide section 4.1).
+#
+# Included: BILL, EXPENSE, CASH_EXPENSE (+) and VENDOR_CREDIT (-).
+# Excluded: purchase orders, drafts, voided and cancelled documents. The document
+# date is reception_date (text), falling back to created_date, as Accutax does.
+# Every join also matches on organization.
+#
+# No curly braces in SQL literals: Cube's YAML reads {...} as a member reference.
+cubes:
+  - name: purchase_lines
+    description: Lines of issued purchase documents, one row per expense_items row.
+    public: false
+    sql: >
+      SELECT ei.id                                         AS line_id,
+             e.id                                          AS document_id,
+             e.organization_id                             AS organization_id,
+             e.expense_type                                AS document_type,
+             e.receipt_number                              AS document_number,
+             st.value                                      AS status,
+             COALESCE(
+               CASE WHEN CAST(e.reception_date AS TEXT) ~ '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+                    THEN CAST(LEFT(CAST(e.reception_date AS TEXT), 10) AS DATE) END,
+               CAST(e.created_date AS DATE))                AS document_date,
+             e.contact_id                                  AS vendor_id,
+             COALESCE(NULLIF(c.name, ''), NULLIF(c.organization_name, ''), 'Unknown') AS vendor_name,
+             COALESCE(ect.value, 'Uncategorised')          AS expense_category,
+             COALESCE(p.project_name, 'No project')        AS project_name,
+             COALESCE(cc.costcenter_name, 'Unallocated')   AS cost_center_name,
+             CASE WHEN e.expense_type = 'VENDOR_CREDIT' THEN -1 ELSE 1 END AS doc_sign,
+             ei.line_amount                                AS line_amount,
+             COALESCE(ei.tax_amount, 0)                    AS tax_amount
+      FROM   public.expense e
+      JOIN   public.expense_items ei ON ei.expense_id = e.id
+      JOIN   public.status_type   st ON st.id = e.status_type_id
+      LEFT   JOIN public.contacts              c   ON c.id   = e.contact_id      AND c.organization_id  = e.organization_id
+      LEFT   JOIN public.expense_category_type ect ON ect.id = e.expense_category_type_id
+      LEFT   JOIN public.projects              p   ON p.id   = e.project_id      AND p.organization_id  = e.organization_id
+      LEFT   JOIN public.cost_centers          cc  ON cc.id  = ei.cost_center_id AND cc.organization_id = e.organization_id
+      WHERE  e.expense_type IN ('BILL', 'EXPENSE', 'CASH_EXPENSE', 'VENDOR_CREDIT')
+        AND  e.is_draft = false
+        AND  e.voided_at IS NULL
+        AND  st.value NOT IN ('CANCELLED', 'VOIDED')
+
+    joins:
+      - name: organizations
+        relationship: many_to_one
+        sql: "{CUBE.organization_id} = {organizations.id}"
+
+    dimensions:
+      - name: line_id
+        sql: line_id
+        type: number
+        primary_key: true
+      - name: organization_id
+        sql: organization_id
+        type: number
+      - name: document_date
+        sql: document_date
+        type: time
+      - name: document_type
+        sql: document_type
+        type: string
+      - name: document_number
+        sql: document_number
+        type: string
+      - name: status
+        sql: status
+        type: string
+      - name: vendor_name
+        sql: vendor_name
+        type: string
+      - name: expense_category
+        sql: expense_category
+        type: string
+      - name: project_name
+        sql: project_name
+        type: string
+      - name: cost_center_name
+        sql: cost_center_name
+        type: string
+
+    measures:
+      - name: gross_purchases
+        description: Purchases before VAT (bills, expenses, cash expenses).
+        type: sum
+        sql: "{CUBE}.line_amount"
+        filters:
+          - sql: "{CUBE}.document_type <> 'VENDOR_CREDIT'"
+      - name: vendor_credits
+        description: Vendor credits before VAT, as a positive amount.
+        type: sum
+        sql: "{CUBE}.line_amount"
+        filters:
+          - sql: "{CUBE}.document_type = 'VENDOR_CREDIT'"
+      - name: net_purchases
+        description: Gross purchases minus vendor credits, before VAT.
+        type: number
+        sql: "COALESCE({gross_purchases}, 0) - COALESCE({vendor_credits}, 0)"
+      - name: input_vat
+        description: VAT on purchases minus VAT on vendor credits.
+        type: sum
+        sql: "{CUBE}.doc_sign * {CUBE}.tax_amount"
+      - name: bill_count
+        description: Number of purchase documents, excluding vendor credits.
+        type: count_distinct
+        sql: "{CUBE}.document_id"
+        filters:
+          - sql: "{CUBE}.document_type <> 'VENDOR_CREDIT'"
+      - name: vendor_count
+        type: count_distinct
+        sql: "{CUBE}.vendor_id"

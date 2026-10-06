@@ -1,0 +1,21 @@
+# Cube Store: cache and queue for Cube in production mode; rollups in Phase 3.
+# Rootless Quadlet unit for the "cube" user (~cube/.config/containers/systemd/).
+[Unit]
+Description=Cube Store for the Accutax semantic layer
+
+[Container]
+ContainerName=cubestore
+Image=docker.io/cubejs/cubestore:v1.7.50
+Network=cube.network
+Volume=cubestore.volume:/cube/data
+Environment=CUBESTORE_REMOTE_DIR=/cube/data
+Environment=CUBESTORE_TELEMETRY=false
+NoNewPrivileges=true
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

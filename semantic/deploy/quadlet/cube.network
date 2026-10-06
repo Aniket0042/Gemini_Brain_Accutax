@@ -1,0 +1,3 @@
+# Private network for cube-api and cubestore (container names resolve on it).
+[Network]
+NetworkName=cube

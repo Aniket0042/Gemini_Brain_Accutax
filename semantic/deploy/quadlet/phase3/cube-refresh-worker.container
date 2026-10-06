@@ -1,0 +1,32 @@
+# Phase 3 only (rollups). Builds pre-aggregations; publishes no port and serves no API traffic.
+# Point it at a read replica before enabling rollups for all tenants.
+[Unit]
+Description=Cube refresh worker for the Accutax semantic layer
+Requires=cubestore.service
+After=cubestore.service
+
+[Container]
+ContainerName=cube-refresh-worker
+Image=docker.io/cubejs/cube:v1.7.50
+Network=cube.network
+EnvironmentFile=%h/semantic/cube.env
+Environment=CUBEJS_REFRESH_WORKER=true
+Environment=CUBEJS_DEV_MODE=false
+Environment=CUBEJS_CACHE_AND_QUEUE_DRIVER=cubestore
+Environment=CUBEJS_CUBESTORE_HOST=cubestore
+Environment=CUBEJS_TELEMETRY=false
+Environment=CUBEJS_LOG_LEVEL=info
+Environment=CUBEJS_DB_QUERY_TIMEOUT=20s
+Environment=CUBEJS_CONCURRENCY=2
+Environment=CUBEJS_DB_MAX_POOL=6
+Volume=%h/semantic/cube.js:/cube/conf/cube.js:ro,Z
+Volume=%h/semantic/model:/cube/conf/model:ro,Z
+NoNewPrivileges=true
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

@@ -389,10 +389,28 @@ def run_multi_org_stream(
         final["agent_trace"].insert(0, plan.trace_step())
     if question != query:
         final["agent_trace"].insert(0, {"step": "multi_org_standalone_question", "question": question})
+    _shadow_metrics(plan, ordered, question, int(run_kwargs.get("user_id") or 0))
     if session_id:
         _persist_turn(session_id, int(run_kwargs.get("user_id") or 0), thread_org_ids, query, final, compare_runner, db_name)
     record_plan(question, plan, final, len(org_ids))
     yield {"final_result": final}
+
+
+def _shadow_metrics(plan: Any, runs: List["OrgRun"], question: str, user_id: int) -> None:
+    """With METRICS_BACKEND=shadow, compare the SQL metric figures with Cube in the background.
+
+    The answer is already final; the comparison only writes the shadow log.
+    """
+    from gemini_brain.config.settings import settings
+
+    if plan is None or settings.metrics_backend != "shadow":
+        return
+    try:
+        from gemini_brain.semantic.shadow import start_shadow_compare
+
+        start_shadow_compare(plan, runs, question, user_id=user_id)
+    except Exception as e:  # noqa: BLE001 - shadow must never fail an answer
+        logger.warning("multi_org: metrics shadow not started: %s", e)
 
 
 def _computed_comparison(plan: Any, runs: List["OrgRun"], question: str) -> Optional[Dict[str, Any]]:

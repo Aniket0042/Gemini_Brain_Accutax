@@ -1,0 +1,30 @@
+views:
+  - name: receivables
+    description: >-
+      What customers owe today: open (PENDING or PARTIALLY_PAID) sales invoices, including VAT.
+      Status has no history, so this view has no past dates. "Overdue" uses the UTC date.
+    meta:
+      kind: current
+      ai_context: >-
+        Use for outstanding or overdue receivables, aging and who owes the most. For a past
+        date, say that receivables are only available for today.
+    cubes:
+      - join_path: open_receivables
+        includes:
+          - organization_id
+          - document_number
+          - status
+          - customer_name
+          - document_date
+          - due_date
+          - days_overdue
+          - aging_bucket
+          - outstanding
+          - overdue_amount
+          - open_count
+          - overdue_count
+      - join_path: open_receivables.organizations
+        includes:
+          - name: name
+            alias: organization_name
+          - currency

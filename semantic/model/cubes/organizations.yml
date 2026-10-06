@@ -1,0 +1,18 @@
+# Organization name and base currency, joined into every view.
+# Not queryable on its own (public: false); views expose name and currency only.
+cubes:
+  - name: organizations
+    sql_table: public.organizations
+    public: false
+
+    dimensions:
+      - name: id
+        sql: id
+        type: number
+        primary_key: true
+      - name: name
+        sql: name
+        type: string
+      - name: currency
+        sql: currency
+        type: string

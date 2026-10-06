@@ -1,0 +1,29 @@
+views:
+  - name: payables
+    description: >-
+      What the organization owes suppliers today: open (PENDING or PARTIALLY_PAID) bills and
+      expenses, including VAT. Status has no history, so this view has no past dates.
+    meta:
+      kind: current
+      ai_context: >-
+        Use for outstanding or overdue payables, aging and which suppliers are owed the most.
+    cubes:
+      - join_path: open_payables
+        includes:
+          - organization_id
+          - document_number
+          - status
+          - vendor_name
+          - document_date
+          - due_date
+          - days_overdue
+          - aging_bucket
+          - outstanding
+          - overdue_amount
+          - open_count
+          - overdue_count
+      - join_path: open_payables.organizations
+        includes:
+          - name: name
+            alias: organization_name
+          - currency

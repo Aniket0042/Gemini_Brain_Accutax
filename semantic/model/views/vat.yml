@@ -1,0 +1,25 @@
+views:
+  - name: vat
+    description: >-
+      VAT from issued documents by document date: output VAT on sales, input VAT on purchases,
+      and the net amount payable. Credit notes and vendor credits reduce the totals.
+    meta:
+      kind: flow
+      time_dimension: vat.document_date
+      ai_context: >-
+        Use for VAT payable, VAT refund position, output or input VAT for a period.
+    cubes:
+      - join_path: vat_lines
+        includes:
+          - organization_id
+          - document_date
+          - direction
+          - output_vat
+          - input_vat
+          - net_vat_payable
+          - standard_rated_sales
+      - join_path: vat_lines.organizations
+        includes:
+          - name: name
+            alias: organization_name
+          - currency

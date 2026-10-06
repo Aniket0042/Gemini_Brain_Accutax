@@ -1,0 +1,112 @@
+# Lines of issued sales documents (guide section 4.1).
+#
+# Included: INVOICE, CASH_INVOICE, INCOME (+) and CREDIT_NOTE (-).
+# Excluded: quotes, estimates, proformas, delivery documents, drafts, voided and
+# cancelled documents. invoice_date is text; values that are not dates get no
+# date and drop out of period queries. Every join also matches on organization.
+#
+# No curly braces in SQL literals: Cube's YAML reads {...} as a member reference.
+cubes:
+  - name: sales_lines
+    description: Lines of issued sales documents, one row per income_items row.
+    public: false
+    sql: >
+      SELECT ii.id                                         AS line_id,
+             inc.id                                        AS document_id,
+             inc.organization_id                           AS organization_id,
+             inc.income_type                               AS document_type,
+             inc.invoice_number                            AS document_number,
+             st.value                                      AS status,
+             CASE WHEN CAST(inc.invoice_date AS TEXT) ~ '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+                  THEN CAST(LEFT(CAST(inc.invoice_date AS TEXT), 10) AS DATE) END AS document_date,
+             inc.contact_id                                AS customer_id,
+             COALESCE(NULLIF(c.name, ''), NULLIF(c.organization_name, ''), 'Unknown') AS customer_name,
+             COALESCE(p.project_name, 'No project')        AS project_name,
+             COALESCE(cc.costcenter_name, 'Unallocated')   AS cost_center_name,
+             CASE WHEN inc.income_type = 'CREDIT_NOTE' THEN -1 ELSE 1 END AS doc_sign,
+             ii.line_amount                                AS line_amount,
+             COALESCE(ii.tax_amount, 0)                    AS tax_amount
+      FROM   public.income inc
+      JOIN   public.income_items ii ON ii.income_id = inc.id
+      JOIN   public.status_type  st ON st.id = inc.status_type_id
+      LEFT   JOIN public.contacts     c  ON c.id  = inc.contact_id    AND c.organization_id  = inc.organization_id
+      LEFT   JOIN public.projects     p  ON p.id  = inc.project_id    AND p.organization_id  = inc.organization_id
+      LEFT   JOIN public.cost_centers cc ON cc.id = ii.cost_center_id AND cc.organization_id = inc.organization_id
+      WHERE  inc.income_type IN ('INVOICE', 'CASH_INVOICE', 'INCOME', 'CREDIT_NOTE')
+        AND  inc.is_draft = false
+        AND  inc.voided_at IS NULL
+        AND  st.value NOT IN ('CANCELLED', 'VOIDED')
+
+    joins:
+      - name: organizations
+        relationship: many_to_one
+        sql: "{CUBE.organization_id} = {organizations.id}"
+
+    dimensions:
+      - name: line_id
+        sql: line_id
+        type: number
+        primary_key: true
+      - name: organization_id
+        sql: organization_id
+        type: number
+      - name: document_date
+        sql: document_date
+        type: time
+      - name: document_type
+        sql: document_type
+        type: string
+      - name: document_number
+        sql: document_number
+        type: string
+      - name: status
+        sql: status
+        type: string
+      - name: customer_name
+        sql: customer_name
+        type: string
+      - name: project_name
+        sql: project_name
+        type: string
+      - name: cost_center_name
+        sql: cost_center_name
+        type: string
+
+    # Measures read raw columns ({CUBE}.line_amount), so amounts need no dimension.
+    # Views list members explicitly: a view makes even public: false members queryable.
+    measures:
+      - name: gross_sales
+        description: Invoiced sales before VAT (invoices, cash invoices, income receipts).
+        type: sum
+        sql: "{CUBE}.line_amount"
+        filters:
+          - sql: "{CUBE}.document_type <> 'CREDIT_NOTE'"
+      - name: credit_notes
+        description: Credit notes before VAT, as a positive amount.
+        type: sum
+        sql: "{CUBE}.line_amount"
+        filters:
+          - sql: "{CUBE}.document_type = 'CREDIT_NOTE'"
+      - name: net_sales
+        description: Gross sales minus credit notes, before VAT.
+        type: number
+        sql: "COALESCE({gross_sales}, 0) - COALESCE({credit_notes}, 0)"
+      - name: output_vat
+        description: VAT on sales minus VAT on credit notes.
+        type: sum
+        sql: "{CUBE}.doc_sign * {CUBE}.tax_amount"
+      - name: standard_rated_sales
+        description: Net sales on lines that carry VAT.
+        type: sum
+        sql: "{CUBE}.doc_sign * {CUBE}.line_amount"
+        filters:
+          - sql: "{CUBE}.tax_amount > 0"
+      - name: invoice_count
+        description: Number of sales documents, excluding credit notes.
+        type: count_distinct
+        sql: "{CUBE}.document_id"
+        filters:
+          - sql: "{CUBE}.document_type <> 'CREDIT_NOTE'"
+      - name: customer_count
+        type: count_distinct
+        sql: "{CUBE}.customer_id"

@@ -1,0 +1,60 @@
+# VAT from documents: output VAT on sales, input VAT on purchases.
+# Reuses the sales_lines and purchase_lines SQL, so the document rules are defined once.
+cubes:
+  - name: vat_lines
+    public: false
+    sql: >
+      SELECT 'S' || s.line_id AS vat_line_id, s.organization_id, s.document_date,
+             'OUTPUT' AS direction, s.doc_sign * s.tax_amount AS vat_amount,
+             CASE WHEN s.tax_amount > 0 THEN s.doc_sign * s.line_amount ELSE 0 END AS standard_rated_amount
+      FROM   ({sales_lines.sql()}) AS s
+      UNION ALL
+      SELECT 'P' || p.line_id, p.organization_id, p.document_date,
+             'INPUT', p.doc_sign * p.tax_amount,
+             CASE WHEN p.tax_amount > 0 THEN p.doc_sign * p.line_amount ELSE 0 END
+      FROM   ({purchase_lines.sql()}) AS p
+
+    joins:
+      - name: organizations
+        relationship: many_to_one
+        sql: "{CUBE.organization_id} = {organizations.id}"
+
+    dimensions:
+      - name: vat_line_id
+        sql: vat_line_id
+        type: string
+        primary_key: true
+      - name: organization_id
+        sql: organization_id
+        type: number
+      - name: document_date
+        sql: document_date
+        type: time
+      - name: direction
+        description: OUTPUT (sales) or INPUT (purchases).
+        sql: direction
+        type: string
+
+    measures:
+      - name: output_vat
+        description: VAT charged on sales, net of credit notes.
+        type: sum
+        sql: "{CUBE}.vat_amount"
+        filters:
+          - sql: "{CUBE}.direction = 'OUTPUT'"
+      - name: input_vat
+        description: VAT paid on purchases, net of vendor credits.
+        type: sum
+        sql: "{CUBE}.vat_amount"
+        filters:
+          - sql: "{CUBE}.direction = 'INPUT'"
+      - name: net_vat_payable
+        description: Output VAT minus input VAT. Negative means a refund position.
+        type: number
+        sql: "COALESCE({output_vat}, 0) - COALESCE({input_vat}, 0)"
+      - name: standard_rated_sales
+        description: Net sales on lines that carry VAT.
+        type: sum
+        sql: "{CUBE}.standard_rated_amount"
+        filters:
+          - sql: "{CUBE}.direction = 'OUTPUT'"

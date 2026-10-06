@@ -1,0 +1,38 @@
+# The only surface the AI can query (cube.js QUERYABLE_VIEWS). meta.kind tells
+# Gemini Brain how time applies: flow = period, balance = as-of, current = none.
+# Every view must include organization_id, organization_name and currency.
+views:
+  - name: pnl
+    description: >-
+      Profit and loss from posted general-ledger entries, with the same rules as the Accutax
+      Profit & Loss report. Amounts exclude VAT and are in each organization's currency.
+    meta:
+      kind: flow
+      time_dimension: pnl.transaction_date
+      ai_context: >-
+        Default view for revenue, income, total sales, expenses, cost of sales, gross or net
+        profit and margins. Margins are empty for an organization with no revenue in the period.
+    cubes:
+      - join_path: gl_lines
+        includes:
+          - organization_id
+          - transaction_date
+          - account_code
+          - account_name
+          - account_type
+          - account_sub_type
+          - source_type
+          - revenue
+          - other_income
+          - cost_of_sales
+          - operating_expenses
+          - total_expenses
+          - gross_profit
+          - net_profit
+          - gross_margin_pct
+          - net_margin_pct
+      - join_path: gl_lines.organizations
+        includes:
+          - name: name
+            alias: organization_name
+          - currency

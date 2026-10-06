@@ -1,0 +1,60 @@
+# Cube for a developer machine (Docker Desktop: docker compose; Podman: podman-compose).
+# The VM runs the same images as rootless Podman Quadlet units (deploy/quadlet).
+# Only the API publishes a port, and only on 127.0.0.1. Cube and Cube Store stay on one release.
+#
+#   cp cube.env.example cube.env   # fill in
+#   docker compose -f docker-compose.cube.yml up -d
+name: accutax-semantic
+
+x-cube-env: &cube-env
+  CUBEJS_DEV_MODE: "false"
+  CUBEJS_CACHE_AND_QUEUE_DRIVER: cubestore
+  CUBEJS_CUBESTORE_HOST: cubestore
+  CUBEJS_DEFAULT_API_SCOPES: meta,data,sql      # no GraphQL
+  CUBEJS_TELEMETRY: "false"
+  CUBEJS_LOG_LEVEL: info
+  CUBEJS_DB_QUERY_TIMEOUT: 20s                  # default is 10m
+  CUBEJS_CONCURRENCY: "4"
+  CUBEJS_DB_MAX_POOL: "12"                      # must exceed queue concurrency + refresh worker
+  CUBEJS_JWT_ALGS: HS256
+  CUBEJS_JWT_AUDIENCE: accutax-cube
+  CUBEJS_JWT_ISSUER: gemini-brain
+
+services:
+  cube_api:
+    image: docker.io/cubejs/cube:v1.7.50
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4000:4000"
+    env_file: cube.env
+    environment:
+      <<: *cube-env
+    volumes:
+      - ./cube.js:/cube/conf/cube.js:ro
+      - ./model:/cube/conf/model:ro
+    depends_on: [cubestore]
+
+  cubestore:
+    image: docker.io/cubejs/cubestore:v1.7.50
+    restart: unless-stopped
+    environment:
+      CUBESTORE_REMOTE_DIR: /cube/data
+      CUBESTORE_TELEMETRY: "false"
+    volumes:
+      - cubestore_data:/cube/data
+
+  # Phase 3 (rollups): uncomment, and add pre_aggregations to the model.
+  # cube_refresh_worker:
+  #   image: docker.io/cubejs/cube:v1.7.50
+  #   restart: unless-stopped
+  #   env_file: cube.env
+  #   environment:
+  #     <<: *cube-env
+  #     CUBEJS_REFRESH_WORKER: "true"
+  #   volumes:
+  #     - ./cube.js:/cube/conf/cube.js:ro
+  #     - ./model:/cube/conf/model:ro
+  #   depends_on: [cubestore]
+
+volumes:
+  cubestore_data:

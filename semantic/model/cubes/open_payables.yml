@@ -1,0 +1,97 @@
+# Open purchase documents as of today: what the organization owes suppliers.
+# Same rules as open_receivables, on expense / expense_items. The document date
+# is reception_date (text), falling back to created_date, as Accutax does.
+#
+# No curly braces in SQL literals: Cube's YAML reads {...} as a member reference.
+cubes:
+  - name: open_payables
+    description: Open bills and expenses as of today. Payment state comes from the status.
+    public: false
+    sql: >
+      SELECT e.id                 AS document_id,
+             e.organization_id    AS organization_id,
+             e.receipt_number     AS document_number,
+             st.value             AS status,
+             COALESCE(
+               CASE WHEN CAST(e.reception_date AS TEXT) ~ '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+                    THEN CAST(LEFT(CAST(e.reception_date AS TEXT), 10) AS DATE) END,
+               CAST(e.created_date AS DATE))                                      AS document_date,
+             CASE WHEN CAST(e.due_date AS TEXT) ~ '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+                  THEN CAST(LEFT(CAST(e.due_date AS TEXT), 10) AS DATE) END         AS due_date,
+             COALESCE(NULLIF(c.name, ''), NULLIF(c.organization_name, ''), 'Unknown') AS vendor_name,
+             t.total_incl_vat - COALESCE(e.amount_paid, 0) AS outstanding
+      FROM   public.expense e
+      JOIN   public.status_type st ON st.id = e.status_type_id
+      LEFT   JOIN public.contacts c ON c.id = e.contact_id AND c.organization_id = e.organization_id
+      CROSS  JOIN LATERAL (
+               SELECT COALESCE(SUM(ei.line_amount + COALESCE(ei.tax_amount, 0)), 0) AS total_incl_vat
+               FROM   public.expense_items ei
+               WHERE  ei.expense_id = e.id
+             ) t
+      WHERE  e.expense_type IN ('BILL', 'EXPENSE', 'CASH_EXPENSE')
+        AND  e.is_draft = false
+        AND  e.voided_at IS NULL
+        AND  st.value IN ('PENDING', 'PARTIALLY_PAID')
+        AND  NOT (CAST(e.reception_date AS TEXT) ~ '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+                  AND CAST(LEFT(CAST(e.reception_date AS TEXT), 10) AS DATE) > CURRENT_DATE)
+
+    joins:
+      - name: organizations
+        relationship: many_to_one
+        sql: "{CUBE.organization_id} = {organizations.id}"
+
+    dimensions:
+      - name: document_id
+        sql: document_id
+        type: number
+        primary_key: true
+      - name: organization_id
+        sql: organization_id
+        type: number
+      - name: document_number
+        sql: document_number
+        type: string
+      - name: status
+        sql: status
+        type: string
+      - name: vendor_name
+        sql: vendor_name
+        type: string
+      - name: document_date
+        sql: document_date
+        type: time
+      - name: due_date
+        sql: due_date
+        type: time
+      - name: days_overdue
+        description: Days past the due date; 0 when not yet due.
+        type: number
+        sql: "CASE WHEN {CUBE}.due_date < CURRENT_DATE THEN CURRENT_DATE - {CUBE}.due_date ELSE 0 END"
+      - name: aging_bucket
+        description: No due date, Not yet due, 1-30 days, 31-60 days, 61-90 days or Over 90 days.
+        type: string
+        sql: >
+          CASE WHEN {CUBE}.due_date IS NULL THEN 'No due date'
+               WHEN {CUBE}.due_date >= CURRENT_DATE THEN 'Not yet due'
+               WHEN CURRENT_DATE - {CUBE}.due_date <= 30 THEN '1-30 days'
+               WHEN CURRENT_DATE - {CUBE}.due_date <= 60 THEN '31-60 days'
+               WHEN CURRENT_DATE - {CUBE}.due_date <= 90 THEN '61-90 days'
+               ELSE 'Over 90 days' END
+
+    measures:
+      - name: outstanding
+        description: Unpaid amount including VAT on open bills and expenses.
+        type: sum
+        sql: "{CUBE}.outstanding"
+      - name: overdue_amount
+        description: Unpaid amount including VAT past the due date.
+        type: sum
+        sql: "{CUBE}.outstanding"
+        filters:
+          - sql: "{CUBE}.due_date < CURRENT_DATE"
+      - name: open_count
+        type: count
+      - name: overdue_count
+        type: count
+        filters:
+          - sql: "{CUBE}.due_date < CURRENT_DATE"

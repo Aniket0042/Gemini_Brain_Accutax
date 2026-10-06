@@ -1,0 +1,3 @@
+# Cube Store data: cache, queue and (Phase 3) rollups. Rebuildable; no backup needed.
+[Volume]
+VolumeName=cubestore-data

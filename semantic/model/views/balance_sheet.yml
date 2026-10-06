@@ -1,0 +1,40 @@
+views:
+  - name: balance_sheet
+    description: >-
+      Balances from posted general-ledger entries as of a date: assets, liabilities, equity,
+      working capital, cash and bank. Grouped by account currency, so currencies are never added together.
+    meta:
+      kind: balance
+      time_dimension: balance_sheet.transaction_date
+      always_group_by:
+        - balance_sheet.account_currency
+      ai_context: >-
+        Use for assets, liabilities, equity, working capital, current ratio, cash position and
+        whether the books balance, at today or at a past date.
+    cubes:
+      - join_path: gl_lines
+        includes:
+          - organization_id
+          - transaction_date
+          - account_code
+          - account_name
+          - account_type
+          - account_sub_type
+          - account_currency
+          - assets
+          - current_assets
+          - fixed_assets
+          - liabilities
+          - current_liabilities
+          - working_capital
+          - current_ratio
+          - equity_booked
+          - accumulated_earnings
+          - total_equity
+          - balance_difference
+          - cash_and_bank
+      - join_path: gl_lines.organizations
+        includes:
+          - name: name
+            alias: organization_name
+          - currency

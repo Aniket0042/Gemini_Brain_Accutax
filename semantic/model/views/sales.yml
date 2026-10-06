@@ -1,0 +1,33 @@
+views:
+  - name: sales
+    description: >-
+      Issued sales documents (invoices, cash invoices, income receipts, less credit notes),
+      before VAT unless the measure says otherwise. Drafts, voided and cancelled documents are excluded.
+    meta:
+      kind: flow
+      time_dimension: sales.document_date
+      ai_context: >-
+        Use when the user asks about invoiced sales, invoice counts, or sales per customer,
+        project or cost centre. For total revenue or profit use pnl.
+    cubes:
+      - join_path: sales_lines
+        includes:
+          - organization_id
+          - document_date
+          - document_type
+          - status
+          - customer_name
+          - project_name
+          - cost_center_name
+          - gross_sales
+          - credit_notes
+          - net_sales
+          - output_vat
+          - standard_rated_sales
+          - invoice_count
+          - customer_count
+      - join_path: sales_lines.organizations
+        includes:
+          - name: name
+            alias: organization_name
+          - currency

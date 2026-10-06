@@ -277,6 +277,40 @@ class GeminiBrainSettings(BaseSettings):
         description="Longest the knowledge-base search may take before the answer falls back to the normal path.",
     )
 
+    # ── Cube Core semantic layer (docs/CUBE_CORE_INTEGRATION_GUIDE_V2.md) ──
+    cube_api_url: str = Field(
+        default="http://127.0.0.1:4000",
+        description="Cube API base URL. Cube listens on loopback only; never point this at a public host.",
+    )
+    cube_api_secret: str = Field(
+        default="",
+        description=(
+            "HS256 secret shared with Cube (CUBEJS_API_SECRET), at least 32 characters. "
+            "Deliberately no default: empty disables every Cube call."
+        ),
+    )
+    cube_jwt_audience: str = Field(default="accutax-cube")
+    cube_jwt_issuer: str = Field(default="gemini-brain")
+    metrics_backend: str = Field(
+        default="sql",
+        description=(
+            "Which backend answers multi-org metric questions: 'sql' (the rpt_ reports), "
+            "'shadow' (SQL answers; Cube is compared off the request path and logged), "
+            "or 'cube' (not wired yet; Phase 1b)."
+        ),
+    )
+    metrics_shadow_log: str = Field(
+        default="logs/metrics_shadow.jsonl",
+        description=(
+            "JSON-lines file of SQL-vs-Cube metric comparisons in shadow mode, relative to "
+            "backend/. Holds organization IDs and figures, no user IDs. Empty turns it off."
+        ),
+    )
+    report_timezone: str = Field(
+        default="Asia/Dubai",
+        description="Time zone that turns period presets such as 'ytd' into dates.",
+    )
+
     model_config = {
         # Anchored to the repository root rather than the process working
         # directory. A relative ".env" silently falls back to the defaults

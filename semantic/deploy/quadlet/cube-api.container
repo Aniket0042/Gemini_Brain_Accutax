@@ -1,0 +1,42 @@
+# Cube API for Gemini Brain, on 127.0.0.1:4000 only. Never proxy it through nginx.
+# Rootless Quadlet unit for the "cube" user (~cube/.config/containers/systemd/).
+# %h is the cube user's home; install_rootless.sh copies cube.js, model/ and cube.env there.
+[Unit]
+Description=Cube API for the Accutax semantic layer (127.0.0.1:4000)
+Requires=cubestore.service
+After=cubestore.service
+
+[Container]
+ContainerName=cube-api
+Image=docker.io/cubejs/cube:v1.7.50
+Network=cube.network
+PublishPort=127.0.0.1:4000:4000
+EnvironmentFile=%h/semantic/cube.env
+Environment=CUBEJS_DEV_MODE=false
+Environment=CUBEJS_CACHE_AND_QUEUE_DRIVER=cubestore
+Environment=CUBEJS_CUBESTORE_HOST=cubestore
+Environment=CUBEJS_DEFAULT_API_SCOPES=meta,data,sql
+Environment=CUBEJS_TELEMETRY=false
+Environment=CUBEJS_LOG_LEVEL=info
+Environment=CUBEJS_DB_QUERY_TIMEOUT=20s
+Environment=CUBEJS_CONCURRENCY=4
+Environment=CUBEJS_DB_MAX_POOL=12
+Environment=CUBEJS_JWT_ALGS=HS256
+Environment=CUBEJS_JWT_AUDIENCE=accutax-cube
+Environment=CUBEJS_JWT_ISSUER=gemini-brain
+Volume=%h/semantic/cube.js:/cube/conf/cube.js:ro,Z
+Volume=%h/semantic/model:/cube/conf/model:ro,Z
+NoNewPrivileges=true
+HealthCmd=node -e "require('http').get('http://127.0.0.1:4000/readyz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+HealthInterval=30s
+HealthRetries=3
+HealthStartPeriod=60s
+HealthOnFailure=kill
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target
