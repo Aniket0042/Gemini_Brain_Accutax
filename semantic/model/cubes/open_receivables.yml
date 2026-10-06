@@ -4,7 +4,9 @@
 # so only PENDING and PARTIALLY_PAID invoices count as open. Status has no
 # history, so this view answers for today only. The total comes from a LATERAL
 # subquery, so item rows cannot multiply header amounts. Invoices dated after
-# today are not yet receivable. CURRENT_DATE is the UTC date (cube_reader role).
+# today are not yet receivable. "Today" is local_today: the date in the
+# organization's own time zone (Asia/Dubai for nearly all; unknown values fall back
+# to it). The UTC date was a day behind Dubai for four hours every night.
 #
 # No curly braces in SQL literals: Cube's YAML reads {...} as a member reference.
 cubes:
@@ -21,9 +23,14 @@ cubes:
              CASE WHEN CAST(inc.due_date AS TEXT) ~ '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
                   THEN CAST(LEFT(CAST(inc.due_date AS TEXT), 10) AS DATE) END     AS due_date,
              COALESCE(NULLIF(c.name, ''), NULLIF(c.organization_name, ''), 'Unknown') AS customer_name,
-             t.total_incl_vat - COALESCE(inc.amount_paid, 0) AS outstanding
+             t.total_incl_vat - COALESCE(inc.amount_paid, 0) AS outstanding,
+             lt.local_today                                AS local_today
       FROM   public.income inc
       JOIN   public.status_type st ON st.id = inc.status_type_id
+      JOIN   public.organizations o ON o.id = inc.organization_id
+      CROSS  JOIN LATERAL (
+               SELECT CAST(CURRENT_TIMESTAMP AT TIME ZONE CASE WHEN o.timezone IN ('Asia/Dubai', 'Asia/Kolkata', 'Asia/Riyadh', 'Asia/Muscat', 'Asia/Qatar', 'Asia/Bahrain', 'Asia/Kuwait', 'Europe/London', 'UTC') THEN o.timezone WHEN o.timezone LIKE 'UTC%' THEN 'UTC' ELSE 'Asia/Dubai' END AS DATE) AS local_today
+             ) lt
       LEFT   JOIN public.contacts c ON c.id = inc.contact_id AND c.organization_id = inc.organization_id
       CROSS  JOIN LATERAL (
                SELECT COALESCE(SUM(ii.line_amount + COALESCE(ii.tax_amount, 0)), 0) AS total_incl_vat
@@ -35,7 +42,7 @@ cubes:
         AND  inc.voided_at IS NULL
         AND  st.value IN ('PENDING', 'PARTIALLY_PAID')
         AND  NOT (CAST(inc.invoice_date AS TEXT) ~ '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
-                  AND CAST(LEFT(CAST(inc.invoice_date AS TEXT), 10) AS DATE) > CURRENT_DATE)
+                  AND CAST(LEFT(CAST(inc.invoice_date AS TEXT), 10) AS DATE) > lt.local_today)
 
     joins:
       - name: organizations
@@ -68,16 +75,16 @@ cubes:
       - name: days_overdue
         description: Days past the due date; 0 when not yet due.
         type: number
-        sql: "CASE WHEN {CUBE}.due_date < CURRENT_DATE THEN CURRENT_DATE - {CUBE}.due_date ELSE 0 END"
+        sql: "CASE WHEN {CUBE}.due_date < {CUBE}.local_today THEN {CUBE}.local_today - {CUBE}.due_date ELSE 0 END"
       - name: aging_bucket
         description: No due date, Not yet due, 1-30 days, 31-60 days, 61-90 days or Over 90 days.
         type: string
         sql: >
           CASE WHEN {CUBE}.due_date IS NULL THEN 'No due date'
-               WHEN {CUBE}.due_date >= CURRENT_DATE THEN 'Not yet due'
-               WHEN CURRENT_DATE - {CUBE}.due_date <= 30 THEN '1-30 days'
-               WHEN CURRENT_DATE - {CUBE}.due_date <= 60 THEN '31-60 days'
-               WHEN CURRENT_DATE - {CUBE}.due_date <= 90 THEN '61-90 days'
+               WHEN {CUBE}.due_date >= {CUBE}.local_today THEN 'Not yet due'
+               WHEN {CUBE}.local_today - {CUBE}.due_date <= 30 THEN '1-30 days'
+               WHEN {CUBE}.local_today - {CUBE}.due_date <= 60 THEN '31-60 days'
+               WHEN {CUBE}.local_today - {CUBE}.due_date <= 90 THEN '61-90 days'
                ELSE 'Over 90 days' END
 
     measures:
@@ -90,7 +97,7 @@ cubes:
         type: sum
         sql: "{CUBE}.outstanding"
         filters:
-          - sql: "{CUBE}.due_date < CURRENT_DATE"
+          - sql: "{CUBE}.due_date < {CUBE}.local_today"
       - name: open_count
         description: Number of open invoices.
         type: count
@@ -98,4 +105,4 @@ cubes:
         description: Number of open invoices past their due date.
         type: count
         filters:
-          - sql: "{CUBE}.due_date < CURRENT_DATE"
+          - sql: "{CUBE}.due_date < {CUBE}.local_today"

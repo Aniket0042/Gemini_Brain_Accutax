@@ -2,7 +2,8 @@ views:
   - name: receivables
     description: >-
       What customers owe today: open (PENDING or PARTIALLY_PAID) sales invoices, including VAT.
-      Status has no history, so this view has no past dates. "Overdue" uses the UTC date.
+      Status has no history, so this view has no past dates. "Today" and "overdue" use each
+      organization's own time zone.
     meta:
       kind: current
       ai_context: >-
