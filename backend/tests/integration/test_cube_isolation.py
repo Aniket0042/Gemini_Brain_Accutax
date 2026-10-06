@@ -76,11 +76,14 @@ def test_naming_another_org_returns_nothing():
 
 # T3
 def test_or_filter_cannot_widen_scope():
+    # Cube refuses dimensions and measures in one condition, so both branches are dimensions;
+    # each alone would match every organization.
     rows = _load({"measures": ["pnl.net_profit"], "dimensions": ["pnl.organization_id"],
                   "filters": [{"or": [{"member": "pnl.organization_id", "operator": "set"},
-                                      {"member": "pnl.net_profit", "operator": "lt", "values": ["0"]}]}]},
+                                      {"member": "pnl.organization_name", "operator": "set"}]}]},
                  [ORG_A]).rows
-    assert _orgs(rows, "pnl") <= {ORG_A}
+    assert rows, "org A needs ledger data for this test"
+    assert _orgs(rows, "pnl") == {ORG_A}
 
 
 # T4
