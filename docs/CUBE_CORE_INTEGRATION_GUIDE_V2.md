@@ -4,7 +4,7 @@ Date: 6 October 2026
 Supersedes: the v1 guide (deleted 7 Oct 2026; its defects and their fixes are listed in section 1.2)
 Related: [`ai-architecture-review-2026-10.md`](./ai-architecture-review-2026-10.md)
 Audience: the engineers building the semantic layer, the DBA, and finance (section 4 only).
-Status: **Phase 1 deployed in shadow mode** (7 Oct 2026). Steps 1–3 are done (sections 5.1, 16). The model, security config, client, tool, shadow hook and tests are written (section 16). Cube runs on the VM and is compared against the SQL path on real questions; users still get the SQL answers. Finance sign-off (section 1.3) is still needed before Cube answers users.
+Status: **Phase 1 engineering complete** (7 Oct 2026); waiting on sign-offs ([`PHASE1_SIGNOFF.md`](./PHASE1_SIGNOFF.md)) and a week of shadow logs. See section 16. The model, security config, client, tool, shadow hook and tests are written (section 16). Cube runs on the VM and is compared against the SQL path on real questions; users still get the SQL answers. Finance sign-off (section 1.3) is still needed before Cube answers users.
 
 The code was written against the Accutax entity definitions, Gemini Brain's own SQL reports, and the Cube docs for v1.7.50. Each cube's SQL and measures have been run read-only against the live database for the test orgs (`scripts/eval/cube_model_check.py`). Cube's own compilation of the model is verified at the Step 3 smoke tests.
 
@@ -710,10 +710,12 @@ These came up while checking v1 against the code. They are not Cube tasks; they 
 | 4. Data model | Built; SQL checked read-only against the test orgs; Cube compilation checked at deploy |
 | 5. Python client | Built and unit-tested |
 | 6. `query_metrics` tool | Built and unit-tested; the agent loop is Phase 2 |
-| 7. Tests | Unit tests pass (11.1). On the VM: isolation suite **17/17** (11.2); reconciliation **0 differences** against `/report/profit-loss-with-accounts` across 12 windows × orgs 24–33 × 4 figures, and every org's balance sheet balances (11.3); demo-01 → orgs 24, 25 in 0.12 s and demo-02 → orgs 26, 28–33 in 0.36 s through Cube |
-| Shadow mode | **On** since 7 Oct 2026 (`METRICS_BACKEND=shadow`, `accutax-ai-api` restarted). Users still get SQL answers; comparisons go to `backend/logs/metrics_shadow.jsonl` on the VM. Review after a week of real questions (12.2) |
-| Finance sign-off | Open: section 4, D1, and the ACCEPTED/RECEIVED question (4.1) |
-| Cold-start latency | Open: on a cold database cache a P&L query exceeded Cube's 20 s limit three times (once locally, twice on the VM); warm, the same query takes 0.2–0.3 s. Proposed fix for the DBA, before Cube answers users: `CREATE INDEX CONCURRENTLY idx_journal_entries_org_date_posted ON journal_entries (organization_id, transaction_date) WHERE is_posted;` (today the planner ANDs a 3.2 million-entry date-index scan into every query). Rollups in Phase 3 remove the rest |
+| 7. Tests | Done. On the VM: isolation suite **17/17**; reconciliation **0 differences** for the P&L (vs Accutax `/report/profit-loss-with-accounts`, 12 windows × orgs 24–33), the balance sheet, and every document view vs independently written SQL (`cube_reconcile.py`); golden tool calls **13/13** (`cube_golden.py`); demo set **30/30** |
+| Shadow mode | **On** since 7 Oct 2026. First review (`shadow_review.py`): 520 records, **0 unexplained** (306 ledger-vs-documents, 132 match, 68 zero-vs-empty, 8 VAT drafts verified to the fils, 6 receivables from before the time-zone fix). One more week of real questions, reviewed the same way |
+| Finance sign-off | Open: [`PHASE1_SIGNOFF.md`](./PHASE1_SIGNOFF.md), decisions 1–6. New finding: cancelled invoices keep their revenue in the ledger (no reversal), so ledger revenue is only safe once decision 3 is made |
+| Cold-start latency | Index `idx_journal_entries_org_date_posted` built 7 Oct (254 MB): warm P&L 270 → 70 ms. Cold reads of journal lines remain; Phase 3 rollups remove them |
+| Model fix from shadow mode | Receivables and payables used the UTC date for "today"; now each organization's own time zone (7 Oct) |
+| **Phase 1 exit** | Engineering complete. Closes when the sign-offs are in and seven days of shadow logs review with nothing unexplained |
 
 ---
 
