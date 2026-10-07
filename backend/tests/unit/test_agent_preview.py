@@ -168,3 +168,35 @@ def test_a_plain_question_gets_no_file(monkeypatch):
 def test_cash_forecast_step_label():
     assert preview.step_label("cash_forecast", {"weeks": 8}) == "Projecting cash…"
     assert preview.step_label("list_documents", {"type": "journal_lines"}) == "Listing documents: journal lines…"
+
+
+@pytest.fixture
+def _primary(monkeypatch):
+    monkeypatch.setattr(preview.settings, "agent_mode", "primary")
+
+
+def test_primary_mode_answers_everyone_with_the_agent(_primary, monkeypatch):
+    calls = []
+    monkeypatch.setattr(routes.agent_preview, "answer", _fake_answer(calls))
+    response = asyncio.run(routes.run_query(QueryRequest(query="Revenue?", model="auto", organization_id=24),
+                                            current_user=OTHER))
+    assert response.answer.startswith("Org One revenue") and calls[0]["orgs"] == [24]
+    assert routes._preview_scope(QueryRequest(query="Revenue?", model="claude-sonnet"), OTHER, []) == [24]
+
+
+def test_primary_mode_serves_one_model_and_hides_the_picker(_primary):
+    catalog = routes.list_model_catalog(current_user=OTHER)
+    assert [m.key for m in catalog.models] == [preview.MODEL_KEY]
+    assert catalog.models[0].label == "Accutax AI" and "Preview" not in catalog.models[0].description
+    assert catalog.picker_hidden and catalog.default_model == preview.MODEL_KEY
+
+
+def test_primary_answers_are_labelled_accutax_ai(_primary, monkeypatch):
+    monkeypatch.setattr(loop, "run_agent", lambda *a, **k: loop.AgentResult(answer="AED 10.", status="ok"))
+    out = preview.answer("Revenue?", [24], lambda: {}, session_id=None, user_id=501)
+    assert out["policy"]["model_label"] == "Accutax AI"
+
+
+def test_other_modes_keep_the_picker():
+    catalog = routes.list_model_catalog(current_user=OTHER)
+    assert not catalog.picker_hidden and preview.MODEL_KEY not in [m.key for m in catalog.models]

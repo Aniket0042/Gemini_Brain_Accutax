@@ -343,9 +343,10 @@ class GeminiBrainSettings(BaseSettings):
     agent_mode: str = Field(
         default="off",
         description=(
-            "'off', or 'shadow': the current path answers and the agent answers the same question "
+            "'off'; 'shadow': the current path answers and the agent answers the same question "
             "off the request path; both answers are logged to AGENT_SHADOW_LOG. Users never see "
-            "the agent's answer in shadow mode."
+            "the agent's answer in shadow mode; or 'primary': the agent answers every chat, the "
+            "model picker is hidden, and the current path is used only when this is set back."
         ),
     )
     agent_model_id: str = Field(

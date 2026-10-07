@@ -288,6 +288,8 @@ class ModelCatalogResponse(BaseModel):
     efforts: List[EffortInfo] = Field(default_factory=list)
     default_model: str = "auto"
     default_effort: str = "auto"
+    #: True when one model answers every chat (AGENT_MODE=primary): the client hides the picker.
+    picker_hidden: bool = False
 
 
 class HealthResponse(BaseModel):

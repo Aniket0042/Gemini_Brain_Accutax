@@ -217,6 +217,11 @@ def list_model_catalog(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> ModelCatalogResponse:
     """Serve the model registry and effort ladder for the picker UI."""
+    if agent_preview.primary():
+        # Every chat is answered by the agent: one model, no picker.
+        return ModelCatalogResponse(models=[ModelInfo(**agent_preview.catalog_entry())], efforts=[],
+                                    default_model=agent_preview.MODEL_KEY, default_effort=DEFAULT_EFFORT,
+                                    picker_hidden=True)
     models = [ModelInfo(**m) for m in list_models()]
     if agent_preview.allowed(current_user):
         models.insert(0, ModelInfo(**agent_preview.catalog_entry()))
@@ -285,9 +290,10 @@ def _preview_scope(payload: QueryRequest, current_user: CurrentUser, orgs: list[
     """The organizations an agent-preview request runs on, or None when it is not one.
 
     The picker shows the preview only to allowed users; a stale selection from anyone
-    else falls back to the normal path.
+    else falls back to the normal path. With AGENT_MODE=primary every request is one.
     """
-    if not agent_preview.requested(payload.model) or not agent_preview.allowed(current_user):
+    if not agent_preview.primary() and (
+            not agent_preview.requested(payload.model) or not agent_preview.allowed(current_user)):
         return None
     scope = orgs or [int(o) for o in (current_user.allowed_org_ids or [])[:1]]
     return scope or None

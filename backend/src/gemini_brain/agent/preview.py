@@ -6,6 +6,10 @@ Users listed in AGENT_PREVIEW_USERS (emails or user ids) see "Accutax Agent
 agent instead of the current path; everyone else is unaffected. It works the
 same after the Accutax SSO handoff: the Accutax token carries the email.
 
+With AGENT_MODE=primary the agent answers every chat for every user, as
+"Accutax AI", and the model picker is hidden. Setting the mode back restores
+the picker and the current path without a frontend rebuild.
+
 The turn is saved to the thread like any other answer, so the thread shows it
 and follow-ups have context.
 """
@@ -21,6 +25,7 @@ logger = logging.getLogger("gemini_brain.agent.preview")
 
 MODEL_KEY = "accutax-agent"
 MODEL_LABEL = "Accutax Agent (preview)"
+PRIMARY_LABEL = "Accutax AI"
 HISTORY_MESSAGES = 6
 
 _STEP = {
@@ -34,6 +39,15 @@ _STEP = {
 
 def _allowlist() -> set:
     return {part.strip().lower() for part in (settings.agent_preview_users or "").split(",") if part.strip()}
+
+
+def primary() -> bool:
+    """AGENT_MODE=primary: the agent answers every chat."""
+    return (settings.agent_mode or "").strip().lower() == "primary"
+
+
+def label() -> str:
+    return PRIMARY_LABEL if primary() else MODEL_LABEL
 
 
 def allowed(user: Any) -> bool:
@@ -53,10 +67,10 @@ def catalog_entry() -> Dict[str, Any]:
     """The picker entry, in the shape of api.models.ModelInfo."""
     return {
         "key": MODEL_KEY,
-        "label": MODEL_LABEL,
-        "description": ("New answer engine on governed figures (Cube): ledger P&L, balance sheet, general ledger, "
-                        "invoices, bills, VAT, cash forecast, files and charts, plus UAE VAT law. Preview: answers "
-                        "may differ from the standard assistant."),
+        "label": label(),
+        "description": ("Answers on governed figures (Cube): ledger P&L, balance sheet, general ledger, invoices, "
+                        "bills, VAT, inventory, bank, cash forecast, files and charts, plus UAE VAT law."
+                        + ("" if primary() else " Preview: answers may differ from the standard assistant.")),
         "provider": "bedrock",
         "supports": ["tools"],
         "efforts": [],
@@ -119,10 +133,10 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
             "type": 6 if result.route == "law" else 1,
             "type_label": "UAE VAT law (knowledge base)" if result.route == "law" else "Figures (governed metrics)",
             "path": f"agent_{result.route}",
-            "reason": f"{MODEL_LABEL}: {len(result.tool_calls)} tool call(s)",
+            "reason": f"{label()}: {len(result.tool_calls)} tool call(s)",
             "bedrock_model": settings.agent_model_id or None,
         },
-        "policy": {"model": MODEL_KEY, "model_label": MODEL_LABEL, "auto": False},
+        "policy": {"model": MODEL_KEY, "model_label": label(), "auto": False},
         "verification": result.verification or None,
         "blocks": blocks or None,
         "api_traces": traces.get("api", []),

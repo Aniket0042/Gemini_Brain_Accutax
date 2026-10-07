@@ -140,13 +140,16 @@ export const QueryInput = ({
             >
               Brief
             </button>
-            <ModelMenu
-              catalog={catalog}
-              catalogState={catalogState}
-              onRetryCatalog={onRetryCatalog}
-              model={model}
-              onModelChange={onModelChange}
-            />
+            {/* One model answers every chat (AGENT_MODE=primary): no picker. */}
+            {!catalog?.picker_hidden && (
+              <ModelMenu
+                catalog={catalog}
+                catalogState={catalogState}
+                onRetryCatalog={onRetryCatalog}
+                model={model}
+                onModelChange={onModelChange}
+              />
+            )}
             <span style={styles.divider} />
             {isLoading ? (
               // While a query runs, the send button becomes Stop.
