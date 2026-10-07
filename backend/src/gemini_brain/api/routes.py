@@ -51,6 +51,7 @@ from gemini_brain.config.settings import settings
 from gemini_brain.health.model_health_checker import check_all_models_and_services
 from gemini_brain.orchestrator.gemini_brain_runner import GeminiBrainRunner
 from gemini_brain.orchestrator.multi_org import run_multi_org, run_multi_org_stream
+from gemini_brain.agent import preview as agent_preview
 from gemini_brain.agent import shadow as agent_shadow
 from gemini_brain.orchestrator.multi_org_plan import plan_query
 from gemini_brain.policy import choose_policy, list_models
@@ -216,8 +217,11 @@ def list_model_catalog(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> ModelCatalogResponse:
     """Serve the model registry and effort ladder for the picker UI."""
+    models = [ModelInfo(**m) for m in list_models()]
+    if agent_preview.allowed(current_user):
+        models.insert(0, ModelInfo(**agent_preview.catalog_entry()))
     return ModelCatalogResponse(
-        models=[ModelInfo(**m) for m in list_models()],
+        models=models,
         efforts=[
             EffortInfo(
                 name=tier.name,
@@ -275,6 +279,46 @@ def _query_orgs(payload: QueryRequest, current_user: CurrentUser, *, action: str
     orgs = _match_session_scope(payload.session_id, orgs, current_user, action=action)
     _require_multi_org_enabled(orgs)
     return orgs
+
+
+def _preview_scope(payload: QueryRequest, current_user: CurrentUser, orgs: list[int]) -> Optional[list[int]]:
+    """The organizations an agent-preview request runs on, or None when it is not one.
+
+    The picker shows the preview only to allowed users; a stale selection from anyone
+    else falls back to the normal path.
+    """
+    if not agent_preview.requested(payload.model) or not agent_preview.allowed(current_user):
+        return None
+    scope = orgs or [int(o) for o in (current_user.allowed_org_ids or [])[:1]]
+    return scope or None
+
+
+def _preview_events(payload: QueryRequest, current_user: CurrentUser, orgs: list[int]) -> Generator[str, None, None]:
+    """SSE for an agent-preview answer: a status line per tool call, then the final result."""
+    import queue
+    import threading
+
+    events: "queue.Queue[Optional[str]]" = queue.Queue()
+    box: dict[str, Any] = {}
+
+    def work() -> None:
+        try:
+            box["result"] = agent_preview.answer(
+                payload.query, orgs, lambda: _org_meta(current_user, orgs),
+                session_id=payload.session_id, user_id=current_user.user_id, db_name=payload.db_name,
+                progress=events.put,
+            )
+        except Exception as e:  # noqa: BLE001 - answer() never raises; this is belt and braces
+            logger.warning("agent preview failed: %s", e, exc_info=True)
+        finally:
+            events.put(None)
+
+    threading.Thread(target=work, name="agent-preview", daemon=True).start()
+    yield f"data: {json.dumps({'status': 'Reading your question…', 'type': 'agent'})}\n\n"
+    while (message := events.get()) is not None:
+        yield f"data: {json.dumps({'status': message, 'type': 'agent'})}\n\n"
+    result = box.get("result") or {"answer": "", "status": "failed"}
+    yield f"data: {json.dumps({'final_result': normalize_envelope(result)}, default=str)}\n\n"
 
 
 def _require_multi_org_enabled(orgs: list[int]) -> None:
@@ -631,6 +675,15 @@ async def run_query(
     """Execute a synchronous financial query through Gemini Brain with tenant isolation enforcement."""
     import asyncio
     orgs = _query_orgs(payload, current_user, action="query")
+    preview_orgs = _preview_scope(payload, current_user, orgs)
+    if preview_orgs is not None:
+        result = await asyncio.to_thread(
+            agent_preview.answer, payload.query, preview_orgs, lambda: _org_meta(current_user, preview_orgs),
+            session_id=payload.session_id, user_id=current_user.user_id, db_name=payload.db_name,
+        )
+        return QueryResponse(**normalize_envelope(result))
+    if agent_preview.requested(payload.model):
+        payload = payload.model_copy(update={"model": "auto"})
     organization_id = orgs[0] if orgs else None
     # Set request-scoped bearer token for any downstream Accutax REST calls
     token_reset = active_auth_token.set(current_user.raw_token)
@@ -813,6 +866,15 @@ def stream_query(
     # Checked before the stream opens, so a refused org is a plain 403 and no
     # event is ever emitted for it.
     orgs = _query_orgs(payload, current_user, action="query.stream")
+    preview_orgs = _preview_scope(payload, current_user, orgs)
+    if preview_orgs is not None:
+        return StreamingResponse(
+            _preview_events(payload, current_user, preview_orgs),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+        )
+    if agent_preview.requested(payload.model):
+        payload = payload.model_copy(update={"model": "auto"})
     organization_id = orgs[0] if orgs else None
 
     def event_generator() -> Generator[str, None, None]:

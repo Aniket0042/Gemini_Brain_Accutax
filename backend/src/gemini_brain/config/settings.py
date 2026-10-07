@@ -359,6 +359,13 @@ class GeminiBrainSettings(BaseSettings):
             "Empty = the planner model. A faster model here cuts most of the agent's time."
         ),
     )
+    agent_preview_users: str = Field(
+        default="",
+        description=(
+            "Comma-separated login emails or user ids that see 'Accutax Agent (preview)' in the model picker "
+            "and can have their chats answered by the agent. Empty = nobody; everyone else keeps the current path."
+        ),
+    )
     agent_max_tool_calls: int = Field(default=6, ge=1, le=12)
     agent_deadline_seconds: float = Field(default=45.0, ge=5.0, le=120.0)
     agent_shadow_log: str = Field(

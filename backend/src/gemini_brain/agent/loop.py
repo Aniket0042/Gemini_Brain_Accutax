@@ -16,7 +16,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from gemini_brain.agent import law, tools
 from gemini_brain.agent.prompt import system_prompt
@@ -156,8 +156,9 @@ def run_agent(
     answer_model_id: Optional[str] = None,
     max_tool_calls: Optional[int] = None,
     deadline_seconds: Optional[float] = None,
+    progress: Optional[Callable[[str, Any], None]] = None,
 ) -> AgentResult:
-    """Answer one question. Never raises."""
+    """Answer one question. Never raises. `progress(tool_name, tool_input)` is called before each tool runs."""
     started = time.monotonic()
     deadline = started + (deadline_seconds or settings.agent_deadline_seconds)
     budget = max_tool_calls or settings.agent_max_tool_calls
@@ -202,6 +203,8 @@ def run_agent(
                 break
             allowed = uses[:max(0, budget - used)]
             used += len(allowed)
+            for use in allowed:
+                _notify(progress, use)
             outcomes = _run_tools(allowed, ctx)
             results = []
             for use in uses:
@@ -229,6 +232,15 @@ def run_agent(
         usage=_usage(planner, writer),
         elapsed_ms=int((time.monotonic() - started) * 1000),
     )
+
+
+def _notify(progress: Optional[Callable[[str, Any], None]], use: Dict[str, Any]) -> None:
+    if progress is None:
+        return
+    try:
+        progress(use.get("name", ""), use.get("input"))
+    except Exception as e:  # noqa: BLE001 - a status line must never break the answer
+        logger.debug("agent progress callback failed: %s", e)
 
 
 def _run_tools(uses: Sequence[Dict[str, Any]], ctx: tools.ToolContext) -> Dict[str, tuple]:

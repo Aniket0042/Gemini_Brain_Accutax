@@ -309,3 +309,10 @@ def test_law_questions_are_not_mistaken_for_organization_questions(question):
 def test_organization_questions_never_take_the_law_route(question):
     assert loop.law.about_the_organizations(question)
     assert _REAL_LAW_ANSWER(question, []) is None
+
+
+def test_progress_is_told_about_each_tool_before_it_runs(agent):
+    FakeAdapter.script = [tool_use("query_metrics", {"view": "pnl"}), final("AED 5,809,352.")]
+    seen = []
+    loop.run_agent("Revenue?", ORGS, META, progress=lambda name, params: seen.append((name, params, len(agent))))
+    assert seen == [("query_metrics", {"view": "pnl"}, 0)]
