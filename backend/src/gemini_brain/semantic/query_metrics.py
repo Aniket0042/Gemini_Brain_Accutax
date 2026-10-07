@@ -13,7 +13,7 @@ user as "figures are temporarily unavailable" and never as an empty answer.
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 from gemini_brain.config.settings import settings
 from gemini_brain.semantic import cube_client, periods
@@ -42,13 +42,73 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
     if len(result.rows) >= query["limit"]:
         notes.append(f"Only the first {query['limit']} rows are returned; there may be more. "
                      "Ask for fewer organizations or a shorter period rather than paging.")
-    return {
+    out = {
         "view": view.name,
         "rows": [{k: str(v) if isinstance(v, Decimal) else v for k, v in r.items()} for r in result.rows],
         "row_count": len(result.rows),
         "data_as_of": result.last_refresh_time,
         "notes": notes,
     }
+    out.update(summarize(result.rows, query, view, params.get("granularity")))
+    return out
+
+
+def _additive(member: str) -> bool:
+    """Amounts that may be added up; percentages and ratios may not."""
+    return not member.endswith("_pct") and not member.endswith("_ratio")
+
+
+def _dec(value: Any) -> Optional[Decimal]:
+    try:
+        return None if value is None else Decimal(str(value))
+    except (ArithmeticError, ValueError):
+        return None
+
+
+def summarize(rows: Sequence[Dict[str, Any]], query: Dict[str, Any], view: View,
+              granularity: Optional[str]) -> Dict[str, Any]:
+    """Figures worked out in code so the model never adds up rows itself.
+
+    - totals: each amount summed over all rows, only when every row has the same currency;
+    - per_organization (trends only): each amount's total, best and worst period per organization.
+    """
+    measures = [m for m in query["measures"] if _additive(m)]
+    # A capped result is missing rows, so any sum of it would be wrong.
+    if not rows or not measures or len(rows) >= query.get("limit", len(rows) + 1):
+        return {}
+    out: Dict[str, Any] = {}
+    currencies = {r.get(f"{view.name}.currency") for r in rows}
+    if len(currencies) == 1 and None not in currencies:
+        out["totals"] = {
+            "currency": next(iter(currencies)),
+            **{m: str(sum((_dec(r.get(m)) or Decimal(0)) for r in rows)) for m in measures},
+        }
+    if granularity and view.time_dimension:
+        bucket = f"{view.time_dimension}.{granularity}"
+        per_org: Dict[str, Dict[str, Any]] = {}
+        for r in rows:
+            org = str(r.get(f"{view.name}.organization_name") or r.get(f"{view.name}.organization_id"))
+            period = str(r.get(bucket) or "")[:10]
+            for m in measures:
+                value = _dec(r.get(m))
+                if value is None:
+                    continue
+                s = per_org.setdefault(org, {}).setdefault(m, {"total": Decimal(0), "periods_with_data": 0,
+                                                               "best": None, "worst": None})
+                s["total"] += value
+                s["periods_with_data"] += 1
+                if s["best"] is None or value > s["best"][1]:
+                    s["best"] = (period, value)
+                if s["worst"] is None or value < s["worst"][1]:
+                    s["worst"] = (period, value)
+        out["per_organization"] = {
+            org: {m: {"total": str(s["total"]), "periods_with_data": s["periods_with_data"],
+                      "best_period": s["best"][0], "best": str(s["best"][1]),
+                      "worst_period": s["worst"][0], "worst": str(s["worst"][1])}
+                  for m, s in by_measure.items()}
+            for org, by_measure in per_org.items()
+        }
+    return out
 
 
 def build_query(params: Dict[str, Any], catalog: Catalog) -> tuple[Dict[str, Any], View, str]:

@@ -9,12 +9,15 @@ from gemini_brain.semantic.catalog import ToolInputError
 from gemini_brain.semantic.cube_client import CubeError
 
 ORGS = [24, 25]
+_REAL_LAW_ANSWER = loop.law.answer
 META = {24: {"name": "Org One", "currency": "AED"}, 25: {"name": "Org Two", "currency": "AED"}}
 
 
 @pytest.fixture(autouse=True)
 def _no_presidio(monkeypatch):
     monkeypatch.setattr(loop, "redact_pii", lambda text: (text, {}))
+    monkeypatch.setattr(loop.law, "answer", lambda question, messages: None)
+    monkeypatch.setitem(loop._cache, "on", True)
 
 
 def _ctx(deadline=60.0):
@@ -78,15 +81,19 @@ def test_specs_without_cube_keep_law_and_guide(monkeypatch):
 # ── The loop ─────────────────────────────────────────────────────────────────
 
 class FakeAdapter:
-    """Plays back scripted Bedrock responses and records what it was sent."""
+    """Plays back scripted Bedrock responses, in order across adapters, and records what each was sent."""
     script = []
+    step = 0
+    log = []
 
     def __init__(self, model_id, label=""):
         self.model_id, self.sent, self.calls = model_id, [], 0
 
     def converse_with_tools(self, system, messages, tools_, max_tokens=0, purpose=""):
         self.sent.append([dict(m) for m in messages])
-        step = FakeAdapter.script[min(self.calls, len(FakeAdapter.script) - 1)]
+        FakeAdapter.log.append({"model": self.model_id, "system": system, "tools": tools_})
+        step = FakeAdapter.script[min(FakeAdapter.step, len(FakeAdapter.script) - 1)]
+        FakeAdapter.step += 1
         self.calls += 1
         return step
 
@@ -105,6 +112,7 @@ def final(text):
 
 @pytest.fixture
 def agent(monkeypatch):
+    FakeAdapter.step, FakeAdapter.log = 0, []
     monkeypatch.setattr(loop, "BedrockAdapter", FakeAdapter)
     monkeypatch.setattr(loop.tools, "specs", lambda ctx: [{"toolSpec": {"name": "query_metrics"}}])
     calls = []
@@ -182,6 +190,7 @@ def test_model_errors_never_raise(monkeypatch):
     class Broken(FakeAdapter):
         def converse_with_tools(self, *a, **k):
             raise RuntimeError("bedrock down")
+    FakeAdapter.step, FakeAdapter.log = 0, []
     monkeypatch.setattr(loop, "BedrockAdapter", Broken)
     monkeypatch.setattr(loop.tools, "specs", lambda ctx: [])
     result = loop.run_agent("Anything", ORGS, META)
@@ -234,3 +243,69 @@ def test_shadow_skips_a_question_when_every_slot_is_busy(monkeypatch):
     shadow._slots.acquire()
     assert shadow.start("q", ORGS, META, {}) is None
     shadow._slots.release()
+
+
+# ── Law route, answer model, parallel calls, caching ─────────────────────────
+
+def test_law_questions_take_the_knowledge_base_answer(monkeypatch, agent):
+    monkeypatch.setattr(loop.law, "answer", lambda question, messages: loop.law.LawAnswer(
+        answer="Correct it in the next return [1].", usage={"llm_calls": 1, "cost_usd": 0.01}))
+    FakeAdapter.script = [final("must not be called")]
+    result = loop.run_agent("Voluntary disclosure or next return for AED 8,000?", ORGS, META)
+    assert result.route == "law" and result.answer.startswith("Correct it") and FakeAdapter.log == []
+
+
+def test_the_answer_model_writes_after_the_tools(agent):
+    FakeAdapter.script = [tool_use("query_metrics", {}), final("Revenue AED 5,809,352.")]
+    loop.run_agent("Revenue?", ORGS, META, model_id="planner", answer_model_id="writer")
+    assert [c["model"] for c in FakeAdapter.log] == ["planner", "writer"]
+
+
+def test_one_turns_tool_calls_all_run_and_the_budget_cuts_the_rest(agent):
+    two = {"stopReason": "tool_use", "output": {"message": {"role": "assistant", "content": [
+        {"toolUse": {"toolUseId": "a", "name": "query_metrics", "input": {"period": "2026"}}},
+        {"toolUse": {"toolUseId": "b", "name": "query_metrics", "input": {"period": "2025"}}},
+        {"toolUse": {"toolUseId": "c", "name": "query_metrics", "input": {"period": "2024"}}}]}}}
+    FakeAdapter.script = [two, final("Growth: AED 5,809,352.")]
+    result = loop.run_agent("Growth over three years", ORGS, META, max_tool_calls=2)
+    assert len(agent) == 2
+    assert [c["ok"] for c in result.tool_calls] == [True, True, False]
+    assert result.tool_calls[2]["error"] == loop.BUDGET_USED
+
+
+def test_system_prompt_and_tools_are_marked_for_caching(agent):
+    FakeAdapter.script = [final("No figures needed.")]
+    loop.run_agent("Hello", ORGS, META)
+    assert FakeAdapter.log[0]["system"][-1] == loop._CACHE_POINT
+    assert FakeAdapter.log[0]["tools"][-1] == loop._CACHE_POINT
+
+
+def test_a_refused_cache_point_is_dropped_for_good(monkeypatch, agent):
+    class NoCache(FakeAdapter):
+        def converse_with_tools(self, system, messages, tools_, max_tokens=0, purpose=""):
+            if loop._CACHE_POINT in system:
+                raise RuntimeError("ValidationException: cachePoint is not supported for this model")
+            return super().converse_with_tools(system, messages, tools_, max_tokens, purpose)
+    monkeypatch.setattr(loop, "BedrockAdapter", NoCache)
+    FakeAdapter.script = [final("Plain answer.")]
+    result = loop.run_agent("Hello", ORGS, META)
+    assert result.answer == "Plain answer." and loop._cache["on"] is False
+
+
+@pytest.mark.parametrize("question", [
+    "We found an error in last quarter's return that understated tax by AED 8,000. Voluntary disclosure, or correct it in the next return?",
+    "A company leaves our VAT tax group mid-year. What output tax and input tax adjustments are needed?",
+    "What is VAT?",
+    "When does e-invoicing become mandatory for a business with AED 60 million revenue?",
+])
+def test_law_questions_are_not_mistaken_for_organization_questions(question):
+    assert not loop.law.about_the_organizations(question)
+
+
+@pytest.mark.parametrize("question", [
+    "What is VAT for each organization?", "Compare VAT payable for Q2 2026", "Compare tax payable",
+    "Input VAT vs output VAT per entity this year", "Which entities have VAT return due this month?",
+])
+def test_organization_questions_never_take_the_law_route(question):
+    assert loop.law.about_the_organizations(question)
+    assert _REAL_LAW_ANSWER(question, []) is None

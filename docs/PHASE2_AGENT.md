@@ -1,7 +1,7 @@
 # Phase 2: the tool-using agent
 
 Date: 7 October 2026
-Status: **built and evaluated offline; not live.** `AGENT_MODE` defaults to `off`. Users still get the current answer path.
+Status: **in shadow on the VM** (`AGENT_MODE=shadow` since 7 Oct; users still get the current answer path). Law routing and latency work are done (section 6) and evaluated, but not yet deployed.
 Context: [`ai-architecture-review-2026-10.md`](./ai-architecture-review-2026-10.md) sections 6.2–6.3 and 7, and [`CUBE_CORE_INTEGRATION_GUIDE_V2.md`](./CUBE_CORE_INTEGRATION_GUIDE_V2.md) sections 10 and 12.1.
 
 ---
@@ -86,26 +86,65 @@ Between the two runs the prompt gained four rules: show signs as returned, no pe
 | Criterion | State |
 |---|---|
 | Better than the current path on accuracy | **Met** on this set: 84 vs 60 of 89 |
-| Better on 95th-percentile time | **Not met**: 36 s vs 11 s |
-| Better on cost | Not measured for the current path |
+| Better on 95th-percentile time | **Not met**: 36 s vs 11 s. After section 6: 17.6 s |
+| Better on cost | Not measured for the current path. Agent: $0.051 a question, $0.021 after section 6 |
 | Zero cross-tenant results | Held: scope is set by code, narrowing is tested, and Cube's tenant guard applies (isolation suite 17/17) |
 | Zero silently dropped conditions | Held on this set ("margin above 20%", "older than 180 days", "lowest first", "weekends") |
-| At least 95% exact figures | 94% overall on the final run |
+| At least 95% exact figures | 94% overall on the final run; 97% after section 6 (86 pass, 3 partial, 0 fail) |
 
 ---
 
 ## 4. Recommendation
 
 1. **Run the agent in shadow on the VM** (`AGENT_MODE=shadow`) for a week next to the current path, as for Cube. Review `logs/agent_shadow.jsonl` the same way.
-2. **Keep VAT law questions on the current knowledge-base path** for now. It already answers them correctly, in about 4 s. Route law questions there, and send everything else to the agent. This removes the law variation and the slowest answers.
-3. **Latency work before any switch:**
-   - stream the answer to the UI;
-   - use Haiku 4.5 for answers that need one tool call and a short table;
-   - run independent tool calls in parallel;
-   - drop the third call by keeping tables short.
-   - Target: 95th percentile 10 s.
+2. ~~Keep VAT law questions on the current knowledge-base path~~ Done (section 6).
+3. ~~Latency work~~ Partly done (section 6): 95th percentile 36 s down to 17.6 s. Still open: stream the answer to the UI, so the first words show after about 3 s.
 4. **Run the replay three times per change** and count a case as passing only when all three runs pass. Add expected answers for the two law cases that flipped.
 5. **Switch users over only after** the Phase 1 sign-offs (ledger vs documents, cancelled invoices, seed data) and a clean shadow week.
+
+---
+
+## 6. Law routing and latency work (7 Oct 2026)
+
+### What changed
+
+| Change | Why |
+|---|---|
+| **Law route** ([`agent/law.py`](../backend/src/gemini_brain/agent/law.py)): a UAE VAT law question gets the existing knowledge-base answer, with the same detector, the same confident-match search and the same prompt as the current path. That is one model call and no tools. A question about the organizations' own figures ("VAT for each organization", "compare tax payable") never takes this route | Law answers varied between agent runs and took 7–40 s |
+| **Prompt caching** of the system prompt and tool definitions (about 6,700 tokens), inside the agent only. The app-wide model list does not name Sonnet 5 or Haiku 4.5, so the current path is unchanged | Every model call re-read the same 6,700 tokens |
+| **Parallel tool calls**: one turn's calls run at the same time, and the prompt asks for every needed call in one turn | A second round of tool calls costs a whole extra model call |
+| **Figures worked out in code**: `query_metrics` returns `totals` (single currency, not for capped results) and, for trends, each organization's total, best and worst period. The prompt says to copy them and to write "n/m" for growth on a zero or negative base | Sums and best/worst picks were done by the model |
+| **Shorter answers**: at most 120 words outside tables, at most two notes | About 2 s per 100 output tokens |
+| **Answer model option** `AGENT_ANSWER_MODEL_ID` (default: the planner, Sonnet 5) | Tested with Haiku 4.5; see below |
+
+### Results (89 real questions, VM)
+
+| Run | Pass | Median | 95th percentile | Slowest | Cost (89 questions) |
+|---|---|---|---|---|---|
+| Before (final run, section 3) | 84 | 10.2 s | 36.2 s | 46.8 s | $4.58 |
+| A: Sonnet plans and writes | not graded in full | 7.5 s | 25.6 s | 48.5 s | $1.95 |
+| B: Sonnet plans, Haiku writes | about 83 (data answers skim-graded) | 5.3 s | 10.8 s | 12.9 s | $1.22 |
+| C: as B, plus figures worked out in code | about 81 (skim-graded) | 5.4 s | 10.8 s | 14.1 s | $1.26 |
+| **D: as A, plus figures worked out in code** | **86** (3 partial, 0 fail) | **7.5 s** | **17.6 s** | 35.2 s | **$1.90** |
+
+- **Law answers:** 19 of 19 correct in every run since the change. They take 3.2 s typically and 5–6 s at the 95th percentile. The two that varied before (r128, r131) now give the correct answer each time.
+- **Haiku as the writer** halves the time but gets reasoning wrong. Examples:
+  - "six companies in trouble" when the data shows eight;
+  - "both show positive growth" for revenue down 38% and 41%;
+  - counts read off a capped 100-row list (1,881 overdue invoices became 28);
+  - a combined cash total off by AED 385k in run B, fixed once totals came from code.
+
+  It stays off.
+- **Run D's three partials:**
+  - r047 asks which fiscal year "FY 2025-26" means instead of stating an assumption.
+  - r088 claims no duplicate invoice numbers from a capped list.
+  - r032 quoted a total of a capped result. That one is fixed after the run: no totals are returned for capped results.
+
+### Still open
+
+- **Streaming.** The answer arrives only when complete. Streaming the writing call would put the first words on screen at about 3 s for every question.
+- **The slowest questions are analysis questions** that need four tool calls and long answers ("are any of my companies in trouble", "summarise each company"): 20–35 s.
+- **Re-run with three repeats** before cutover, as recommended in section 4.
 
 ---
 

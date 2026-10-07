@@ -352,6 +352,13 @@ class GeminiBrainSettings(BaseSettings):
         default="",
         description="Bedrock model the agent plans and writes with. Empty = the Sonnet 5 profile (SONNET5_ID).",
     )
+    agent_answer_model_id: str = Field(
+        default="",
+        description=(
+            "Bedrock model that writes the answer after the tools have run (the planner picks the tools). "
+            "Empty = the planner model. A faster model here cuts most of the agent's time."
+        ),
+    )
     agent_max_tool_calls: int = Field(default=6, ge=1, le=12)
     agent_deadline_seconds: float = Field(default=45.0, ge=5.0, le=120.0)
     agent_shadow_log: str = Field(

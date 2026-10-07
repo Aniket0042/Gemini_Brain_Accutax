@@ -117,3 +117,37 @@ def test_tool_spec_lists_document_types_and_filter_members():
     assert spec["name"] == "list_documents"
     assert spec["inputSchema"]["json"]["properties"]["type"]["enum"] == sorted(list_documents.DOCUMENT_TYPES)
     assert "sales.document_weekday" in spec["description"]
+
+
+# ── Figures worked out in code ───────────────────────────────────────────────
+
+def _row(org, period, revenue, margin="10.0", currency="AED"):
+    return {"pnl.organization_id": org, "pnl.organization_name": f"Org {org}", "pnl.currency": currency,
+            "pnl.transaction_date.month": f"{period}T00:00:00.000", "pnl.revenue": revenue, "pnl.net_margin_pct": margin}
+
+
+def test_totals_add_amounts_but_never_percentages():
+    rows = [_row(24, "2026-01-01", "765692"), _row(25, "2026-01-01", "-13652073"), _row(26, "2026-01-01", None)]
+    query = {"measures": ["pnl.revenue", "pnl.net_margin_pct"]}
+    out = query_metrics.summarize(rows, query, CATALOG.views["pnl"], None)
+    assert out == {"totals": {"currency": "AED", "pnl.revenue": "-12886381"}}
+
+
+def test_no_total_across_currencies():
+    rows = [_row(24, "2026-01-01", "100"), _row(25, "2026-01-01", "100", currency="USD")]
+    assert "totals" not in query_metrics.summarize(rows, {"measures": ["pnl.revenue"]}, CATALOG.views["pnl"], None)
+
+
+def test_a_trend_gets_each_organizations_total_best_and_worst_period():
+    rows = [_row(24, "2026-01-01", "900099"), _row(24, "2026-02-01", "-24237"), _row(24, "2026-03-01", "1528362"),
+            _row(25, "2026-01-01", "5")]
+    out = query_metrics.summarize(rows, {"measures": ["pnl.revenue"]}, CATALOG.views["pnl"], "month")
+    org = out["per_organization"]["Org 24"]["pnl.revenue"]
+    assert org == {"total": "2404224", "periods_with_data": 3, "best_period": "2026-03-01", "best": "1528362",
+                   "worst_period": "2026-02-01", "worst": "-24237"}
+
+
+def test_no_totals_from_a_capped_result():
+    rows = [_row(24, "2026-01-01", "100"), _row(25, "2026-01-01", "200")]
+    assert query_metrics.summarize(rows, {"measures": ["pnl.revenue"], "limit": 2}, CATALOG.views["pnl"], None) == {}
+    assert query_metrics.summarize(rows, {"measures": ["pnl.revenue"], "limit": 3}, CATALOG.views["pnl"], None)["totals"]

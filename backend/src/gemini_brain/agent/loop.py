@@ -1,19 +1,24 @@
 """
 loop.py — The bounded tool-using agent (Phase 2, review section 6.3).
 
-One model plans, calls tools and writes the answer. Hard limits: a number of
-tool calls and a deadline for the whole question. Figures come only from tool
+UAE VAT law questions go to the knowledge-base answer (law.py). Everything
+else goes through the tool loop: the planner model chooses tools, and the
+answer model writes from their results (AGENT_ANSWER_MODEL_ID; the planner when
+unset). Hard limits: a number of tool calls and a deadline for the whole
+question. Tool calls from one turn run in parallel. The system prompt and tool
+definitions are marked for Bedrock prompt caching. Figures come only from tool
 results; the verifier checks the answer against them (report only for now).
 """
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence
 
-from gemini_brain.agent import tools
+from gemini_brain.agent import law, tools
 from gemini_brain.agent.prompt import system_prompt
 from gemini_brain.config.constants import SONNET5_ID
 from gemini_brain.config.settings import settings
@@ -32,13 +37,16 @@ BUDGET_USED = ("Tool budget used. Answer now with the figures you already have, 
                "and say plainly which part could not be answered.")
 OUT_OF_TIME = ("I could not finish this within the time limit. Please ask again, "
                "or narrow the question (fewer organizations or a shorter period).")
-#: Sent once when an answer comes back cut off or empty (usually a table too long for the answer).
 #: With less than this many seconds or no tool calls left, the model is told to answer now.
 WRAP_UP_SECONDS = 15.0
 WRAP_UP = "Time or tool budget is nearly used up. Do not call more tools: answer now from the results you have."
+#: Sent once when an answer comes back cut off or empty (usually a table too long for the answer).
 SHORTER = ("Your answer was cut off or empty. Answer again in under 250 words from the tool results you have: "
            "summarise long series per organization (total, best and worst period) instead of a full table.")
 _NUMBER_IN_TEXT = re.compile(r"\d[\d,]*(?:\.\d+)?")
+_CACHE_POINT = {"cachePoint": {"type": "default"}}
+#: Turned off for the process if Bedrock ever refuses a cache point.
+_cache = {"on": True}
 
 
 @dataclass
@@ -49,6 +57,7 @@ class AgentResult:
     verification: Dict[str, Any] = field(default_factory=dict)
     usage: Dict[str, Any] = field(default_factory=dict)
     elapsed_ms: int = 0
+    route: str = "tools"                          # "tools" | "law"
 
 
 def _messages(history: Optional[Sequence[Dict[str, Any]]], question: str) -> List[Dict[str, Any]]:
@@ -69,6 +78,35 @@ def _messages(history: Optional[Sequence[Dict[str, Any]]], question: str) -> Lis
         out.append({"role": "assistant", "content": [{"text": "(no answer)"}]})
     out.append({"role": "user", "content": [{"text": question}]})
     return out
+
+
+def _cached(system: str, specs: List[Dict[str, Any]]) -> tuple:
+    if not _cache["on"]:
+        return [{"text": system}], specs
+    return [{"text": system}, _CACHE_POINT], specs + [_CACHE_POINT]
+
+
+def _converse(adapter: Any, system: str, messages: List[Dict[str, Any]], specs: List[Dict[str, Any]]) -> Dict[str, Any]:
+    sys_blocks, tool_list = _cached(system, specs)
+    try:
+        return adapter.converse_with_tools(sys_blocks, messages, tool_list, max_tokens=MAX_ANSWER_TOKENS, purpose="agent")
+    except Exception as e:
+        if not _cache["on"] or "cache" not in str(e).lower():
+            raise
+        logger.warning("agent: prompt caching refused, continuing without it: %s", e)
+        _cache["on"] = False
+        return adapter.converse_with_tools([{"text": system}], messages, specs,
+                                           max_tokens=MAX_ANSWER_TOKENS, purpose="agent")
+
+
+def _usage(*adapters: Any) -> Dict[str, Any]:
+    """Token counts and cost summed over the adapters used (the same adapter counted once)."""
+    total: Dict[str, Any] = {}
+    for adapter in {id(a): a for a in adapters}.values():
+        for key, value in adapter.get_token_usage().items():
+            if isinstance(value, (int, float)):
+                total[key] = round(total.get(key, 0) + value, 6)
+    return total
 
 
 def _text_of(message: Dict[str, Any]) -> str:
@@ -115,31 +153,40 @@ def run_agent(
     history: Optional[Sequence[Dict[str, Any]]] = None,
     subject: str = "agent",
     model_id: Optional[str] = None,
+    answer_model_id: Optional[str] = None,
     max_tool_calls: Optional[int] = None,
     deadline_seconds: Optional[float] = None,
 ) -> AgentResult:
-    """Answer one question with tools. Never raises."""
+    """Answer one question. Never raises."""
     started = time.monotonic()
     deadline = started + (deadline_seconds or settings.agent_deadline_seconds)
     budget = max_tool_calls or settings.agent_max_tool_calls
     orgs = [int(o) for o in organization_ids]
     ctx = tools.ToolContext(organization_ids=orgs, subject=subject, deadline=deadline)
-    adapter = BedrockAdapter(model_id or settings.agent_model_id or SONNET5_ID, label="agent")
+    planner_id = model_id or settings.agent_model_id or SONNET5_ID
+    writer_id = answer_model_id or settings.agent_answer_model_id or planner_id
+    planner = BedrockAdapter(planner_id, label="agent")
+    writer = planner if writer_id == planner_id else BedrockAdapter(writer_id, label="agent-answer")
     calls: List[Dict[str, Any]] = []
     ok_results: List[Dict[str, Any]] = []
     answer, status = "", "ok"
 
     try:
+        messages = _messages(history, redact_pii(question)[0])
+        law_answer = law.answer(question, [dict(m) for m in messages])
+        if law_answer is not None:
+            return AgentResult(answer=law_answer.answer, status="ok", usage=law_answer.usage, route="law",
+                               elapsed_ms=int((time.monotonic() - started) * 1000))
+
         today = periods.today_in(settings.report_timezone)
         system = system_prompt(org_meta, orgs, today, settings.report_timezone)
         specs = tools.specs(ctx)
-        messages = _messages(history, redact_pii(question)[0])
-        used, asked_shorter = 0, False
+        used, asked_shorter, adapter = 0, False, planner
         while True:
             if deadline - time.monotonic() < MIN_SECONDS_FOR_MODEL_CALL:
                 status, answer = "deadline", OUT_OF_TIME
                 break
-            resp = adapter.converse_with_tools(system, messages, specs, max_tokens=MAX_ANSWER_TOKENS, purpose="agent")
+            resp = _converse(adapter, system, messages, specs)
             message = (resp.get("output") or {}).get("message") or {"role": "assistant", "content": []}
             messages.append(message)
             uses = [b["toolUse"] for b in message.get("content") or [] if "toolUse" in b]
@@ -153,17 +200,14 @@ def run_agent(
                     messages.append({"role": "user", "content": [{"text": SHORTER}]})
                     continue
                 break
+            allowed = uses[:max(0, budget - used)]
+            used += len(allowed)
+            outcomes = _run_tools(allowed, ctx)
             results = []
             for use in uses:
-                t0 = time.monotonic()
-                if used >= budget:
-                    result, ok = {"error": BUDGET_USED}, False
-                else:
-                    used += 1
-                    result, ok = tools.execute(use.get("name", ""), use.get("input"), ctx)
-                calls.append({"name": use.get("name"), "input": use.get("input"), "ok": ok,
-                              "ms": int((time.monotonic() - t0) * 1000), "rows": result.get("row_count"),
-                              **({"error": result.get("error")} if not ok else {})})
+                result, ok, ms = outcomes.get(use["toolUseId"], ({"error": BUDGET_USED}, False, 0))
+                calls.append({"name": use.get("name"), "input": use.get("input"), "ok": ok, "ms": ms,
+                              "rows": result.get("row_count"), **({"error": result.get("error")} if not ok else {})})
                 if ok:
                     ok_results.append(result)
                 results.append({"toolResult": {"toolUseId": use["toolUseId"], "content": [{"json": result}],
@@ -171,6 +215,7 @@ def run_agent(
             if used >= budget or deadline - time.monotonic() < WRAP_UP_SECONDS:
                 results.append({"text": WRAP_UP})
             messages.append({"role": "user", "content": results})
+            adapter = writer
     except Exception as e:  # noqa: BLE001 - the agent must never break the request it shadows
         logger.warning("agent failed: %s", e, exc_info=True)
         status, answer = "error", answer or ""
@@ -181,6 +226,20 @@ def run_agent(
         status=status,
         tool_calls=calls,
         verification=report.to_public() if report else {},
-        usage=adapter.get_token_usage(),
+        usage=_usage(planner, writer),
         elapsed_ms=int((time.monotonic() - started) * 1000),
     )
+
+
+def _run_tools(uses: Sequence[Dict[str, Any]], ctx: tools.ToolContext) -> Dict[str, tuple]:
+    """Run one turn's tool calls at the same time. toolUseId -> (result, ok, ms)."""
+    def one(use: Dict[str, Any]) -> tuple:
+        t0 = time.monotonic()
+        result, ok = tools.execute(use.get("name", ""), use.get("input"), ctx)
+        return result, ok, int((time.monotonic() - t0) * 1000)
+
+    if len(uses) <= 1:
+        return {u["toolUseId"]: one(u) for u in uses}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(uses), thread_name_prefix="agent-call") as pool:
+        futures = {u["toolUseId"]: pool.submit(one, u) for u in uses}
+        return {uid: f.result() for uid, f in futures.items()}

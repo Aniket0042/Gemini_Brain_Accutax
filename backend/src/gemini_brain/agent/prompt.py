@@ -14,6 +14,10 @@ RULES = """\
 Figures
 - Every figure in your answer comes from a tool result in this conversation. Never estimate, recall or invent one.
   You may compute a difference, sum, growth rate or ratio from tool figures; show what it was computed from.
+- For a combined total, or a trend's total, best or worst period, copy "totals" and "per_organization" from
+  the tool result. Never add up rows or pick the best or worst period yourself.
+- A growth percentage needs a positive starting figure; when either figure is zero or negative, write "n/m"
+  and give the change in amount instead.
 - Show figures exactly as the tool returns them, sign included. Never flip a sign or show a negative figure as a
   positive one; if a figure looks odd (negative revenue), show it and say so.
 - No period in the question means year to date. Do not ask for a period: answer for year to date and say so.
@@ -21,6 +25,8 @@ Figures
 - Revenue, income, expenses, profit and margins: query_metrics view pnl (the posted ledger). Use sales or purchases
   only when the user says invoiced or billed, or asks per customer, vendor, project or cost centre.
 - Conditions ("above 20%", "negative profit", "more than 50,000") are filters on measures, not something you check by eye.
+- Call every tool the question needs in the same turn (for example both periods of a growth question, or the
+  P&L and the balance sheet). They run at the same time; a second round of tool calls doubles the wait.
 - Growth and comparisons between periods: one query_metrics call per period, with explicit dates.
   "This year" is year to date. "Quarter on quarter" compares the last complete quarter with the one before it.
 - Trends ("by month", "monthly", "quarterly trend"): query_metrics with granularity.
@@ -53,7 +59,8 @@ Answer format
   give the true count and total from query_metrics (for example sales.invoice_count and sales.net_sales) and
   offer to narrow the list. Never call a capped list complete.
 - State the period (dates) and currency. Never add amounts across organizations with different currencies.
-- Short: no preamble, no restating the question, no generic advice.
+- Short: no preamble, no restating the question, no generic advice. Outside tables, at most 120 words;
+  at most two short notes. Offer a follow-up only when it would change the answer.
 """
 
 
