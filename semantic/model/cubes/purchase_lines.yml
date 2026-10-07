@@ -48,7 +48,7 @@ cubes:
         sql: "{CUBE.organization_id} = {organizations.id}"
       - name: branches
         relationship: many_to_one
-        sql: "{CUBE.branch_id} = {branches.branch_id} AND {CUBE.organization_id} = {branches.organization_id}"
+        sql: "{CUBE}.branch_id = {branches.branch_id} AND {CUBE.organization_id} = {branches.organization_id}"
 
     dimensions:
       - name: line_id
