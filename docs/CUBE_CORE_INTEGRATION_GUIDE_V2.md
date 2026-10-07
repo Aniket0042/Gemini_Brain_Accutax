@@ -716,6 +716,7 @@ These came up while checking v1 against the code. They are not Cube tasks; they 
 | Cold-start latency | Index `idx_journal_entries_org_date_posted` built 7 Oct (254 MB): warm P&L 270 → 70 ms. Cold reads of journal lines remain; Phase 3 rollups remove them |
 | Model fix from shadow mode | Receivables and payables used the UTC date for "today"; now each organization's own time zone (7 Oct) |
 | **Phase 1 exit** | Engineering complete. Closes when the sign-offs are in and seven days of shadow logs review with nothing unexplained |
+| Phase 2 (started 7 Oct) | `document_number` and `document_weekday` added to the `sales` and `purchases` views (deployed to the VM by hand; backup `~cube/semantic/model.bak-pre-phase2-20261007`). `query_metrics` gained `granularity`; `list_documents` is new. Agent results: [`PHASE2_AGENT.md`](./PHASE2_AGENT.md) |
 
 ---
 

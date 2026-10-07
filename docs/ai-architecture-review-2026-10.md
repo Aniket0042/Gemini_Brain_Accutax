@@ -368,6 +368,8 @@ That is one SQL query, expected under 1 second.
 - Run it in shadow mode next to the current path on the golden set. Compare accuracy, response time and cost.
 - Switch over when it is better on all three. Then remove the regex routers and the endpoint selector.
 
+**Phase 2 status, 7 Oct 2026:** the agent is built and was evaluated offline (`AGENT_MODE` is off). On 89 real questions from the chat history it passed 84, against 60 for the current path. It is not yet faster: its 95th-percentile time was 36 s, against 11 s for the current path. VAT law answers vary from run to run. Details, the recommendation and the grade for each case are in [`PHASE2_AGENT.md`](./PHASE2_AGENT.md).
+
 ### Phase 3: platform hardening
 
 - Expose the tools as an MCP server, with tenant scope taken from the caller's token.

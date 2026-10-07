@@ -22,6 +22,8 @@ from gemini_brain.semantic.catalog import AUTO_DIMENSIONS, Catalog, ToolInputErr
 OPERATORS = ("equals", "notEquals", "gt", "gte", "lt", "lte", "contains", "notContains",
              "set", "notSet", "inDateRange", "beforeDate", "afterDate")
 MAX_MEASURES, MAX_GROUP_BY, MAX_FILTERS, MAX_LIMIT, DEFAULT_LIMIT = 6, 3, 5, 100, 50
+#: A trend returns one row per organization and time bucket, so it may return more rows.
+GRANULARITIES, MAX_SERIES_LIMIT = ("week", "month", "quarter", "year"), 300
 MAX_FILTER_VALUES = 20
 BEGINNING_OF_TIME = "1900-01-01"
 CURRENCY_NOTE = ("Figures are per organization, in that organization's currency. "
@@ -37,6 +39,9 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
     notes = [period_note, CURRENCY_NOTE]
     if any(f["member"].endswith("_margin_pct") for f in query.get("filters") or []):
         notes.append(MARGIN_NOTE)
+    if len(result.rows) >= query["limit"]:
+        notes.append(f"Only the first {query['limit']} rows are returned; there may be more. "
+                     "Ask for fewer organizations or a shorter period rather than paging.")
     return {
         "view": view.name,
         "rows": [{k: str(v) if isinstance(v, Decimal) else v for k, v in r.items()} for r in result.rows],
@@ -57,8 +62,10 @@ def build_query(params: Dict[str, Any], catalog: Catalog) -> tuple[Dict[str, Any
 
     dims = [f"{view.name}.{d}" for d in AUTO_DIMENSIONS] + list(view.always_group_by)
     dims += [d for d in group_by if d not in dims]
+    series = bool(params.get("granularity"))
     query: Dict[str, Any] = {"measures": measures, "dimensions": dims, "filters": filters,
-                             "limit": _limit(params.get("limit"))}
+                             "limit": _limit(params.get("limit") or (MAX_SERIES_LIMIT if series else DEFAULT_LIMIT),
+                                             MAX_SERIES_LIMIT if series else MAX_LIMIT)}
     period_note = _apply_time(query, view, params)
 
     order = params.get("order") or {}
@@ -106,21 +113,26 @@ def _filters(raw: Any, view: View) -> List[Dict[str, Any]]:
     return out
 
 
-def _limit(value: Any) -> int:
+def _limit(value: Any, most: int = MAX_LIMIT) -> int:
     try:
-        return max(1, min(int(value or DEFAULT_LIMIT), MAX_LIMIT))
+        return max(1, min(int(value or DEFAULT_LIMIT), most))
     except (TypeError, ValueError):
         return DEFAULT_LIMIT
 
 
 def _apply_time(query: Dict[str, Any], view: View, params: Dict[str, Any]) -> str:
     today = periods.today_in(settings.report_timezone)
+    granularity = params.get("granularity")
+    if granularity and (view.kind != "flow" or granularity not in GRANULARITIES):
+        raise ToolInputError(f"granularity is one of {list(GRANULARITIES)} and applies to period views only")
     try:
         if view.kind == "flow":
             start, end = periods.resolve(params.get("period"), today)
-            query["timeDimensions"] = [{"dimension": view.time_dimension,
-                                        "dateRange": [start.isoformat(), end.isoformat()]}]
-            return f"Period: {start.isoformat()} to {end.isoformat()}."
+            time_dimension = {"dimension": view.time_dimension, "dateRange": [start.isoformat(), end.isoformat()]}
+            if granularity:
+                time_dimension["granularity"] = granularity
+            query["timeDimensions"] = [time_dimension]
+            return f"Period: {start.isoformat()} to {end.isoformat()}" + (f", by {granularity}." if granularity else ".")
         if view.kind == "balance":
             as_of = periods.parse_date(params.get("as_of")) or today
             query["timeDimensions"] = [{"dimension": view.time_dimension,
@@ -168,6 +180,8 @@ def tool_spec(catalog: Catalog) -> Dict[str, Any]:
                     "end": {"type": "string"},
                 }},
                 "as_of": {"type": "string", "description": "YYYY-MM-DD, balance_sheet only"},
+                "granularity": {"type": "string", "enum": list(GRANULARITIES),
+                                "description": "Split a period view into time buckets, for trends"},
                 "order": {"type": "object", "properties": {
                     "member": {"type": "string"},
                     "direction": {"type": "string", "enum": ["asc", "desc"]},

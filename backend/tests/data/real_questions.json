@@ -1,0 +1,3148 @@
+{
+ "description": "Real questions from the chat history (model_arena_chat_messages, 27 Sep - 6 Oct 2026, test orgs 24-33), one case per distinct question. Excluded: unit-test fixture traffic (org 69), orgs outside the test set (68, 1834), and near-duplicate wordings. 'old_answer' is the start of the answer users saw at the time. 'expect.ref' are reference Cube queries (ledger basis); 'expect.alt' the document basis the current path uses. Seed phase of the Phase 2 golden set (guide 11.4); replayed by scripts/eval/replay_real_questions.py.",
+ "cases": [
+  {
+   "id": "r006",
+   "asked": "2026-09-27",
+   "orgs": [
+    24,
+    27,
+    29,
+    31,
+    33
+   ],
+   "question": "Compare revenue this year",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "ytd"
+     }
+    ],
+    "alt": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "period": "ytd"
+     }
+    ]
+   },
+   "old_answer": "Here is a comparison of the revenue for the current year across the organizations:  | Organization | Revenue (Currency) | Invoices Issued | | --- | --- | --- | | Agriculture & Forestry_User1_Org1 | AED 4,495,435.00 | 629 | | Professional & Consulting Services_User1_Org4 | AED 16,015,560.00 | 1,890 | | Professional & Consulting Services_User1_Org6 | AED 1,862,472.00 | 220 | | Professional & Consulting Services_User1_Org8 | AED 2,097,469.00 | 318 | | Agriculture & Forestry_User1_Org10 | AED 2,954,424.00 | 441 |  The revenue figures are provided in the local currency of AED (United Arab Emirates "
+  },
+  {
+   "id": "r007",
+   "asked": "2026-09-27",
+   "orgs": [
+    24,
+    27,
+    29,
+    31,
+    33
+   ],
+   "question": "what about last quarter",
+   "kind": "followup",
+   "context": [
+    "r006"
+   ],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "last_quarter"
+     }
+    ],
+    "alt": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "period": "last_quarter"
+     }
+    ]
+   },
+   "old_answer": "Based on the information provided, here is a summary of the revenues for the organizations last quarter:  | Organization | Currency | Revenue | | --- | --- | --- | | Agriculture & Forestry_User1_Org1 | AED | 0.00 | | Professional & Consulting Services_User1_Org4 | AED | 0.00 | | Professional & Consulting Services_User1_Org6 | AED | 0.00 | | Professional & Consulting Services_User1_Org8 | AED | 0.00 | | Agriculture & Forestry_User1_Org10 | AED | 0.00 |  All the organizations reported 0.00 revenue for the last quarter. The currency for all organizations is AED."
+  },
+  {
+   "id": "r008",
+   "asked": "2026-09-27",
+   "orgs": [
+    24,
+    27,
+    29,
+    31,
+    33
+   ],
+   "question": "can you compare organization Professional & Consulting Services_User1_Org4  and Professional & Consulting Services_User1_Org6 vendors and tell me which vendors are good for both the organizations",
+   "kind": "analysis",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "purchases",
+      "measures": [
+       "net_purchases",
+       "bill_count"
+      ],
+      "period": "ytd",
+      "group_by": [
+       "vendor_name"
+      ],
+      "orgs": [
+       27,
+       29
+      ],
+      "order": [
+       "net_purchases",
+       "desc"
+      ],
+      "limit": 20
+     }
+    ],
+    "note": "Org4 = 27, Org6 = 29. Vendor comparison between two orgs."
+   },
+   "old_answer": "I apologize, it seems there was some confusion in our previous conversation. You had asked me to provide the specific question you would like me to answer, but you did not actually state a question initially.   Since there is no prior question for me to reference, I do not have a specific question to rewrite. However, I'm happy to provide a general response based on the context of our conversation so far.  As an AI assistant for Accutax, I can help with a variety of tasks, such as:  - Guidance on navigating the Accutax UI and workflows - Explanations of accounting and financial concepts - Busi"
+  },
+  {
+   "id": "r011",
+   "asked": "2026-09-28",
+   "orgs": [
+    27,
+    29
+   ],
+   "question": "List invoices for this year",
+   "kind": "record_list",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "sales",
+      "measures": [
+       "invoice_count",
+       "net_sales"
+      ],
+      "period": "ytd"
+     }
+    ],
+    "note": "Invoice list per org; counts and totals must be the same on every run."
+   },
+   "old_answer": "Here is a summary of the invoices for this year across the two organizations:  | Organization | Currency | Invoices | | --- | --- | --- | | Professional & Consulting Services_User1_Org4 | AED | 14 pending invoices with amounts of AED 3,484 each, with due dates from 2021-01-15 to 2021-01-21. The oldest invoice is 2,082 days overdue. | | Professional & Consulting Services_User1_Org6 | AED | 16 pending invoices with amounts of AED 10,397 each, with due dates from 2021-02-15 to 2021-03-13. The oldest invoice is 2,051 days overdue. Additionally, there are 4 pending invoices for customer Vritti with"
+  },
+  {
+   "id": "r012",
+   "asked": "2026-09-28",
+   "orgs": [
+    27
+   ],
+   "question": "List invoices for this year",
+   "kind": "record_list",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "sales",
+      "measures": [
+       "invoice_count",
+       "net_sales"
+      ],
+      "period": "ytd"
+     }
+    ]
+   },
+   "old_answer": "Recent invoices from December 2026 show:  * Total of 9 invoices worth AED 86,331.00 * 3 invoices are marked as paid, 4 as received, and 2 as voided * Largest invoice is to Vedant for AED 17,188.00 for Client Success Program (though voided) * Most common payment method is Bank Transfer, used for 6 invoices"
+  },
+  {
+   "id": "r013",
+   "asked": "2026-09-28",
+   "orgs": [
+    27,
+    29
+   ],
+   "question": "Compare total revenue this year",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "ytd"
+     }
+    ],
+    "alt": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "period": "ytd"
+     }
+    ]
+   },
+   "old_answer": "The total revenue across the two organizations for this year is:  | Organization | Revenue | | --- | --- | | Professional & Consulting Services_User1_Org4 | AED 16,015,560.00 | | Professional & Consulting Services_User1_Org6 | AED 1,862,472.00 | | **Total** | **AED 17,878,032.00** |"
+  },
+  {
+   "id": "r018",
+   "asked": "2026-09-28",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "List vendors with overdue bills in each organization",
+   "kind": "record_list",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "payables",
+      "measures": [
+       "overdue_amount",
+       "overdue_count"
+      ],
+      "group_by": [
+       "vendor_name"
+      ],
+      "filters": [
+       [
+        "overdue_amount",
+        "gt",
+        [
+         "0"
+        ]
+       ]
+      ],
+      "order": [
+       "overdue_amount",
+       "desc"
+      ],
+      "limit": 100
+     }
+    ]
+   },
+   "old_answer": "Here is a summary of the vendors with overdue bills in each organization:  - Hospitality & Tourism_User1_Org3:  - Top 5 overdue bills: Turvi 47,481.00 AED, Warinder 44,489.00 AED, Jeet 38,177.00 AED, Aishani 26,399.00 AED, Ansh 26,184.00 AED  - Total overdue bills: 513,541.00 AED  - Professional & Consulting Services_User1_Org4:   - Top 5 overdue bills: Shaurya 193,015.00 AED, Max 192,570.00 AED, Ronith 169,092.00 AED, Aarini 162,393.00 AED, Vidhi 146,268.00 AED  - Total overdue bills: 1,982,608.00 AED  - Construction & Real Estate_User1_Org5:  - Top 5 overdue bills: Noah 159,542.00 AED, Qushi"
+  },
+  {
+   "id": "r019",
+   "asked": "2026-09-28",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Compare total revenue for this year",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "ytd"
+     }
+    ],
+    "alt": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "period": "ytd"
+     }
+    ]
+   },
+   "old_answer": "The total revenue across all organizations for this year is AED 39,866,320. Here is the breakdown:  - Agriculture & Forestry_User1_Org1: AED 4,495,435 - Construction & Real Estate_User1_Org2: AED 4,909,798 - Hospitality & Tourism_User1_Org3: AED 1,741,014 - Professional & Consulting Services_User1_Org4: AED 16,015,560 - Construction & Real Estate_User1_Org5: AED 3,962,698 - Professional & Consulting Services_User1_Org6: AED 1,862,472 - Agriculture & Forestry_User1_Org7: AED 2,279,693 - Professional & Consulting Services_User1_Org8: AED 2,097,469 - Technology & Software_User1_Org9: AED 1,448,75"
+  },
+  {
+   "id": "r020",
+   "asked": "2026-09-28",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Which organization has higher outstanding receivables?",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "outstanding"
+      ],
+      "order": [
+       "outstanding",
+       "desc"
+      ]
+     }
+    ]
+   },
+   "old_answer": "Based on the data provided, the organization with the highest outstanding receivables as of 28 Sep 2026 is:  - Professional & Consulting Services_User1_Org4 with 14,445,699.00 AED, which is 33.2% of the total.  Other key points:  - The organization with the second highest outstanding receivables is Construction & Real Estate_User1_Org5 with 10,802,905.00 AED, which is 24.9% of the total. - The organization with the lowest outstanding receivables is Agriculture & Forestry_User1_Org1 and Construction & Real Estate_User1_Org2, both with 0.00 AED. - There is a notable gap of 3,642,794.00 AED betwe"
+  },
+  {
+   "id": "r025",
+   "asked": "2026-09-28",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Rank the organizations by total expenses",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "total_expenses"
+      ],
+      "period": "ytd",
+      "order": [
+       "total_expenses",
+       "desc"
+      ]
+     }
+    ],
+    "alt": [
+     {
+      "view": "purchases",
+      "measures": [
+       "net_purchases"
+      ],
+      "period": "ytd",
+      "order": [
+       "net_purchases",
+       "desc"
+      ]
+     }
+    ]
+   },
+   "old_answer": "Based on the total expenses data provided for the period of 1 Jan 2026 � 28 Sep 2026:  - The organizations can be ranked from highest to lowest total expenses as follows: 1. Construction & Real Estate_User1_Org2: 2,737,953.00 AED 2. Construction & Real Estate_User1_Org5: 1,278,905.00 AED 3. Professional & Consulting Services_User1_Org4: 1,258,190.00 AED 4. Professional & Consulting Services_User1_Org6: 997,950.00 AED 5. Agriculture & Forestry_User1_Org7: 729,678.00 AED  - The organization with the highest total expenses is Construction & Real Estate_User1_Org2 with 2,737,953.00 AED. - The orga"
+  },
+  {
+   "id": "r026",
+   "asked": "2026-09-28",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Which organization has the highest cash balance?",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "balance_sheet",
+      "measures": [
+       "cash_and_bank"
+      ],
+      "as_of": "today",
+      "order": [
+       "cash_and_bank",
+       "desc"
+      ]
+     }
+    ]
+   },
+   "old_answer": "Based on the information provided, I was not able to retrieve the cash balance data for any of the organizations. The conversation did not include any details about the cash balances of the different organizations. Without that data, I cannot determine which organization has the highest cash balance. I would need the specific cash balance figures for each organization in order to make that comparison."
+  },
+  {
+   "id": "r030",
+   "asked": "2026-09-28",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "rank organization by total expenses",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "total_expenses"
+      ],
+      "period": "ytd",
+      "order": [
+       "total_expenses",
+       "desc"
+      ]
+     }
+    ],
+    "alt": [
+     {
+      "view": "purchases",
+      "measures": [
+       "net_purchases"
+      ],
+      "period": "ytd",
+      "order": [
+       "net_purchases",
+       "desc"
+      ]
+     }
+    ]
+   },
+   "old_answer": "Here is the ranking of organizations by total expenses for the period of 1 Jan 2026 � 31 Dec 2026:  - Professional & Consulting Services_User1_Org4: AED 1,799,210.00 - Construction & Real Estate_User1_Org5: AED 1,650,941.00  - Construction & Real Estate_User1_Org2: AED 1,162,731.00 - Professional & Consulting Services_User1_Org6: AED 1,254,127.00 - Technology & Software_User1_Org9: AED 654,958.00 - Agriculture & Forestry_User1_Org10: AED 554,748.00 - Hospitality & Tourism_User1_Org3: AED 444,831.00 - Agriculture & Forestry_User1_Org7: AED 728,020.00 - Professional & Consulting Services_User1_O"
+  },
+  {
+   "id": "r032",
+   "asked": "2026-09-28",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "list vendors with overdue invoices in each organizations",
+   "kind": "record_list",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "overdue_amount",
+       "overdue_count"
+      ],
+      "group_by": [
+       "customer_name"
+      ],
+      "filters": [
+       [
+        "overdue_amount",
+        "gt",
+        [
+         "0"
+        ]
+       ]
+      ],
+      "order": [
+       "overdue_amount",
+       "desc"
+      ],
+      "limit": 100
+     }
+    ],
+    "note": "Ambiguous: invoices are customers, not vendors. Should say so or ask."
+   },
+   "old_answer": "Based on the information provided, here is a summary of the vendors with overdue invoices in each organization:  - Agriculture & Forestry_User1_Org1: The top 5 vendors with overdue invoices are Neelima (23,598.60 AED), Anusha (21,447.76 AED), Yashasvi (20,595.36 AED), Netra (19,808.67 AED), and Ayaan (19,168.68 AED). - Construction & Real Estate_User1_Org2: The top 5 vendors with overdue invoices are Vasana (22,874.52 AED), Henry (22,704.38 AED), Jackson (21,391.25 AED), Faras (20,450.43 AED), and Amara (19,638.48 AED). - Hospitality & Tourism_User1_Org3: The top 5 vendors with overdue invoice"
+  },
+  {
+   "id": "r034",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "rank the top 5 orgnanization by thier revenue and also tell me the overdue invoices each organization have",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "ytd",
+      "order": [
+       "revenue",
+       "desc"
+      ],
+      "limit": 5
+     },
+     {
+      "view": "receivables",
+      "measures": [
+       "overdue_amount",
+       "overdue_count"
+      ]
+     }
+    ],
+    "alt": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "period": "ytd",
+      "order": [
+       "net_sales",
+       "desc"
+      ],
+      "limit": 5
+     }
+    ]
+   },
+   "old_answer": "Based on the information provided:  - The top 5 organizations ranked by revenue are: 1. Professional & Consulting Services_User1_Org4: 14,445,699.00 AED in overdue receivables 2. Construction & Real Estate_User1_Org5: 10,802,905.00 AED in overdue receivables  3. Technology & Software_User1_Org9: 4,125,316.00 AED in overdue receivables 4. Professional & Consulting Services_User1_Org8: 3,538,210.00 AED in overdue receivables 5. Agriculture & Forestry_User1_Org10: 3,016,283.00 AED in overdue receiv"
+  },
+  {
+   "id": "r035",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "what about revenue you are not showing the revenue",
+   "kind": "followup",
+   "context": [
+    "r034"
+   ],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "ytd",
+      "order": [
+       "revenue",
+       "desc"
+      ],
+      "limit": 5
+     }
+    ],
+    "alt": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "period": "ytd",
+      "order": [
+       "net_sales",
+       "desc"
+      ],
+      "limit": 5
+     }
+    ]
+   },
+   "old_answer": "Based on the data provided, here is a summary of the top 5 organizations ranked by revenue and their overdue invoices:  - The top 5 organizations ranked by revenue are: 1. Professional & Consulting Services_User1_Org4: 14,445,699.00 AED in overdue invoices 2. Construction & Real Estate_User1_Org5: 10,802,905.00 AED in overdue invoices  3. Technology & Software_User1_Org9: 4,125,316.00 AED in overdue invoices 4. Professional & Consulting Services_User1_Org8: 3,538,210.00 AED in overdue invoices 5"
+  },
+  {
+   "id": "r036",
+   "asked": "2026-09-29",
+   "orgs": [
+    25,
+    26,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "rank top 5 org based on their revenue",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "ytd",
+      "order": [
+       "revenue",
+       "desc"
+      ],
+      "limit": 5
+     }
+    ],
+    "alt": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "period": "ytd",
+      "order": [
+       "net_sales",
+       "desc"
+      ],
+      "limit": 5
+     }
+    ]
+   },
+   "old_answer": "Based on the total revenue data provided for the period of 1 Jan 2026 � 29 Sep 2026, the top 5 organizations ranked by revenue are:  1. Construction & Real Estate_User1_Org2: 4,909,798.00 AED 2. Construction & Real Estate_User1_Org5: 3,165,296.00 AED  3. Agriculture & Forestry_User1_Org10: 2,275,451.00 AED 4. Agriculture & Forestry_User1_Org7: 1,981,899.00 AED 5. Professional & Consulting Services_User1_Org8: 1,877,826.00 AED  The leader is Construction & Real Estate_User1_Org2 with 4,909,798.00 AED in revenue, while the laggard is Technology & Software_User1_Org9 with 1,003,547.00 AED.  There"
+  },
+  {
+   "id": "r037",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Compare revenue, expenses and cash this year",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "ytd"
+     },
+     {
+      "view": "pnl",
+      "measures": [
+       "total_expenses"
+      ],
+      "period": "ytd"
+     },
+     {
+      "view": "balance_sheet",
+      "measures": [
+       "cash_and_bank"
+      ],
+      "as_of": "today"
+     }
+    ],
+    "alt": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "period": "ytd"
+     },
+     {
+      "view": "purchases",
+      "measures": [
+       "net_purchases"
+      ],
+      "period": "ytd"
+     }
+    ]
+   },
+   "old_answer": "Here is a summary of the key points from the data provided:  - All organizations use the same currency, AED. - The organization with the highest total revenue is Professional & Consulting Services_User1_Org4 at 16,015,560.00 AED. - The organization with the lowest total revenue is Technology & Software_User1_Org9 at 1,448,757.00 AED. - There is a notable gap between the highest and lowest total revenue, with Professional & Consulting Services_User1_Org4 generating over 10 times more revenue than Technology & Software_User1_Org9. - The organization with the highest cash balance as of 29 Sep 202"
+  },
+  {
+   "id": "r038",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "rank top 5 organization based on their revenue and also show me the overdue invoices count and overdue amount",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "ytd",
+      "order": [
+       "revenue",
+       "desc"
+      ],
+      "limit": 5
+     },
+     {
+      "view": "receivables",
+      "measures": [
+       "overdue_amount",
+       "overdue_count"
+      ]
+     }
+    ],
+    "alt": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "period": "ytd",
+      "order": [
+       "net_sales",
+       "desc"
+      ],
+      "limit": 5
+     }
+    ]
+   },
+   "old_answer": "Here is a summary of the top 5 organizations based on total revenue, along with the overdue receivables count and amount:  - The top 5 organizations by total revenue are: 1. Professional & Consulting Services_User1_Org4: 12,183,037.00 AED 2. Construction & Real Estate_User1_Org2: 4,909,798.00 AED  3. Agriculture & Forestry_User1_Org1: 4,495,435.00 AED 4. Construction & Real Estate_User1_Org5: 3,165,296.00 AED 5. Agriculture & Forestry_User1_Org10: 2,275,451.00 AED  - The organization with the highest overdue receivables is Professional & Consulting Services_User1_Org4 with 14,445,699.00 AED.  "
+  },
+  {
+   "id": "r039",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "show me the ooverdue invoices count",
+   "kind": "followup",
+   "context": [
+    "r038"
+   ],
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "overdue_amount",
+       "overdue_count"
+      ]
+     }
+    ]
+   },
+   "old_answer": "Based on the data provided, here is a summary of the overdue invoices count and overdue amount for the organizations:  - The total overdue amount across all organizations is 43,351,369.00 AED as of 29 Sep 2026. - The organization with the highest overdue amount is Professional & Consulting Services_User1_Org4 with 14,445,699.00 AED, which is 33.3% of the total. - The organizations with the lowest overdue amount of 0.00 AED are Agriculture & Forestry_User1_Org9 and Construction & Real Estate_User1_Org2, which each make up 0.0% of the total. - There is a notable gap between the top 3 organizatio"
+  },
+  {
+   "id": "r040",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "give me summary for each organizations with respect to their bills and invoices",
+   "kind": "analysis",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales",
+       "invoice_count"
+      ],
+      "period": "ytd"
+     },
+     {
+      "view": "purchases",
+      "measures": [
+       "net_purchases",
+       "bill_count"
+      ],
+      "period": "ytd"
+     },
+     {
+      "view": "receivables",
+      "measures": [
+       "outstanding",
+       "overdue_amount"
+      ]
+     },
+     {
+      "view": "payables",
+      "measures": [
+       "outstanding",
+       "overdue_amount"
+      ]
+     }
+    ]
+   },
+   "old_answer": "Here is a summary of the bills and invoices across the organizations:  - **Bills**:  - The majority of bills are in ACCEPTED, RECEIVED, and CANCELLED statuses across the organizations.  - Total outstanding bills (PENDING + RECEIVED) range from around AED 5.8 million to AED 11.1 million.  - The organization with the highest total bills is Construction & Real Estate_User1_Org5 with 4,753 bills valued at AED 11,103,196.  - **Invoices**:  - The most common invoice statuses are RECEIVED, VOIDED, ACCEPTED, and PENDING.  - Total outstanding invoices (PENDING + RECEIVED) range from around AED 19 milli"
+  },
+  {
+   "id": "r041",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Compare the balance sheet",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "balance_sheet",
+      "measures": [
+       "assets",
+       "liabilities",
+       "total_equity"
+      ],
+      "as_of": "today"
+     }
+    ]
+   },
+   "old_answer": "Here is a summary of the balance sheet comparison across the organizations:  - The organization with the highest total assets is Agriculture & Forestry_User1_Org1 with 67,947,177.87 AED. - The organization with the highest total liabilities is Professional & Consulting Services_User1_Org6 with 9,093,677.00 AED. - The organization with the highest total equity is Agriculture & Forestry_User1_Org1 with 62,932,377.00 AED. - There is a notable gap between the top organization (Agriculture & Forestry_User1_Org1) and the rest in terms of total assets and total equity. - Several organizations have ne"
+  },
+  {
+   "id": "r042",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Which org has the best profit margin?",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "net_margin_pct"
+      ],
+      "period": "ytd",
+      "order": [
+       "net_margin_pct",
+       "desc"
+      ]
+     }
+    ]
+   },
+   "old_answer": "Based on the profit margin data provided for the period of 1 Jan 2026 � 29 Sep 2026:  - The organization with the best profit margin is Agriculture & Forestry_User1_Org1 at 100.00%. - The organization with the lowest profit margin is Professional & Consulting Services_User1_Org6 at -1.27%. - There is a notable gap of 41.37 percentage points between the highest (100.00%) and second-highest (89.63%) profit margins. - The top 3 profit margins are all in the Agriculture & Forestry and Professional & Consulting Services sectors. - The data indicates that the organizations share the same currency, a"
+  },
+  {
+   "id": "r043",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "\"Revenue growth vs last year\"",
+   "kind": "growth",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "ytd"
+     },
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "same_period_last_year"
+     }
+    ],
+    "alt": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "period": "ytd"
+     },
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "period": "same_period_last_year"
+     }
+    ]
+   },
+   "old_answer": "Here is a summary of the revenue growth comparison across the organizations for the period of 1 Jan 2025 � 31 Dec 2025 vs the same period last year:  - The organization with the highest revenue growth is Agriculture & Forestry_User1_Org10 at 70.58%, with current revenue of 2,214,836.00 AED and previous revenue of 1,298,411.00 AED. - The organization with the lowest (negative) revenue growth is Hospitality & Tourism_User1_Org3 at -22.11%, with current revenue of 1,092,921.00 AED and previous revenue of 1,403,182.00 AED. - There is a notable gap between the highest and lowest revenue growth, ran"
+  },
+  {
+   "id": "r044",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "revenue by month for each organization",
+   "kind": "series",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "ytd",
+      "granularity": "month"
+     }
+    ]
+   },
+   "old_answer": "Here is a summary of the revenue by month for the organizations from January 1, 2026 to September 29, 2026:  - The organization with the highest total revenue during this period was Professional & Consulting Services_User1_Org4 with AED 12,183,037.00, with the best month being January 2026 at AED 2,466,087. - The organization with the lowest total revenue was Technology & Software_User1_Org9 with AED 1,003,547.00, with the best month being February 2026 at AED 221,382. - There is a notable gap between the highest and lowest total revenues, with Professional & Consulting Services_User1_Org4 ear"
+  },
+  {
+   "id": "r045",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Quarterly profit trend",
+   "kind": "series",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "net_profit"
+      ],
+      "period": "ytd",
+      "granularity": "quarter"
+     }
+    ]
+   },
+   "old_answer": "Based on the quarterly profit data provided for the period from January 1, 2026 to September 29, 2026:  - The organization with the highest total net profit for the period is Professional & Consulting Services_User1_Org4 with AED 10,919,388.00. - The organization with the lowest total net profit for the period is Professional & Consulting Services_User1_Org6 with a loss of AED 12,690.00. - There is a notable gap between the top performer, Professional & Consulting Services_User1_Org4 (AED 10,919,388.00), and the second-best performer, Agriculture & Forestry_User1_Org1 (AED 4,495,435.00). - The"
+  },
+  {
+   "id": "r046",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Compare revenue, expenses, net profit and cash for all selected orgs this year",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "ytd"
+     },
+     {
+      "view": "pnl",
+      "measures": [
+       "total_expenses"
+      ],
+      "period": "ytd"
+     },
+     {
+      "view": "pnl",
+      "measures": [
+       "net_profit"
+      ],
+      "period": "ytd"
+     },
+     {
+      "view": "balance_sheet",
+      "measures": [
+       "cash_and_bank"
+      ],
+      "as_of": "today"
+     }
+    ],
+    "alt": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "period": "ytd"
+     },
+     {
+      "view": "purchases",
+      "measures": [
+       "net_purchases"
+      ],
+      "period": "ytd"
+     }
+    ]
+   },
+   "old_answer": "Here is a summary of the key points from the data provided:  - All organizations use the same currency, AED. - The organization with the highest total revenue is Professional & Consulting Services_User1_Org4 at 16,015,560.00 AED. - The organization with the lowest total revenue is Technology & Software_User1_Org9 at 1,448,757.00 AED. - There is a notable gap between the top revenue earner (Professional & Consulting Services_User1_Org4 at 16,015,560.00 AED) and the second highest (Construction & "
+  },
+  {
+   "id": "r047",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Show me the P&L for each entity for FY 2025-26",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue",
+       "cost_of_sales",
+       "operating_expenses",
+       "net_profit"
+      ],
+      "period": [
+       "2025-04-01",
+       "2026-03-31"
+      ]
+     }
+    ],
+    "note": "FY 2025-26 is ambiguous; the answer must state the period it used."
+   },
+   "old_answer": "Here is a summary of the P&L data for the organizations for FY 2025-26:  - The organization with the highest total revenue is Professional & Consulting Services_User1_Org4 at 11,196,621.00 AED. - The organization with the highest net profit is Agriculture & Forestry_User1_Org1 at 9,627,414.00 AED, with a 100% profit margin. - There is a notable gap between the top revenue earners (Professional & Consulting Services_User1_Org4, Agriculture & Forestry_User1_Org1, Construction & Real Estate_User1_O"
+  },
+  {
+   "id": "r048",
+   "asked": "2026-09-29",
+   "orgs": [
+    33
+   ],
+   "question": "Generate our profit and loss statement for this fiscal year, broken down by month, including revenue, cost of sales, operating expenses, and net profit.",
+   "kind": "series",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue",
+       "cost_of_sales",
+       "operating_expenses",
+       "net_profit"
+      ],
+      "period": "ytd",
+      "granularity": "month"
+     }
+    ]
+   },
+   "old_answer": "- Total revenue for the fiscal year is AED 2,752,767. - Cost of goods sold is AED 0. - Gross profit is AED 2,752,767. - Operating expenses are AED 644,620. - Operating profit is AED 2,108,147. - Net profit for the fiscal year is AED 2,108,147."
+  },
+  {
+   "id": "r049",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "What is the combined cash position across all entities?",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "balance_sheet",
+      "measures": [
+       "cash_and_bank"
+      ],
+      "as_of": "today"
+     }
+    ]
+   },
+   "old_answer": "The combined cash position across all entities is AED 0.  The key details are:  - Agriculture & Forestry_User1_Org1: AED 0 - Construction & Real Estate_User1_Org2: AED 0 - Hospitality & Tourism_User1_Org3: AED 0 - Professional & Consulting Services_User1_Org4: AED 0 - Construction & Real Estate_User1_Org5: AED 0 - Professional & Consulting Services_User1_Org6: AED 0 - Agriculture & Forestry_User1_Org7: AED 0 - Professional & Consulting Services_User1_Org8: AED 0 - Technology & Software_User1_Org"
+  },
+  {
+   "id": "r050",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Compare revenue this year vs last year for each org",
+   "kind": "growth",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "ytd"
+     },
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "last_year"
+     }
+    ],
+    "alt": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "period": "ytd"
+     },
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "period": "last_year"
+     }
+    ]
+   },
+   "old_answer": "Based on the data provided, here is a comparison of the revenue this year (1 Jan 2026 – 31 Dec 2026) versus last year for the organizations:  - The organization with the highest revenue is Professional & Consulting Services_User1_Org4 with 16,015,560.00 AED. - The organization with the lowest revenue is Technology & Software_User1_Org9 with 1,448,757.00 AED. - The revenue gap between the highest and lowest revenue organizations is 14,566,803.00 AED. - The top 3 organizations (Professional & Cons"
+  },
+  {
+   "id": "r051",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Which entity burns the most cash? Rank by expenses last quarter, lowest first",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "total_expenses"
+      ],
+      "period": "last_quarter",
+      "order": [
+       "total_expenses",
+       "asc"
+      ]
+     }
+    ],
+    "alt": [
+     {
+      "view": "purchases",
+      "measures": [
+       "net_purchases"
+      ],
+      "period": "last_quarter",
+      "order": [
+       "net_purchases",
+       "asc"
+      ]
+     }
+    ]
+   },
+   "old_answer": "Based on the data provided:  - The organization that burned the most cash last quarter is Construction & Real Estate_User1_Org2, with total expenses of 1,344,261.00 AED. - The organization that burned the least cash last quarter is Agriculture & Forestry_User1_Org1, with total expenses of 0.00 AED. - There is a notable gap between the top two cash burners, Construction & Real Estate_User1_Org2 (1,344,261.00 AED) and Professional & Consulting Services_User1_Org6 (329,267.00 AED), a difference of "
+  },
+  {
+   "id": "r053",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Revenue and profit growth quarter on quarter",
+   "kind": "growth",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue",
+       "net_profit"
+      ],
+      "period": [
+       "2026-04-01",
+       "2026-06-30"
+      ]
+     },
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue",
+       "net_profit"
+      ],
+      "period": [
+       "2026-07-01",
+       "2026-09-30"
+      ]
+     }
+    ]
+   },
+   "old_answer": "Here is a summary of the revenue and profit growth across the organizations:  - The period covered is 1 Jan 2026 – 29 Sep 2026 compared to the previous period. - The organization with the highest revenue growth is Hospitality & Tourism_User1_Org3 at 94.07% growth. - The organization with the highest profit growth is Professional & Consulting Services_User1_Org4 at 116.14% growth. - The organization with the lowest revenue growth is Technology & Software_User1_Org9 at -29.93% growth. - The organi"
+  },
+  {
+   "id": "r054",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Monthly net profit trend for each org since January 2025",
+   "kind": "series",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "net_profit"
+      ],
+      "period": [
+       "2025-01-01",
+       "today"
+      ],
+      "granularity": "month"
+     }
+    ]
+   },
+   "old_answer": "Here is a summary of the monthly net profit trend for each organization from January to December 2025:  - All organizations are reporting in the same currency, AED (United Arab Emirates Dirham). - The organization with the highest total net profit for the year is Agriculture & Forestry_User1_Org1 with AED 9,627,414.00, with its best month being May 2025 at AED 1,317,781. - The organization with the lowest total net profit for the year is Hospitality & Tourism_User1_Org3 with AED 611,670.00, with"
+  },
+  {
+   "id": "r056",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Compare gross margin",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "gross_margin_pct"
+      ],
+      "period": "ytd"
+     }
+    ]
+   },
+   "old_answer": "Based on the data provided, here is a summary of the gross margin comparison across the organizations for the period of 1 Jan 2026 – 29 Sep 2026:  - The organization with the highest gross margin is Agriculture & Forestry_User1_Org1 at 100.00%. - The organization with the lowest gross margin is Professional & Consulting Services_User1_Org6 at -1.27%. - There is a notable gap of 41.40 percentage points between the highest (100.00%) and the second-highest (81.68%) gross margins. - The gross margin"
+  },
+  {
+   "id": "r057",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Compare EBITDA",
+   "kind": "unsupported",
+   "context": [],
+   "expect": {
+    "must_refuse": "EBITDA",
+    "note": "No EBITDA in the data; say so plainly and offer net profit. No figure under the EBITDA name."
+   },
+   "old_answer": "Here is a comparison of the EBITDA across the organizations for the period of January 1, 2026 to September 29, 2026:  | Organization | EBITDA (AED) | | --- | --- | | Agriculture & Forestry_User1_Org1 | 2,469,135.69 | | Construction & Real Estate_User1_Org2 | 3,600,868.03 | | Hospitality & Tourism_User1_Org3 | 1,509,418.00 | | Professional & Consulting Services_User1_Org4 | 16,672,305.00 | | Construction & Real Estate_User1_Org5 | 2,034,980.00 | | Professional & Consulting Services_User1_Org6 | 0"
+  },
+  {
+   "id": "r058",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Compare working capital",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "balance_sheet",
+      "measures": [
+       "working_capital"
+      ],
+      "as_of": "today"
+     }
+    ]
+   },
+   "old_answer": "Here is a comparison of the working capital across the organizations for the period of January 1, 2026 to September 29, 2026:  | Organization | Working Capital (AED) | | --- | --- | | Agriculture & Forestry_User1_Org1 | 5,809,352.00 | | Construction & Real Estate_User1_Org2 | 5,337,109.21 | | Hospitality & Tourism_User1_Org3 | -379,336.00 | | Professional & Consulting Services_User1_Org4 | -3,042,841.00 | | Construction & Real Estate_User1_Org5 | -892,327.00 | | Professional & Consulting Service"
+  },
+  {
+   "id": "r059",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Compare other income",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "other_income"
+      ],
+      "period": "ytd"
+     }
+    ]
+   },
+   "old_answer": "Based on the data provided, here is a comparison of other income across the organizations:  - The organization with the highest other income is Professional & Consulting Services_User1_Org4 with 12,183,037.00 AED, which represents 35.6% of the total. - The organization with the lowest other income is Technology & Software_User1_Org9 with 1,003,547.00 AED, which represents 2.9% of the total. - There is a notable gap between the top earner (Professional & Consulting Services_User1_Org4 with 12,183"
+  },
+  {
+   "id": "r060",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Compare fixed assets",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "balance_sheet",
+      "measures": [
+       "fixed_assets"
+      ],
+      "as_of": "today"
+     }
+    ]
+   },
+   "old_answer": "Based on the data provided, here is a comparison of the fixed assets across the organizations as of September 29, 2026:  - The organization with the highest fixed assets is Agriculture & Forestry_User1_Org1 with 67,947,177.87 AED, accounting for 50.0% of the total. - The organization with the lowest fixed assets is Agriculture & Forestry_User1_Org7 with 886,290.00 AED, accounting for 0.7% of the total. - There is a notable gap between the top organization (Agriculture & Forestry_User1_Org1) and "
+  },
+  {
+   "id": "r061",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Compare current liabilities",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "balance_sheet",
+      "measures": [
+       "current_liabilities"
+      ],
+      "as_of": "today"
+     }
+    ]
+   },
+   "old_answer": "Based on the data provided, here is a summary of the comparison of current liabilities across the organizations as of September 29, 2026:  - The organization with the highest current liabilities is Construction & Real Estate_User1_Org2 with 11,510,325.50 AED, accounting for 17.1% of the total. - The organization with the lowest current liabilities is Hospitality & Tourism_User1_Org3 with 3,995,774.00 AED, accounting for 5.9% of the total. - There is a notable gap of 6,515,551.50 AED between the "
+  },
+  {
+   "id": "r062",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Cash flow comparison this year",
+   "kind": "unsupported",
+   "context": [],
+   "expect": {
+    "must_refuse": "cash flow statement",
+    "ref": [
+     {
+      "view": "balance_sheet",
+      "measures": [
+       "cash_and_bank"
+      ],
+      "as_of": "2025-12-31"
+     },
+     {
+      "view": "balance_sheet",
+      "measures": [
+       "cash_and_bank"
+      ],
+      "as_of": "today"
+     }
+    ],
+    "note": "No per-org cash flow statement; may offer the change in cash and bank since 31 Dec 2025. Must not show 0 for every org."
+   },
+   "old_answer": "Here is the cash flow comparison across the organizations for the current year:  - Agriculture & Forestry_User1_Org1: AED 0 - Construction & Real Estate_User1_Org2: AED 0 - Construction & Real Estate_User1_Org5: AED 0 - Hospitality & Tourism_User1_Org3: AED 0 - Professional & Consulting Services_User1_Org4: AED 0 - Professional & Consulting Services_User1_Org6: AED 0 - Professional & Consulting Services_User1_Org8: AED 0 - Technology & Software_User1_Org9: AED 0 - Agriculture & Forestry_User1_Or"
+  },
+  {
+   "id": "r063",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Which of my companies is performing best overall?",
+   "kind": "analysis",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue",
+       "net_profit",
+       "net_margin_pct"
+      ],
+      "period": "ytd"
+     }
+    ],
+    "note": "Must state the criteria used."
+   },
+   "old_answer": "Accutax AI: To determine which of your companies is performing best overall, I would suggest reviewing the following key metrics:  - **Revenue**: Compare the total sales revenue generated by each company. - **Profitability**: Look at the net profit margins for each company. - **Cash Flow**: Analyze the cash flow statements to see which company has the strongest cash position. - **Efficiency**: Compare key ratios like inventory turnover, accounts receivable days, and accounts payable days. - **Gr"
+  },
+  {
+   "id": "r064",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Rank top 5 organizations by revenue and also show overdue invoices count and amount",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "ytd",
+      "order": [
+       "revenue",
+       "desc"
+      ],
+      "limit": 5
+     },
+     {
+      "view": "receivables",
+      "measures": [
+       "overdue_amount",
+       "overdue_count"
+      ]
+     }
+    ],
+    "alt": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "period": "ytd",
+      "order": [
+       "net_sales",
+       "desc"
+      ],
+      "limit": 5
+     }
+    ]
+   },
+   "old_answer": "Here is a summary of the top 5 organizations by revenue and their overdue invoices:  - The top 5 organizations by total revenue (1 Jan 2026 – 29 Sep 2026) are: 1. Professional & Consulting Services_User1_Org4: 12,183,037.00 AED 2. Construction & Real Estate_User1_Org2: 4,909,798.00 AED  3. Agriculture & Forestry_User1_Org1: 4,495,435.00 AED 4. Construction & Real Estate_User1_Org5: 3,165,296.00 AED 5. Agriculture & Forestry_User1_Org10: 2,275,451.00 AED  - The organization with the highest overd"
+  },
+  {
+   "id": "r065",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Which business should I invest more in based on growth and margin?",
+   "kind": "analysis",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue",
+       "net_margin_pct"
+      ],
+      "period": "ytd"
+     },
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "same_period_last_year"
+     }
+    ],
+    "note": "Data-based comparison of growth and margin; not investment advice."
+   },
+   "old_answer": "Based on the profit margin data for the period of 1 Jan 2026 – 29 Sep 2026:  - The organization with the highest profit margin is Agriculture & Forestry_User1_Org1 at 100.00%. - The organization with the lowest profit margin is Professional & Consulting Services_User1_Org6 at -1.27%. - There is a notable gap of 41.40 percentage points between the highest (100.00%) and second-highest (89.63%) profit margins. - The top 4 organizations by profit margin are all in the Agriculture & Forestry and Prof"
+  },
+  {
+   "id": "r066",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Summarize each company in 3 bullets",
+   "kind": "analysis",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue",
+       "net_profit"
+      ],
+      "period": "ytd"
+     },
+     {
+      "view": "balance_sheet",
+      "measures": [
+       "cash_and_bank"
+      ],
+      "as_of": "today"
+     }
+    ]
+   },
+   "old_answer": "Accutax AI's summary of the company profile setup:  - Go to Configuration > Organization Configuration and click the Company Profile tile - Fill in details like organization name, industry, VAT registration, tax number, location, and address - Save the company profile settings"
+  },
+  {
+   "id": "r067",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Are any of my companies in trouble?",
+   "kind": "analysis",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "net_profit"
+      ],
+      "period": "ytd"
+     },
+     {
+      "view": "balance_sheet",
+      "measures": [
+       "cash_and_bank",
+       "current_ratio"
+      ],
+      "as_of": "today"
+     },
+     {
+      "view": "receivables",
+      "measures": [
+       "overdue_amount"
+      ]
+     }
+    ],
+    "note": "Losses, negative cash, current ratio below 1, overdue receivables. Not generic advice."
+   },
+   "old_answer": "Accutax AI here. To check if any of your companies are in trouble, I would suggest:  - Go to the **Reports** section in Accutax. - Review the **Cash Flow Statement** and **Profit & Loss Statement** reports for each of your companies. - Look for any negative cash flow, declining revenue, or increasing expenses that could indicate financial difficulties. - The **Aging Report** can also highlight any overdue customer payments or unpaid supplier invoices. - If you have concerns about a specific comp"
+  },
+  {
+   "id": "r068",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Compare net worth",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "balance_sheet",
+      "measures": [
+       "total_equity"
+      ],
+      "as_of": "today"
+     }
+    ]
+   },
+   "old_answer": "Based on the total equity figures provided for the organizations as of September 29, 2026:  - The organization with the highest net worth is Agriculture & Forestry_User1_Org1 with 62,932,377.00 AED. - The organization with the lowest net worth is Construction & Real Estate_User1_Org5 with -9,396,867.00 AED. - There is a notable gap of 72,329,244.00 AED between the leader (Agriculture & Forestry_User1_Org1) and the laggard (Construction & Real Estate_User1_Org5). - 6 out of the 10 organizations r"
+  },
+  {
+   "id": "r069",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Who is most profitable and who has the most overdue receivables?",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "net_profit"
+      ],
+      "period": "ytd",
+      "order": [
+       "net_profit",
+       "desc"
+      ]
+     },
+     {
+      "view": "receivables",
+      "measures": [
+       "overdue_amount"
+      ],
+      "order": [
+       "overdue_amount",
+       "desc"
+      ]
+     }
+    ]
+   },
+   "old_answer": "Based on the data provided:  - The most profitable organization is Professional & Consulting Services_User1_Org4 with a net profit of 10,919,388.00 AED. - The organization with the highest overdue receivables is Professional & Consulting Services_User1_Org4 with 14,445,699.00 AED. - There is a notable gap between the net profit of Professional & Consulting Services_User1_Org4 (10,919,388.00 AED) and the next highest, Agriculture & Forestry_User1_Org1 (4,495,435.00 AED). - The organizations with "
+  },
+  {
+   "id": "r071",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Compare VAT payable for Q2 2026",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "vat",
+      "measures": [
+       "net_vat_payable"
+      ],
+      "period": [
+       "2026-04-01",
+       "2026-06-30"
+      ]
+     }
+    ]
+   },
+   "old_answer": "Based on the data provided, here is a summary of the VAT payable for Q2 2026 across the organizations:  - The total VAT payable across all organizations for the period of 1 Apr 2026 – 30 Jun 2026 is 244,787.29 AED. - Agriculture & Forestry_User1_Org1 has the highest VAT payable at 165,875.66 AED, accounting for 67.8% of the total. - Construction & Real Estate_User1_Org2 has the second highest VAT payable at 78,911.63 AED, accounting for 32.2% of the total. - The remaining 7 organizations (Hospit"
+  },
+  {
+   "id": "r072",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "What is VAT for each organization?",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "vat",
+      "measures": [
+       "output_vat",
+       "input_vat",
+       "net_vat_payable"
+      ],
+      "period": "ytd"
+     }
+    ],
+    "note": "Ambiguous; per-org VAT figures with the period stated."
+   },
+   "old_answer": "Based on the data provided, here is a summary of the VAT for the organizations:  - The total net VAT payable for the period of 1 Jan 2026 – 29 Sep 2026 is 518,944.79 AED. - The organization with the highest VAT is Agriculture & Forestry_User1_Org1 with 356,234.17 AED, which is 68.6% of the total. - The organizations with the lowest VAT are Hospitality & Tourism_User1_Org3, Professional & Consulting Services_User1_Org4, Construction & Real Estate_User1_Org5, Professional & Consulting Services_Use"
+  },
+  {
+   "id": "r073",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "What is VAT?",
+   "kind": "kb",
+   "context": [],
+   "expect": {
+    "kb": true,
+    "note": "Definition of VAT. No organization figures."
+   },
+   "old_answer": "Based on the data provided, the VAT payable for each organization for the period of 1 Apr 2026 - 30 Jun 2026 is as follows:  - Agriculture & Forestry_User1_Org1: 89,058.54 AED (25% of the total VAT payable for the full year 2026) - Construction & Real Estate_User1_Org2: 40,677.66 AED (25% of the total VAT payable for the full year 2026) - Hospitality & Tourism_User1_Org3: 0.00 AED (0% of the total VAT payable for the full year 2026) - Professional & Consulting Services_User1_Org4: 0.00 AED (0% o"
+  },
+  {
+   "id": "r074",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Compare tax payable",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "vat",
+      "measures": [
+       "net_vat_payable"
+      ],
+      "period": "ytd"
+     }
+    ],
+    "note": "Should say this is VAT; corporate tax is not tracked."
+   },
+   "old_answer": "Based on the data provided, here is a summary of the comparison of net VAT payable for the period of 1 Jan 2026 – 29 Sep 2026:  - The total net VAT payable across all organizations is 518,944.79 AED. - Agriculture & Forestry_User1_Org1 has the highest net VAT payable at 356,234.17 AED, accounting for 68.6% of the total. - Construction & Real Estate_User1_Org2 has the second-highest net VAT payable at 162,710.62 AED, accounting for 31.4% of the total. - The remaining 8 organizations have no net V"
+  },
+  {
+   "id": "r075",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Input VAT vs output VAT per entity this year",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "vat",
+      "measures": [
+       "input_vat",
+       "output_vat"
+      ],
+      "period": "ytd"
+     }
+    ]
+   },
+   "old_answer": "Based on the data provided, the key points regarding the Net VAT payable for the period of 1 Jan 2026 – 31 Dec 2026 are:  - The total Net VAT payable across all organizations is 518,944.79 AED. - The organization with the highest Net VAT payable is Agriculture & Forestry_User1_Org1 at 356,234.17 AED, which is 68.6% of the total. - The organization with the second highest Net VAT payable is Construction & Real Estate_User1_Org2 at 162,710.62 AED, which is 31.4% of the total. - The remaining 7 org"
+  },
+  {
+   "id": "r076",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Which entities have VAT return due this month?",
+   "kind": "unsupported",
+   "context": [],
+   "expect": {
+    "must_refuse": "VAT return due date",
+    "note": "No VAT return due date in the data; say so plainly and offer net VAT payable for the current quarter. No figure under the VAT return due date name."
+   },
+   "old_answer": "Based on the data provided for the period of 1 Sep 2026 – 30 Sep 2026, none of the organizations have any VAT return due this month. The Net VAT payable amount is 0.00 AED for all 10 organizations:  - Agriculture & Forestry_User1_Org1, Construction & Real Estate_User1_Org2, Hospitality & Tourism_User1_Org3, Professional & Consulting Services_User1_Org4, Construction & Real Estate_User1_Org5, Professional & Consulting Services_User1_Org6, Agriculture & Forestry_User1_Org7, Professional & Consulti"
+  },
+  {
+   "id": "r077",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Any org missing a TRN?",
+   "kind": "org_info",
+   "context": [],
+   "expect": {
+    "note": "Organization master data (TRN). Not in Cube; check against the organizations table by hand."
+   },
+   "old_answer": "Accutax AI: Based on the previous conversation, I do not have a specific question to answer. The user has not asked a direct question yet. If you could provide a standalone question for me to respond to, I would be happy to assist you. As an AI assistant for Accutax, I'm here to provide step-by-step guidance on using the platform, explain accounting and financial concepts, and offer business advice. Please feel free to ask me anything, and I'll do my best to provide a helpful response."
+  },
+  {
+   "id": "r078",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Compare corporate tax liability FY 2025",
+   "kind": "unsupported",
+   "context": [],
+   "expect": {
+    "must_refuse": "corporate tax liability",
+    "note": "No corporate tax liability in the data; say so plainly and offer net profit for 2025. No figure under the corporate tax liability name."
+   },
+   "old_answer": "Based on the provided data on total liabilities as of September 29, 2026, the key points are:  - The organization with the highest corporate tax liability in FY 2025 is Construction & Real Estate_User1_Org2 with 11,510,325.50 AED. - The organization with the lowest corporate tax liability in FY 2025 is Hospitality & Tourism_User1_Org3 with 3,995,774.00 AED. - There is a notable gap of 7,514,551.50 AED between the highest (Construction & Real Estate_User1_Org2) and lowest (Hospitality & Tourism_U"
+  },
+  {
+   "id": "r079",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Explain why Org A margin lower than Org B",
+   "kind": "clarify",
+   "context": [],
+   "expect": {
+    "note": "No Org A / Org B in the data; must ask which organizations."
+   },
+   "old_answer": "Based on the provided data for the period of 1 Jan 2026 – 29 Sep 2026:  - Org A (Construction & Real Estate_User1_Org2) has a profit margin of 44.23%, which is lower than Org B (Construction & Real Estate_User1_Org5) at 59.60%. - The leader in profit margin is Agriculture & Forestry_User1_Org1 at 100.00%. - The laggard is Professional & Consulting Services_User1_Org6 at -1.27%. - There is a notable gap of 15.37 percentage points between the profit margins of Org A and Org B. - The profit margins"
+  },
+  {
+   "id": "r080",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Compare revenue this year",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "ytd"
+     }
+    ],
+    "alt": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "period": "ytd"
+     }
+    ]
+   },
+   "old_answer": "Based on the data provided, here is a summary of the total revenue comparison for the period of 1 Jan 2026 � 31 Dec 2026:  - The organization with the highest total revenue is Professional & Consulting Services_User1_Org4 with 16,015,560.00 AED, accounting for 38.3% of the total. - The organization with the lowest total revenue is Technology & Software_User1_Org9 with 1,448,757.00 AED, accounting for 3.5% of the total. - There is a notable gap between the top-earning organization (Professional & Consulting Services_User1_Org4) and the second-highest earner (Construction & Real Estate_User1_Org"
+  },
+  {
+   "id": "r081",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "and last quarter ?",
+   "kind": "followup",
+   "context": [
+    "r080"
+   ],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "last_quarter"
+     }
+    ],
+    "alt": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "period": "last_quarter"
+     }
+    ]
+   },
+   "old_answer": "Based on the data provided, here is a summary of the revenue comparison between this year and last quarter:  - The total revenue across the 10 organizations for the period of 1 Jan 2026 � 31 Dec 2026 was 41,767,320.00 AED. - The organization with the highest revenue was Professional & Consulting Services_User1_Org4 with 16,015,560.00 AED, accounting for 38.3% of the total. - The organization with the lowest revenue was Technology & Software_User1_Org9 with 1,448,757.00 AED, accounting for 3.5% of the total. - There is a notable gap between the top revenue generator (Professional & Consulting S"
+  },
+  {
+   "id": "r082",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "now only show the top 2",
+   "kind": "followup",
+   "context": [
+    "r080",
+    "r081"
+   ],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "last_quarter",
+      "order": [
+       "revenue",
+       "desc"
+      ],
+      "limit": 2
+     }
+    ],
+    "alt": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "period": "last_quarter",
+      "order": [
+       "net_sales",
+       "desc"
+      ],
+      "limit": 2
+     }
+    ]
+   },
+   "old_answer": "Based on the revenue data provided for the period of 1 Jan 2026 � 31 Dec 2026:  - The top 2 organizations by total revenue are:  1. Professional & Consulting Services_User1_Org4: 16,015,560.00 AED  2. Construction & Real Estate_User1_Org2: 4,909,798.00 AED  - No last quarter revenue data was provided, so a comparison between this year and last quarter cannot be made.  - The revenue share of the top 2 organizations is 38.3% and 11.8% respectively, indicating a significant gap between the leader and the second-largest organization.  - The remaining organizations have revenues ranging from 4,495,"
+  },
+  {
+   "id": "r083",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "why is the second one so low?",
+   "kind": "followup",
+   "context": [
+    "r080",
+    "r081",
+    "r082"
+   ],
+   "expect": {
+    "note": "Explains the second-ranked org from the previous answer with figures, not generic reasons."
+   },
+   "old_answer": "Based on the data provided, here is the answer to your question:  - The revenue for the second highest organization, Construction & Real Estate_User1_Org2, is 4,909,798.00 AED, which is significantly lower than the top organization, Professional & Consulting Services_User1_Org4, which has a revenue of 12,183,037.00 AED. - Professional & Consulting Services_User1_Org4 is the leader with the highest revenue, accounting for 35.6% of the total. - Construction & Real Estate_User1_Org2 is the second highest organization, but its revenue is less than half of the top organization, at 14.3% of the tota"
+  },
+  {
+   "id": "r084",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "drop  Agriculture & Forestry_User1_Org1 and redo",
+   "kind": "followup",
+   "context": [
+    "r080",
+    "r081",
+    "r082",
+    "r083"
+   ],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "last_quarter",
+      "order": [
+       "revenue",
+       "desc"
+      ],
+      "filters": [
+       [
+        "organization_name",
+        "notEquals",
+        [
+         "Agriculture & Forestry_User1_Org1"
+        ]
+       ]
+      ],
+      "limit": 2
+     }
+    ],
+    "alt": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "period": "last_quarter",
+      "order": [
+       "net_sales",
+       "desc"
+      ],
+      "filters": [
+       [
+        "organization_name",
+        "notEquals",
+        [
+         "Agriculture & Forestry_User1_Org1"
+        ]
+       ]
+      ],
+      "limit": 2
+     }
+    ]
+   },
+   "old_answer": "Based on the data provided, the revenue comparison between the top 2 organizations for the period of 1 Jan 2026 � 31 Dec 2026, excluding Agriculture & Forestry_User1_Org1, is as follows:  - The top 2 organizations by revenue are:  1. Professional & Consulting Services_User1_Org4: 16,015,560.00 AED  2. Construction & Real Estate_User1_Org2: 4,909,798.00 AED - Professional & Consulting Services_User1_Org4 is the revenue leader, accounting for 38.3% of the total revenue. - Construction & Real Estate_User1_Org2 is the revenue laggard among the top 2, accounting for 11.8% of the total revenue. - Th"
+  },
+  {
+   "id": "r085",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Vendors common to all orgs paid more than 100,000 AED",
+   "kind": "record_list",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "purchases",
+      "measures": [
+       "net_purchases"
+      ],
+      "period": "ytd",
+      "group_by": [
+       "vendor_name"
+      ],
+      "filters": [
+       [
+        "net_purchases",
+        "gt",
+        [
+         "100000"
+        ]
+       ]
+      ],
+      "limit": 500
+     }
+    ],
+    "note": "Vendors present in every org with purchases over 100,000. Paid amounts need payments data, which is not modelled."
+   },
+   "old_answer": "Based on the information provided, the vendors common to all organizations that were paid more than 100,000 AED are:  - Ranveer:   - Construction & Real Estate_User1_Org2: 120,000 AED  - Hospitality & Tourism_User1_Org3: 150,000 AED  - Construction & Real Estate_User1_Org5: 130,000 AED  - Professional & Consulting Services_User1_Org6: 110,000 AED  - Professional & Consulting Services_User1_Org8: 125,000 AED - Janani:  - Construction & Real Estate_User1_Org2: 105,000 AED  - Hospitality & Tourism_"
+  },
+  {
+   "id": "r086",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Top 10 largest bills overall",
+   "kind": "record_list",
+   "context": [],
+   "expect": {
+    "note": "Document-level: needs list_documents (purchases view has no document number)."
+   },
+   "old_answer": "Here is a summary of the top 10 largest bills overall across the organizations:  - Construction & Real Estate_User1_Org2: The top 10 largest bills are Harshil, Hredhaan, Ridhi, Bachittar, Logan, Niharika, Vritti, Guneet, Aarna, and Mohini. - Hospitality & Tourism_User1_Org3: The top 10 largest bills are Wyatt, Nakul, and Jeet (each appearing 4 times). - Professional & Consulting Services_User1_Org4: The top 10 largest bills are Ronith, Zarna, Vidhi, Max, and Maanas (each appearing 2 times). - Co"
+  },
+  {
+   "id": "r087",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "List every unpaid invoice older than 180 days per org",
+   "kind": "record_list",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "outstanding",
+       "open_count"
+      ],
+      "filters": [
+       [
+        "days_overdue",
+        "gt",
+        [
+         "180"
+        ]
+       ]
+      ]
+     }
+    ],
+    "note": "Read as more than 180 days past due; invoice age is the other reading."
+   },
+   "old_answer": "Here is a summary of the unpaid invoices older than 180 days for each organization:  - Agriculture & Forestry_User1_Org1: 591 unpaid invoices totaling 4,689,018.00 AED. The top 5 largest invoices are from Neelima (23,598.60 AED), Yashasvi (20,595.36 AED), Netra (19,808.67 AED), Ayaan (19,168.68 AED), and Neelima (18,942.28 AED). - Construction & Real Estate_User1_Org2: 611 unpaid invoices totaling 4,971,957.77 AED. The top 5 largest invoices are from Henry (22,704.38 AED), Jackson (21,391.25 AED"
+  },
+  {
+   "id": "r088",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Duplicate invoice numbers across organizations",
+   "kind": "record_list",
+   "context": [],
+   "expect": {
+    "note": "Document numbers across orgs: needs list_documents."
+   },
+   "old_answer": "Based on the information provided, the duplicate invoice numbers that exist across the different organizations could not be determined. The requested data could not be retrieved from the database for any of the organizations. The query may require data that doesn't exist for the specified criteria, or the calculation method may need to be adjusted for these datasets."
+  },
+  {
+   "id": "r089",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "List invoices posted on weekends in each org",
+   "kind": "record_list",
+   "context": [],
+   "expect": {
+    "note": "Day-of-week filter: needs list_documents."
+   },
+   "old_answer": "Here is a summary of the weekend invoices posted across the organizations:  - Hospitality & Tourism_User1_Org3 had 20 weekend invoices totaling 58,162.00 AED, with the top 5 being Michael 9,801.00 AED (x4) and Gaurangi 3,580.00 AED. - Agriculture & Forestry_User1_Org7 had 20 weekend invoices totaling 40,950.00 AED, with the top 5 being Victor 16,246.00 AED (x2) and Damyanti 8,458.00 AED. - Professional & Consulting Services_User1_Org8 had 20 weekend invoices totaling 48,830.00 AED, with the top "
+  },
+  {
+   "id": "r090",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Which vendors got paid by more than one entity in the same week?",
+   "kind": "unsupported",
+   "context": [],
+   "expect": {
+    "must_refuse": "payments by week",
+    "note": "No payments by week in the data; say so plainly and offer purchases by vendor. No figure under the payments by week name."
+   },
+   "old_answer": "Based on the information provided, the following vendors were paid by more than one organization in the same week:  - Turvi was paid 47,481.00 AED by Hospitality & Tourism_User1_Org3. - William was paid 45,345.00 AED by Hospitality & Tourism_User1_Org3 and 51,084.00 AED by Technology & Software_User1_Org9, for a total of 96,429.00 AED. - Jeet was paid 38,177.00 AED by Hospitality & Tourism_User1_Org3. - Max was paid 205,046.00 AED by Professional & Consulting Services_User1_Org4. - Deepa was pai"
+  },
+  {
+   "id": "r091",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Which orgs have bank accounts in more than one currency?",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "balance_sheet",
+      "measures": [
+       "cash_and_bank"
+      ],
+      "as_of": "today",
+      "group_by": [
+       "account_currency"
+      ]
+     }
+    ]
+   },
+   "old_answer": "Based on the information provided, none of the organizations have bank accounts in more than one currency. All organizations report their figures in AED, indicating they operate in a single currency."
+  },
+  {
+   "id": "r092",
+   "asked": "2026-09-29",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Which entity has the most employees / payroll cost?",
+   "kind": "unsupported",
+   "context": [],
+   "expect": {
+    "must_refuse": "payroll and employee data",
+    "note": "No payroll and employee data in the data; say so plainly and offer expenses by account. No figure under the payroll and employee data name."
+   },
+   "old_answer": "Accutax AI: Based on the conversation so far, I do not have a specific previous question that you asked me to rewrite. The conversation has been focused on providing general guidance about the Accutax platform, rather than addressing a particular user question. If you have a specific question you would like me to rewrite, please feel free to provide it, and I will be happy to assist you. Otherwise, I'm happy to continue our discussion about the Accutax platform and how I can best support you."
+  },
+  {
+   "id": "r100",
+   "asked": "2026-09-30",
+   "orgs": [
+    24
+   ],
+   "question": "Generate our profit and loss statement for this fiscal year, broken down by month, including revenue, cost of sales, operating expenses, and net profit.",
+   "kind": "series",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue",
+       "cost_of_sales",
+       "operating_expenses",
+       "net_profit"
+      ],
+      "period": "ytd",
+      "granularity": "month"
+     }
+    ]
+   },
+   "old_answer": "The profit and loss statement for the fiscal year to date shows an operating income of AED 6,430,875.05. There are no reported cost of goods sold or operating expenses, resulting in a gross profit and operating profit of the same amount. The net profit for the period from January 1, 2026 to September 30, 2026 is AED 6,430,875.05.  - The data provided does not include a monthly breakdown, only the aggregated figures for the full period. - The non-operating income and expenses are reported as zero"
+  },
+  {
+   "id": "r103",
+   "asked": "2026-10-04",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "What changed in UAE VAT from 1 January 2026 under Federal Decree-Law No. 16 of 2025?",
+   "kind": "kb",
+   "context": [],
+   "expect": {
+    "kb": true,
+    "note": "VAT law answer from the knowledge base, with citations, no organization figures."
+   },
+   "old_answer": "**Net VAT payable**, 1 Jan 2026 � 4 Oct 2026 � 10 organizations  - Highest: Agriculture & Forestry_User1_Org1, 356,234.17 AED. - Agriculture & Forestry_User1_Org1 holds 68.6% of the combined total. - Lowest: Construction & Real Estate_User1_Org2, 162,710.62 AED. - Gap between the highest and the lowest: 193,523.55 AED. - Combined total: 518,944.79 AED. - Nothing recorded: Hospitality & Tourism_User1_Org3, Professional & Consulting Services_User1_Org4, Construction & Real Estate_User1_Org5, Professional & Consulting Services_User1_Org6, Agriculture & Forestry_User1_Org7 and 3 more."
+  },
+  {
+   "id": "r104",
+   "asked": "2026-10-04",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "What checks must a business carry out on its suppliers so its input tax is not denied?",
+   "kind": "kb",
+   "context": [],
+   "expect": {
+    "kb": true,
+    "note": "VAT law answer from the knowledge base, with citations, no organization figures."
+   },
+   "old_answer": "Accutax AI:  - Verify the supplier's VAT registration status and TRN (Tax Registration Number) with the Federal Tax Authority (FTA). - Obtain and retain valid tax invoices for all purchases, ensuring they contain the required details. - Ensure the supplier's name, address, and TRN on the tax invoice match the FTA records. - Maintain proper documentation and records of all supplier transactions for audit purposes. - Implement a supplier onboarding process to collect and validate the necessary VAT compliance information."
+  },
+  {
+   "id": "r105",
+   "asked": "2026-10-04",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "How do I value a deemed supply of services?",
+   "kind": "kb",
+   "context": [],
+   "expect": {
+    "kb": true,
+    "note": "VAT law answer from the knowledge base, with citations, no organization figures."
+   },
+   "old_answer": "**Net VAT payable**, 1 Jan 2026 � 4 Oct 2026 � 10 organizations  - Highest: Agriculture & Forestry_User1_Org1, 356,234.17 AED. - Agriculture & Forestry_User1_Org1 holds 68.6% of the combined total. - Lowest: Construction & Real Estate_User1_Org2, 162,710.62 AED. - Gap between the highest and the lowest: 193,523.55 AED. - Combined total: 518,944.79 AED. - Nothing recorded: Hospitality & Tourism_User1_Org3, Professional & Consulting Services_User1_Org4, Construction & Real Estate_User1_Org5, Professional & Consulting Services_User1_Org6, Agriculture & Forestry_User1_Org7 and 3 more."
+  },
+  {
+   "id": "r112",
+   "asked": "2026-10-05",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "What are the current late payment penalties for VAT?",
+   "kind": "kb",
+   "context": [],
+   "expect": {
+    "kb": true,
+    "note": "VAT law answer from the knowledge base, with citations, no organization figures."
+   },
+   "old_answer": "Accutax AI here. According to the latest rules effective from 14 April 2026 [2]:  The late payment penalty for VAT is now: - 14% per annum, charged monthly (or part month) on the unpaid tax amount - Starts from the day after the payment due date - Applies to both regular VAT returns and voluntary disclosures - For voluntary disclosures, payment is due within 20 business days of submission - For tax assessments, payment is due within 20 business days of receiving the assessment  This is a significant change from the previous penalty structure that had 2%, 4% and 1% daily charges."
+  },
+  {
+   "id": "r121",
+   "asked": "2026-10-05",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "We receive payment in USDT. How do we convert it to AED for VAT?",
+   "kind": "kb",
+   "context": [],
+   "expect": {
+    "kb": true,
+    "note": "VAT law answer from the knowledge base, with citations, no organization figures."
+   },
+   "old_answer": "** When you receive payment in USDT (a digital currency), you must convert it to AED using a specific mechanism for VAT reporting purposes.  **How to convert USDT to AED for VAT:**  1. **Select three exchange platforms:** Choose three centralised public digital currency exchange platforms from the list published by the Federal Tax Authority, and use the same three platforms for all transactions during the same calendar year [1].  2. **Calculate the average exchange rate:** Find the exchange rate"
+  },
+  {
+   "id": "r122",
+   "asked": "2026-10-05",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "A company leaves our VAT tax group mid-year. What output tax and input tax adjustments are needed?",
+   "kind": "kb",
+   "context": [],
+   "expect": {
+    "kb": true,
+    "note": "VAT law answer from the knowledge base, with citations, no organization figures."
+   },
+   "old_answer": "When a company leaves your tax group mid-year, **you must adjust both output tax and input tax in your tax returns for any taxable supplies and expenses that the departing member made or incurred before leaving, if those were previously declared in the group's tax returns** [1].  **Key adjustments to make:**  - **Output tax adjustment:** Reduce the output tax you previously reported for the group by the amount relating to taxable supplies the departing member made before the exit date. You accou"
+  },
+  {
+   "id": "r124",
+   "asked": "2026-10-05",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "A mainland company buys goods from another company in a designated zone and has them shipped to Dubai mainland. Who charges VAT, and when?",
+   "kind": "kb",
+   "context": [],
+   "expect": {
+    "kb": true,
+    "note": "VAT law answer from the knowledge base, with citations, no organization figures."
+   },
+   "old_answer": "The **importer (the mainland company) charges VAT to itself on import**, and the **VAT is due when the goods cross into mainland UAE**. The supplier in the designated zone does not charge VAT on the sale itself. [1][2]  **Who accounts for the VAT**  - **Supplier in the designated zone:** Charges no VAT on the sale. The supply is treated as outside the scope of UAE VAT because the goods will be consumed (used) by the buyer on the mainland. [2] - **Importer (mainland company):** Pays import VAT at"
+  },
+  {
+   "id": "r125",
+   "asked": "2026-10-05",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "We sell used cars that we bought from individuals. Can we use the profit margin scheme? What if a car was bought from a VAT-registered dealer who charged VAT?",
+   "kind": "kb",
+   "context": [],
+   "expect": {
+    "kb": true,
+    "note": "VAT law answer from the knowledge base, with citations, no organization figures."
+   },
+   "old_answer": "The **Profit Margin Scheme applies to your used car sales from individuals, but not if you bought from a VAT-registered dealer who charged VAT** and you recovered that input tax. [1][2]  **Conditions for the Profit Margin Scheme**  - **Purchase from non-registrants:** You can use the scheme when you buy from individuals (non-VAT-registered persons). [1] - **Purchase from VAT-registered dealers — input tax not recovered:** If you buy from a VAT-registered dealer, you can still use the scheme **on"
+  },
+  {
+   "id": "r126",
+   "asked": "2026-10-05",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "A UAE national builds a villa and rents one floor out. Can they still claim the new-residence refund?",
+   "kind": "kb",
+   "context": [],
+   "expect": {
+    "kb": true,
+    "note": "VAT law answer from the knowledge base, with citations, no organization figures."
+   },
+   "old_answer": "No, they cannot claim the new-residence refund if they rent out one floor. The building must be **used solely as a residence** by the applicant or their family [1][3].  **Key disqualifying condition**  A UAE national may not submit a refund request in connection with a building that will not be used solely as a residence by the applicant or their family. Renting out any part of the villa—including one floor—means the building is not used solely as a residence, so it falls outside the scheme [1]."
+  },
+  {
+   "id": "r127",
+   "asked": "2026-10-05",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "We bought an entire business, including staff and stock. Do we charge or reclaim VAT on the transfer?",
+   "kind": "kb",
+   "context": [],
+   "expect": {
+    "kb": true,
+    "note": "VAT law answer from the knowledge base, with citations, no organization figures."
+   },
+   "old_answer": "You do **not** charge or reclaim VAT on the transfer — the sale is **not a supply for VAT purposes** and is therefore **not subject to VAT** [1].  This treatment applies because your purchase qualifies as a **transfer of a business as a going concern** (TOGC). Since you acquired the whole business with its staff, stock, and operations intact, and you intend to continue running it, the transfer itself falls outside VAT scope entirely [1].  **Key points:**  - **No VAT invoice:** The seller does no"
+  },
+  {
+   "id": "r128",
+   "asked": "2026-10-05",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Our employees get company mobile phones with unlimited data, and they also use them personally. Can we reclaim the input tax in full?",
+   "kind": "kb",
+   "context": [],
+   "expect": {
+    "kb": true,
+    "note": "VAT law answer from the knowledge base, with citations, no organization figures."
+   },
+   "old_answer": "No, you cannot reclaim the input tax in full if employees use the phones personally. You can only recover input tax if the phones and data are used **solely for business purposes** and you meet strict conditions [1][2].  **Conditions for Input Tax Recovery**  • **Documented policy:** You must have a written policy clearly stating that phones and data packages may only be used for business purposes, with stated consequences for personal use. Backdated policies are not accepted [1].  • **Sole busi"
+  },
+  {
+   "id": "r129",
+   "asked": "2026-10-05",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "Taxable supplies AED 6,000,000, exempt supplies AED 4,000,000, residual input tax AED 100,000. How much can we recover under the standard method, and when is the annual adjustment due?",
+   "kind": "kb",
+   "context": [],
+   "expect": {
+    "kb": true,
+    "must_contain": [
+     "60,000"
+    ],
+    "note": "6M / (6M + 4M) = 60% of 100,000 = AED 60,000 recoverable."
+   },
+   "old_answer": "Under the standard input tax apportionment method, you can recover **AED 60,000.00** of your residual input tax. The annual adjustment (wash-up calculation) is due in the **first tax period following the end of your tax year** [1].  **How to calculate the recovery**  **Step 1 – Recovery ratio:** Divide taxable supplies by the sum of taxable and exempt supplies: AED 6,000,000 ÷ (AED 6,000,000 + AED 4,000,000) = **60%** [1]  **Step 2 – Apply to residual input tax:** Multiply residual input tax by "
+  },
+  {
+   "id": "r130",
+   "asked": "2026-10-05",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "An invoice for AED 105,000 including VAT; the customer paid 40%, and the invoice is now 8 months old. How much output tax can we adjust under bad debt relief, and what conditions apply?",
+   "kind": "kb",
+   "context": [],
+   "expect": {
+    "kb": true,
+    "must_contain": [
+     "3,000"
+    ],
+    "note": "Unpaid 60% of 105,000 = 63,000 incl. VAT; output tax 63,000 x 5/105 = AED 3,000."
+   },
+   "old_answer": "You can adjust **AED 3,000** in output tax under bad debt relief, because you have written off 60% of the invoice (AED 63,000) and the debt is over six months old. [1]  **Conditions you must meet**  - **VAT charged and accounted for:** You must have charged 5% VAT on the original tax invoice and reported it to the FTA in your tax returns. [1] - **Written off in accounts:** You must have written off the unpaid portion (AED 63,000) as a bad debt in your financial records. The relief applies only t"
+  },
+  {
+   "id": "r131",
+   "asked": "2026-10-05",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "We found an error in last quarter's return that understated tax by AED 8,000. Voluntary disclosure, or correct it in the next return?",
+   "kind": "kb",
+   "context": [],
+   "expect": {
+    "kb": true,
+    "note": "AED 8,000 is not above AED 10,000: correct it in the return for the period the error is found."
+   },
+   "old_answer": "Accutax AI's recommendations for correcting the AED 8,000 understatement from last quarter's VAT return:  - Go to the **Taxes > VAT Summary** page and locate the previous quarter's return. - Click **Adjust** to create a manual adjustment for the AED 8,000 understatement. - Select the appropriate adjustment type (e.g. \"Increase Output Tax\") and provide a description. - The adjustment will be reflected in the current period's VAT return. - Ensure the current VAT return accurately includes the prio"
+  },
+  {
+   "id": "r133",
+   "asked": "2026-10-05",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "When does e-invoicing become mandatory for a business with AED 60 million revenue, and by what date must it appoint an Accredited Service Provider?",
+   "kind": "kb",
+   "context": [],
+   "expect": {
+    "kb": true,
+    "note": "VAT law answer from the knowledge base, with citations, no organization figures."
+   },
+   "old_answer": "For a business with AED 60 million revenue, e-invoicing becomes **mandatory on 1 January 2027**, and you must appoint an Accredited Service Provider by **30 October 2026** [1].  **Key dates and requirements**  - **Revenue threshold:** Your revenue of AED 60 million exceeds the AED 50 million threshold, placing you in the first mandatory phase [1]. - **Appointment deadline:** 30 October 2026 — you must have selected and appointed your Accredited Service Provider by this date [1]. - **Implementati"
+  },
+  {
+   "id": "r134",
+   "asked": "2026-10-05",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "What is the penalty for not issuing an e-invoice?",
+   "kind": "kb",
+   "context": [],
+   "expect": {
+    "kb": true,
+    "note": "VAT law answer from the knowledge base, with citations, no organization figures."
+   },
+   "old_answer": "The penalty for failing to issue an electronic invoice depends on how late it is. **The FTA imposes AED 100 per electronic invoice, up to a maximum of AED 5,000 per calendar month**, if you do not issue and transmit the electronic invoice to the recipient through the Electronic Invoicing System within the timeline prescribed by the Minister [1].  **Key points:**  - **Who pays:** The Issuer (the person obligated to issue the electronic invoice). - **When it applies:** From **15 October 2025** onw"
+  },
+  {
+   "id": "r135",
+   "asked": "2026-10-05",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "what is the criteria for e-invoicing currently",
+   "kind": "kb",
+   "context": [],
+   "expect": {
+    "kb": true,
+    "note": "VAT law answer from the knowledge base, with citations, no organization figures."
+   },
+   "old_answer": "The criteria for e-invoicing in the UAE depend on your revenue and entity type, with different implementation deadlines for each group.  **Who must implement e-invoicing and when:**  - **Revenue ≥ AED 50 million:** Appoint an Accredited Service Provider by **30 October 2026** and go live by **1 January 2027** [1] - **Revenue < AED 50 million:** Appoint an Accredited Service Provider by **31 March 2027** and go live by **1 July 2027** [1] - **Government entities:** Appoint an Accredited Service P"
+  },
+  {
+   "id": "r136",
+   "asked": "2026-10-05",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "what is the flow of e-invoicing in UAE",
+   "kind": "kb",
+   "context": [],
+   "expect": {
+    "kb": true,
+    "note": "VAT law answer from the knowledge base, with citations, no organization figures."
+   },
+   "old_answer": "# Electronic Invoicing Flow in UAE  The electronic invoicing system in UAE operates through a structured process where businesses issue, transmit, and exchange invoices electronically via accredited service providers. Here's the flow:  ## **Key Steps in the E-Invoicing Flow**  1. **Appoint an Accredited Service Provider**  - You must select a service provider from the Ministry's published list of accredited providers [1][4]  - Notify the provider in writing of any changes to your registered data"
+  },
+  {
+   "id": "r177",
+   "asked": "2026-10-06",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "question": "which of the organization have profit margin above 20%",
+   "kind": "metric",
+   "context": [],
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "net_margin_pct",
+       "revenue",
+       "net_profit"
+      ],
+      "period": "ytd",
+      "filters": [
+       [
+        "net_margin_pct",
+        "gt",
+        [
+         "20"
+        ]
+       ]
+      ]
+     }
+    ],
+    "alt": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "period": "ytd"
+     },
+     {
+      "view": "purchases",
+      "measures": [
+       "net_purchases"
+      ],
+      "period": "ytd"
+     }
+    ]
+   },
+   "old_answer": "**Profit margin**, 1 Jan 2026 � 6 Oct 2026 � 10 organizations  - Highest: Agriculture & Forestry_User1_Org1, 100.00%. - Lowest: Professional & Consulting Services_User1_Org6, -2.58%. - Gap between the highest and the second (Professional & Consulting Services_User1_Org4): 10.27 percentage points. - Gap between the highest and the lowest: 102.58 percentage points. - Negative for 1 of 10: Professional & Consulting Services_User1_Org6."
+  }
+ ]
+}

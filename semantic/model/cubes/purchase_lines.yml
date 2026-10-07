@@ -66,6 +66,10 @@ cubes:
       - name: status
         sql: status
         type: string
+      - name: document_weekday
+        description: Day of the week of the document date (Monday to Sunday).
+        sql: "TRIM(TO_CHAR({CUBE}.document_date, 'FMDay'))"
+        type: string
       - name: vendor_name
         sql: vendor_name
         type: string

@@ -51,6 +51,7 @@ from gemini_brain.config.settings import settings
 from gemini_brain.health.model_health_checker import check_all_models_and_services
 from gemini_brain.orchestrator.gemini_brain_runner import GeminiBrainRunner
 from gemini_brain.orchestrator.multi_org import run_multi_org, run_multi_org_stream
+from gemini_brain.agent import shadow as agent_shadow
 from gemini_brain.orchestrator.multi_org_plan import plan_query
 from gemini_brain.policy import choose_policy, list_models
 from gemini_brain.policy.effort import DEFAULT_EFFORT, EFFORT_ORDER, EFFORT_TIERS
@@ -644,6 +645,7 @@ async def run_query(
             start_sql_trace(trace_id=rid)
             start_api_trace(trace_id=rid)
             start_llm_trace(trace_id=rid)
+            history = agent_shadow.thread_history(payload.session_id, payload.db_name)
             try:
                 if len(orgs) > 1:
                     res = run_multi_org(
@@ -679,6 +681,7 @@ async def run_query(
                 llm_traces = get_llm_traces(trace_id=rid)
                 if llm_traces and isinstance(res, dict):
                     res["llm_traces"] = llm_traces
+                agent_shadow.start(payload.query, orgs, lambda: _org_meta(current_user, orgs), res, history=history)
                 return res
             finally:
                 clear_sql_trace(trace_id=rid)
@@ -823,6 +826,7 @@ def stream_query(
         start_llm_trace(trace_id=rid)
         chunks = None
         try:
+            history = agent_shadow.thread_history(payload.session_id, payload.db_name)
             if len(orgs) > 1:
                 chunks = run_multi_org_stream(
                     payload.query, orgs, _org_meta(current_user, orgs),
@@ -860,6 +864,8 @@ def stream_query(
                     if llm_traces and isinstance(chunk["final_result"], dict):
                         chunk["final_result"]["llm_traces"] = llm_traces
                     chunk["final_result"] = normalize_envelope(chunk["final_result"])
+                    agent_shadow.start(payload.query, orgs, lambda: _org_meta(current_user, orgs),
+                                       chunk["final_result"], history=history)
                 yield f"data: {json.dumps(chunk, default=str)}\n\n"
         except ValueError as ve:
             code = ErrorCode.TENANT_FORBIDDEN if "tenant" in str(ve).lower() else ErrorCode.VALIDATION_FAILED

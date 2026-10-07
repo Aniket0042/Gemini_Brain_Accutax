@@ -339,6 +339,29 @@ class GeminiBrainSettings(BaseSettings):
         description="Time zone that turns period presets such as 'ytd' into dates.",
     )
 
+    # ── Tool-using agent (Phase 2, docs/ai-architecture-review-2026-10.md section 6.3) ──
+    agent_mode: str = Field(
+        default="off",
+        description=(
+            "'off', or 'shadow': the current path answers and the agent answers the same question "
+            "off the request path; both answers are logged to AGENT_SHADOW_LOG. Users never see "
+            "the agent's answer in shadow mode."
+        ),
+    )
+    agent_model_id: str = Field(
+        default="",
+        description="Bedrock model the agent plans and writes with. Empty = the Sonnet 5 profile (SONNET5_ID).",
+    )
+    agent_max_tool_calls: int = Field(default=6, ge=1, le=12)
+    agent_deadline_seconds: float = Field(default=45.0, ge=5.0, le=120.0)
+    agent_shadow_log: str = Field(
+        default="logs/agent_shadow.jsonl",
+        description=(
+            "JSON-lines file of current-path vs agent answers in shadow mode, relative to backend/. "
+            "Holds the redacted question, both answers and the tool calls, no user IDs. Empty turns it off."
+        ),
+    )
+
     model_config = {
         # Anchored to the repository root rather than the process working
         # directory. A relative ".env" silently falls back to the defaults
