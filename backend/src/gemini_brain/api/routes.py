@@ -7,7 +7,7 @@ import json
 from collections import Counter
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Generator, Optional
+from typing import Any, Callable, Generator, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
@@ -304,7 +304,7 @@ def _preview_events(payload: QueryRequest, current_user: CurrentUser, orgs: list
     def work() -> None:
         try:
             box["result"] = agent_preview.answer(
-                payload.query, orgs, lambda: _org_meta(current_user, orgs),
+                payload.query, orgs, _agent_org_meta(orgs, current_user),
                 session_id=payload.session_id, user_id=current_user.user_id, db_name=payload.db_name,
                 progress=events.put,
             )
@@ -363,6 +363,12 @@ def _match_session_scope(
             detail="This chat belongs to a different organization selection. Start a new chat to change it.",
         )
     return orgs
+
+
+def _agent_org_meta(orgs: list[int], current_user: CurrentUser) -> Callable[[], dict[int, dict[str, Any]]]:
+    """Org names and currencies for the agent, from Cube (no Accutax endpoint). Looked up only when called."""
+    from gemini_brain.semantic import org_directory
+    return lambda: org_directory.lookup(orgs, subject=f"agent-org-meta:{current_user.user_id}")
 
 
 def _org_meta(current_user: CurrentUser, orgs: list[int]) -> dict[int, dict[str, Any]]:
@@ -678,7 +684,7 @@ async def run_query(
     preview_orgs = _preview_scope(payload, current_user, orgs)
     if preview_orgs is not None:
         result = await asyncio.to_thread(
-            agent_preview.answer, payload.query, preview_orgs, lambda: _org_meta(current_user, preview_orgs),
+            agent_preview.answer, payload.query, preview_orgs, _agent_org_meta(preview_orgs, current_user),
             session_id=payload.session_id, user_id=current_user.user_id, db_name=payload.db_name,
         )
         return QueryResponse(**normalize_envelope(result))
@@ -734,7 +740,7 @@ async def run_query(
                 llm_traces = get_llm_traces(trace_id=rid)
                 if llm_traces and isinstance(res, dict):
                     res["llm_traces"] = llm_traces
-                agent_shadow.start(payload.query, orgs, lambda: _org_meta(current_user, orgs), res, history=history)
+                agent_shadow.start(payload.query, orgs, _agent_org_meta(orgs, current_user), res, history=history)
                 return res
             finally:
                 clear_sql_trace(trace_id=rid)
@@ -926,7 +932,7 @@ def stream_query(
                     if llm_traces and isinstance(chunk["final_result"], dict):
                         chunk["final_result"]["llm_traces"] = llm_traces
                     chunk["final_result"] = normalize_envelope(chunk["final_result"])
-                    agent_shadow.start(payload.query, orgs, lambda: _org_meta(current_user, orgs),
+                    agent_shadow.start(payload.query, orgs, _agent_org_meta(orgs, current_user),
                                        chunk["final_result"], history=history)
                 yield f"data: {json.dumps(chunk, default=str)}\n\n"
         except ValueError as ve:

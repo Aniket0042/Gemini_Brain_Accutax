@@ -64,6 +64,9 @@ def test_every_view_exposes_the_organization_members(name):
     included = _included(VIEWS[name])
     for member in AUTO_DIMENSIONS:
         assert member in included, f"{name} must include {member}"
+    if (VIEWS[name].get("meta") or {}).get("kind") == "lookup":
+        assert included["organization_id"] == ("organizations", "id")
+        return
     assert included["organization_id"][1] == "organization_id"
     assert included["organization_id"][0] != "organizations", "organization_id must come from the fact cube"
 
@@ -77,7 +80,7 @@ def test_every_view_member_exists_in_its_cube(name):
 @pytest.mark.parametrize("name", sorted(VIEWS))
 def test_every_view_declares_how_time_applies(name):
     meta = VIEWS[name].get("meta") or {}
-    assert meta.get("kind") in KINDS
+    assert meta.get("kind") in (*KINDS, "lookup")
     if meta["kind"] in ("flow", "balance"):
         dimension = meta.get("time_dimension", "")
         assert dimension.startswith(f"{name}.") and dimension.split(".", 1)[1] in _included(VIEWS[name])
@@ -105,3 +108,12 @@ def test_no_stray_braces_in_cube_sql(name):
 def test_inventory_bank_and_branch_views_are_queryable():
     assert {"inventory", "bank_accounts", "bank_transactions", "ledger"} <= set(VIEWS)
     assert "branch_name" in _included(VIEWS["sales"]) and "branch_name" in _included(VIEWS["purchases"])
+
+
+def test_the_organization_directory_is_a_lookup_the_agent_never_sees():
+    from gemini_brain.semantic.catalog import parse_meta
+    view = VIEWS["organization_directory"]
+    assert view["meta"]["kind"] == "lookup"
+    meta = {"cubes": [{"name": "organization_directory", "type": "view", "meta": view["meta"],
+                       "measures": [], "dimensions": [{"name": "organization_directory.organization_id"}]}]}
+    assert parse_meta(meta).views == {}

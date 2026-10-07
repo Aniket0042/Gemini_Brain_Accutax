@@ -1,0 +1,14 @@
+views:
+  - name: organization_directory
+    description: Name and base currency of each organization, for labelling answers.
+    meta:
+      # A lookup, not figures: the agent's catalog (semantic/catalog.py) skips this kind.
+      kind: lookup
+    cubes:
+      - join_path: organizations
+        includes:
+          - name: id
+            alias: organization_id
+          - name: name
+            alias: organization_name
+          - currency
