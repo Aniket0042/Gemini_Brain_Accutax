@@ -1,0 +1,29 @@
+# Branch names, joined from sales_lines and purchase_lines on branch_id.
+#
+# PENDING: needs SELECT on branches for cube_reader
+# (semantic/dba/cube_reader_grants_inventory_bank.sql). See semantic/model_pending/README.md.
+cubes:
+  - name: branches
+    description: Branches of an organization.
+    public: false
+    sql: >
+      SELECT b.id AS branch_id, b.organization_id AS organization_id,
+             COALESCE(NULLIF(b.branch_name, ''), 'Unnamed branch') AS branch_name
+      FROM   public.branches b
+
+    joins:
+      - name: organizations
+        relationship: many_to_one
+        sql: "{CUBE.organization_id} = {organizations.id}"
+
+    dimensions:
+      - name: branch_id
+        sql: branch_id
+        type: number
+        primary_key: true
+      - name: organization_id
+        sql: organization_id
+        type: number
+      - name: branch_name
+        sql: branch_name
+        type: string

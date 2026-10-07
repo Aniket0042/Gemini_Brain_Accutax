@@ -1,0 +1,153 @@
+# Bank accounts and bank-feed transactions.
+#
+# PENDING: needs SELECT on bank_accounts and bank_transactions for cube_reader
+# (semantic/dba/cube_reader_grants_inventory_bank.sql). See semantic/model_pending/README.md.
+#
+# Rules match Accutax BankService.getAccounts: an account's stored balance is only the
+# opening balance; the current balance is opening_bank_balance plus credits minus debits
+# of its transactions (bank_transactions.account_id holds the account id as text).
+# Uncategorized means no chart account assigned yet. Every join also matches on organization.
+#
+# No curly braces in SQL literals: Cube's YAML reads {...} as a member reference.
+cubes:
+  - name: bank_account_balances
+    description: Bank accounts with their current balance, one row per account.
+    public: false
+    sql: >
+      SELECT ba.id                                            AS account_id,
+             ba.organization_id                               AS organization_id,
+             COALESCE(NULLIF(ba.account_name, ''), 'Unnamed account') AS account_name,
+             ba.bank_name                                     AS bank_name,
+             CAST(ba.account_type AS TEXT)                    AS account_type,
+             ba.currency_code                                 AS account_currency,
+             COALESCE(ba.is_active, true)                     AS is_active,
+             COALESCE(ba.opening_bank_balance, 0) + COALESCE(t.net, 0) AS current_balance,
+             COALESCE(t.uncategorized, 0)                     AS uncategorized
+      FROM   public.bank_accounts ba
+      LEFT   JOIN LATERAL (
+               SELECT SUM(CASE WHEN bt.debit_or_credit = 'credit' THEN ABS(bt.amount)
+                               WHEN bt.debit_or_credit = 'debit'  THEN -ABS(bt.amount)
+                               ELSE bt.amount END)                       AS net,
+                      COUNT(*) FILTER (WHERE bt.chart_account_id IS NULL) AS uncategorized
+               FROM   public.bank_transactions bt
+               WHERE  bt.account_id = CAST(ba.id AS TEXT)
+                 AND  bt.organization_id = ba.organization_id
+             ) t ON true
+
+    joins:
+      - name: organizations
+        relationship: many_to_one
+        sql: "{CUBE.organization_id} = {organizations.id}"
+
+    dimensions:
+      - name: account_id
+        sql: account_id
+        type: number
+        primary_key: true
+      - name: organization_id
+        sql: organization_id
+        type: number
+      - name: account_name
+        sql: account_name
+        type: string
+      - name: bank_name
+        sql: bank_name
+        type: string
+      - name: account_type
+        sql: account_type
+        type: string
+      - name: account_currency
+        sql: account_currency
+        type: string
+      - name: is_active
+        sql: is_active
+        type: boolean
+
+    measures:
+      - name: current_balance
+        description: Opening balance plus credits minus debits of the account's bank transactions.
+        type: sum
+        sql: "{CUBE}.current_balance"
+      - name: uncategorized_transactions
+        description: Bank transactions not yet matched to a ledger account.
+        type: sum
+        sql: "{CUBE}.uncategorized"
+      - name: account_count
+        type: count
+
+  - name: bank_transaction_lines
+    description: Bank-feed transactions, one row per transaction.
+    public: false
+    sql: >
+      SELECT bt.id                                            AS transaction_id,
+             bt.organization_id                               AS organization_id,
+             CAST(bt.date AS DATE)                            AS transaction_date,
+             COALESCE(NULLIF(bt.account_name, ''), 'Unknown account') AS account_name,
+             COALESCE(NULLIF(bt.payee, ''), NULLIF(bt.vendor, ''), NULLIF(bt.customer, ''), 'Unknown') AS payee,
+             bt.description                                   AS description,
+             bt.reference_number                              AS reference_number,
+             bt.debit_or_credit                               AS direction,
+             CAST(bt.status AS TEXT)                          AS status,
+             COALESCE(bt.chart_account_name, 'Uncategorized') AS ledger_account,
+             CASE WHEN bt.chart_account_id IS NULL THEN 'yes' ELSE 'no' END AS uncategorized,
+             CASE WHEN bt.debit_or_credit = 'credit' THEN ABS(bt.amount) ELSE 0 END AS money_in,
+             CASE WHEN bt.debit_or_credit = 'debit'  THEN ABS(bt.amount) ELSE 0 END AS money_out
+      FROM   public.bank_transactions bt
+
+    joins:
+      - name: organizations
+        relationship: many_to_one
+        sql: "{CUBE.organization_id} = {organizations.id}"
+
+    dimensions:
+      - name: transaction_id
+        sql: transaction_id
+        type: number
+        primary_key: true
+      - name: organization_id
+        sql: organization_id
+        type: number
+      - name: transaction_date
+        sql: transaction_date
+        type: time
+      - name: account_name
+        sql: account_name
+        type: string
+      - name: payee
+        sql: payee
+        type: string
+      - name: description
+        sql: description
+        type: string
+      - name: reference_number
+        sql: reference_number
+        type: string
+      - name: direction
+        description: credit (money in) or debit (money out).
+        sql: direction
+        type: string
+      - name: status
+        sql: status
+        type: string
+      - name: ledger_account
+        description: The ledger account the transaction is categorized to, or Uncategorized.
+        sql: ledger_account
+        type: string
+      - name: uncategorized
+        description: yes when the transaction has no ledger account yet.
+        sql: uncategorized
+        type: string
+
+    measures:
+      - name: money_in
+        type: sum
+        sql: "{CUBE}.money_in"
+      - name: money_out
+        type: sum
+        sql: "{CUBE}.money_out"
+      - name: net_flow
+        description: Money in minus money out.
+        type: number
+        sql: "COALESCE({money_in}, 0) - COALESCE({money_out}, 0)"
+      - name: transaction_count
+        type: count

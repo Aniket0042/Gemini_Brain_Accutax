@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Sequence, Tuple
 
 from gemini_brain.config.settings import settings
-from gemini_brain.semantic import list_documents, query_metrics
+from gemini_brain.semantic import cash_forecast, list_documents, query_metrics
 from gemini_brain.semantic.catalog import ToolInputError, get_catalog
 from gemini_brain.semantic.cube_client import CubeError
 
@@ -30,6 +30,9 @@ VAT_KB_TIMEOUT_SECONDS = 15.0
 FIGURES_UNAVAILABLE = "Figures are temporarily unavailable. Tell the user so; never estimate figures."
 
 _pool = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="agent-tool")
+
+#: Tools that read figures from Cube, on the organizations in scope.
+DATA_TOOLS = {"query_metrics": query_metrics, "list_documents": list_documents, "cash_forecast": cash_forecast}
 
 _SCOPE_PROPERTY = {
     "type": "array", "items": {"type": "integer"},
@@ -99,6 +102,8 @@ def specs(ctx: ToolContext) -> List[Dict[str, Any]]:
     try:
         catalog = get_catalog(ctx.organization_ids, ctx.subject, ctx.call_deadline())
         out += [_with_scope(query_metrics.tool_spec(catalog)), _with_scope(list_documents.tool_spec(catalog))]
+        if cash_forecast.available(list(catalog.views)):
+            out.append(_with_scope(cash_forecast.tool_spec()))
     except Exception as e:  # noqa: BLE001 - the agent still answers law and how-to questions
         logger.warning("agent: Cube catalog unavailable, figure tools left out: %s", e)
     return out + [VAT_KB_SPEC, APP_GUIDE_SPEC]
@@ -108,9 +113,9 @@ def execute(name: str, params: Any, ctx: ToolContext) -> Tuple[Dict[str, Any], b
     """Run one tool call. Returns (result, ok); never raises."""
     params = params if isinstance(params, dict) else {}
     try:
-        if name in ("query_metrics", "list_documents"):
+        if name in DATA_TOOLS:
             orgs = ctx.scope(params.get("organization_ids"))
-            tool = query_metrics if name == "query_metrics" else list_documents
+            tool = DATA_TOOLS[name]
             args = {k: v for k, v in params.items() if k != "organization_ids"}
             return tool.run(args, organization_ids=orgs, subject=ctx.subject, deadline=ctx.call_deadline()), True
         if name == "search_vat_kb":

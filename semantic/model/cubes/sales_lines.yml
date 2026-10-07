@@ -23,6 +23,7 @@ cubes:
              COALESCE(NULLIF(c.name, ''), NULLIF(c.organization_name, ''), 'Unknown') AS customer_name,
              COALESCE(p.project_name, 'No project')        AS project_name,
              COALESCE(cc.costcenter_name, 'Unallocated')   AS cost_center_name,
+             inc.branch_id                                    AS branch_id,
              CASE WHEN inc.income_type = 'CREDIT_NOTE' THEN -1 ELSE 1 END AS doc_sign,
              ii.line_amount                                AS line_amount,
              COALESCE(ii.tax_amount, 0)                    AS tax_amount
@@ -41,6 +42,11 @@ cubes:
       - name: organizations
         relationship: many_to_one
         sql: "{CUBE.organization_id} = {organizations.id}"
+      # PENDING (branch names): uncomment once semantic/model_pending/cubes/branches.yml is in model/,
+      # and add "- join_path: sales_lines.branches / includes: [branch_name]" to the view. See model_pending/README.md.
+      # - name: branches
+      #   relationship: many_to_one
+      #   sql: "{CUBE.branch_id} = {branches.branch_id} AND {CUBE.organization_id} = {branches.organization_id}"
 
     dimensions:
       - name: line_id

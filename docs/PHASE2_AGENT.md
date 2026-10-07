@@ -148,6 +148,33 @@ Between the two runs the prompt gained four rules: show signs as returned, no pe
 
 ---
 
+## 7. Closing the coverage gaps (8 Oct 2026)
+
+The current path covers some topics with Accutax REST endpoints, and the agent could not
+answer them yet. Each gap is now handled as follows.
+
+| Topic | How the agent answers it | State |
+|---|---|---|
+| General ledger, journal entries, account activity | New Cube view `ledger` (debit, credit, net movement per account, source or journal). New `list_documents` type `journal_lines`. | Built. Needs the Cube model deployed (`semantic/deploy/install_rootless.sh --start`). |
+| Cash forecast | New tool `cash_forecast`. Code computes the weekly closing cash: opening ledger cash, plus open invoices, minus open bills, each in the week it falls due. Overdue amounts, undated amounts and amounts due after the forecast period are reported separately. | Built. Tested live against Cube on the VM. |
+| PDF, Excel, CSV and charts | Agent answers build files with the same `attach_delivery` as the current path, from the largest figure result. The prompt tells the model the file is attached. | Built. Tested live: chart, table, PDF and CSV. |
+| Projects and cost centres | Already in the `sales` and `purchases` views. | No change needed. |
+| Inventory, bank accounts and transactions, branch names | Cube model written in `semantic/model_pending/`. | Waiting on the DBA. The `cube_reader` role cannot read the tables yet; the grant script is `semantic/dba/cube_reader_grants_inventory_bank.sql`. The steps after the grant are in `semantic/model_pending/README.md`. |
+
+The REST endpoints were tested and not used:
+
+- Accutax takes the organization from the user's token before the `organization_id`
+  parameter. In a multi-organization chat, a REST call could return one organization's
+  data under another organization's name.
+- Several endpoints did not answer within 8–15 s:
+  - `/report/cash-forecast`;
+  - `/report/profit-loss-by-branch`, `-by-cost-center` and `-by-project`;
+  - `/report/cash-flow-indirect`.
+- `/accounting/general-ledger` returned nothing for test organizations that do have
+  ledger postings.
+
+---
+
 ## 5. How to run
 
 ```bash

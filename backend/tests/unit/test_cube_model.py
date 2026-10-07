@@ -99,3 +99,37 @@ def test_no_stray_braces_in_cube_sql(name):
     for text in texts:
         leftover = _REFERENCE.sub("", str(text))
         assert "{" not in leftover and "}" not in leftover, f"{name}: stray brace in {text!r}"
+
+
+PENDING = SEMANTIC / "model_pending"
+PENDING_CUBES = {c["name"]: c for f in sorted((PENDING / "cubes").glob("*.yml"))
+                 for c in yaml.safe_load(f.read_text(encoding="utf-8"))["cubes"]}
+PENDING_VIEWS = {v["name"]: v for f in sorted((PENDING / "views").glob("*.yml"))
+                 for v in yaml.safe_load(f.read_text(encoding="utf-8"))["views"]}
+
+
+def test_pending_views_are_not_loaded_or_queryable_yet():
+    assert not set(PENDING_VIEWS) & set(VIEWS)
+    assert not set(PENDING_VIEWS) & _queryable_views_in_cube_js()
+    assert {"inventory", "bank_accounts", "bank_transactions"} <= set(PENDING_VIEWS)
+
+
+@pytest.mark.parametrize("name", sorted(PENDING_CUBES))
+def test_pending_cubes_follow_the_same_rules(name):
+    cube = PENDING_CUBES[name]
+    assert cube.get("public") is False
+    assert "organization_id" in {d["name"] for d in cube["dimensions"]}
+    assert any(j["name"] == "organizations" for j in cube.get("joins", []))
+    assert any(d.get("primary_key") for d in cube["dimensions"])
+
+
+@pytest.mark.parametrize("name", sorted(PENDING_VIEWS))
+def test_pending_views_follow_the_same_rules(name):
+    view = PENDING_VIEWS[name]
+    included = _included(view)
+    for member in AUTO_DIMENSIONS:
+        assert member in included, f"{name} must include {member}"
+    cubes = {**CUBES, **PENDING_CUBES}
+    for exposed, (cube, member) in included.items():
+        assert member in _members(cubes[cube]), f"{name}.{exposed}: {cube}.{member} does not exist"
+    assert (view.get("meta") or {}).get("kind") in KINDS

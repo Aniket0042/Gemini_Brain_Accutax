@@ -118,3 +118,53 @@ def test_answer_returns_cube_and_model_traces_for_the_trace_cards(monkeypatch):
     out = preview.answer("Revenue?", [24], lambda: {}, session_id=None, user_id=501)
     assert [t["endpoint"] for t in out["api_traces"]] == ["cube:pnl"]
     assert out["llm_traces"][0]["purpose"] == "agent"
+
+
+def test_export_rows_take_the_largest_figure_result_with_plain_column_names():
+    data = [
+        {"tool": "query_metrics", "result": {"rows": [{"pnl.organization_id": 24, "pnl.organization_name": "A",
+                                                       "pnl.revenue": "10"}]}},
+        {"tool": "query_metrics", "result": {"rows": [
+            {"pnl.organization_id": 24, "pnl.organization_name": "A", "pnl.transaction_date.month": "2026-01-01",
+             "pnl.revenue": "4"},
+            {"pnl.organization_id": 24, "pnl.organization_name": "A", "pnl.transaction_date.month": "2026-02-01",
+             "pnl.revenue": "6"}]}},
+    ]
+    assert preview.export_rows(data) == [{"organization_name": "A", "month": "2026-01-01", "revenue": "4"},
+                                         {"organization_name": "A", "month": "2026-02-01", "revenue": "6"}]
+
+
+def test_export_rows_flatten_the_cash_forecast_weeks():
+    data = [{"tool": "cash_forecast", "result": {"organizations": [
+        {"organization_name": "A", "currency": "AED", "weeks": [{"week_start": "2026-10-08", "closing_cash": "5"}]}]}}]
+    assert preview.export_rows(data) == [{"organization": "A", "currency": "AED", "week_start": "2026-10-08",
+                                          "closing_cash": "5"}]
+
+
+def test_a_file_request_gets_download_blocks_from_the_agent_figures(monkeypatch):
+    import gemini_brain.artifacts.attach as attach
+    seen = {}
+
+    def fake_attach(query, data, blocks, **kw):
+        seen.update(query=query, data=data, **kw)
+        return [{"type": "artifact", "kind": "pdf", "id": "a1"}]
+
+    monkeypatch.setattr(attach, "attach_delivery", fake_attach)
+    monkeypatch.setattr(loop, "run_agent", lambda *a, **k: loop.AgentResult(
+        answer="Revenue AED 10.", status="ok",
+        data=[{"tool": "query_metrics", "result": {"rows": [{"pnl.organization_name": "A", "pnl.revenue": "10"}]}}]))
+    out = preview.answer("Export my P&L for this year as a PDF", [24], lambda: {24: {"name": "A"}},
+                         session_id=None, user_id=501)
+    assert out["blocks"] == [{"type": "artifact", "kind": "pdf", "id": "a1"}]
+    assert seen["data"] == [{"organization_name": "A", "revenue": "10"}]
+    assert seen["organization_id"] == 24 and seen["org_name"] == "A" and seen["answer_text"] == "Revenue AED 10."
+
+
+def test_a_plain_question_gets_no_file(monkeypatch):
+    monkeypatch.setattr(loop, "run_agent", lambda *a, **k: loop.AgentResult(answer="AED 10.", status="ok"))
+    assert preview.answer("Revenue this year?", [24], lambda: {}, session_id=None, user_id=501)["blocks"] is None
+
+
+def test_cash_forecast_step_label():
+    assert preview.step_label("cash_forecast", {"weeks": 8}) == "Projecting cash…"
+    assert preview.step_label("list_documents", {"type": "journal_lines"}) == "Listing documents: journal lines…"

@@ -1,0 +1,62 @@
+views:
+  - name: bank_accounts
+    description: >-
+      Bank accounts today: current balance (opening balance plus credits minus debits) and
+      transactions not yet categorized. Grouped by account currency.
+    meta:
+      kind: current
+      always_group_by:
+        - bank_accounts.account_currency
+      ai_context: >-
+        Use for bank balances per account and uncategorized bank transactions. For the cash
+        position in the books use balance_sheet cash_and_bank.
+    cubes:
+      - join_path: bank_account_balances
+        includes:
+          - organization_id
+          - account_name
+          - bank_name
+          - account_type
+          - account_currency
+          - is_active
+          - current_balance
+          - uncategorized_transactions
+          - account_count
+      - join_path: bank_account_balances.organizations
+        includes:
+          - name: name
+            alias: organization_name
+          - currency
+
+  - name: bank_transactions
+    description: >-
+      Bank-feed transactions in a period: money in, money out, payee, ledger account and
+      whether each is categorized.
+    meta:
+      kind: flow
+      time_dimension: bank_transactions.transaction_date
+      ai_context: >-
+        Use for bank deposits and withdrawals in a period, payments to or from a payee, and
+        which bank transactions are still uncategorized.
+    cubes:
+      - join_path: bank_transaction_lines
+        includes:
+          - organization_id
+          - transaction_date
+          - account_name
+          - payee
+          - description
+          - reference_number
+          - direction
+          - status
+          - ledger_account
+          - uncategorized
+          - money_in
+          - money_out
+          - net_flow
+          - transaction_count
+      - join_path: bank_transaction_lines.organizations
+        includes:
+          - name: name
+            alias: organization_name
+          - currency

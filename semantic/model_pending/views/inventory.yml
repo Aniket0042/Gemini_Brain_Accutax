@@ -1,0 +1,31 @@
+views:
+  - name: inventory
+    description: >-
+      Stock on hand today per item and warehouse: quantities, items below their reorder level,
+      and stock value at average cost.
+    meta:
+      kind: current
+      ai_context: >-
+        Use for stock levels, low stock, items to reorder, stock per warehouse and stock value.
+        Quantities are for today only. Stock value is an estimate at average cost.
+    cubes:
+      - join_path: inventory_stock
+        includes:
+          - organization_id
+          - item_name
+          - sku
+          - unit_of_measure
+          - warehouse_name
+          - below_reorder_level
+          - quantity_on_hand
+          - quantity_available
+          - quantity_reserved
+          - reorder_level
+          - stock_value
+          - item_count
+          - low_stock_count
+      - join_path: inventory_stock.organizations
+        includes:
+          - name: name
+            alias: organization_name
+          - currency

@@ -26,6 +26,7 @@ HISTORY_MESSAGES = 6
 _STEP = {
     "query_metrics": "Fetching figures",
     "list_documents": "Listing documents",
+    "cash_forecast": "Projecting cash",
     "search_vat_kb": "Searching UAE VAT law",
     "app_guide": "Checking the Accutax guide",
 }
@@ -53,8 +54,9 @@ def catalog_entry() -> Dict[str, Any]:
     return {
         "key": MODEL_KEY,
         "label": MODEL_LABEL,
-        "description": ("New answer engine on governed figures (Cube): ledger P&L and balance sheet, invoices, "
-                        "bills, VAT, plus UAE VAT law. Preview: answers may differ from the standard assistant."),
+        "description": ("New answer engine on governed figures (Cube): ledger P&L, balance sheet, general ledger, "
+                        "invoices, bills, VAT, cash forecast, files and charts, plus UAE VAT law. Preview: answers "
+                        "may differ from the standard assistant."),
         "provider": "bedrock",
         "supports": ["tools"],
         "efforts": [],
@@ -102,8 +104,9 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
     finally:
         traces = _collect_traces(rid)
     answer_text = result.answer or "I could not produce an answer for that request. Please try again."
+    blocks = _files(question, result, orgs, meta, user_id=user_id, session_id=session_id, answer_text=answer_text)
     if session_id:
-        _save_turn(session_id, user_id, orgs, question, answer_text, db_name)
+        _save_turn(session_id, user_id, orgs, question, answer_text, db_name, blocks)
 
     usage = dict(result.usage or {})
     usage["elapsed_seconds"] = round(time.monotonic() - started, 2)
@@ -121,6 +124,7 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
         },
         "policy": {"model": MODEL_KEY, "model_label": MODEL_LABEL, "auto": False},
         "verification": result.verification or None,
+        "blocks": blocks or None,
         "api_traces": traces.get("api", []),
         "llm_traces": traces.get("llm", []),
         "agent_trace": [{"step": "tool", **{k: v for k, v in call.items() if k in ("name", "input", "ok", "ms", "rows", "error")}}
@@ -155,7 +159,53 @@ def _collect_traces(rid: str) -> Dict[str, List[Dict[str, Any]]]:
     return out
 
 
-def _save_turn(session_id: str, user_id: int, orgs: List[int], question: str, text: str, db_name: str) -> None:
+def export_rows(data: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The rows a file or chart is built from: the figure-tool result with the most rows, with plain column names."""
+    best: List[Dict[str, Any]] = []
+    for item in data or []:
+        result = item.get("result") or {}
+        if item.get("tool") == "cash_forecast":
+            rows = [{"organization": org.get("organization_name"), "currency": org.get("currency"), **week}
+                    for org in result.get("organizations") or [] for week in org.get("weeks") or []]
+        else:
+            rows = [_plain(r) for r in result.get("rows") or []]
+        if rows and len(rows) >= len(best):
+            best = rows
+    return best
+
+
+def _plain(row: Dict[str, Any]) -> Dict[str, Any]:
+    """'pnl.revenue' -> 'revenue', 'pnl.transaction_date.month' -> 'month'; the organization id is dropped."""
+    out: Dict[str, Any] = {}
+    for key, value in row.items():
+        name = str(key).split(".")[-1]
+        if name != "organization_id":
+            out[name] = value
+    return out
+
+
+def _files(question: str, result: Any, orgs: List[int], meta: Dict[int, Dict[str, Any]], *, user_id: int,
+           session_id: Optional[str], answer_text: str) -> List[Dict[str, Any]]:
+    """Chart, canvas and download blocks when the user asked for a file or a chart; [] otherwise. Never raises."""
+    try:
+        from gemini_brain.artifacts.delivery import detect_delivery
+        if detect_delivery(question).mode == "none":
+            return []
+        from gemini_brain.artifacts.attach import attach_delivery
+        rows = export_rows(getattr(result, "data", None) or [])
+        single = orgs[0] if len(orgs) == 1 else None
+        return attach_delivery(
+            question, rows, [], status="ok" if rows else "empty", user_id=user_id, organization_id=single,
+            session_id=session_id, org_name=(meta.get(single) or {}).get("name") if single else None,
+            answer_text=answer_text,
+        )
+    except Exception as e:  # noqa: BLE001 - the answer still reaches the user without the file
+        logger.warning("agent preview: file not built: %s", e, exc_info=True)
+        return []
+
+
+def _save_turn(session_id: str, user_id: int, orgs: List[int], question: str, text: str, db_name: str,
+               blocks: Optional[List[Dict[str, Any]]] = None) -> None:
     try:
         from gemini_brain.memory.session_memory import ensure_session, save_message_by_session
         scope = {"organization_ids": orgs} if len(orgs) > 1 else {"organization_id": orgs[0] if orgs else None}
@@ -164,5 +214,8 @@ def _save_turn(session_id: str, user_id: int, orgs: List[int], question: str, te
             return
         save_message_by_session(session_id, "user", question, db_name=db_name)
         save_message_by_session(session_id, "assistant", text, db_name=db_name)
+        if blocks:
+            from gemini_brain.memory.session_memory import update_last_assistant_blocks
+            update_last_assistant_blocks(session_id, blocks, db_name=db_name)
     except Exception as e:  # noqa: BLE001 - the answer still reaches the user
         logger.warning("agent preview: could not save turn to %s: %s", session_id, e)

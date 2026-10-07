@@ -12,9 +12,14 @@ cubes:
     public: false
     sql: >
       SELECT l.id               AS line_id,
+             j.id               AS journal_id,
              j.organization_id  AS organization_id,
              j.transaction_date AS transaction_date,
              j.source_type      AS source_type,
+             j.journal_number   AS journal_number,
+             j.reference_number AS reference_number,
+             j.description      AS journal_description,
+             l.description      AS line_description,
              c.account_code     AS account_code,
              c.account_name     AS account_name,
              c.account_type     AS account_type,
@@ -48,6 +53,21 @@ cubes:
         description: What created the entry (INCOME, EXPENSE, MANUAL, BANK_TRANSACTION, ADJUSTMENT, PAYMENT).
         sql: source_type
         type: string
+      - name: journal_number
+        sql: journal_number
+        type: string
+      - name: reference_number
+        description: Reference of the source document, when it has one.
+        sql: reference_number
+        type: string
+      - name: journal_description
+        description: Narration of the journal entry.
+        sql: journal_description
+        type: string
+      - name: line_description
+        description: Narration of the line, when it has one.
+        sql: line_description
+        type: string
       - name: account_code
         sql: account_code
         type: string
@@ -67,6 +87,27 @@ cubes:
         type: string
 
     measures:
+      # ── Ledger detail (flow): query with a period ───────────────────────
+      - name: debit
+        description: Sum of debit amounts.
+        type: sum
+        sql: "{CUBE}.debit_amount"
+      - name: credit
+        description: Sum of credit amounts.
+        type: sum
+        sql: "{CUBE}.credit_amount"
+      - name: net_movement
+        description: Debit minus credit. Positive raises an asset or expense; negative raises a liability, equity or revenue.
+        type: sum
+        sql: "{CUBE}.debit_amount - {CUBE}.credit_amount"
+      - name: line_count
+        description: Number of journal lines.
+        type: count
+      - name: journal_count
+        description: Number of journal entries.
+        type: count_distinct
+        sql: "{CUBE}.journal_id"
+
       # ── P&L (flow): query with a period ─────────────────────────────────
       - name: revenue
         description: Revenue excluding VAT, from posted entries on all Revenue accounts.

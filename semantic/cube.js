@@ -16,7 +16,7 @@ if (secret.length < 32) {
 }
 
 const QUERYABLE_VIEWS = new Set([
-  'pnl', 'balance_sheet', 'sales', 'purchases', 'receivables', 'payables', 'vat',
+  'pnl', 'balance_sheet', 'sales', 'purchases', 'receivables', 'payables', 'vat', 'ledger',
 ]);
 const MAX_TOKEN_LIFETIME_SECONDS = 120;
 const MAX_ORGS = 25;

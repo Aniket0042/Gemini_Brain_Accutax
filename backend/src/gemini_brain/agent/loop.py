@@ -59,6 +59,8 @@ class AgentResult:
     usage: Dict[str, Any] = field(default_factory=dict)
     elapsed_ms: int = 0
     route: str = "tools"                          # "tools" | "law"
+    #: Successful figure-tool results, in call order: {"tool": name, "result": result}. Used to build files.
+    data: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def _messages(history: Optional[Sequence[Dict[str, Any]]], question: str) -> List[Dict[str, Any]]:
@@ -171,6 +173,7 @@ def run_agent(
     writer = planner if writer_id == planner_id else BedrockAdapter(writer_id, label="agent-answer")
     calls: List[Dict[str, Any]] = []
     ok_results: List[Dict[str, Any]] = []
+    data: List[Dict[str, Any]] = []
     answer, status = "", "ok"
 
     try:
@@ -214,6 +217,8 @@ def run_agent(
                               "rows": result.get("row_count"), **({"error": result.get("error")} if not ok else {})})
                 if ok:
                     ok_results.append(result)
+                    if use.get("name") in tools.DATA_TOOLS:
+                        data.append({"tool": use.get("name"), "result": result})
                 results.append({"toolResult": {"toolUseId": use["toolUseId"], "content": [{"json": result}],
                                                "status": "success" if ok else "error"}})
             if used >= budget or deadline - time.monotonic() < WRAP_UP_SECONDS:
@@ -232,6 +237,7 @@ def run_agent(
         verification=report.to_public() if report else {},
         usage=_usage(planner, writer),
         elapsed_ms=int((time.monotonic() - started) * 1000),
+        data=data,
     )
 
 

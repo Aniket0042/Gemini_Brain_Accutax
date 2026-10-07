@@ -1,0 +1,93 @@
+# Stock on hand today, one row per inventory_quantities row (item, or item and warehouse).
+#
+# PENDING: needs SELECT on items, inventory_quantities and warehouses for cube_reader
+# (semantic/dba/cube_reader_grants_inventory_bank.sql). See semantic/model_pending/README.md.
+#
+# Rules match Accutax InventoryQuantityService: quantities come from inventory_quantities;
+# an item is low on stock when quantity_available is below its reorder level (reorder
+# level above 0). Stock value is quantity on hand at the item's average cost (unit cost
+# when there is no average); Accutax's own valuation report uses FIFO layers, so the two
+# can differ. Every join also matches on organization.
+#
+# No curly braces in SQL literals: Cube's YAML reads {...} as a member reference.
+cubes:
+  - name: inventory_stock
+    description: Stock on hand today per item and warehouse.
+    public: false
+    sql: >
+      SELECT iq.id                                              AS row_id,
+             iq.organization_id                                 AS organization_id,
+             i.id                                               AS item_id,
+             COALESCE(NULLIF(i.name, ''), 'Unnamed item')       AS item_name,
+             i.sku                                              AS sku,
+             i.unit_of_measure                                  AS unit_of_measure,
+             COALESCE(w.warehouse_name, 'No warehouse')         AS warehouse_name,
+             COALESCE(iq.quantity_on_hand, 0)                   AS quantity_on_hand,
+             COALESCE(iq.quantity_available, 0)                 AS quantity_available,
+             COALESCE(iq.quantity_reserved, 0)                  AS quantity_reserved,
+             COALESCE(i.reorder_level, 0)                       AS reorder_level,
+             COALESCE(NULLIF(i.average_unit_cost, 0), i.unit_cost, 0) AS unit_cost
+      FROM   public.inventory_quantities iq
+      JOIN   public.items      i ON i.id = iq.item_id AND i.organization_id = iq.organization_id
+      LEFT   JOIN public.warehouses w ON w.id = iq.warehouse_id AND w.organization_id = iq.organization_id
+      WHERE  COALESCE(i.is_active, true)
+
+    joins:
+      - name: organizations
+        relationship: many_to_one
+        sql: "{CUBE.organization_id} = {organizations.id}"
+
+    dimensions:
+      - name: row_id
+        sql: row_id
+        type: number
+        primary_key: true
+      - name: organization_id
+        sql: organization_id
+        type: number
+      - name: item_name
+        sql: item_name
+        type: string
+      - name: sku
+        sql: sku
+        type: string
+      - name: unit_of_measure
+        sql: unit_of_measure
+        type: string
+      - name: warehouse_name
+        sql: warehouse_name
+        type: string
+      - name: below_reorder_level
+        description: yes when the quantity available is below the item's reorder level.
+        type: string
+        sql: "CASE WHEN {CUBE}.reorder_level > 0 AND {CUBE}.quantity_available < {CUBE}.reorder_level THEN 'yes' ELSE 'no' END"
+
+    measures:
+      - name: quantity_on_hand
+        type: sum
+        sql: "{CUBE}.quantity_on_hand"
+      - name: quantity_available
+        description: On hand minus reserved and on hold.
+        type: sum
+        sql: "{CUBE}.quantity_available"
+      - name: quantity_reserved
+        type: sum
+        sql: "{CUBE}.quantity_reserved"
+      - name: reorder_level
+        description: The item's reorder level (meaningful per item).
+        type: max
+        sql: "{CUBE}.reorder_level"
+      - name: stock_value
+        description: Quantity on hand at average unit cost. An estimate; the Accutax valuation report uses FIFO.
+        type: sum
+        sql: "{CUBE}.quantity_on_hand * {CUBE}.unit_cost"
+      - name: item_count
+        description: Number of distinct items.
+        type: count_distinct
+        sql: "{CUBE}.item_id"
+      - name: low_stock_count
+        description: Number of distinct items below their reorder level.
+        type: count_distinct
+        sql: "{CUBE}.item_id"
+        filters:
+          - sql: "{CUBE}.reorder_level > 0 AND {CUBE}.quantity_available < {CUBE}.reorder_level"

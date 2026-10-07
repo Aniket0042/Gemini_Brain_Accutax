@@ -1,5 +1,5 @@
 """
-list_documents.py — Document-level rows (invoices, bills, open items) for the agent.
+list_documents.py — Document-level rows (invoices, bills, open items, journal lines) for the agent.
 
 query_metrics answers with totals per organization; this answers "which
 invoices", "top 10 bills", "unpaid invoices older than 180 days". It reads the
@@ -35,8 +35,12 @@ DOCUMENT_TYPES: Dict[str, tuple] = {
                                          "aging_bucket", "status", "customer_name"), ("outstanding",), "outstanding"),
     "open_payables": ("payables", ("document_number", "document_date", "due_date", "days_overdue",
                                    "aging_bucket", "status", "vendor_name"), ("outstanding",), "outstanding"),
+    "journal_lines": ("ledger", ("journal_number", "transaction_date", "source_type", "account_code", "account_name",
+                                 "journal_description", "line_description"), ("debit", "credit"), "debit"),
 }
 ORDER_BY = ("amount", "date", "days_overdue")
+#: The date "order by date" uses, when it is not document_date.
+DATE_MEMBER = {"journal_lines": "transaction_date"}
 
 
 def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str, deadline: float) -> Dict[str, Any]:
@@ -76,7 +80,7 @@ def build_query(params: Dict[str, Any], catalog: Catalog) -> tuple[Dict[str, Any
     by = order.get("by", "amount") if isinstance(order, dict) else "amount"
     if by not in ORDER_BY:
         raise ToolInputError(f"order.by must be one of {list(ORDER_BY)}")
-    member = {"amount": f"{name}.{amount_member}", "date": f"{name}.document_date",
+    member = {"amount": f"{name}.{amount_member}", "date": f"{name}.{DATE_MEMBER.get(kind, 'document_date')}",
               "days_overdue": f"{name}.days_overdue"}[by]
     if member not in dims and member not in query["measures"]:
         raise ToolInputError(f"{kind} cannot be ordered by {by}")
@@ -95,9 +99,11 @@ def tool_spec(catalog: Catalog) -> Dict[str, Any]:
         "name": "list_documents",
         "description": (
             "Individual documents for the organizations selected in this chat: issued sales invoices, bills, "
-            "or the invoices and bills still open today. Use for 'which', 'list', 'largest', 'top N documents', "
-            "'older than N days', weekday questions. Each row has the document number, date, counterparty, status "
-            "and amount, and its organization. For totals use query_metrics.\n\nFilter members per type:\n"
+            "the invoices and bills still open today, or posted journal lines (general ledger detail). Use for "
+            "'which', 'list', 'largest', 'top N documents', 'older than N days', weekday questions, and the "
+            "journal entries or ledger lines of an account. Each row has the document or journal number, date, "
+            "counterparty or account, and amount, and its organization. For totals use query_metrics."
+            "\n\nFilter members per type:\n"
             + "\n".join(filterable)
         ),
         "inputSchema": {"json": {
@@ -113,7 +119,8 @@ def tool_spec(catalog: Catalog) -> Dict[str, Any]:
                     },
                     "required": ["member", "operator"],
                 }},
-                "period": {"type": "object", "description": "sales_invoices and bills only; same shape as query_metrics",
+                "period": {"type": "object",
+                           "description": "sales_invoices, bills and journal_lines only; same shape as query_metrics",
                            "properties": {"preset": {"type": "string"}, "start": {"type": "string"},
                                           "end": {"type": "string"}}},
                 "order": {"type": "object", "properties": {

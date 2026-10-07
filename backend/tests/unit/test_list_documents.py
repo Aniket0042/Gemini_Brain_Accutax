@@ -27,6 +27,9 @@ CATALOG = parse_meta({"cubes": [
           ["document_number", "document_date", "due_date", "days_overdue", "aging_bucket", "status", "customer_name"]),
     _view("pnl", "flow", ["revenue", "net_profit"], ["transaction_date"], "pnl.transaction_date"),
     _view("balance_sheet", "balance", ["cash_and_bank"], ["transaction_date"], "balance_sheet.transaction_date"),
+    _view("ledger", "flow", ["debit", "credit", "net_movement"],
+          ["transaction_date", "journal_number", "source_type", "account_code", "account_name",
+           "journal_description", "line_description"], "ledger.transaction_date"),
 ]})
 
 
@@ -151,3 +154,21 @@ def test_no_totals_from_a_capped_result():
     rows = [_row(24, "2026-01-01", "100"), _row(25, "2026-01-01", "200")]
     assert query_metrics.summarize(rows, {"measures": ["pnl.revenue"], "limit": 2}, CATALOG.views["pnl"], None) == {}
     assert query_metrics.summarize(rows, {"measures": ["pnl.revenue"], "limit": 3}, CATALOG.views["pnl"], None)["totals"]
+
+
+def test_journal_lines_list_the_ledger_for_a_period_and_order_by_transaction_date():
+    query, note = list_documents.build_query({
+        "type": "journal_lines", "period": {"preset": "last_month"}, "order": {"by": "date"},
+        "filters": [{"member": "ledger.account_name", "operator": "contains", "values": ["Bank"]}],
+    }, CATALOG)
+    assert query["measures"] == ["ledger.debit", "ledger.credit"]
+    assert {"ledger.journal_number", "ledger.account_name", "ledger.transaction_date"} <= set(query["dimensions"])
+    assert query["order"] == {"ledger.transaction_date": "desc"}
+    assert query["timeDimensions"][0] == {"dimension": "ledger.transaction_date", "dateRange": ["2026-09-01", "2026-09-30"]}
+    assert note.startswith("Period: 2026-09-01")
+
+
+def test_journal_lines_are_described_to_the_model():
+    spec = list_documents.tool_spec(CATALOG)["toolSpec"]
+    assert "journal_lines" in spec["inputSchema"]["json"]["properties"]["type"]["enum"]
+    assert "journal_lines (ledger)" in spec["description"]

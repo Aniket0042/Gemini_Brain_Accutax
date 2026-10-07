@@ -1,0 +1,38 @@
+views:
+  - name: ledger
+    description: >-
+      Posted general-ledger lines for a period: debits, credits and net movement per account,
+      account type, source or journal entry.
+    meta:
+      kind: flow
+      time_dimension: ledger.transaction_date
+      ai_context: >-
+        Use for the general ledger, journal entries, account activity or movement in a period,
+        trial-balance-style debit and credit totals, and what was posted from which source
+        (INCOME, EXPENSE, MANUAL, BANK_TRANSACTION, ADJUSTMENT, PAYMENT). For an account's balance
+        at a date use balance_sheet; for revenue, expenses and profit use pnl.
+    cubes:
+      - join_path: gl_lines
+        includes:
+          - organization_id
+          - transaction_date
+          - source_type
+          - journal_number
+          - reference_number
+          - journal_description
+          - line_description
+          - account_code
+          - account_name
+          - account_type
+          - account_sub_type
+          - account_currency
+          - debit
+          - credit
+          - net_movement
+          - line_count
+          - journal_count
+      - join_path: gl_lines.organizations
+        includes:
+          - name: name
+            alias: organization_name
+          - currency
