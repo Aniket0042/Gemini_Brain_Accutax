@@ -1,7 +1,6 @@
 # Bank accounts and bank-feed transactions.
 #
-# PENDING: needs SELECT on bank_accounts and bank_transactions for cube_reader
-# (semantic/dba/cube_reader_grants_inventory_bank.sql). See semantic/model_pending/README.md.
+# Read grants: semantic/dba/cube_reader_grants_inventory_bank.sql.
 #
 # Rules match Accutax BankService.getAccounts: an account's stored balance is only the
 # opening balance; the current balance is opening_bank_balance plus credits minus debits

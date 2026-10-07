@@ -42,11 +42,9 @@ cubes:
       - name: organizations
         relationship: many_to_one
         sql: "{CUBE.organization_id} = {organizations.id}"
-      # PENDING (branch names): uncomment once semantic/model_pending/cubes/branches.yml is in model/,
-      # and add "- join_path: sales_lines.branches / includes: [branch_name]" to the view. See model_pending/README.md.
-      # - name: branches
-      #   relationship: many_to_one
-      #   sql: "{CUBE.branch_id} = {branches.branch_id} AND {CUBE.organization_id} = {branches.organization_id}"
+      - name: branches
+        relationship: many_to_one
+        sql: "{CUBE.branch_id} = {branches.branch_id} AND {CUBE.organization_id} = {branches.organization_id}"
 
     dimensions:
       - name: line_id

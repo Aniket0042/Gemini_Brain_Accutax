@@ -3,7 +3,8 @@
 -- For the DBA. Run as a superuser or the table owner on accutax_bk_1_5,
 -- after semantic/dba/cube_reader.sql. Read-only grants; no table is changed.
 --
--- After it runs, enable the views as described in semantic/model_pending/README.md.
+-- Used by the views inventory, bank_accounts, bank_transactions and the
+-- branch_name member of sales and purchases. Run on 2026-10-08.
 -- =============================================================================
 
 GRANT SELECT ON public.items, public.inventory_quantities, public.warehouses,

@@ -155,11 +155,11 @@ answer them yet. Each gap is now handled as follows.
 
 | Topic | How the agent answers it | State |
 |---|---|---|
-| General ledger, journal entries, account activity | New Cube view `ledger` (debit, credit, net movement per account, source or journal). New `list_documents` type `journal_lines`. | Built. Needs the Cube model deployed (`semantic/deploy/install_rootless.sh --start`). |
+| General ledger, journal entries, account activity | New Cube view `ledger` (debit, credit, net movement per account, source or journal). New `list_documents` type `journal_lines`. | Built and deployed on 8 Oct; tested live. |
 | Cash forecast | New tool `cash_forecast`. Code computes the weekly closing cash: opening ledger cash, plus open invoices, minus open bills, each in the week it falls due. Overdue amounts, undated amounts and amounts due after the forecast period are reported separately. | Built. Tested live against Cube on the VM. |
 | PDF, Excel, CSV and charts | Agent answers build files with the same `attach_delivery` as the current path, from the largest figure result. The prompt tells the model the file is attached. | Built. Tested live: chart, table, PDF and CSV. |
 | Projects and cost centres | Already in the `sales` and `purchases` views. | No change needed. |
-| Inventory, bank accounts and transactions, branch names | Cube model written in `semantic/model_pending/`. | Waiting on the DBA. The `cube_reader` role cannot read the tables yet; the grant script is `semantic/dba/cube_reader_grants_inventory_bank.sql`. The steps after the grant are in `semantic/model_pending/README.md`. |
+| Inventory, bank accounts and transactions, branch names | Cube views `inventory`, `bank_accounts` and `bank_transactions`; `branch_name` in `sales` and `purchases`. The rules match the Accutax code: low stock means available below the reorder level; bank balance is the opening balance plus credits minus debits. | Built. The read grants (`semantic/dba/cube_reader_grants_inventory_bank.sql`) were run on 8 Oct. |
 
 The REST endpoints were tested and not used:
 

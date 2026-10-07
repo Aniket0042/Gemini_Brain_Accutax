@@ -1,7 +1,6 @@
 # Branch names, joined from sales_lines and purchase_lines on branch_id.
 #
-# PENDING: needs SELECT on branches for cube_reader
-# (semantic/dba/cube_reader_grants_inventory_bank.sql). See semantic/model_pending/README.md.
+# Read grants: semantic/dba/cube_reader_grants_inventory_bank.sql.
 cubes:
   - name: branches
     description: Branches of an organization.

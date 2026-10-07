@@ -8,7 +8,7 @@ views:
       time_dimension: sales.document_date
       ai_context: >-
         Use when the user asks about invoiced sales, invoice counts, or sales per customer,
-        project or cost centre. For total revenue or profit use pnl.
+        project, cost centre or branch. For total revenue or profit use pnl.
     cubes:
       - join_path: sales_lines
         includes:
@@ -28,6 +28,9 @@ views:
           - standard_rated_sales
           - invoice_count
           - customer_count
+      - join_path: sales_lines.branches
+        includes:
+          - branch_name
       - join_path: sales_lines.organizations
         includes:
           - name: name

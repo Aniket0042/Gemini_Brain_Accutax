@@ -1,7 +1,6 @@
 # Stock on hand today, one row per inventory_quantities row (item, or item and warehouse).
 #
-# PENDING: needs SELECT on items, inventory_quantities and warehouses for cube_reader
-# (semantic/dba/cube_reader_grants_inventory_bank.sql). See semantic/model_pending/README.md.
+# Read grants: semantic/dba/cube_reader_grants_inventory_bank.sql.
 #
 # Rules match Accutax InventoryQuantityService: quantities come from inventory_quantities;
 # an item is low on stock when quantity_available is below its reorder level (reorder
