@@ -100,3 +100,21 @@ def test_step_labels():
     assert preview.step_label("query_metrics", {"view": "balance_sheet"}) == "Fetching figures: balance sheet…"
     assert preview.step_label("list_documents", {"type": "open_receivables"}) == "Listing documents: open receivables…"
     assert preview.step_label("search_vat_kb", {"question": "x"}) == "Searching UAE VAT law…"
+
+
+def test_answer_returns_cube_and_model_traces_for_the_trace_cards(monkeypatch):
+    from gemini_brain.observability.api_tracer import record_api_trace
+    from gemini_brain.observability.llm_tracer import record_llm_trace
+
+    def fake_run_agent(question, orgs, meta, *, history, subject, progress):
+        record_api_trace(endpoint="cube:pnl", method="POST", status_code=200, outcome="ok", row_count=10, source="cube")
+        record_llm_trace(model_id="in.anthropic.claude-sonnet-5", purpose="agent", input_tokens=100, output_tokens=20,
+                         duration_ms=900.0)
+        return loop.AgentResult(answer="AED 5,809,352.", status="ok")
+
+    monkeypatch.setattr(loop, "run_agent", fake_run_agent)
+    monkeypatch.setattr(preview.settings, "show_api_traces", True)
+    monkeypatch.setattr(preview.settings, "show_llm_traces", True)
+    out = preview.answer("Revenue?", [24], lambda: {}, session_id=None, user_id=501)
+    assert [t["endpoint"] for t in out["api_traces"]] == ["cube:pnl"]
+    assert out["llm_traces"][0]["purpose"] == "agent"

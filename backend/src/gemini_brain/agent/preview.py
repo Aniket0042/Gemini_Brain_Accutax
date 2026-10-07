@@ -96,7 +96,11 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
         meta = {}
 
     on_tool = (lambda name, params: progress(step_label(name, params))) if progress else None
-    result = run_agent(question, orgs, meta, history=history, subject=f"agent-preview:{user_id}", progress=on_tool)
+    rid, traces = _start_traces()
+    try:
+        result = run_agent(question, orgs, meta, history=history, subject=f"agent-preview:{user_id}", progress=on_tool)
+    finally:
+        traces = _collect_traces(rid)
     answer_text = result.answer or "I could not produce an answer for that request. Please try again."
     if session_id:
         _save_turn(session_id, user_id, orgs, question, answer_text, db_name)
@@ -117,9 +121,38 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
         },
         "policy": {"model": MODEL_KEY, "model_label": MODEL_LABEL, "auto": False},
         "verification": result.verification or None,
+        "api_traces": traces.get("api", []),
+        "llm_traces": traces.get("llm", []),
         "agent_trace": [{"step": "tool", **{k: v for k, v in call.items() if k in ("name", "input", "ok", "ms", "rows", "error")}}
                         for call in result.tool_calls],
     }
+
+
+def _start_traces() -> tuple:
+    """Collect this answer's Cube calls (API trace card) and model calls (LLM trace card), as the other paths do."""
+    import uuid
+    rid = str(uuid.uuid4())
+    try:
+        from gemini_brain.observability.api_tracer import start_api_trace
+        from gemini_brain.observability.llm_tracer import start_llm_trace
+        start_api_trace(trace_id=rid)
+        start_llm_trace(trace_id=rid)
+    except Exception as e:  # noqa: BLE001 - traces are diagnostics only
+        logger.debug("agent preview: traces not started: %s", e)
+    return rid, {}
+
+
+def _collect_traces(rid: str) -> Dict[str, List[Dict[str, Any]]]:
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    try:
+        from gemini_brain.observability.api_tracer import clear_api_trace, get_api_traces
+        from gemini_brain.observability.llm_tracer import clear_llm_trace, get_llm_traces
+        out = {"api": get_api_traces(trace_id=rid), "llm": get_llm_traces(trace_id=rid)}
+        clear_api_trace(trace_id=rid)
+        clear_llm_trace(trace_id=rid)
+    except Exception as e:  # noqa: BLE001
+        logger.debug("agent preview: traces not collected: %s", e)
+    return out
 
 
 def _save_turn(session_id: str, user_id: int, orgs: List[int], question: str, text: str, db_name: str) -> None:

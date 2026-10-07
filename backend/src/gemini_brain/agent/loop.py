@@ -12,6 +12,7 @@ results; the verifier checks the answer against them (report only for now).
 from __future__ import annotations
 
 import concurrent.futures
+import contextvars
 import logging
 import re
 import time
@@ -253,5 +254,6 @@ def _run_tools(uses: Sequence[Dict[str, Any]], ctx: tools.ToolContext) -> Dict[s
     if len(uses) <= 1:
         return {u["toolUseId"]: one(u) for u in uses}
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(uses), thread_name_prefix="agent-call") as pool:
-        futures = {u["toolUseId"]: pool.submit(one, u) for u in uses}
+        # Each call runs in a copy of this context, so the request's trace collectors see it.
+        futures = {u["toolUseId"]: pool.submit(contextvars.copy_context().run, one, u) for u in uses}
         return {uid: f.result() for uid, f in futures.items()}
