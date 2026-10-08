@@ -323,3 +323,11 @@ def test_the_law_route_passes_its_sources_block_on(monkeypatch, agent):
     monkeypatch.setattr(loop.law, "answer", lambda q, m: loop.law.LawAnswer(answer="Rule [1].", blocks=[block]))
     result = loop.run_agent("what is a deemed supply", [24], {})
     assert result.route == "law" and result.blocks == [block]
+
+
+def test_app_guide_and_figure_results_are_kept_for_links_and_files(agent):
+    FakeAdapter.script = [tool_use("app_guide", {"question": "how do I create an invoice"}, "g1"),
+                          tool_use("query_metrics", {"view": "pnl", "measures": ["pnl.revenue"]}, "q1"),
+                          final("Go to Sales > Create invoice.")]
+    result = loop.run_agent("How do I create an invoice?", ORGS, META)
+    assert [d["tool"] for d in result.data] == ["app_guide", "query_metrics"]

@@ -18,6 +18,7 @@ views:
           - transaction_date
           - source_type
           - journal_number
+          - journal_id
           - reference_number
           - journal_description
           - line_description

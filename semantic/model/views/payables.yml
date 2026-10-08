@@ -12,6 +12,7 @@ views:
         includes:
           - organization_id
           - document_number
+          - document_id
           - status
           - vendor_name
           - document_date

@@ -43,6 +43,10 @@ cubes:
         sql: line_id
         type: number
         primary_key: true
+      - name: journal_id
+        description: Accutax id of the journal entry (links to it in the app).
+        sql: journal_id
+        type: number
       - name: organization_id
         sql: organization_id
         type: number

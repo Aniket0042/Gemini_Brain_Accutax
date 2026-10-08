@@ -55,6 +55,10 @@ cubes:
         sql: line_id
         type: number
         primary_key: true
+      - name: document_id
+        description: Accutax id of the purchase document (links to it in the app).
+        sql: document_id
+        type: number
       - name: organization_id
         sql: organization_id
         type: number

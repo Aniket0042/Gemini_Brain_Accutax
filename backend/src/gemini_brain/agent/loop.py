@@ -59,7 +59,8 @@ class AgentResult:
     usage: Dict[str, Any] = field(default_factory=dict)
     elapsed_ms: int = 0
     route: str = "tools"                          # "tools" | "law"
-    #: Successful figure-tool results, in call order: {"tool": name, "result": result}. Used to build files.
+    #: Successful figure-tool and app_guide results, in call order: {"tool": name, "result": result}.
+    #: Used to build files and links into the app.
     data: List[Dict[str, Any]] = field(default_factory=list)
     #: Blocks shown with the answer; the law route's FTA sources (citation chips and source list).
     blocks: List[Dict[str, Any]] = field(default_factory=list)
@@ -220,7 +221,7 @@ def run_agent(
                               "rows": result.get("row_count"), **({"error": result.get("error")} if not ok else {})})
                 if ok:
                     ok_results.append(result)
-                    if use.get("name") in tools.DATA_TOOLS:
+                    if use.get("name") in tools.DATA_TOOLS or use.get("name") == "app_guide":
                         data.append({"tool": use.get("name"), "result": result})
                 results.append({"toolResult": {"toolUseId": use["toolUseId"], "content": [{"json": result}],
                                                "status": "success" if ok else "error"}})

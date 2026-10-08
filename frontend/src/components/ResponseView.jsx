@@ -81,6 +81,13 @@ const customMarkdownComponents = {
       <table {...props} />
     </div>
   ),
+  // Links in an answer (an invoice, bill or journal in Accutax) open in a new tab, like table links,
+  // so the chat stays open.
+  a: ({ node, href, children, ...props }) => (
+    /^https?:\/\//i.test(href || '')
+      ? <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>
+      : <a href={href} {...props}>{children}</a>
+  ),
 };
 
 /**

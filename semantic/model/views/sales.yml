@@ -16,6 +16,7 @@ views:
           - document_date
           - document_type
           - document_number
+          - document_id
           - document_weekday
           - status
           - customer_name

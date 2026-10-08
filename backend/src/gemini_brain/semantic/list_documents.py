@@ -27,16 +27,17 @@ MAX_LIMIT = 100
 
 #: type -> (view, columns returned for each document, amount measures, member the "amount" order uses)
 DOCUMENT_TYPES: Dict[str, tuple] = {
-    "sales_invoices": ("sales", ("document_number", "document_date", "document_weekday", "document_type",
+    "sales_invoices": ("sales", ("document_number", "document_id", "document_date", "document_weekday", "document_type",
                                  "status", "customer_name"), ("net_sales", "output_vat"), "net_sales"),
-    "bills": ("purchases", ("document_number", "document_date", "document_weekday", "document_type",
+    "bills": ("purchases", ("document_number", "document_id", "document_date", "document_weekday", "document_type",
                             "status", "vendor_name"), ("net_purchases", "input_vat"), "net_purchases"),
-    "open_receivables": ("receivables", ("document_number", "document_date", "due_date", "days_overdue",
+    "open_receivables": ("receivables", ("document_number", "document_id", "document_date", "due_date", "days_overdue",
                                          "aging_bucket", "status", "customer_name"), ("outstanding",), "outstanding"),
-    "open_payables": ("payables", ("document_number", "document_date", "due_date", "days_overdue",
+    "open_payables": ("payables", ("document_number", "document_id", "document_date", "due_date", "days_overdue",
                                    "aging_bucket", "status", "vendor_name"), ("outstanding",), "outstanding"),
-    "journal_lines": ("ledger", ("journal_number", "transaction_date", "source_type", "account_code", "account_name",
-                                 "journal_description", "line_description"), ("debit", "credit"), "debit"),
+    "journal_lines": ("ledger", ("journal_number", "journal_id", "transaction_date", "source_type", "account_code",
+                                 "account_name", "journal_description", "line_description"),
+                      ("debit", "credit"), "debit"),
 }
 ORDER_BY = ("amount", "date", "days_overdue")
 #: The date "order by date" uses, when it is not document_date.
