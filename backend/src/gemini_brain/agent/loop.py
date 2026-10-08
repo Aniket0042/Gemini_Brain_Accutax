@@ -61,6 +61,8 @@ class AgentResult:
     route: str = "tools"                          # "tools" | "law"
     #: Successful figure-tool results, in call order: {"tool": name, "result": result}. Used to build files.
     data: List[Dict[str, Any]] = field(default_factory=list)
+    #: Blocks shown with the answer; the law route's FTA sources (citation chips and source list).
+    blocks: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def _messages(history: Optional[Sequence[Dict[str, Any]]], question: str) -> List[Dict[str, Any]]:
@@ -181,7 +183,8 @@ def run_agent(
         law_answer = law.answer(question, [dict(m) for m in messages])
         if law_answer is not None:
             return AgentResult(answer=law_answer.answer, status="ok", usage=law_answer.usage, route="law",
-                               elapsed_ms=int((time.monotonic() - started) * 1000))
+                               elapsed_ms=int((time.monotonic() - started) * 1000),
+                               blocks=list(law_answer.blocks or []))
 
         today = periods.today_in(settings.report_timezone)
         system = system_prompt(org_meta, orgs, today, settings.report_timezone)

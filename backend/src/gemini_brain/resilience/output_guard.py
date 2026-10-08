@@ -87,11 +87,15 @@ _EMOJI_PATTERN = re.compile(
 
 def strip_emojis(text: Optional[str]) -> Optional[str]:
     """Remove emoji/pictograph characters from `text`, collapsing any resulting
-    double spaces left behind. Returns `text` unchanged when falsy."""
-    if not text:
+    double spaces left behind. Returns `text` unchanged when falsy or emoji-free.
+
+    Only spaces between words are collapsed: Markdown needs leading indentation
+    (nested list items) and two trailing spaces (a line break) kept as they are.
+    """
+    if not text or not _EMOJI_PATTERN.search(text):
         return text
     cleaned = _EMOJI_PATTERN.sub("", text)
-    return re.sub(r"[ \t]{2,}", " ", cleaned)
+    return re.sub(r"(?<=\S)[ \t]{2,}(?=\S)", " ", cleaned)
 
 
 #: Models sometimes continue CONVERSATION SO FAR as a script and append a fake

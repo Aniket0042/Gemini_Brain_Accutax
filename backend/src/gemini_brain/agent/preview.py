@@ -118,7 +118,8 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
     finally:
         traces = _collect_traces(rid)
     answer_text = result.answer or "I could not produce an answer for that request. Please try again."
-    blocks = _files(question, result, orgs, meta, user_id=user_id, session_id=session_id, answer_text=answer_text)
+    blocks = list(getattr(result, "blocks", None) or [])
+    blocks += _files(question, result, orgs, meta, user_id=user_id, session_id=session_id, answer_text=answer_text)
     if session_id:
         _save_turn(session_id, user_id, orgs, question, answer_text, db_name, blocks)
 

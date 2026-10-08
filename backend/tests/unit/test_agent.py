@@ -316,3 +316,10 @@ def test_progress_is_told_about_each_tool_before_it_runs(agent):
     seen = []
     loop.run_agent("Revenue?", ORGS, META, progress=lambda name, params: seen.append((name, params, len(agent))))
     assert seen == [("query_metrics", {"view": "pnl"}, 0)]
+
+
+def test_the_law_route_passes_its_sources_block_on(monkeypatch, agent):
+    block = {"type": "fta_sources", "sources": [{"n": 1}]}
+    monkeypatch.setattr(loop.law, "answer", lambda q, m: loop.law.LawAnswer(answer="Rule [1].", blocks=[block]))
+    result = loop.run_agent("what is a deemed supply", [24], {})
+    assert result.route == "law" and result.blocks == [block]

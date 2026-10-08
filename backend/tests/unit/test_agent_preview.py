@@ -200,3 +200,12 @@ def test_primary_answers_are_labelled_accutax_ai(_primary, monkeypatch):
 def test_other_modes_keep_the_picker():
     catalog = routes.list_model_catalog(current_user=OTHER)
     assert not catalog.picker_hidden and preview.MODEL_KEY not in [m.key for m in catalog.models]
+
+
+def test_law_answers_keep_their_fta_sources_for_the_citation_chips(monkeypatch):
+    sources = {"type": "fta_sources", "sources": [{"n": 1, "title": "VAT Public Clarification", "url": "https://x"}]}
+    monkeypatch.setattr(loop, "run_agent", lambda *a, **k: loop.AgentResult(
+        answer="Use the open market value [1].", status="ok", route="law", blocks=[sources]))
+    out = preview.answer("how do I value the deemed supply of services", [24], lambda: {}, session_id=None,
+                         user_id=501)
+    assert out["blocks"] == [sources] and out["routing_info"]["path"] == "agent_law"
