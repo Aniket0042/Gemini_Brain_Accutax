@@ -6,6 +6,7 @@ import { AnswerProvenance } from './AnswerProvenance';
 import { BlockRenderer, hasPortedBlocks, chatFacingBlocks } from './blocks/BlockRenderer';
 import { citationSources, linkCitations, citationLinkRenderer } from './citations';
 import { MarkdownLink } from './markdownLinks';
+import { SortableMarkdownTable } from './SortableMarkdownTable';
 import { ReportActions } from './blocks/ReportActions';
 import { CodeChrome } from './blocks/CodeBlock';
 import { SqlTraceCard } from './SqlTraceCard';
@@ -77,11 +78,8 @@ function useCopied() {
  * Custom components for ReactMarkdown to ensure wide tables and elements are cleanly scrollable.
  */
 const customMarkdownComponents = {
-  table: ({ node, ...props }) => (
-    <div className="markdown-table-wrapper">
-      <table {...props} />
-    </div>
-  ),
+  // Sortable, with a pinned header, like the structured table block.
+  table: SortableMarkdownTable,
   // Links in an answer (an invoice, bill or journal in Accutax) open in a new tab, like table links.
   a: MarkdownLink,
 };

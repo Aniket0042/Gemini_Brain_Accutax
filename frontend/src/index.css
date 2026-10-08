@@ -566,6 +566,30 @@ h1, h2, h3, h4, h5 {
   min-width: 0;
 }
 
+/* Answer tables (SortableMarkdownTable): a long table scrolls in its own box under a pinned header. */
+.sortable-table {
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid var(--border-soft);
+}
+.sortable-table table {
+  margin-bottom: 0;
+}
+.sortable-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.sortable-table th.sortable-th {
+  cursor: pointer;
+  user-select: none;
+}
+.sortable-th-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .data-table-container {
   min-width: 0;
   width: 100%;
