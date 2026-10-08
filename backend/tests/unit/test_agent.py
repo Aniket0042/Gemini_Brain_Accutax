@@ -16,7 +16,7 @@ META = {24: {"name": "Org One", "currency": "AED"}, 25: {"name": "Org Two", "cur
 @pytest.fixture(autouse=True)
 def _no_presidio(monkeypatch):
     monkeypatch.setattr(loop, "redact_pii", lambda text: (text, {}))
-    monkeypatch.setattr(loop.law, "answer", lambda question, messages: None)
+    monkeypatch.setattr(loop.law, "answer", lambda question, messages, brief=False: None)
     monkeypatch.setitem(loop._cache, "on", True)
 
 
@@ -248,7 +248,7 @@ def test_shadow_skips_a_question_when_every_slot_is_busy(monkeypatch):
 # ── Law route, answer model, parallel calls, caching ─────────────────────────
 
 def test_law_questions_take_the_knowledge_base_answer(monkeypatch, agent):
-    monkeypatch.setattr(loop.law, "answer", lambda question, messages: loop.law.LawAnswer(
+    monkeypatch.setattr(loop.law, "answer", lambda question, messages, brief=False: loop.law.LawAnswer(
         answer="Correct it in the next return [1].", usage={"llm_calls": 1, "cost_usd": 0.01}))
     FakeAdapter.script = [final("must not be called")]
     result = loop.run_agent("Voluntary disclosure or next return for AED 8,000?", ORGS, META)
@@ -320,7 +320,7 @@ def test_progress_is_told_about_each_tool_before_it_runs(agent):
 
 def test_the_law_route_passes_its_sources_block_on(monkeypatch, agent):
     block = {"type": "fta_sources", "sources": [{"n": 1}]}
-    monkeypatch.setattr(loop.law, "answer", lambda q, m: loop.law.LawAnswer(answer="Rule [1].", blocks=[block]))
+    monkeypatch.setattr(loop.law, "answer", lambda q, m, brief=False: loop.law.LawAnswer(answer="Rule [1].", blocks=[block]))
     result = loop.run_agent("what is a deemed supply", [24], {})
     assert result.route == "law" and result.blocks == [block]
 
@@ -331,3 +331,20 @@ def test_app_guide_and_figure_results_are_kept_for_links_and_files(agent):
                           final("Go to Sales > Create invoice.")]
     result = loop.run_agent("How do I create an invoice?", ORGS, META)
     assert [d["tool"] for d in result.data] == ["app_guide", "query_metrics"]
+
+
+
+def test_law_answers_are_checked_against_the_cited_passages(monkeypatch, agent):
+    block = {"type": "fta_sources", "sources": [{"n": 1}], "evidence_numbers": ["5", "375000"]}
+    monkeypatch.setattr(loop.law, "answer", lambda q, m, brief=False: loop.law.LawAnswer(
+        answer="Register when supplies exceed AED 375,000 [1].", blocks=[block]))
+    result = loop.run_agent("When must I register for VAT?", [24], {})
+    assert result.verification.get("grounded") is True
+
+
+def test_brief_mode_reaches_the_prompt_and_the_law_route(monkeypatch, agent):
+    seen = {}
+    monkeypatch.setattr(loop.law, "answer", lambda q, m, brief=False: seen.update(brief=brief) or None)
+    FakeAdapter.script = [final("AED 5,809,352.")]
+    loop.run_agent("Revenue this year?", ORGS, META, brief=True)
+    assert seen["brief"] is True and "Brief mode" in FakeAdapter.log[0]["system"][0]["text"]

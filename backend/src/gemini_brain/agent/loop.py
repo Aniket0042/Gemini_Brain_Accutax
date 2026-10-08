@@ -163,6 +163,7 @@ def run_agent(
     max_tool_calls: Optional[int] = None,
     deadline_seconds: Optional[float] = None,
     progress: Optional[Callable[[str, Any], None]] = None,
+    brief: bool = False,
 ) -> AgentResult:
     """Answer one question. Never raises. `progress(tool_name, tool_input)` is called before each tool runs."""
     started = time.monotonic()
@@ -181,14 +182,15 @@ def run_agent(
 
     try:
         messages = _messages(history, redact_pii(question)[0])
-        law_answer = law.answer(question, [dict(m) for m in messages])
+        law_answer = law.answer(question, [dict(m) for m in messages], brief=brief)
         if law_answer is not None:
             return AgentResult(answer=law_answer.answer, status="ok", usage=law_answer.usage, route="law",
                                elapsed_ms=int((time.monotonic() - started) * 1000),
-                               blocks=list(law_answer.blocks or []))
+                               blocks=list(law_answer.blocks or []),
+                               verification=_law_verification(law_answer))
 
         today = periods.today_in(settings.report_timezone)
-        system = system_prompt(org_meta, orgs, today, settings.report_timezone)
+        system = system_prompt(org_meta, orgs, today, settings.report_timezone, brief=brief)
         specs = tools.specs(ctx)
         used, asked_shorter, adapter = 0, False, planner
         while True:
@@ -243,6 +245,20 @@ def run_agent(
         elapsed_ms=int((time.monotonic() - started) * 1000),
         data=data,
     )
+
+
+def _law_verification(law_answer: Any) -> Dict[str, Any]:
+    """Check the figures in a law answer (rates, thresholds, penalties) against the cited FTA passages,
+    as the current path does. Report only."""
+    numbers = [n for b in law_answer.blocks or [] if isinstance(b, dict) and b.get("type") == "fta_sources"
+               for n in b.get("evidence_numbers") or []]
+    if not law_answer.answer:
+        return {}
+    try:
+        return verify_answer(law_answer.answer, [numbers], enforce=False).to_public()
+    except Exception as e:  # noqa: BLE001 - verification is a report; the answer still goes out
+        logger.warning("agent: law answer not verified: %s", e)
+        return {}
 
 
 def _notify(progress: Optional[Callable[[str, Any], None]], use: Dict[str, Any]) -> None:

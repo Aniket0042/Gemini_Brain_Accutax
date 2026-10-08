@@ -312,7 +312,7 @@ def _preview_events(payload: QueryRequest, current_user: CurrentUser, orgs: list
             box["result"] = agent_preview.answer(
                 payload.query, orgs, _agent_org_meta(orgs, current_user),
                 session_id=payload.session_id, user_id=current_user.user_id, db_name=payload.db_name,
-                progress=events.put,
+                progress=events.put, brief=bool(payload.brief),
             )
         except Exception as e:  # noqa: BLE001 - answer() never raises; this is belt and braces
             logger.warning("agent preview failed: %s", e, exc_info=True)
@@ -692,6 +692,7 @@ async def run_query(
         result = await asyncio.to_thread(
             agent_preview.answer, payload.query, preview_orgs, _agent_org_meta(preview_orgs, current_user),
             session_id=payload.session_id, user_id=current_user.user_id, db_name=payload.db_name,
+            brief=bool(payload.brief),
         )
         return QueryResponse(**normalize_envelope(result))
     if agent_preview.requested(payload.model):

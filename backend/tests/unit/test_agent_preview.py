@@ -41,7 +41,7 @@ def test_preview_scope():
 
 
 def _fake_answer(calls):
-    def answer(question, orgs, org_meta, *, session_id, user_id, db_name="", progress=None):
+    def answer(question, orgs, org_meta, *, session_id, user_id, db_name="", progress=None, brief=False):
         calls.append({"question": question, "orgs": orgs, "session_id": session_id, "user_id": user_id})
         if progress:
             progress("Fetching figures: pnl…")
@@ -82,7 +82,7 @@ def test_answer_saves_the_turn_and_reports_the_route(monkeypatch):
     monkeypatch.setattr(memory, "save_message_by_session", lambda sid, role, text, db_name="": saved.append((role, text)))
     seen = {}
 
-    def fake_run_agent(question, orgs, meta, *, history, subject, progress):
+    def fake_run_agent(question, orgs, meta, *, history, subject, progress, brief=False):
         seen.update(history=history, subject=subject)
         return loop.AgentResult(answer="Correct it in the next return [1].", status="ok", route="law", usage={"llm_calls": 1})
 
@@ -106,7 +106,7 @@ def test_answer_returns_cube_and_model_traces_for_the_trace_cards(monkeypatch):
     from gemini_brain.observability.api_tracer import record_api_trace
     from gemini_brain.observability.llm_tracer import record_llm_trace
 
-    def fake_run_agent(question, orgs, meta, *, history, subject, progress):
+    def fake_run_agent(question, orgs, meta, *, history, subject, progress, brief=False):
         record_api_trace(endpoint="cube:pnl", method="POST", status_code=200, outcome="ok", row_count=10, source="cube")
         record_llm_trace(model_id="in.anthropic.claude-sonnet-5", purpose="agent", input_tokens=100, output_tokens=20,
                          duration_ms=900.0)
@@ -209,3 +209,64 @@ def test_law_answers_keep_their_fta_sources_for_the_citation_chips(monkeypatch):
     out = preview.answer("how do I value the deemed supply of services", [24], lambda: {}, session_id=None,
                          user_id=501)
     assert out["blocks"] == [sources] and out["routing_info"]["path"] == "agent_law"
+
+
+
+def test_brief_reaches_the_agent(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(loop, "run_agent", lambda *a, **k: seen.update(k) or loop.AgentResult(answer="AED 10.", status="ok"))
+    preview.answer("Revenue?", [24], lambda: {}, session_id=None, user_id=1, brief=True)
+    assert seen["brief"] is True
+
+
+def test_the_stream_route_passes_brief(monkeypatch):
+    seen = {}
+
+    def fake(question, orgs, org_meta, **kw):
+        seen.update(kw)
+        return {"answer": "x", "status": "ok"}
+    monkeypatch.setattr(routes.agent_preview, "answer", fake)
+    monkeypatch.setattr(routes, "_agent_org_meta", lambda orgs, user: lambda: {})
+    payload = QueryRequest(query="Revenue?", model=preview.MODEL_KEY, organization_id=24, brief=True)
+    list(routes._preview_events(payload, TESTER, [24]))
+    assert seen["brief"] is True
+
+
+def test_multi_org_answers_carry_org_chips(monkeypatch):
+    monkeypatch.setattr(loop, "run_agent", lambda *a, **k: loop.AgentResult(answer="AED 10.", status="ok"))
+    out = preview.answer("Revenue?", [24, 25], lambda: {24: {"name": "A", "currency": "AED"}}, session_id=None, user_id=1)
+    assert out["organizations"] == [{"id": 24, "name": "A", "currency": "AED", "status": "ok"},
+                                    {"id": 25, "name": "Organization 25", "currency": "", "status": "ok"}]
+    single = preview.answer("Revenue?", [24], lambda: {}, session_id=None, user_id=1)
+    assert single["organizations"] == []
+
+
+@pytest.mark.parametrize("status, calls, expected_status, code", [
+    ("deadline", [], "degraded", "UPSTREAM_TIMEOUT"),
+    ("error", [], "failed", "MODEL_UNAVAILABLE"),
+    ("ok", [{"name": "query_metrics", "ok": False,
+             "error": "Figures are temporarily unavailable. Tell the user so; never estimate figures."}],
+     "partial", "UPSTREAM_UNAVAILABLE"),
+    ("ok", [], "ok", None),
+])
+def test_notice_cards_match_the_outcome(monkeypatch, status, calls, expected_status, code):
+    monkeypatch.setattr(loop, "run_agent", lambda *a, **k: loop.AgentResult(answer="x", status=status, tool_calls=calls))
+    out = preview.answer("Revenue?", [24, 25], lambda: {}, session_id=None, user_id=1)
+    assert out["status"] == expected_status
+    assert (out["notice"] or {}).get("code") == code
+    if code == "UPSTREAM_UNAVAILABLE":
+        assert all(o["status"] == "failed" for o in out["organizations"])
+
+
+def test_the_context_window_meter_counts_agent_tokens(monkeypatch):
+    import gemini_brain.memory.context_window as cw
+    import gemini_brain.memory.session_memory as memory
+    seen = []
+    monkeypatch.setattr(cw, "track_context_window_usage",
+                        lambda sid, i, o, db_name="": seen.append((sid, i, o)) or {"used": i + o})
+    for name in ("get_history_by_session", "ensure_session", "save_message_by_session"):
+        monkeypatch.setattr(memory, name, lambda *a, **k: [] if name == "get_history_by_session" else True)
+    monkeypatch.setattr(loop, "run_agent", lambda *a, **k: loop.AgentResult(
+        answer="x", status="ok", usage={"input_tokens": 1200, "output_tokens": 300}))
+    out = preview.answer("Revenue?", [24], lambda: {}, session_id="5f0c8a43-1111-4222-8333-944455556666", user_id=1)
+    assert seen == [("5f0c8a43-1111-4222-8333-944455556666", 1200, 300)] and out["context_window"] == {"used": 1500}

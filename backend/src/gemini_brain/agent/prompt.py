@@ -74,8 +74,15 @@ Answer format
 """
 
 
+BRIEF = """
+Brief mode (the user turned on Brief answers)
+- At most 60 words outside tables: the direct answer and the figures that support it. Tables at most 8 rows.
+  No notes unless a figure would be misleading without one.
+"""
+
+
 def system_prompt(org_meta: Dict[int, Dict[str, Any]], organization_ids: Sequence[int],
-                  today: dt.date, timezone: str) -> str:
+                  today: dt.date, timezone: str, brief: bool = False) -> str:
     orgs = "\n".join(
         f"- id {o}: {(org_meta.get(o) or {}).get('name') or f'Organization {o}'}"
         f" ({(org_meta.get(o) or {}).get('currency') or 'currency unknown'})"
@@ -86,4 +93,5 @@ def system_prompt(org_meta: Dict[int, Dict[str, Any]], organization_ids: Sequenc
         f"Today is {today:%A %d %B %Y} ({timezone}).\n\n"
         f"Organizations selected in this chat ({len(organization_ids)}):\n{orgs}\n\n"
         + RULES
+        + (BRIEF if brief else "")
     )

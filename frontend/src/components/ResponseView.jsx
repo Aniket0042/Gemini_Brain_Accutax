@@ -5,6 +5,7 @@ import { NoticeCard } from './NoticeCard';
 import { AnswerProvenance } from './AnswerProvenance';
 import { BlockRenderer, hasPortedBlocks, chatFacingBlocks } from './blocks/BlockRenderer';
 import { citationSources, linkCitations, citationLinkRenderer } from './citations';
+import { MarkdownLink } from './markdownLinks';
 import { ReportActions } from './blocks/ReportActions';
 import { CodeChrome } from './blocks/CodeBlock';
 import { SqlTraceCard } from './SqlTraceCard';
@@ -81,13 +82,8 @@ const customMarkdownComponents = {
       <table {...props} />
     </div>
   ),
-  // Links in an answer (an invoice, bill or journal in Accutax) open in a new tab, like table links,
-  // so the chat stays open.
-  a: ({ node, href, children, ...props }) => (
-    /^https?:\/\//i.test(href || '')
-      ? <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>
-      : <a href={href} {...props}>{children}</a>
-  ),
+  // Links in an answer (an invoice, bill or journal in Accutax) open in a new tab, like table links.
+  a: MarkdownLink,
 };
 
 /**

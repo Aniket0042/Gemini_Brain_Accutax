@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { linkComponents } from '../markdownLinks';
 
 export function MdPreview({ artifact, token }) {
   const [text, setText] = useState('');
@@ -40,7 +41,7 @@ export function MdPreview({ artifact, token }) {
   if (status) return <p className="answer-canvas-empty">{status}</p>;
   return (
     <div className="markdown-body">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={linkComponents}>{text}</ReactMarkdown>
     </div>
   );
 }

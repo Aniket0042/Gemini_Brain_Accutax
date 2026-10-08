@@ -93,7 +93,7 @@ def step_label(name: str, params: Any) -> str:
 
 def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[], Dict[int, Dict[str, Any]]], *,
            session_id: Optional[str], user_id: int, db_name: str = "",
-           progress: Optional[Callable[[str], None]] = None) -> Dict[str, Any]:
+           progress: Optional[Callable[[str], None]] = None, brief: bool = False) -> Dict[str, Any]:
     """Answer with the agent and save the turn. Returns a QueryResponse-shaped dict. Never raises."""
     from gemini_brain.agent.loop import run_agent
 
@@ -115,7 +115,8 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
     on_tool = (lambda name, params: progress(step_label(name, params))) if progress else None
     rid, traces = _start_traces()
     try:
-        result = run_agent(question, orgs, meta, history=history, subject=f"agent-preview:{user_id}", progress=on_tool)
+        result = run_agent(question, orgs, meta, history=history, subject=f"agent-preview:{user_id}", progress=on_tool,
+                           brief=brief)
     finally:
         traces = _collect_traces(rid)
     data = getattr(result, "data", None) or []
@@ -128,10 +129,13 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
 
     usage = dict(result.usage or {})
     usage["elapsed_seconds"] = round(time.monotonic() - started, 2)
-    status = {"ok": "ok", "deadline": "degraded"}.get(result.status, "failed")
+    status, notice = _status_and_notice(result)
     return {
         "answer": answer_text,
         "status": status,
+        "notice": notice,
+        "organizations": _org_chips(orgs, meta, figures_failed=bool(notice and notice["code"] == UNAVAILABLE)),
+        "context_window": _context_window(session_id, usage, db_name),
         "token_usage": usage,
         "routing_info": {
             "type": 6 if result.route == "law" else 1,
@@ -148,6 +152,45 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
         "agent_trace": [{"step": "tool", **{k: v for k, v in call.items() if k in ("name", "input", "ok", "ms", "rows", "error")}}
                         for call in result.tool_calls],
     }
+
+
+UNAVAILABLE = "UPSTREAM_UNAVAILABLE"
+
+
+def _status_and_notice(result: Any) -> tuple:
+    """The response status and the notice card for it, as the current path shows them:
+    a timeout, a failed answer, or figures Cube could not return."""
+    from gemini_brain.agent.tools import FIGURES_UNAVAILABLE
+    from gemini_brain.resilience.envelope import build_notice
+    if result.status == "deadline":
+        return "degraded", build_notice("UPSTREAM_TIMEOUT", subject="your figures")
+    if result.status != "ok":
+        return "failed", build_notice("MODEL_UNAVAILABLE", subject="your answer")
+    if any(call.get("error") == FIGURES_UNAVAILABLE for call in result.tool_calls):
+        return "partial", build_notice(UNAVAILABLE, subject="your figures")
+    return "ok", None
+
+
+def _org_chips(orgs: List[int], meta: Dict[int, Dict[str, Any]], *, figures_failed: bool) -> List[Dict[str, Any]]:
+    """The organizations a multi-organization answer covers, for the chips above it."""
+    if len(orgs) < 2:
+        return []
+    return [{"id": o, "name": (meta.get(o) or {}).get("name") or f"Organization {o}",
+             "currency": (meta.get(o) or {}).get("currency") or "", "status": "failed" if figures_failed else "ok"}
+            for o in orgs]
+
+
+def _context_window(session_id: Optional[str], usage: Dict[str, Any], db_name: str) -> Optional[Dict[str, Any]]:
+    """Add this answer's tokens to the chat's context-window meter, as the current path does."""
+    if not session_id:
+        return None
+    try:
+        from gemini_brain.memory.context_window import track_context_window_usage
+        return track_context_window_usage(session_id, int(usage.get("input_tokens") or 0),
+                                          int(usage.get("output_tokens") or 0), db_name=db_name)
+    except Exception as e:  # noqa: BLE001 - the meter is a convenience
+        logger.warning("agent preview: context-window meter not updated: %s", e)
+        return None
 
 
 def _start_traces() -> tuple:

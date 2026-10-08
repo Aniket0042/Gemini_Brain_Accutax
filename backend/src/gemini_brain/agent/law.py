@@ -40,7 +40,13 @@ def about_the_organizations(question: str) -> bool:
     return bool(_ABOUT_THE_ORGS.search(question or ""))
 
 
-def answer(question: str, messages: List[Dict[str, Any]]) -> Optional[LawAnswer]:
+#: Added to the law prompt when the user turned on Brief answers.
+BRIEF_LAW = ("\n\nBRIEF MODE: the user asked for a brief answer. Give the rule in at most 80 words: the direct "
+             "answer and the key condition or figure, with citations. No step lists unless the question asks "
+             "for steps.")
+
+
+def answer(question: str, messages: List[Dict[str, Any]], brief: bool = False) -> Optional[LawAnswer]:
     """The knowledge-base answer, or None when this is not a law question the knowledge base
     answers confidently (the tool loop then handles it). Never raises."""
     if about_the_organizations(question):
@@ -54,8 +60,9 @@ def answer(question: str, messages: List[Dict[str, Any]]) -> Optional[LawAnswer]
         vat = augment(question, KNOWLEDGE_TYPE, DIRECT_ANSWER_SYSTEM_PROMPT)
         if not vat.model_id:
             return None
+        system = vat.system + BRIEF_LAW if brief and isinstance(vat.system, str) else vat.system
         adapter = BedrockAdapter(vat.model_id, label="agent-law")
-        text = adapter.converse(vat.system, messages, max_tokens=vat.max_tokens, purpose="agent_law")
+        text = adapter.converse(system, messages, max_tokens=vat.max_tokens, purpose="agent_law")
         return LawAnswer(answer=tidy_answer(text or ""), usage=adapter.get_token_usage(), blocks=vat.blocks)
     except Exception as e:  # noqa: BLE001 - the tool loop still answers
         logger.warning("agent law route failed, using the tool loop: %s", e)

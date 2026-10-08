@@ -1,5 +1,6 @@
 import React from 'react';
 import { ExternalLink } from 'lucide-react';
+import { MarkdownLink } from './markdownLinks';
 
 /**
  * Inline citations for answers backed by the UAE VAT knowledge base.
@@ -116,6 +117,6 @@ export function citationLinkRenderer(sources) {
       if (source) return <CitationChip source={source} />;
       return <>{children}</>;
     }
-    return <a href={href} {...props}>{children}</a>;
+    return <MarkdownLink href={href} {...props}>{children}</MarkdownLink>;
   };
 }
