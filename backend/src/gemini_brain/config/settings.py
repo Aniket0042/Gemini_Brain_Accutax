@@ -369,6 +369,15 @@ class GeminiBrainSettings(BaseSettings):
     )
     agent_max_tool_calls: int = Field(default=6, ge=1, le=12)
     agent_deadline_seconds: float = Field(default=45.0, ge=5.0, le=120.0)
+    agent_answer_log: str = Field(
+        default="",
+        description=(
+            "JSON-lines file with one line per agent answer (primary mode and preview), relative to backend/, "
+            "for example logs/agent_answers.jsonl: masked question, user and organization ids, route, tool calls, "
+            "figure check, time, tokens, cost, status and answer. Rotates at 50 MB, keeping 5 files. "
+            "Empty (the default) turns it off."
+        ),
+    )
     agent_shadow_log: str = Field(
         default="logs/agent_shadow.jsonl",
         description=(

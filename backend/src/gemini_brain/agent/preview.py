@@ -19,7 +19,7 @@ import logging
 import time
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
-from gemini_brain.agent import links, tiles
+from gemini_brain.agent import answer_log, links, tiles
 from gemini_brain.config.settings import settings
 
 logger = logging.getLogger("gemini_brain.agent.preview")
@@ -113,10 +113,11 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
         meta = {}
 
     on_tool = (lambda name, params: progress(step_label(name, params))) if progress else None
+    attached = attachment(question)
     rid, traces = _start_traces()
     try:
         result = run_agent(question, orgs, meta, history=history, subject=f"agent-preview:{user_id}", progress=on_tool,
-                           brief=brief, attachment=attachment(question))
+                           brief=brief, attachment=attached)
     finally:
         traces = _collect_traces(rid)
     data = getattr(result, "data", None) or []
@@ -130,7 +131,7 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
     usage = dict(result.usage or {})
     usage["elapsed_seconds"] = round(time.monotonic() - started, 2)
     status, notice = _status_and_notice(result)
-    return {
+    response = {
         "answer": answer_text,
         "status": status,
         "notice": notice,
@@ -152,6 +153,9 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
         "agent_trace": [{"step": "tool", **{k: v for k, v in call.items() if k in ("name", "input", "ok", "ms", "rows", "error")}}
                         for call in result.tool_calls],
     }
+    answer_log.record(question, orgs, user_id=user_id, session_id=session_id, brief=brief, attachment=attached,
+                      result=result, response=response)
+    return response
 
 
 UNAVAILABLE = "UPSTREAM_UNAVAILABLE"
