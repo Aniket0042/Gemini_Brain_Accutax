@@ -54,8 +54,8 @@ function mapWidgetConversation(turns = []) {
   });
 }
 
-function mapApiTranscript(messages = []) {
-  return messages.map((msg) => {
+function mapApiTranscript(messages = [], contextWindow = null) {
+  const mapped = messages.map((msg) => {
     if (msg.role === 'user') {
       return { role: 'user', content: msg.content, timestamp: msg.created_at ? Date.parse(msg.created_at) : Date.now() };
     }
@@ -73,6 +73,12 @@ function mapApiTranscript(messages = []) {
       timestamp: msg.created_at ? Date.parse(msg.created_at) : Date.now(),
     };
   });
+  // The meter reads the latest assistant turn's context_window: give a reopened thread its saved total.
+  if (contextWindow) {
+    const last = mapped.map((m) => m.role).lastIndexOf('assistant');
+    if (last >= 0) mapped[last].responseData.context_window = contextWindow;
+  }
+  return mapped;
 }
 
 const DELETED_SESSIONS_KEY = 'accutax_deleted_sessions';
@@ -636,7 +642,7 @@ export default function App() {
         if (cancelled) return;
         const data = await fetchSessionMessages(widgetSessionId, currentUser.access_token);
         if (cancelled) return;
-        const mapped = mapApiTranscript(data.messages || []);
+        const mapped = mapApiTranscript(data.messages || [], data.context_window);
         if (mapped.length === 0) return;
         const inHistory = chatHistoryRef.current.some(
           (e) => e.sessionId && e.sessionId === widgetSessionId,

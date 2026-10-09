@@ -267,6 +267,23 @@ def test_the_context_window_meter_counts_agent_tokens(monkeypatch):
     for name in ("get_history_by_session", "ensure_session", "save_message_by_session"):
         monkeypatch.setattr(memory, name, lambda *a, **k: [] if name == "get_history_by_session" else True)
     monkeypatch.setattr(loop, "run_agent", lambda *a, **k: loop.AgentResult(
-        answer="x", status="ok", usage={"input_tokens": 1200, "output_tokens": 300}))
+        answer="x", status="ok",
+        usage={"input_tokens": 1200, "cache_read_tokens": 9000, "cache_write_tokens": 500, "output_tokens": 300}))
     out = preview.answer("Revenue?", [24], lambda: {}, session_id="5f0c8a43-1111-4222-8333-944455556666", user_id=1)
-    assert seen == [("5f0c8a43-1111-4222-8333-944455556666", 1200, 300)] and out["context_window"] == {"used": 1500}
+    # Cached prompt tokens count: the model read them all.
+    assert seen == [("5f0c8a43-1111-4222-8333-944455556666", 10700, 300)] and out["context_window"] == {"used": 11000}
+
+
+
+def test_a_reopened_thread_gets_its_meter(monkeypatch):
+    import gemini_brain.memory.context_window as cw
+    import gemini_brain.memory.session_memory as memory
+    sid = "5f0c8a43-1111-4222-8333-944455556666"
+    monkeypatch.setattr(memory, "get_session_record", lambda s: {"id": s, "organization_id": 24})
+    monkeypatch.setattr(memory, "verify_session_ownership", lambda s, u: True)
+    monkeypatch.setattr(memory, "session_scope", lambda rec: [24])
+    monkeypatch.setattr(memory, "get_transcript_by_session", lambda s, limit=50: [])
+    monkeypatch.setattr(routes, "authorize_org_scope", lambda *a, **k: None)
+    monkeypatch.setattr(cw, "get_context_window_usage", lambda s, db_name="": {"used": 11000, "limit": 200000})
+    out = routes.get_chat_session_messages(sid, current_user=TESTER)
+    assert out.context_window == {"used": 11000, "limit": 200000}

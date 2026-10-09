@@ -420,6 +420,8 @@ class ChatMessageSchema(BaseModel):
 class ChatMessageListResponse(BaseModel):
     session_id: str
     messages: List[ChatMessageSchema] = Field(default_factory=list)
+    #: The thread's context-window meter, so a reopened thread shows its usage before the next answer.
+    context_window: Optional[Dict[str, Any]] = None
 
 
 

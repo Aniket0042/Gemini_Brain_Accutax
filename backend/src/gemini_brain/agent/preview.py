@@ -190,8 +190,9 @@ def _context_window(session_id: Optional[str], usage: Dict[str, Any], db_name: s
         return None
     try:
         from gemini_brain.memory.context_window import track_context_window_usage
-        return track_context_window_usage(session_id, int(usage.get("input_tokens") or 0),
-                                          int(usage.get("output_tokens") or 0), db_name=db_name)
+        # Cached prompt tokens are still context the model read: count them with the uncached ones.
+        read = sum(int(usage.get(k) or 0) for k in ("input_tokens", "cache_read_tokens", "cache_write_tokens"))
+        return track_context_window_usage(session_id, read, int(usage.get("output_tokens") or 0), db_name=db_name)
     except Exception as e:  # noqa: BLE001 - the meter is a convenience
         logger.warning("agent preview: context-window meter not updated: %s", e)
         return None

@@ -505,10 +505,13 @@ def get_chat_session_messages(
     if not verify_session_ownership(session_id, current_user.user_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Session does not belong to this user.")
     authorize_org_scope(session_scope(rec), current_user, action="sessions.read")
+    from gemini_brain.memory.context_window import get_context_window_usage
+
     messages = get_transcript_by_session(session_id, limit=min(max(limit, 1), 200))
     return ChatMessageListResponse(
         session_id=session_id,
         messages=[ChatMessageSchema(**m) for m in messages],
+        context_window=get_context_window_usage(session_id),
     )
 
 
