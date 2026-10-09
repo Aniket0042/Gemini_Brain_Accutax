@@ -1,0 +1,206 @@
+# Payments received from customers and made to suppliers, and the invoices and bills they settled.
+#
+# PENDING: needs SELECT on customer_payment, customer_payment_items, supplier_payments and
+# supplier_payment_items for cube_reader (semantic/dba/cube_reader_grants_payments.sql).
+# See semantic/model_pending/README.md.
+#
+# Rules follow the Accutax entities (CustomerPaymentEntity, SupplierPaymentEntity): cancelled
+# payments are left out; a customer payment's refunded part is taken off what was received.
+# Supplier payment dates are text; values that are not dates get no date and drop out of
+# period queries. Row keys are even for customer rows and odd for supplier rows, so the two
+# sides never share a key. Every join also matches on organization.
+#
+# No curly braces in SQL literals: Cube's YAML reads {...} as a member reference.
+cubes:
+  - name: payment_lines
+    description: One row per payment received from a customer or made to a supplier.
+    public: false
+    sql: >
+      SELECT cp.id * 2                                    AS row_key,
+             cp.organization_id                           AS organization_id,
+             'Received from customer'                     AS direction,
+             cp.payment_number                            AS payment_number,
+             cp.date                                      AS payment_date,
+             COALESCE(NULLIF(c.name, ''), NULLIF(c.organization_name, ''), 'Unknown') AS counterparty_name,
+             CAST(cp.payment_type AS TEXT)                AS payment_type,
+             cp.reference                                 AS reference,
+             cp.amount - COALESCE(cp.amount_refunded, 0)  AS received,
+             0                                            AS paid
+      FROM   public.customer_payment cp
+      LEFT   JOIN public.contacts c ON c.id = cp.customer_id AND c.organization_id = cp.organization_id
+      WHERE  cp.organization_id IS NOT NULL
+        AND  CAST(cp.status AS TEXT) <> 'CANCELLED'
+      UNION ALL
+      SELECT sp.id * 2 + 1,
+             sp.organization_id,
+             'Paid to supplier',
+             sp.payment_number,
+             CASE WHEN CAST(sp.date AS TEXT) ~ '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+                  THEN CAST(LEFT(CAST(sp.date AS TEXT), 10) AS DATE) END,
+             COALESCE(NULLIF(c.name, ''), NULLIF(c.organization_name, ''), 'Unknown'),
+             'SUPPLIER_PAYMENT',
+             sp.reference,
+             0,
+             sp.amount
+      FROM   public.supplier_payments sp
+      LEFT   JOIN public.contacts c ON c.id = sp.supplier_id AND c.organization_id = sp.organization_id
+      WHERE  CAST(sp.status AS TEXT) <> 'CANCELLED'
+
+    joins:
+      - name: organizations
+        relationship: many_to_one
+        sql: "{CUBE.organization_id} = {organizations.id}"
+
+    dimensions:
+      - name: row_key
+        sql: row_key
+        type: number
+        primary_key: true
+      - name: organization_id
+        sql: organization_id
+        type: number
+      - name: direction
+        description: Received from customer, or Paid to supplier.
+        sql: direction
+        type: string
+      - name: payment_number
+        sql: payment_number
+        type: string
+      - name: payment_date
+        sql: payment_date
+        type: time
+      - name: counterparty_name
+        description: The customer who paid or the supplier who was paid.
+        sql: counterparty_name
+        type: string
+      - name: payment_type
+        description: INVOICE_PAYMENT, ADVANCE or REFUND for customer payments; SUPPLIER_PAYMENT for supplier payments.
+        sql: payment_type
+        type: string
+      - name: reference
+        sql: reference
+        type: string
+
+    measures:
+      - name: amount_received
+        description: Received from customers, less refunds.
+        type: sum
+        sql: "{CUBE}.received"
+      - name: amount_paid
+        description: Paid to suppliers.
+        type: sum
+        sql: "{CUBE}.paid"
+      - name: net_payments
+        description: Received minus paid.
+        type: number
+        sql: "COALESCE({amount_received}, 0) - COALESCE({amount_paid}, 0)"
+      - name: payment_count
+        type: count
+
+  - name: payment_applications
+    description: One row per invoice or bill a payment settled, with how long it took to pay.
+    public: false
+    sql: >
+      SELECT cpi.id * 2                                   AS row_key,
+             cp.organization_id                           AS organization_id,
+             'Received from customer'                     AS direction,
+             cp.payment_number                            AS payment_number,
+             cp.date                                      AS payment_date,
+             inc.invoice_number                           AS document_number,
+             CASE WHEN CAST(inc.invoice_date AS TEXT) ~ '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+                  THEN CAST(LEFT(CAST(inc.invoice_date AS TEXT), 10) AS DATE) END AS document_date,
+             CASE WHEN CAST(inc.due_date AS TEXT) ~ '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+                  THEN CAST(LEFT(CAST(inc.due_date AS TEXT), 10) AS DATE) END     AS due_date,
+             COALESCE(NULLIF(c.name, ''), NULLIF(c.organization_name, ''), 'Unknown') AS counterparty_name,
+             cpi.amount_applied                           AS amount_applied
+      FROM   public.customer_payment_items cpi
+      JOIN   public.customer_payment cp ON cp.id = cpi.payment_id
+      JOIN   public.income inc ON inc.id = cpi.invoice_id AND inc.organization_id = cp.organization_id
+      LEFT   JOIN public.contacts c ON c.id = cp.customer_id AND c.organization_id = cp.organization_id
+      WHERE  CAST(cp.status AS TEXT) <> 'CANCELLED'
+      UNION ALL
+      SELECT spi.id * 2 + 1,
+             sp.organization_id,
+             'Paid to supplier',
+             sp.payment_number,
+             CASE WHEN CAST(sp.date AS TEXT) ~ '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+                  THEN CAST(LEFT(CAST(sp.date AS TEXT), 10) AS DATE) END,
+             e.receipt_number,
+             COALESCE(
+               CASE WHEN CAST(e.reception_date AS TEXT) ~ '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+                    THEN CAST(LEFT(CAST(e.reception_date AS TEXT), 10) AS DATE) END,
+               CAST(e.created_date AS DATE)),
+             CASE WHEN CAST(e.due_date AS TEXT) ~ '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+                  THEN CAST(LEFT(CAST(e.due_date AS TEXT), 10) AS DATE) END,
+             COALESCE(NULLIF(c.name, ''), NULLIF(c.organization_name, ''), 'Unknown'),
+             spi.amount_applied
+      FROM   public.supplier_payment_items spi
+      JOIN   public.supplier_payments sp ON sp.id = spi.payment_id
+      JOIN   public.expense e ON e.id = spi.bill_id AND e.organization_id = sp.organization_id
+      LEFT   JOIN public.contacts c ON c.id = sp.supplier_id AND c.organization_id = sp.organization_id
+      WHERE  CAST(sp.status AS TEXT) <> 'CANCELLED'
+
+    joins:
+      - name: organizations
+        relationship: many_to_one
+        sql: "{CUBE.organization_id} = {organizations.id}"
+
+    dimensions:
+      - name: row_key
+        sql: row_key
+        type: number
+        primary_key: true
+      - name: organization_id
+        sql: organization_id
+        type: number
+      - name: direction
+        description: Received from customer, or Paid to supplier.
+        sql: direction
+        type: string
+      - name: payment_number
+        sql: payment_number
+        type: string
+      - name: payment_date
+        sql: payment_date
+        type: time
+      - name: document_number
+        description: The invoice or bill the payment settled.
+        sql: document_number
+        type: string
+      - name: document_date
+        sql: document_date
+        type: time
+      - name: due_date
+        sql: due_date
+        type: time
+      - name: counterparty_name
+        sql: counterparty_name
+        type: string
+      - name: paid_on_time
+        description: yes when paid on or before the due date, no when after, No due date when there is none.
+        type: string
+        sql: >
+          CASE WHEN {CUBE}.due_date IS NULL OR {CUBE}.payment_date IS NULL THEN 'No due date'
+               WHEN {CUBE}.payment_date <= {CUBE}.due_date THEN 'yes' ELSE 'no' END
+
+    measures:
+      - name: amount_applied
+        description: Amount of the payment applied to the invoice or bill.
+        type: sum
+        sql: "{CUBE}.amount_applied"
+      - name: settled_count
+        description: Number of invoice or bill settlements.
+        type: count
+      - name: avg_days_to_pay
+        description: Average days from the invoice or bill date to the payment date.
+        type: avg
+        sql: "{CUBE}.payment_date - {CUBE}.document_date"
+      - name: avg_days_late
+        description: Average days paid after the due date, over settlements that were late.
+        type: avg
+        sql: "CASE WHEN {CUBE}.payment_date > {CUBE}.due_date THEN {CUBE}.payment_date - {CUBE}.due_date END"
+      - name: paid_late_count
+        description: Settlements paid after the due date.
+        type: count
+        filters:
+          - sql: "{CUBE}.payment_date > {CUBE}.due_date"

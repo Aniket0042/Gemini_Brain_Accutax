@@ -1,0 +1,64 @@
+views:
+  - name: payments
+    description: >-
+      Payments received from customers and made to suppliers in a period: amount, payer or payee,
+      payment number and type. Cancelled payments are left out; refunds are taken off receipts.
+    meta:
+      kind: flow
+      time_dimension: payments.payment_date
+      ai_context: >-
+        Use for money received or paid in a period, when a customer paid, payments to a supplier,
+        largest payments and advances. For how long invoices or bills took to pay use
+        payment_settlements.
+    cubes:
+      - join_path: payment_lines
+        includes:
+          - organization_id
+          - direction
+          - payment_number
+          - payment_date
+          - counterparty_name
+          - payment_type
+          - reference
+          - amount_received
+          - amount_paid
+          - net_payments
+          - payment_count
+      - join_path: payment_lines.organizations
+        includes:
+          - name: name
+            alias: organization_name
+          - currency
+
+  - name: payment_settlements
+    description: >-
+      Invoices and bills settled by payments in a period: which payment settled which document,
+      days from the document date to payment, and whether it was paid by the due date.
+    meta:
+      kind: flow
+      time_dimension: payment_settlements.payment_date
+      ai_context: >-
+        Use for days to collect or days to pay (average days from invoice or bill date to payment),
+        late payers, invoices paid late, and which invoice a payment settled.
+    cubes:
+      - join_path: payment_applications
+        includes:
+          - organization_id
+          - direction
+          - payment_number
+          - payment_date
+          - document_number
+          - document_date
+          - due_date
+          - counterparty_name
+          - paid_on_time
+          - amount_applied
+          - settled_count
+          - avg_days_to_pay
+          - avg_days_late
+          - paid_late_count
+      - join_path: payment_applications.organizations
+        includes:
+          - name: name
+            alias: organization_name
+          - currency
