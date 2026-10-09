@@ -22,6 +22,7 @@ views:
           - reference
           - amount_received
           - amount_paid
+          - payment_amount
           - net_payments
           - payment_count
       - join_path: payment_lines.organizations

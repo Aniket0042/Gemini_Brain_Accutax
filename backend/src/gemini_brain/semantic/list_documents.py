@@ -36,13 +36,18 @@ DOCUMENT_TYPES: Dict[str, tuple] = {
                                          "aging_bucket", "status", "customer_name"), ("outstanding",), "outstanding"),
     "open_payables": ("payables", ("document_number", "document_id", "document_date", "due_date", "days_overdue",
                                    "aging_bucket", "status", "vendor_name"), ("outstanding",), "outstanding"),
+    "payments": ("payments", ("payment_number", "payment_date", "direction", "counterparty_name", "payment_type",
+                              "reference"), ("payment_amount",), "payment_amount"),
+    "payment_settlements": ("payment_settlements", ("payment_number", "payment_date", "direction", "document_number",
+                                                    "document_date", "due_date", "paid_on_time", "counterparty_name"),
+                            ("amount_applied",), "amount_applied"),
     "journal_lines": ("ledger", ("journal_number", "journal_id", "transaction_date", "source_type", "account_code",
                                  "account_name", "journal_description", "line_description"),
                       ("debit", "credit"), "debit"),
 }
 ORDER_BY = ("amount", "date", "days_overdue")
 #: The date "order by date" uses, when it is not document_date.
-DATE_MEMBER = {"journal_lines": "transaction_date"}
+DATE_MEMBER = {"journal_lines": "transaction_date", "payments": "payment_date", "payment_settlements": "payment_date"}
 
 
 def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str, deadline: float) -> Dict[str, Any]:
@@ -102,10 +107,12 @@ def tool_spec(catalog: Catalog) -> Dict[str, Any]:
         "name": "list_documents",
         "description": (
             "Individual documents for the organizations selected in this chat: issued sales invoices, bills, "
-            "the invoices and bills still open today, or posted journal lines (general ledger detail). Use for "
-            "'which', 'list', 'largest', 'top N documents', 'older than N days', weekday questions, and the "
-            "journal entries or ledger lines of an account. Each row has the document or journal number, date, "
-            "counterparty or account, and amount, and its organization. For totals use query_metrics."
+            "the invoices and bills still open today, posted journal lines (general ledger detail), individual "
+            "payments received or made (payments; filter payments.direction), or which invoice or bill each "
+            "payment settled (payment_settlements). Use for 'which', 'list', 'largest', 'top N', 'older than N "
+            "days', weekday questions, the journal entries of an account, and 'largest supplier payments'. Each "
+            "row has the number, date, counterparty or account, amount and organization. For totals use "
+            "query_metrics."
             "\n\nFilter members per type:\n"
             + "\n".join(filterable)
         ),
@@ -123,7 +130,8 @@ def tool_spec(catalog: Catalog) -> Dict[str, Any]:
                     "required": ["member", "operator"],
                 }},
                 "period": {"type": "object",
-                           "description": "sales_invoices, bills and journal_lines only; same shape as query_metrics",
+                           "description": "sales_invoices, bills, journal_lines, payments and payment_settlements "
+                                          "only; same shape as query_metrics",
                            "properties": {"preset": {"type": "string"}, "start": {"type": "string"},
                                           "end": {"type": "string"}}},
                 "order": {"type": "object", "properties": {

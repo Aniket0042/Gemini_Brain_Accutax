@@ -88,6 +88,10 @@ cubes:
         description: Paid to suppliers.
         type: sum
         sql: "{CUBE}.paid"
+      - name: payment_amount
+        description: The payment's amount, whichever its direction (received less refunds, or paid).
+        type: sum
+        sql: "{CUBE}.received + {CUBE}.paid"
       - name: net_payments
         description: Received minus paid.
         type: number

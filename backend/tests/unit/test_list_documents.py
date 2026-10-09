@@ -27,6 +27,9 @@ CATALOG = parse_meta({"cubes": [
           ["document_number", "document_date", "due_date", "days_overdue", "aging_bucket", "status", "customer_name"]),
     _view("pnl", "flow", ["revenue", "net_profit"], ["transaction_date"], "pnl.transaction_date"),
     _view("balance_sheet", "balance", ["cash_and_bank"], ["transaction_date"], "balance_sheet.transaction_date"),
+    _view("payments", "flow", ["payment_amount", "amount_received", "amount_paid"],
+          ["payment_number", "payment_date", "direction", "counterparty_name", "payment_type", "reference"],
+          "payments.payment_date"),
     _view("ledger", "flow", ["debit", "credit", "net_movement"],
           ["transaction_date", "journal_number", "source_type", "account_code", "account_name",
            "journal_description", "line_description"], "ledger.transaction_date"),
@@ -179,3 +182,16 @@ def test_journal_lines_are_described_to_the_model():
 def test_decimals_are_plain_digits(value, text):
     from decimal import Decimal
     assert query_metrics.decimal_text(Decimal(value)) == text
+
+
+def test_largest_supplier_payments_are_individual_payments():
+    query, note = list_documents.build_query({
+        "type": "payments", "limit": 10,
+        "filters": [{"member": "payments.direction", "operator": "equals", "values": ["Paid to supplier"]}],
+    }, CATALOG)
+    assert query["measures"] == ["payments.payment_amount"]
+    assert {"payments.payment_number", "payments.payment_date", "payments.counterparty_name"} <= set(query["dimensions"])
+    assert query["order"] == {"payments.payment_amount": "desc"} and query["limit"] == 10
+    assert query["timeDimensions"][0]["dimension"] == "payments.payment_date"
+    by_date, _ = list_documents.build_query({"type": "payments", "order": {"by": "date"}}, CATALOG)
+    assert by_date["order"] == {"payments.payment_date": "desc"}
