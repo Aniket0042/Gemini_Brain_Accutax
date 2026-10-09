@@ -82,7 +82,7 @@ def test_answer_saves_the_turn_and_reports_the_route(monkeypatch):
     monkeypatch.setattr(memory, "save_message_by_session", lambda sid, role, text, db_name="": saved.append((role, text)))
     seen = {}
 
-    def fake_run_agent(question, orgs, meta, *, history, subject, progress, brief=False):
+    def fake_run_agent(question, orgs, meta, *, history, subject, progress, **_):
         seen.update(history=history, subject=subject)
         return loop.AgentResult(answer="Correct it in the next return [1].", status="ok", route="law", usage={"llm_calls": 1})
 
@@ -106,7 +106,7 @@ def test_answer_returns_cube_and_model_traces_for_the_trace_cards(monkeypatch):
     from gemini_brain.observability.api_tracer import record_api_trace
     from gemini_brain.observability.llm_tracer import record_llm_trace
 
-    def fake_run_agent(question, orgs, meta, *, history, subject, progress, brief=False):
+    def fake_run_agent(question, orgs, meta, *, history, subject, progress, **_):
         record_api_trace(endpoint="cube:pnl", method="POST", status_code=200, outcome="ok", row_count=10, source="cube")
         record_llm_trace(model_id="in.anthropic.claude-sonnet-5", purpose="agent", input_tokens=100, output_tokens=20,
                          duration_ms=900.0)

@@ -45,6 +45,8 @@ WRAP_UP = "Time or tool budget is nearly used up. Do not call more tools: answer
 SHORTER = ("Your answer was cut off or empty. Answer again in under 250 words from the tool results you have: "
            "summarise long series per organization (total, best and worst period) instead of a full table.")
 _NUMBER_IN_TEXT = re.compile(r"\d[\d,]*(?:\.\d+)?")
+_DIGITS = re.compile(r"\d+")
+_IDENTIFIER = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)[\w./#-]+$")
 _CACHE_POINT = {"cachePoint": {"type": "default"}}
 #: Turned off for the process if Bedrock ever refuses a cache point.
 _cache = {"on": True}
@@ -137,6 +139,21 @@ def _numbers(payload: Any, out: List[float], depth: int = 0) -> None:
             _numbers(v, out, depth + 1)
 
 
+def _identifier_digits(payload: Any, out: List[str], depth: int = 0) -> None:
+    if depth > 8:
+        return
+    if isinstance(payload, str):
+        # Only identifiers: letters with digits ("INV-0012", "JE-24-2026-00000773"); dates and plain numbers are not.
+        if _IDENTIFIER.match(payload):
+            out.extend(_DIGITS.findall(payload))
+    elif isinstance(payload, dict):
+        for v in payload.values():
+            _identifier_digits(v, out, depth + 1)
+    elif isinstance(payload, (list, tuple)):
+        for v in payload:
+            _identifier_digits(v, out, depth + 1)
+
+
 def _evidence(results: Sequence[Dict[str, Any]]) -> List[Any]:
     """What the verifier may match figures against: the results, their magnitudes (the verifier reads
     "-143,160" in prose as 143160), and numbers quoted inside text results."""
@@ -144,6 +161,11 @@ def _evidence(results: Sequence[Dict[str, Any]]) -> List[Any]:
     values: List[float] = []
     _numbers(list(results), values)
     evidence.append([abs(v) for v in values if v < 0])
+    # Digits inside identifiers ("INV-BULK-26-20241216180347-114231", "JE-24-2026-00000773") are part of the
+    # document number the answer quotes, not figures; let the verifier match them.
+    identifiers: List[str] = []
+    _identifier_digits(list(results), identifiers)
+    evidence.append(identifiers)
     for r in results:
         for key in ("sources_and_rules", "guide"):
             if isinstance(r.get(key), str):
@@ -164,6 +186,7 @@ def run_agent(
     deadline_seconds: Optional[float] = None,
     progress: Optional[Callable[[str, Any], None]] = None,
     brief: bool = False,
+    attachment: Optional[str] = None,
 ) -> AgentResult:
     """Answer one question. Never raises. `progress(tool_name, tool_input)` is called before each tool runs."""
     started = time.monotonic()
@@ -190,7 +213,7 @@ def run_agent(
                                verification=_law_verification(law_answer))
 
         today = periods.today_in(settings.report_timezone)
-        system = system_prompt(org_meta, orgs, today, settings.report_timezone, brief=brief)
+        system = system_prompt(org_meta, orgs, today, settings.report_timezone, brief=brief, attachment=attachment)
         specs = tools.specs(ctx)
         used, asked_shorter, adapter = 0, False, planner
         while True:

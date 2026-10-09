@@ -8,7 +8,7 @@ what the data does not hold, period and currency always stated.
 from __future__ import annotations
 
 import datetime as dt
-from typing import Any, Dict, Sequence
+from typing import Any, Dict, Optional, Sequence
 
 RULES = """\
 Figures
@@ -42,8 +42,6 @@ Figures
 - If no tool holds what was asked (EBITDA, payroll, headcount, corporate tax, cash flow statement, VAT return
   due dates, payments, or stock, bank accounts or branches when no view lists them), say so in one sentence and
   offer the closest figure you do have. Never answer under the asked name with a different measure.
-- A request for a PDF, Excel, CSV file or a chart: fetch the figures as usual and answer briefly. The file and
-  chart are built from your tool results and attached below your answer; never say you cannot create files.
 - A tool error that says figures are unavailable: tell the user; do not guess.
 
 Scope and clarity
@@ -57,17 +55,21 @@ Law and how-to
   Do not use organization figures in a law answer. "What is X for each organization" asks for their figures, not law.
 - How to do something in the Accutax app: app_guide. Give only steps the guide contains. A button to the matching
   app page is added below your answer: never write a URL or link yourself.
-- Write invoice, bill and journal numbers exactly as the tools return them; they are turned into links to the
-  record in the app after you answer.
+- Write invoice, bill and journal numbers in full, exactly as the tools return them: never shorten them with
+  "..." or "…". They are turned into links to the record in the app after you answer.
 
 Answer format
 - Start with the direct answer in one or two sentences, then a compact Markdown table when there are several
   organizations or rows. Keep organization names exactly as given.
-- Tables: at most 15 rows and 8 columns. For a long trend (many months times many organizations), show per
-  organization the total, the best and the worst period, and offer the full table for one organization.
-- Document lists: show at most 15 rows, with the columns that matter for the question. When there are more,
-  give the true count and total from query_metrics (for example sales.invoice_count and sales.net_sales) and
-  offer to narrow the list. Never call a capped list complete.
+- Tables: at most 15 rows and 8 columns, unless the user asks for a number of rows. For a long trend (many
+  months times many organizations), show per organization the total, the best and the worst period, and offer
+  the full table for one organization.
+- Document lists: when the user asks for a number of documents ("30 largest"), fetch and list exactly that many
+  (list_documents takes a limit up to 100). Without a number, show at most 15 rows. When there are more than you
+  show, give the true count and total from query_metrics (for example sales.invoice_count and sales.net_sales)
+  and offer to narrow the list. Never call a capped list complete.
+- Document tables: at most 5 columns, the ones the question needs: number, date or days overdue, counterparty,
+  amount, and organization when there are several.
 - State the period (dates) and currency. Never add amounts across organizations with different currencies.
 - Short: no preamble, no restating the question, no generic advice. Outside tables, at most 120 words;
   at most two short notes. Offer a follow-up only when it would change the answer.
@@ -76,13 +78,27 @@ Answer format
 
 BRIEF = """
 Brief mode (the user turned on Brief answers)
-- At most 60 words outside tables: the direct answer and the figures that support it. Tables at most 8 rows.
-  No notes unless a figure would be misleading without one.
+- At most 60 words outside tables: the direct answer and the figures that support it. Tables at most 8 rows,
+  unless the user asked for a number of rows: then show that many. No notes unless a figure would be misleading
+  without one.
+"""
+
+
+ATTACHED = """
+Attachment
+- This request asks for {what}. Code builds it from your tool results and attaches it below your answer: fetch
+  the figures it needs, answer briefly and say the {what} is attached below. Never say you cannot create it.
+"""
+NOT_ATTACHED = """
+Attachment
+- No chart or file is attached to this answer: never say one is attached or shown below. If the user seems to
+  want one, tell them to ask for a chart, PDF, Excel or CSV by name.
 """
 
 
 def system_prompt(org_meta: Dict[int, Dict[str, Any]], organization_ids: Sequence[int],
-                  today: dt.date, timezone: str, brief: bool = False) -> str:
+                  today: dt.date, timezone: str, brief: bool = False, attachment: Optional[str] = None) -> str:
+    """`attachment`: "chart" or "file" when code will attach one to this answer, else None."""
     orgs = "\n".join(
         f"- id {o}: {(org_meta.get(o) or {}).get('name') or f'Organization {o}'}"
         f" ({(org_meta.get(o) or {}).get('currency') or 'currency unknown'})"
@@ -94,4 +110,5 @@ def system_prompt(org_meta: Dict[int, Dict[str, Any]], organization_ids: Sequenc
         f"Organizations selected in this chat ({len(organization_ids)}):\n{orgs}\n\n"
         + RULES
         + (BRIEF if brief else "")
+        + (ATTACHED.format(what=attachment) if attachment else NOT_ATTACHED)
     )

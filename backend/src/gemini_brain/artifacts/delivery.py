@@ -34,10 +34,14 @@ CHART_WORDS = re.compile(
     r"\b(charts?|graphs?|plotted|plots?|visuali[sz]e|visuali[sz]ation|"
     r"bar charts?|pie charts?|line charts?|area charts?|pie|donut|doughnut|waterfall|"
     r"(?:stacked|horizontal)(?:\s+(?:bar|column))?|"
-    r"(?:profit|p&l|pnl|cash)\s+bridge|bridge\s+(?:chart|graph)|trend(?:line)?s?)\b",
+    r"(?:profit|p&l|pnl|cash)\s+bridge|bridge\s+(?:chart|graph)|trend(?:line)?s?|"
+    # "the joined bar", "grouped columns", "bar graph", "show me a bar": bars without the word chart
+    r"(?:grouped|joined|clustered|combined|side[- ]by[- ]side)\s+(?:bars?|columns?)|"
+    r"(?:bars?|columns?)\s+(?:graphs?|diagrams?|charts?)|"
+    r"(?:show|draw|plot|give|display)\s+(?:me\s+)?(?:an?\s+|the\s+)?(?:\w+\s+)?bars?)\b",
     re.IGNORECASE,
 )
-BAR_HINT = re.compile(r"\b(?:bar|column)(?:\s+(?:chart|graph|plot))?\b", re.IGNORECASE)
+BAR_HINT = re.compile(r"\b(?:bars?|columns?)(?:\s+(?:charts?|graphs?|plots?))?\b", re.IGNORECASE)
 LINE_HINT = re.compile(r"\b(?:line(?:\s+(?:chart|graph|plot))?|trend(?:line)?s?|trending)\b", re.IGNORECASE)
 AREA_HINT = re.compile(r"\barea(?:\s+(?:chart|graph|plot))?\b", re.IGNORECASE)
 PIE_HINT = re.compile(r"\bpie(?:\s+(?:chart|graph|plot))?\b", re.IGNORECASE)

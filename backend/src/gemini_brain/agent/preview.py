@@ -116,7 +116,7 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
     rid, traces = _start_traces()
     try:
         result = run_agent(question, orgs, meta, history=history, subject=f"agent-preview:{user_id}", progress=on_tool,
-                           brief=brief)
+                           brief=brief, attachment=attachment(question))
     finally:
         traces = _collect_traces(rid)
     data = getattr(result, "data", None) or []
@@ -218,6 +218,20 @@ def _collect_traces(rid: str) -> Dict[str, List[Dict[str, Any]]]:
     except Exception as e:  # noqa: BLE001
         logger.debug("agent preview: traces not collected: %s", e)
     return out
+
+
+def attachment(question: str) -> Optional[str]:
+    """What _files will attach for this question ("chart" or "file"), so the model is told the truth about it."""
+    try:
+        from gemini_brain.artifacts.delivery import detect_delivery
+        delivery = detect_delivery(question)
+    except Exception:  # noqa: BLE001
+        return None
+    if delivery.mode == "none":
+        return None
+    if delivery.wants_file and delivery.format:
+        return f"{delivery.format.upper()} file" + (" and chart" if delivery.wants_chart else "")
+    return "chart" if delivery.wants_chart else "file"
 
 
 def export_rows(data: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
