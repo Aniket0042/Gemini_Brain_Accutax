@@ -156,3 +156,7 @@ def test_pending_views_follow_the_same_rules(name):
     for exposed, (cube, member) in included.items():
         assert member in _members(cubes[cube]), f"{name}.{exposed}: {cube}.{member} does not exist"
     assert (view.get("meta") or {}).get("kind") in KINDS
+
+
+def test_payment_views_are_queryable():
+    assert {"payments", "payment_settlements"} <= set(VIEWS) & _queryable_views_in_cube_js()

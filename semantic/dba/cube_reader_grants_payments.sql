@@ -3,7 +3,7 @@
 -- For the DBA. Run as a superuser or the table owner on accutax_bk_1_5,
 -- after semantic/dba/cube_reader.sql. Read-only grants; no table is changed.
 --
--- After it runs, enable the views as described in semantic/model_pending/README.md.
+-- Used by the views payments and payment_settlements. Run on 2026-10-09.
 -- =============================================================================
 
 GRANT SELECT ON public.customer_payment, public.customer_payment_items,

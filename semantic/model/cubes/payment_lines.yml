@@ -1,8 +1,6 @@
 # Payments received from customers and made to suppliers, and the invoices and bills they settled.
 #
-# PENDING: needs SELECT on customer_payment, customer_payment_items, supplier_payments and
-# supplier_payment_items for cube_reader (semantic/dba/cube_reader_grants_payments.sql).
-# See semantic/model_pending/README.md.
+# Read grants: semantic/dba/cube_reader_grants_payments.sql (run on 2026-10-09).
 #
 # Rules follow the Accutax entities (CustomerPaymentEntity, SupplierPaymentEntity): cancelled
 # payments are left out; a customer payment's refunded part is taken off what was received.
