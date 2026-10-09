@@ -16,7 +16,7 @@ cubes:
     sql: >
       SELECT cp.id * 2                                    AS row_key,
              cp.organization_id                           AS organization_id,
-             'Received from customer'                     AS direction,
+             'received'                                   AS direction,
              cp.payment_number                            AS payment_number,
              cp.date                                      AS payment_date,
              COALESCE(NULLIF(c.name, ''), NULLIF(c.organization_name, ''), 'Unknown') AS counterparty_name,
@@ -31,7 +31,7 @@ cubes:
       UNION ALL
       SELECT sp.id * 2 + 1,
              sp.organization_id,
-             'Paid to supplier',
+             'paid',
              sp.payment_number,
              CASE WHEN CAST(sp.date AS TEXT) ~ '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
                   THEN CAST(LEFT(CAST(sp.date AS TEXT), 10) AS DATE) END,
@@ -58,7 +58,7 @@ cubes:
         sql: organization_id
         type: number
       - name: direction
-        description: Received from customer, or Paid to supplier.
+        description: received (from a customer) or paid (to a supplier).
         sql: direction
         type: string
       - name: payment_number
@@ -105,7 +105,7 @@ cubes:
     sql: >
       SELECT cpi.id * 2                                   AS row_key,
              cp.organization_id                           AS organization_id,
-             'Received from customer'                     AS direction,
+             'received'                                   AS direction,
              cp.payment_number                            AS payment_number,
              cp.date                                      AS payment_date,
              inc.invoice_number                           AS document_number,
@@ -123,7 +123,7 @@ cubes:
       UNION ALL
       SELECT spi.id * 2 + 1,
              sp.organization_id,
-             'Paid to supplier',
+             'paid',
              sp.payment_number,
              CASE WHEN CAST(sp.date AS TEXT) ~ '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
                   THEN CAST(LEFT(CAST(sp.date AS TEXT), 10) AS DATE) END,
@@ -156,7 +156,7 @@ cubes:
         sql: organization_id
         type: number
       - name: direction
-        description: Received from customer, or Paid to supplier.
+        description: received (from a customer) or paid (to a supplier).
         sql: direction
         type: string
       - name: payment_number

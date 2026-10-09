@@ -187,7 +187,7 @@ def test_decimals_are_plain_digits(value, text):
 def test_largest_supplier_payments_are_individual_payments():
     query, note = list_documents.build_query({
         "type": "payments", "limit": 10,
-        "filters": [{"member": "payments.direction", "operator": "equals", "values": ["Paid to supplier"]}],
+        "filters": [{"member": "payments.direction", "operator": "equals", "values": ["paid"]}],
     }, CATALOG)
     assert query["measures"] == ["payments.payment_amount"]
     assert {"payments.payment_number", "payments.payment_date", "payments.counterparty_name"} <= set(query["dimensions"])
