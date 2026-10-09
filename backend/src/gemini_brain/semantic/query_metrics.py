@@ -44,13 +44,22 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
                      "Ask for fewer organizations or a shorter period rather than paging.")
     out = {
         "view": view.name,
-        "rows": [{k: str(v) if isinstance(v, Decimal) else v for k, v in r.items()} for r in result.rows],
+        "rows": [{k: decimal_text(v) if isinstance(v, Decimal) else v for k, v in r.items()} for r in result.rows],
         "row_count": len(result.rows),
         "data_as_of": result.last_refresh_time,
         "notes": notes,
     }
     out.update(summarize(result.rows, query, view, params.get("granularity")))
     return out
+
+
+def decimal_text(value: Decimal) -> str:
+    """A Decimal as plain digits. Postgres returns an average of exactly 0 as 0E-20; str() keeps that form."""
+    text = str(value)
+    if "E" not in text and "e" not in text:
+        return text
+    text = format(value, "f")
+    return (text.rstrip("0").rstrip(".") if "." in text else text) or "0"
 
 
 def _additive(member: str) -> bool:

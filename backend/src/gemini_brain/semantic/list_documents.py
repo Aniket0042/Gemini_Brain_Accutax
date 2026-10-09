@@ -21,6 +21,7 @@ from gemini_brain.semantic.query_metrics import (
     _apply_time,
     _filters,
     _limit,
+    decimal_text,
 )
 
 MAX_LIMIT = 100
@@ -48,7 +49,8 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
     catalog = get_catalog(organization_ids, subject, deadline)
     query, period_note = build_query(params, catalog)
     result = cube_client.load(query, organization_ids=organization_ids, subject=subject, deadline=deadline)
-    rows = [{k.split(".", 1)[1]: str(v) if isinstance(v, Decimal) else v for k, v in r.items()} for r in result.rows]
+    rows = [{k.split(".", 1)[1]: decimal_text(v) if isinstance(v, Decimal) else v for k, v in r.items()}
+            for r in result.rows]
     notes = [period_note, CURRENCY_NOTE]
     if len(rows) >= query["limit"]:
         notes.append(f"Only the first {query['limit']} documents are listed; there may be more.")

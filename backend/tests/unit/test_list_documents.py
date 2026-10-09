@@ -172,3 +172,10 @@ def test_journal_lines_are_described_to_the_model():
     spec = list_documents.tool_spec(CATALOG)["toolSpec"]
     assert "journal_lines" in spec["inputSchema"]["json"]["properties"]["type"]["enum"]
     assert "journal_lines (ledger)" in spec["description"]
+
+
+@pytest.mark.parametrize("value, text", [("0E-20", "0"), ("1.50E+3", "1500"), ("13611877.00", "13611877.00"),
+                                         ("-2.5E-1", "-0.25")])
+def test_decimals_are_plain_digits(value, text):
+    from decimal import Decimal
+    assert query_metrics.decimal_text(Decimal(value)) == text
