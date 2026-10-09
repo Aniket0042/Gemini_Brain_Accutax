@@ -244,9 +244,31 @@ def export_rows(data: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     for org in result.get("organizations") or [] for week in org.get("weeks") or []]
         else:
             rows = [_plain(r) for r in result.get("rows") or []]
+            granularity = (item.get("input") or {}).get("granularity")
+            for row in rows:
+                if granularity in row:
+                    row[granularity] = period_label(row[granularity], granularity)
         if rows and len(rows) >= len(best):
             best = rows
     return best
+
+
+def period_label(value: Any, granularity: str) -> Any:
+    """A time bucket as people write it: 2026-03-01 by month is "Mar 2026", by quarter "Q1 2026"."""
+    import datetime as dt
+    try:
+        day = dt.date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return value
+    if granularity == "month":
+        return day.strftime("%b %Y")
+    if granularity == "quarter":
+        return f"Q{(day.month - 1) // 3 + 1} {day.year}"
+    if granularity == "year":
+        return str(day.year)
+    if granularity == "week":
+        return "Week of " + day.strftime("%d %b %Y")
+    return day.isoformat()
 
 
 def _plain(row: Dict[str, Any]) -> Dict[str, Any]:

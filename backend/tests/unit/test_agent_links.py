@@ -74,3 +74,28 @@ def test_preview_answers_carry_document_links_and_the_guide_button(monkeypatch):
     assert {"type": "action_button", "label": "Open in Accutax", "url": "http://app.test/journal-entries"} in out["blocks"]
 
 
+
+
+def test_payments_link_by_direction_and_settlements_link_both_numbers():
+    data = [
+        _docs("payments", [{"payment_number": "SPY-2026-0537", "payment_id": 811, "direction": "paid"},
+                           {"payment_number": "CPY-2026-0001", "payment_id": "12", "direction": "received"}]),
+        _docs("payment_settlements", [{"payment_number": "SPY-2026-0540", "payment_id": 815, "direction": "paid",
+                                       "document_number": "EXP-77", "document_id": 77},
+                                      {"payment_number": "CPY-2026-0002", "payment_id": 13, "direction": "received",
+                                       "document_number": "INV-9", "document_id": 9}]),
+    ]
+    assert links.document_links(data) == {
+        "SPY-2026-0537": "http://app.test/edit-supplier-payment/811",
+        "CPY-2026-0001": "http://app.test/edit-customer-payment/12",
+        "SPY-2026-0540": "http://app.test/edit-supplier-payment/815",
+        "EXP-77": "http://app.test/expenses/edit-expense/77",
+        "CPY-2026-0002": "http://app.test/edit-customer-payment/13",
+        "INV-9": "http://app.test/income/details/9",
+    }
+
+
+def test_a_reused_payment_number_gets_no_link():
+    data = [_docs("payments", [{"payment_number": "SPY-2026-0572", "payment_id": 1, "direction": "paid"},
+                               {"payment_number": "SPY-2026-0572", "payment_id": 2, "direction": "paid"}])]
+    assert links.document_links(data) == {}

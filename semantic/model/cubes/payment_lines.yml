@@ -15,6 +15,7 @@ cubes:
     public: false
     sql: >
       SELECT cp.id * 2                                    AS row_key,
+             cp.id                                        AS payment_id,
              cp.organization_id                           AS organization_id,
              'received'                                   AS direction,
              cp.payment_number                            AS payment_number,
@@ -30,6 +31,7 @@ cubes:
         AND  CAST(cp.status AS TEXT) <> 'CANCELLED'
       UNION ALL
       SELECT sp.id * 2 + 1,
+             sp.id,
              sp.organization_id,
              'paid',
              sp.payment_number,
@@ -54,6 +56,10 @@ cubes:
         sql: row_key
         type: number
         primary_key: true
+      - name: payment_id
+        description: Accutax id of the payment (links to it in the app).
+        sql: payment_id
+        type: number
       - name: organization_id
         sql: organization_id
         type: number
@@ -104,6 +110,8 @@ cubes:
     public: false
     sql: >
       SELECT cpi.id * 2                                   AS row_key,
+             cp.id                                        AS payment_id,
+             inc.id                                       AS document_id,
              cp.organization_id                           AS organization_id,
              'received'                                   AS direction,
              cp.payment_number                            AS payment_number,
@@ -122,6 +130,8 @@ cubes:
       WHERE  CAST(cp.status AS TEXT) <> 'CANCELLED'
       UNION ALL
       SELECT spi.id * 2 + 1,
+             sp.id,
+             e.id,
              sp.organization_id,
              'paid',
              sp.payment_number,
@@ -152,6 +162,14 @@ cubes:
         sql: row_key
         type: number
         primary_key: true
+      - name: payment_id
+        description: Accutax id of the payment (links to it in the app).
+        sql: payment_id
+        type: number
+      - name: document_id
+        description: Accutax id of the invoice or bill settled (links to it in the app).
+        sql: document_id
+        type: number
       - name: organization_id
         sql: organization_id
         type: number

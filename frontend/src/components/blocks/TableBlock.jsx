@@ -212,7 +212,7 @@ const styles = {
     whiteSpace: 'nowrap',
   },
   invoiceLink: {
-    color: 'var(--accent)',
+    color: 'var(--link)',
     textDecoration: 'none',
   },
   empty: {

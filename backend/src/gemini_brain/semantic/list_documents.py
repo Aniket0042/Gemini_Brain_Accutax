@@ -21,7 +21,7 @@ from gemini_brain.semantic.query_metrics import (
     _apply_time,
     _filters,
     _limit,
-    decimal_text,
+    cell_text,
 )
 
 MAX_LIMIT = 100
@@ -36,10 +36,11 @@ DOCUMENT_TYPES: Dict[str, tuple] = {
                                          "aging_bucket", "status", "customer_name"), ("outstanding",), "outstanding"),
     "open_payables": ("payables", ("document_number", "document_id", "document_date", "due_date", "days_overdue",
                                    "aging_bucket", "status", "vendor_name"), ("outstanding",), "outstanding"),
-    "payments": ("payments", ("payment_number", "payment_date", "direction", "counterparty_name", "payment_type",
+    "payments": ("payments", ("payment_number", "payment_id", "payment_date", "direction", "counterparty_name", "payment_type",
                               "reference"), ("payment_amount",), "payment_amount"),
-    "payment_settlements": ("payment_settlements", ("payment_number", "payment_date", "direction", "document_number",
-                                                    "document_date", "due_date", "paid_on_time", "counterparty_name"),
+    "payment_settlements": ("payment_settlements", ("payment_number", "payment_id", "payment_date", "direction",
+                                                    "document_number", "document_id", "document_date", "due_date",
+                                                    "paid_on_time", "counterparty_name"),
                             ("amount_applied",), "amount_applied"),
     "journal_lines": ("ledger", ("journal_number", "journal_id", "transaction_date", "source_type", "account_code",
                                  "account_name", "journal_description", "line_description"),
@@ -54,8 +55,7 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
     catalog = get_catalog(organization_ids, subject, deadline)
     query, period_note = build_query(params, catalog)
     result = cube_client.load(query, organization_ids=organization_ids, subject=subject, deadline=deadline)
-    rows = [{k.split(".", 1)[1]: decimal_text(v) if isinstance(v, Decimal) else v for k, v in r.items()}
-            for r in result.rows]
+    rows = [{k.split(".", 1)[1]: cell_text(v) for k, v in r.items()} for r in result.rows]
     notes = [period_note, CURRENCY_NOTE]
     if len(rows) >= query["limit"]:
         notes.append(f"Only the first {query['limit']} documents are listed; there may be more.")

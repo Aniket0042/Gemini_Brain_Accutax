@@ -49,3 +49,21 @@ def test_preview_puts_the_tiles_first(monkeypatch):
         answer="Revenue AED 5,809,352.", status="ok", data=[_pnl(PARAMS, [ROW])]))
     out = preview.answer("P&L this year", [24], lambda: {}, session_id=None, user_id=1)
     assert out["blocks"][0]["type"] == "kpi_grid"
+
+
+def test_cells_drop_the_midnight_time_part():
+    from decimal import Decimal
+    from gemini_brain.semantic.query_metrics import cell_text
+    assert cell_text("2026-03-01T00:00:00.000") == "2026-03-01"
+    assert cell_text("2026-03-01T14:30:00.000") == "2026-03-01T14:30:00.000"
+    assert cell_text(Decimal("0E-20")) == "0" and cell_text("INV-0012") == "INV-0012" and cell_text(7) == 7
+
+
+def test_chart_and_file_rows_use_readable_period_labels():
+    data = [{"tool": "query_metrics", "input": {"view": "payments", "granularity": "month"},
+             "result": {"rows": [{"payments.organization_id": 25, "payments.payment_date.month": "2026-03-01",
+                                  "payments.amount_paid": "401541.00"}]}}]
+    assert preview.export_rows(data) == [{"month": "Mar 2026", "amount_paid": "401541.00"}]
+    assert preview.period_label("2026-04-01", "quarter") == "Q2 2026"
+    assert preview.period_label("2026-03-02", "week") == "Week of 02 Mar 2026"
+    assert preview.period_label("2026-01-01", "year") == "2026"

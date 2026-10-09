@@ -4,10 +4,9 @@ links.py — Links from an agent answer into the Accutax app.
 Built in code from tool results, never written by the model, so a link can
 neither be invented nor point at the wrong record:
 
-- document links: each invoice, bill or journal number in the answer that a
-  list_documents result returned with its record id becomes a Markdown link to
-  that record's page (the same routes the current path's tables use,
-  frontend/src/components/blocks/TableBlock.jsx);
+- document links: each invoice, bill, journal or payment number in the answer
+  that a list_documents result returned with its record id becomes a Markdown
+  link to that record's page in Accutax;
 - guide buttons: an app_guide result that matched a guide section with a known
   route adds an "Open in Accutax" button, as the current path does.
 """
@@ -18,13 +17,25 @@ from typing import Any, Dict, List, Sequence
 
 from gemini_brain.config.settings import settings
 
-#: list_documents type -> (number column, id column, app route for the record)
+#: Routes of the record pages in Accutax (frontend App.jsx).
+INVOICE, BILL, JOURNAL = "/income/details/{id}", "/expenses/edit-expense/{id}", "/journal-entries/{id}"
+CUSTOMER_PAYMENT, SUPPLIER_PAYMENT = "/edit-customer-payment/{id}", "/edit-supplier-payment/{id}"
+
+
+def _by_direction(received: str, paid: str):
+    return lambda row: paid if str(row.get("direction") or "").lower() == "paid" else received
+
+
+#: list_documents type -> [(number column, id column, route, or a function of the row giving it)]
 DOCUMENT_ROUTES = {
-    "sales_invoices": ("document_number", "document_id", "/income/details/{id}"),
-    "open_receivables": ("document_number", "document_id", "/income/details/{id}"),
-    "bills": ("document_number", "document_id", "/expenses/edit-expense/{id}"),
-    "open_payables": ("document_number", "document_id", "/expenses/edit-expense/{id}"),
-    "journal_lines": ("journal_number", "journal_id", "/journal-entries/{id}"),
+    "sales_invoices": [("document_number", "document_id", INVOICE)],
+    "open_receivables": [("document_number", "document_id", INVOICE)],
+    "bills": [("document_number", "document_id", BILL)],
+    "open_payables": [("document_number", "document_id", BILL)],
+    "journal_lines": [("journal_number", "journal_id", JOURNAL)],
+    "payments": [("payment_number", "payment_id", _by_direction(CUSTOMER_PAYMENT, SUPPLIER_PAYMENT))],
+    "payment_settlements": [("payment_number", "payment_id", _by_direction(CUSTOMER_PAYMENT, SUPPLIER_PAYMENT)),
+                            ("document_number", "document_id", _by_direction(INVOICE, BILL))],
 }
 #: Existing Markdown links and inline code, which are left as they are.
 _PROTECTED = re.compile(r"\[[^\]\n]*\]\([^)\s]*\)|`[^`\n]*`")
@@ -46,18 +57,16 @@ def document_links(data: Sequence[Dict[str, Any]]) -> Dict[str, str]:
         if item.get("tool") != "list_documents":
             continue
         result = item.get("result") or {}
-        route = DOCUMENT_ROUTES.get(result.get("type"))
-        if not route:
-            continue
-        number_key, id_key, path = route
-        for row in result.get("rows") or []:
-            number, record_id = str(row.get(number_key) or "").strip(), row.get(id_key)
-            if len(number) < 3 or record_id in (None, ""):
-                continue
-            url = base + path.format(id=int(float(record_id)))
-            if links.get(number, url) != url:
-                clashes.add(number)
-            links[number] = url
+        for number_key, id_key, route in DOCUMENT_ROUTES.get(result.get("type"), []):
+            for row in result.get("rows") or []:
+                number, record_id = str(row.get(number_key) or "").strip(), row.get(id_key)
+                if len(number) < 3 or record_id in (None, ""):
+                    continue
+                path = route(row) if callable(route) else route
+                url = base + path.format(id=int(float(record_id)))
+                if links.get(number, url) != url:
+                    clashes.add(number)
+                links[number] = url
     return {n: u for n, u in links.items() if n not in clashes}
 
 

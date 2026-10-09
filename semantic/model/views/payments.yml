@@ -16,6 +16,7 @@ views:
           - organization_id
           - direction
           - payment_number
+          - payment_id
           - payment_date
           - counterparty_name
           - payment_type
@@ -47,8 +48,10 @@ views:
           - organization_id
           - direction
           - payment_number
+          - payment_id
           - payment_date
           - document_number
+          - document_id
           - document_date
           - due_date
           - counterparty_name

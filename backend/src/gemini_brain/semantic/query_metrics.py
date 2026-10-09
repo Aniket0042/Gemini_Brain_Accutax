@@ -44,7 +44,7 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
                      "Ask for fewer organizations or a shorter period rather than paging.")
     out = {
         "view": view.name,
-        "rows": [{k: decimal_text(v) if isinstance(v, Decimal) else v for k, v in r.items()} for r in result.rows],
+        "rows": [{k: cell_text(v) for k, v in r.items()} for r in result.rows],
         "row_count": len(result.rows),
         "data_as_of": result.last_refresh_time,
         "notes": notes,
@@ -60,6 +60,16 @@ def decimal_text(value: Decimal) -> str:
         return text
     text = format(value, "f")
     return (text.rstrip("0").rstrip(".") if "." in text else text) or "0"
+
+
+def cell_text(value: Any) -> Any:
+    """A Cube cell for the model and for files: Decimals as plain digits, and a date-only timestamp
+    ("2026-03-01T00:00:00.000") as its date, so tables and charts never show the time part."""
+    if isinstance(value, Decimal):
+        return decimal_text(value)
+    if isinstance(value, str) and len(value) > 10 and value[10] == "T" and value[11:].startswith("00:00:00"):
+        return value[:10]
+    return value
 
 
 def _additive(member: str) -> bool:
