@@ -258,21 +258,24 @@ def test_notice_cards_match_the_outcome(monkeypatch, status, calls, expected_sta
         assert all(o["status"] == "failed" for o in out["organizations"])
 
 
-def test_the_context_window_meter_counts_agent_tokens(monkeypatch):
+def test_the_context_window_meter_shows_the_latest_context_size(monkeypatch):
     import gemini_brain.memory.context_window as cw
     import gemini_brain.memory.session_memory as memory
     seen = []
-    monkeypatch.setattr(cw, "track_context_window_usage",
-                        lambda sid, i, o, db_name="": seen.append((sid, i, o)) or {"used": i + o})
+    monkeypatch.setattr(cw, "set_context_window_usage",
+                        lambda sid, tokens, db_name="": seen.append((sid, tokens)) or {"used": tokens})
     for name in ("get_history_by_session", "ensure_session", "save_message_by_session"):
         monkeypatch.setattr(memory, name, lambda *a, **k: [] if name == "get_history_by_session" else True)
-    monkeypatch.setattr(loop, "run_agent", lambda *a, **k: loop.AgentResult(
-        answer="x", status="ok",
-        usage={"input_tokens": 1200, "cache_read_tokens": 9000, "cache_write_tokens": 500, "output_tokens": 300}))
-    out = preview.answer("Revenue?", [24], lambda: {}, session_id="5f0c8a43-1111-4222-8333-944455556666", user_id=1)
-    # Cached prompt tokens count: the model read them all.
-    assert seen == [("5f0c8a43-1111-4222-8333-944455556666", 10700, 300)] and out["context_window"] == {"used": 11000}
-
+    sid = "5f0c8a43-1111-4222-8333-944455556666"
+    monkeypatch.setattr(loop, "run_agent", lambda *a, **k: loop.AgentResult(answer="x", status="ok", usage={
+        "input_tokens": 1200, "cache_read_tokens": 20000, "output_tokens": 600, "llm_calls": 2,
+        "context_tokens": 11500}))
+    assert preview.answer("Revenue?", [24], lambda: {}, session_id=sid, user_id=1)["context_window"] == {"used": 11500}
+    # Without the per-call figure: the tokens read and written, over the model calls.
+    monkeypatch.setattr(loop, "run_agent", lambda *a, **k: loop.AgentResult(answer="x", status="ok", usage={
+        "input_tokens": 1200, "cache_read_tokens": 20000, "output_tokens": 600, "llm_calls": 2}))
+    preview.answer("Revenue?", [24], lambda: {}, session_id=sid, user_id=1)
+    assert seen == [(sid, 11500), (sid, 10900)]
 
 
 def test_a_reopened_thread_gets_its_meter(monkeypatch):

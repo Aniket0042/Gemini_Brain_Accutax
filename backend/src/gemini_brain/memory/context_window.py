@@ -73,6 +73,28 @@ def track_context_window_usage(
         return None
 
 
+def set_context_window_usage(
+    session_id: Optional[str],
+    context_tokens: int,
+    db_name: str = "",
+) -> Optional[Dict[str, Any]]:
+    """Record how full the model's context window was on the latest turn, and persist it.
+
+    The agent keeps only the last few messages, so what the model holds is the latest turn's
+    prompt and answer, not a running total of every turn. None when there is no session.
+    """
+    if not session_id or not is_valid_uuid(session_id):
+        return None
+    try:
+        state = dict(get_state_by_session(session_id, db_name=db_name) or {})
+        state[_STATE_KEY] = max(0, int(context_tokens or 0))
+        update_state_by_session(session_id, state, db_name=db_name)
+        return _snapshot(state[_STATE_KEY])
+    except Exception as e:
+        logger.warning("Context-window update failed for session %s: %s", session_id, e)
+        return None
+
+
 def get_context_window_usage(session_id: Optional[str], db_name: str = "") -> Optional[Dict[str, Any]]:
     """Read-only snapshot of a session's current usage, without adding to it."""
     if not session_id or not is_valid_uuid(session_id):

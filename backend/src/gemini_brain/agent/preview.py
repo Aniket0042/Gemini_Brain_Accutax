@@ -185,14 +185,18 @@ def _org_chips(orgs: List[int], meta: Dict[int, Dict[str, Any]], *, figures_fail
 
 
 def _context_window(session_id: Optional[str], usage: Dict[str, Any], db_name: str) -> Optional[Dict[str, Any]]:
-    """Add this answer's tokens to the chat's context-window meter, as the current path does."""
+    """Set the chat's context-window meter to how full the model's context was on this answer:
+    the largest single model call (its whole prompt, cached or not, and its output)."""
     if not session_id:
         return None
     try:
-        from gemini_brain.memory.context_window import track_context_window_usage
-        # Cached prompt tokens are still context the model read: count them with the uncached ones.
-        read = sum(int(usage.get(k) or 0) for k in ("input_tokens", "cache_read_tokens", "cache_write_tokens"))
-        return track_context_window_usage(session_id, read, int(usage.get("output_tokens") or 0), db_name=db_name)
+        from gemini_brain.memory.context_window import set_context_window_usage
+        held = usage.get("context_tokens")
+        if held is None:  # an older adapter: the uncached and cached prompt plus the output, over the calls
+            held = sum(int(usage.get(k) or 0) for k in
+                       ("input_tokens", "cache_read_tokens", "cache_write_tokens", "output_tokens"))
+            held //= max(1, int(usage.get("llm_calls") or 1))
+        return set_context_window_usage(session_id, int(held), db_name=db_name)
     except Exception as e:  # noqa: BLE001 - the meter is a convenience
         logger.warning("agent preview: context-window meter not updated: %s", e)
         return None

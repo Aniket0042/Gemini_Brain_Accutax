@@ -152,6 +152,7 @@ class BedrockAdapter:
         self._calls = 0
         self._cache_read_tokens = 0
         self._cache_write_tokens = 0
+        self._largest_context = 0
 
     def reset_tokens(self) -> None:
         """Reset internal token counters."""
@@ -160,6 +161,7 @@ class BedrockAdapter:
         self._calls = 0
         self._cache_read_tokens = 0
         self._cache_write_tokens = 0
+        self._largest_context = 0
 
     def _build_system_array(self, system_prompt: Union[str, List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
         """Build Bedrock system array with optional cachePoint block."""
@@ -178,6 +180,10 @@ class BedrockAdapter:
         return [{"text": system_prompt}]
 
     def _track_usage(self, usage: Dict[str, Any]) -> None:
+        # Tokens one call held in the model's context window: its whole prompt (cached or not) and its output.
+        held = sum(int(usage.get(k) or 0) for k in
+                   ("inputTokens", "cacheReadInputTokens", "cacheWriteInputTokens", "outputTokens"))
+        self._largest_context = max(getattr(self, "_largest_context", 0), held)
         self._input_tokens += usage.get("inputTokens") or 0
         self._output_tokens += usage.get("outputTokens") or 0
         self._cache_read_tokens += usage.get("cacheReadInputTokens") or 0
@@ -362,6 +368,7 @@ class BedrockAdapter:
             "output_tokens": self._output_tokens,
             "llm_calls": self._calls,
             "cost_usd": round(cost, 6),
+            "context_tokens": getattr(self, "_largest_context", 0),
         }
         if self._cache_read_tokens > 0 or self._cache_write_tokens > 0:
             result["cache_read_tokens"] = self._cache_read_tokens

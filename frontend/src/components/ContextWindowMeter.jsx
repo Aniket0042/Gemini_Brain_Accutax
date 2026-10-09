@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-// Compact "355.7k / 1M" style meter for this session's cumulative token usage
-// against a fixed budget (SESSION_CONTEXT_WINDOW_TOKENS on the backend —
-// currently 200K). Deliberately NOT the selected model's real context window:
+// Compact "21.9k / 200k" style meter: how full the model's context window was on
+// the latest answer (the agent keeps only the last few messages, so this is what
+// the model holds, not a running total), against SESSION_CONTEXT_WINDOW_TOKENS
+// on the backend — currently 200K. Deliberately NOT the selected model's real context window:
 // that varies per model in this app's catalog (Claude 200K vs Gemini 1M), and
 // the whole point of this meter is a number that stays stable across model
 // switches, same as the account-level meter it's modeled after.

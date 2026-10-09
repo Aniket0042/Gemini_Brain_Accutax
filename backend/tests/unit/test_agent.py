@@ -348,3 +348,22 @@ def test_brief_mode_reaches_the_prompt_and_the_law_route(monkeypatch, agent):
     FakeAdapter.script = [final("AED 5,809,352.")]
     loop.run_agent("Revenue this year?", ORGS, META, brief=True)
     assert seen["brief"] is True and "Brief mode" in FakeAdapter.log[0]["system"][0]["text"]
+
+
+
+def test_context_size_is_the_largest_single_call():
+    from gemini_brain.reasoning.bedrock_client import BedrockAdapter
+    adapter = BedrockAdapter("in.anthropic.claude-sonnet-5")
+    adapter._track_usage({"inputTokens": 300, "cacheReadInputTokens": 10000, "outputTokens": 100})
+    adapter._track_usage({"inputTokens": 2500, "cacheReadInputTokens": 10000, "outputTokens": 400})
+    usage = adapter.get_token_usage()
+    assert usage["context_tokens"] == 12900 and usage["input_tokens"] == 2800
+
+    class Fixed:
+        def __init__(self, usage):
+            self.usage = usage
+
+        def get_token_usage(self):
+            return self.usage
+    total = loop._usage(Fixed({"context_tokens": 9000, "input_tokens": 10}), Fixed({"context_tokens": 13000, "input_tokens": 5}))
+    assert total == {"context_tokens": 13000, "input_tokens": 15}

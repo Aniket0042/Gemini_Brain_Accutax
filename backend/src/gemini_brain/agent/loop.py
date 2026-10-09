@@ -112,7 +112,9 @@ def _usage(*adapters: Any) -> Dict[str, Any]:
     total: Dict[str, Any] = {}
     for adapter in {id(a): a for a in adapters}.values():
         for key, value in adapter.get_token_usage().items():
-            if isinstance(value, (int, float)):
+            if key == "context_tokens":  # the largest single call, not a sum
+                total[key] = max(total.get(key, 0), value)
+            elif isinstance(value, (int, float)):
                 total[key] = round(total.get(key, 0) + value, 6)
     return total
 
