@@ -26,6 +26,9 @@ cubes:
              COALESCE(ect.value, 'Uncategorised')          AS expense_category,
              COALESCE(p.project_name, 'No project')        AS project_name,
              COALESCE(cc.costcenter_name, 'Unallocated')   AS cost_center_name,
+             COALESCE(NULLIF(it.name, ''), 'No item')      AS item_name,
+             it.sku                                        AS item_sku,
+             COALESCE(ei.quantity, 0)                      AS quantity,
              e.branch_id                                      AS branch_id,
              CASE WHEN e.expense_type = 'VENDOR_CREDIT' THEN -1 ELSE 1 END AS doc_sign,
              ei.line_amount                                AS line_amount,
@@ -37,6 +40,7 @@ cubes:
       LEFT   JOIN public.expense_category_type ect ON ect.id = e.expense_category_type_id
       LEFT   JOIN public.projects              p   ON p.id   = e.project_id      AND p.organization_id  = e.organization_id
       LEFT   JOIN public.cost_centers          cc  ON cc.id  = ei.cost_center_id AND cc.organization_id = e.organization_id
+      LEFT   JOIN public.items it ON it.id = ei.items_id AND it.organization_id = e.organization_id
       WHERE  e.expense_type IN ('BILL', 'EXPENSE', 'CASH_EXPENSE', 'VENDOR_CREDIT')
         AND  e.is_draft = false
         AND  e.voided_at IS NULL
@@ -90,8 +94,20 @@ cubes:
       - name: cost_center_name
         sql: cost_center_name
         type: string
+      - name: item_name
+        description: Product or service on the line (from the item list); No item when the line has none.
+        sql: item_name
+        type: string
+      - name: item_sku
+        description: SKU of the item, when it has one.
+        sql: item_sku
+        type: string
 
     measures:
+      - name: quantity_purchased
+        description: Units bought on the lines, less units on vendor credits.
+        type: sum
+        sql: "{CUBE}.doc_sign * {CUBE}.quantity"
       - name: gross_purchases
         description: Purchases before VAT (bills, expenses, cash expenses).
         type: sum

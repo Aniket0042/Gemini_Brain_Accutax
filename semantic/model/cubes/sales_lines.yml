@@ -23,6 +23,9 @@ cubes:
              COALESCE(NULLIF(c.name, ''), NULLIF(c.organization_name, ''), 'Unknown') AS customer_name,
              COALESCE(p.project_name, 'No project')        AS project_name,
              COALESCE(cc.costcenter_name, 'Unallocated')   AS cost_center_name,
+             COALESCE(NULLIF(it.name, ''), 'No item')      AS item_name,
+             it.sku                                        AS item_sku,
+             COALESCE(ii.quantity, 0)                      AS quantity,
              inc.branch_id                                    AS branch_id,
              CASE WHEN inc.income_type = 'CREDIT_NOTE' THEN -1 ELSE 1 END AS doc_sign,
              ii.line_amount                                AS line_amount,
@@ -33,6 +36,7 @@ cubes:
       LEFT   JOIN public.contacts     c  ON c.id  = inc.contact_id    AND c.organization_id  = inc.organization_id
       LEFT   JOIN public.projects     p  ON p.id  = inc.project_id    AND p.organization_id  = inc.organization_id
       LEFT   JOIN public.cost_centers cc ON cc.id = ii.cost_center_id AND cc.organization_id = inc.organization_id
+      LEFT   JOIN public.items it ON it.id = ii.items_id AND it.organization_id = inc.organization_id
       WHERE  inc.income_type IN ('INVOICE', 'CASH_INVOICE', 'INCOME', 'CREDIT_NOTE')
         AND  inc.is_draft = false
         AND  inc.voided_at IS NULL
@@ -83,10 +87,22 @@ cubes:
       - name: cost_center_name
         sql: cost_center_name
         type: string
+      - name: item_name
+        description: Product or service on the line (from the item list); No item when the line has none.
+        sql: item_name
+        type: string
+      - name: item_sku
+        description: SKU of the item, when it has one.
+        sql: item_sku
+        type: string
 
     # Measures read raw columns ({CUBE}.line_amount), so amounts need no dimension.
     # Views list members explicitly: a view makes even public: false members queryable.
     measures:
+      - name: quantity_sold
+        description: Units sold on the lines, less units on credit notes.
+        type: sum
+        sql: "{CUBE}.doc_sign * {CUBE}.quantity"
       - name: gross_sales
         description: Invoiced sales before VAT (invoices, cash invoices, income receipts).
         type: sum

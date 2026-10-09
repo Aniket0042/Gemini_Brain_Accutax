@@ -117,3 +117,9 @@ def test_the_organization_directory_is_a_lookup_the_agent_never_sees():
     meta = {"cubes": [{"name": "organization_directory", "type": "view", "meta": view["meta"],
                        "measures": [], "dimensions": [{"name": "organization_directory.organization_id"}]}]}
     assert parse_meta(meta).views == {}
+
+
+def test_sales_and_purchases_break_down_by_product():
+    for view, quantity in (("sales", "quantity_sold"), ("purchases", "quantity_purchased")):
+        included = _included(VIEWS[view])
+        assert {"item_name", "item_sku", quantity} <= set(included), view

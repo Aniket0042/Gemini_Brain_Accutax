@@ -8,7 +8,7 @@ views:
       time_dimension: purchases.document_date
       ai_context: >-
         Use when the user asks about billed purchases, spend per vendor, expense category,
-        project, cost centre or branch. For total expenses or profit use pnl.
+        project, cost centre, branch or product (item). For total expenses or profit use pnl.
     cubes:
       - join_path: purchase_lines
         includes:
@@ -23,6 +23,9 @@ views:
           - expense_category
           - project_name
           - cost_center_name
+          - item_name
+          - item_sku
+          - quantity_purchased
           - gross_purchases
           - vendor_credits
           - net_purchases
