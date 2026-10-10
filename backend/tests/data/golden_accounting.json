@@ -1,0 +1,2744 @@
+{
+ "description": "Golden evaluation set built from docs/AI queries.xlsx (IDs kept, v1 questions) and the accounting question bank (.docx, IDs DOC-*, adapted to the UAE). 'behavior' is what a correct answer does; 'must_show' is the pass criterion for a manual tester; 'expect.ref' are reference Cube queries (dates like {today} and {week_start} resolve on the day of the run). Orgs: 24-25 have clean ledgers (P&L questions), 27 has the most invoices (document questions). Replay with scripts/eval/replay_real_questions.py --cases tests/data/golden_accounting.json; build the manual test sheet with scripts/eval/golden_sheet.py.",
+ "cases": [
+  {
+   "id": "ARS-01",
+   "source": "xlsx status",
+   "team": "Finance",
+   "question": "What is total receivables outstanding right now?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "answer",
+   "priority": "P1",
+   "must_show": "Outstanding receivables per organization as of today, and the total (all AED); orgs with none named",
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "outstanding",
+       "open_count"
+      ]
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "ARS-02",
+   "source": "xlsx status",
+   "team": "Finance",
+   "question": "Which invoices are overdue right now, by bucket?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "answer",
+   "priority": "P1",
+   "must_show": "Overdue amount and count per aging bucket, per organization or in total",
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "overdue_amount",
+       "overdue_count"
+      ],
+      "group_by": [
+       "aging_bucket"
+      ]
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "ARS-03",
+   "source": "xlsx status",
+   "team": "Finance",
+   "question": "Which customers have the highest overdue amounts?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "Customers ranked by overdue amount, with their organization",
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "overdue_amount",
+       "overdue_count"
+      ],
+      "group_by": [
+       "customer_name"
+      ],
+      "order": [
+       "overdue_amount",
+       "desc"
+      ],
+      "limit": 10
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "APS-01",
+   "source": "xlsx status",
+   "team": "Finance",
+   "question": "What is total payables outstanding right now?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "answer",
+   "priority": "P1",
+   "must_show": "Outstanding payables per organization as of today, and the total",
+   "expect": {
+    "ref": [
+     {
+      "view": "payables",
+      "measures": [
+       "outstanding",
+       "open_count"
+      ]
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "APS-02",
+   "source": "xlsx status",
+   "team": "Finance",
+   "question": "Which vendor bills are due this week or overdue now?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "answer",
+   "priority": "P1",
+   "must_show": "Says open bills have no due date recorded (all are in the 'No due date' bucket), so none can show as due or overdue; may give the open total",
+   "expect": {
+    "ref": [
+     {
+      "view": "payables",
+      "measures": [
+       "outstanding",
+       "open_count"
+      ],
+      "filters": [
+       [
+        "due_date",
+        "inDateRange",
+        [
+         "{week_start}",
+         "{week_end}"
+        ]
+       ]
+      ]
+     },
+     {
+      "view": "payables",
+      "measures": [
+       "open_count",
+       "outstanding"
+      ],
+      "group_by": [
+       "aging_bucket"
+      ]
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "CST-01",
+   "source": "xlsx status",
+   "team": "Founder",
+   "question": "What is our cash balance right now across all bank and cash accounts?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "answer",
+   "priority": "P1",
+   "must_show": "Cash and bank per organization as of today; total only because all are AED; Org1 has none",
+   "expect": {
+    "ref": [
+     {
+      "view": "balance_sheet",
+      "measures": [
+       "cash_and_bank"
+      ],
+      "as_of": "today"
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "UCTS-02",
+   "source": "xlsx status",
+   "team": "Finance",
+   "question": "What is our current VAT position (preliminary payable or refundable)?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "answer",
+   "priority": "P1",
+   "must_show": "Output VAT, input VAT and net payable per organization, with the period stated (current quarter or year to date)",
+   "expect": {
+    "ref": [
+     {
+      "view": "vat",
+      "measures": [
+       "output_vat",
+       "input_vat",
+       "net_vat_payable"
+      ],
+      "period": "this_quarter"
+     },
+     {
+      "view": "vat",
+      "measures": [
+       "output_vat",
+       "input_vat",
+       "net_vat_payable"
+      ],
+      "period": "ytd"
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "DEF-L01",
+   "source": "xlsx statistics",
+   "team": "Collections",
+   "question": "Show me the top 10 defaulters",
+   "orgs": [
+    27
+   ],
+   "behavior": "answer",
+   "priority": "P1",
+   "must_show": "10 customers ranked by overdue amount",
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "overdue_amount",
+       "overdue_count"
+      ],
+      "group_by": [
+       "customer_name"
+      ],
+      "order": [
+       "overdue_amount",
+       "desc"
+      ],
+      "limit": 10
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "DEF-L02",
+   "source": "xlsx statistics",
+   "team": "Collections",
+   "question": "Show me the top 10 defaulters by oldest overdue",
+   "orgs": [
+    27
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "10 invoices or customers ranked by days overdue, with the days",
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "outstanding"
+      ],
+      "group_by": [
+       "document_number",
+       "customer_name",
+       "due_date",
+       "days_overdue"
+      ],
+      "filters": [
+       [
+        "days_overdue",
+        "gt",
+        [
+         "0"
+        ]
+       ]
+      ],
+      "order": [
+       "days_overdue",
+       "desc"
+      ],
+      "limit": 10
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "DEF-L03",
+   "source": "xlsx statistics",
+   "team": "Collections",
+   "question": "Show me the top 10 customers by overdue amount more than 30 days",
+   "orgs": [
+    27
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "Customers ranked by the amount more than 30 days overdue",
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "overdue_amount",
+       "overdue_count"
+      ],
+      "group_by": [
+       "customer_name"
+      ],
+      "filters": [
+       [
+        "days_overdue",
+        "gt",
+        [
+         "30"
+        ]
+       ]
+      ],
+      "order": [
+       "overdue_amount",
+       "desc"
+      ],
+      "limit": 10
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "DEF-L04",
+   "source": "xlsx statistics",
+   "team": "Collections",
+   "question": "Show me the top 10 customers with multiple overdue invoices",
+   "orgs": [
+    27
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "Customers with 2 or more overdue invoices, ranked, with counts",
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "overdue_count",
+       "overdue_amount"
+      ],
+      "group_by": [
+       "customer_name"
+      ],
+      "filters": [
+       [
+        "overdue_count",
+        "gt",
+        [
+         "1"
+        ]
+       ]
+      ],
+      "order": [
+       "overdue_count",
+       "desc"
+      ],
+      "limit": 10
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "DEF-L05",
+   "source": "xlsx statistics",
+   "team": "Collections",
+   "question": "Show me the top 10 overdue invoices",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "answer",
+   "priority": "P1",
+   "must_show": "10 invoices: number, customer, organization, amount, days overdue",
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "outstanding"
+      ],
+      "group_by": [
+       "document_number",
+       "customer_name",
+       "due_date",
+       "days_overdue"
+      ],
+      "filters": [
+       [
+        "days_overdue",
+        "gt",
+        [
+         "0"
+        ]
+       ]
+      ],
+      "order": [
+       "outstanding",
+       "desc"
+      ],
+      "limit": 10
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "BILL-L01",
+   "source": "xlsx statistics",
+   "team": "Billing",
+   "question": "Show me the last 10 invoices created",
+   "orgs": [
+    27
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "10 most recent invoices by invoice date (says it uses invoice date)",
+   "expect": {
+    "ref": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "group_by": [
+       "document_number",
+       "document_date",
+       "customer_name"
+      ],
+      "period": "ytd",
+      "order": [
+       "document_date",
+       "desc"
+      ],
+      "limit": 10
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "BILL-L03",
+   "source": "xlsx statistics",
+   "team": "Billing",
+   "question": "Show me the top 10 invoices by value this month",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "answer",
+   "priority": "P1",
+   "must_show": "10 largest invoices dated this month, with organization",
+   "expect": {
+    "ref": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "group_by": [
+       "document_number",
+       "document_date",
+       "customer_name"
+      ],
+      "period": "this_month",
+      "order": [
+       "net_sales",
+       "desc"
+      ],
+      "limit": 10
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "EXP-L01",
+   "source": "xlsx statistics",
+   "team": "Founder",
+   "question": "Show me the last 5 expenditures",
+   "orgs": [
+    25
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "5 most recent bills or expenses: date, vendor, amount",
+   "expect": {
+    "ref": [
+     {
+      "view": "purchases",
+      "measures": [
+       "net_purchases"
+      ],
+      "group_by": [
+       "document_number",
+       "document_date",
+       "vendor_name"
+      ],
+      "period": "ytd",
+      "order": [
+       "document_date",
+       "desc"
+      ],
+      "limit": 5
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "EXP-L02",
+   "source": "xlsx statistics",
+   "team": "Founder",
+   "question": "Show me the last 10 expenditures above AED 10,000",
+   "orgs": [
+    25
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "10 most recent bills over AED 10,000",
+   "expect": {
+    "ref": [
+     {
+      "view": "purchases",
+      "measures": [
+       "net_purchases"
+      ],
+      "group_by": [
+       "document_number",
+       "document_date",
+       "vendor_name"
+      ],
+      "period": "ytd",
+      "filters": [
+       [
+        "net_purchases",
+        "gt",
+        [
+         "10000"
+        ]
+       ]
+      ],
+      "order": [
+       "document_date",
+       "desc"
+      ],
+      "limit": 10
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "EXP-L05",
+   "source": "xlsx statistics",
+   "team": "CFO",
+   "question": "Show me the top 10 expenditures this month",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "10 largest bills dated this month; says so plainly if there are few or none",
+   "expect": {
+    "ref": [
+     {
+      "view": "purchases",
+      "measures": [
+       "net_purchases"
+      ],
+      "group_by": [
+       "document_number",
+       "document_date",
+       "vendor_name"
+      ],
+      "period": "this_month",
+      "order": [
+       "net_purchases",
+       "desc"
+      ],
+      "limit": 10
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "EXP-L06",
+   "source": "xlsx statistics",
+   "team": "CFO",
+   "question": "Which are the top 10 expense categories this year?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "Expense categories ranked by amount (billed purchases), period stated",
+   "expect": {
+    "ref": [
+     {
+      "view": "purchases",
+      "measures": [
+       "net_purchases"
+      ],
+      "group_by": [
+       "expense_category"
+      ],
+      "period": "ytd",
+      "order": [
+       "net_purchases",
+       "desc"
+      ],
+      "limit": 10
+     }
+    ],
+    "note": "Adapted from 'this month': the first days of a month often have no bills."
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "ARS-G03",
+   "source": "xlsx status",
+   "team": "Finance",
+   "question": "Which overdue invoices have partial payments received?",
+   "orgs": [
+    27
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "Says there are none: every open invoice is unpaid in full (status pending)",
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "outstanding"
+      ],
+      "group_by": [
+       "document_number",
+       "customer_name",
+       "due_date",
+       "days_overdue"
+      ],
+      "filters": [
+       [
+        "status",
+        "equals",
+        [
+         "PARTIALLY_PAID"
+        ]
+       ],
+       [
+        "days_overdue",
+        "gt",
+        [
+         "0"
+        ]
+       ]
+      ],
+      "order": [
+       "outstanding",
+       "desc"
+      ],
+      "limit": 20
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "ARS-G04",
+   "source": "xlsx status",
+   "team": "Finance",
+   "question": "Which high-value invoices above AED 10,000 are due in the next 3 days?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "Open invoices due today to today+3 above AED 10,000; or says there are none",
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "outstanding"
+      ],
+      "group_by": [
+       "document_number",
+       "customer_name",
+       "due_date",
+       "days_overdue"
+      ],
+      "filters": [
+       [
+        "due_date",
+        "inDateRange",
+        [
+         "{today}",
+         "{today+3}"
+        ]
+       ],
+       [
+        "outstanding",
+        "gt",
+        [
+         "10000"
+        ]
+       ]
+      ],
+      "order": [
+       "outstanding",
+       "desc"
+      ],
+      "limit": 20
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "ARS-G08",
+   "source": "xlsx status",
+   "team": "Collections",
+   "question": "Which customers have multiple overdue invoices across aging buckets?",
+   "orgs": [
+    27
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "Customers with overdue invoices in 2 or more buckets, bucket split shown",
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "overdue_count",
+       "overdue_amount"
+      ],
+      "group_by": [
+       "customer_name",
+       "aging_bucket"
+      ],
+      "filters": [
+       [
+        "overdue_count",
+        "gt",
+        [
+         "0"
+        ]
+       ]
+      ],
+      "limit": 100
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "APS-G07",
+   "source": "xlsx status",
+   "team": "Finance",
+   "question": "Which bills are partially paid and still overdue?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "Says none are partially paid, and that open bills have no due date recorded",
+   "expect": {
+    "ref": [
+     {
+      "view": "payables",
+      "measures": [
+       "overdue_amount",
+       "overdue_count"
+      ],
+      "filters": [
+       [
+        "status",
+        "equals",
+        [
+         "PARTIALLY_PAID"
+        ]
+       ]
+      ]
+     },
+     {
+      "view": "payables",
+      "measures": [
+       "open_count",
+       "outstanding"
+      ],
+      "group_by": [
+       "aging_bucket"
+      ]
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "APS-G08",
+   "source": "xlsx status",
+   "team": "Finance",
+   "question": "Which vendors have multiple unpaid bills due this week?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "Says open bills have no due date recorded, so none are due this week; no invented vendor list",
+   "expect": {
+    "ref": [
+     {
+      "view": "payables",
+      "measures": [
+       "open_count",
+       "outstanding"
+      ],
+      "group_by": [
+       "vendor_name"
+      ],
+      "filters": [
+       [
+        "due_date",
+        "inDateRange",
+        [
+         "{week_start}",
+         "{week_end}"
+        ]
+       ],
+       [
+        "open_count",
+        "gt",
+        [
+         "1"
+        ]
+       ]
+      ],
+      "limit": 50
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "ARS-05",
+   "source": "xlsx status",
+   "team": "Finance",
+   "question": "What is collections status this month vs billed amount?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "partial",
+   "priority": "P1",
+   "must_show": "Billed (invoiced) this month per organization; says collections (payments received) are not available",
+   "expect": {
+    "ref": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales",
+       "invoice_count"
+      ],
+      "period": "this_month"
+     }
+    ]
+   },
+   "kind": "partial",
+   "context": []
+  },
+  {
+   "id": "AR-ACT01",
+   "source": "xlsx executionaction",
+   "team": "Collections",
+   "question": "Show me the top 20 overdue invoices and create a collection call list",
+   "orgs": [
+    27
+   ],
+   "behavior": "partial",
+   "priority": "P2",
+   "must_show": "The 20 overdue invoices from the data, arranged as a call list; must not claim to have created tasks in the app",
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "outstanding"
+      ],
+      "group_by": [
+       "document_number",
+       "customer_name",
+       "due_date",
+       "days_overdue"
+      ],
+      "filters": [
+       [
+        "days_overdue",
+        "gt",
+        [
+         "0"
+        ]
+       ]
+      ],
+      "order": [
+       "outstanding",
+       "desc"
+      ],
+      "limit": 20
+     }
+    ]
+   },
+   "kind": "partial",
+   "context": []
+  },
+  {
+   "id": "DOC-FIN-A01",
+   "source": "docx Finance A",
+   "team": "Finance",
+   "question": "What is total revenue MTD, QTD and YTD?",
+   "orgs": [
+    25
+   ],
+   "behavior": "answer",
+   "priority": "P1",
+   "must_show": "Three figures with their dates; says nothing is posted yet for October (month and quarter to date) rather than showing zero as revenue",
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "this_month"
+     },
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "this_quarter"
+     },
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": "ytd"
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "DOC-FIN-A03",
+   "source": "docx Finance A",
+   "team": "Finance",
+   "question": "Compare revenue for September 2026 with September 2025.",
+   "orgs": [
+    24,
+    25
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "Revenue per organization for both months and the change",
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": [
+       "2026-09-01",
+       "2026-09-30"
+      ]
+     },
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue"
+      ],
+      "period": [
+       "2025-09-01",
+       "2025-09-30"
+      ]
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "DOC-FIN-A11",
+   "source": "docx Finance A",
+   "team": "Finance",
+   "question": "What % of our revenue this year came from the top 10 customers?",
+   "orgs": [
+    27
+   ],
+   "behavior": "answer",
+   "priority": "P1",
+   "must_show": "Top 10 customers' share of invoiced sales, with the total it is a share of",
+   "expect": {
+    "ref": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "group_by": [
+       "customer_name"
+      ],
+      "period": "ytd",
+      "order": [
+       "net_sales",
+       "desc"
+      ],
+      "limit": 10
+     },
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "period": "ytd"
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "DOC-FIN-A15",
+   "source": "docx Finance A",
+   "team": "Finance",
+   "question": "Show the gross sales, credit notes and net sales bridge for this year.",
+   "orgs": [
+    27
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "Gross sales, credit notes, net sales (before VAT), year to date",
+   "expect": {
+    "ref": [
+     {
+      "view": "sales",
+      "measures": [
+       "gross_sales",
+       "credit_notes",
+       "net_sales"
+      ],
+      "period": "ytd"
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "DOC-FIN-B01",
+   "source": "docx Finance B",
+   "team": "Finance",
+   "question": "What was our gross margin in the first half of 2026?",
+   "orgs": [
+    24,
+    25
+   ],
+   "behavior": "answer",
+   "priority": "P1",
+   "must_show": "Revenue, cost of sales, gross profit and gross margin % for Jan-Jun 2026 per organization",
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue",
+       "cost_of_sales",
+       "gross_profit",
+       "gross_margin_pct"
+      ],
+      "period": [
+       "2026-01-01",
+       "2026-06-30"
+      ]
+     }
+    ],
+    "note": "Adapted from 'this month': July-October postings in the test ledgers are mostly reversals."
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "DOC-FIN-B03",
+   "source": "docx Finance B",
+   "team": "CFO",
+   "question": "What is EBITDA from our bookkeeping data?",
+   "orgs": [
+    24,
+    25
+   ],
+   "behavior": "not_available",
+   "priority": "P1",
+   "must_show": "Says EBITDA is not available (no depreciation/interest split) and offers net profit; no figure called EBITDA",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says EBITDA is not available (no depreciation/interest split) and offers net profit; no figure called EBITDA"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "DOC-FIN-B10",
+   "source": "docx Finance B",
+   "team": "CFO",
+   "question": "Which cost buckets increased most in May compared with April?",
+   "orgs": [
+    25
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "Expense accounts ranked by increase, with both months' amounts",
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "operating_expenses",
+       "cost_of_sales"
+      ],
+      "group_by": [
+       "account_name"
+      ],
+      "period": [
+       "2026-05-01",
+       "2026-05-31"
+      ],
+      "limit": 100
+     },
+     {
+      "view": "pnl",
+      "measures": [
+       "operating_expenses",
+       "cost_of_sales"
+      ],
+      "group_by": [
+       "account_name"
+      ],
+      "period": [
+       "2026-04-01",
+       "2026-04-30"
+      ],
+      "limit": 100
+     }
+    ],
+    "note": "Adapted from 'this month': org 25 has ledger postings only up to June 2026."
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "DOC-FIN-B17",
+   "source": "docx Finance B",
+   "team": "CFO",
+   "question": "What is break-even revenue at our current cost base?",
+   "orgs": [
+    25
+   ],
+   "behavior": "partial",
+   "priority": "P2",
+   "must_show": "Says a fixed/variable cost split is not available; may give total expenses as the cost base with the period",
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "total_expenses",
+       "revenue"
+      ],
+      "period": "ytd"
+     }
+    ]
+   },
+   "kind": "partial",
+   "context": []
+  },
+  {
+   "id": "DOC-FIN-C03",
+   "source": "docx Finance C",
+   "team": "CFO",
+   "question": "What is our cash burn this month?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "partial",
+   "priority": "P2",
+   "must_show": "Change in cash and bank since the end of last month per organization; says it is the balance change, not a cash flow statement",
+   "expect": {
+    "ref": [
+     {
+      "view": "balance_sheet",
+      "measures": [
+       "cash_and_bank"
+      ],
+      "as_of": "2026-09-30"
+     },
+     {
+      "view": "balance_sheet",
+      "measures": [
+       "cash_and_bank"
+      ],
+      "as_of": "today"
+     }
+    ]
+   },
+   "kind": "partial",
+   "context": []
+  },
+  {
+   "id": "DOC-FIN-C07",
+   "source": "docx Finance C",
+   "team": "Finance",
+   "question": "Which payments are due in the next 7, 15 and 30 days?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "answer",
+   "priority": "P1",
+   "must_show": "Says open bills have no due date recorded, so payments due by date cannot be listed; may give total open bills",
+   "expect": {
+    "ref": [
+     {
+      "view": "payables",
+      "measures": [
+       "outstanding",
+       "open_count"
+      ],
+      "filters": [
+       [
+        "due_date",
+        "inDateRange",
+        [
+         "{today}",
+         "{today+7}"
+        ]
+       ]
+      ]
+     },
+     {
+      "view": "payables",
+      "measures": [
+       "outstanding",
+       "open_count"
+      ],
+      "filters": [
+       [
+        "due_date",
+        "inDateRange",
+        [
+         "{today}",
+         "{today+15}"
+        ]
+       ]
+      ]
+     },
+     {
+      "view": "payables",
+      "measures": [
+       "outstanding",
+       "open_count"
+      ],
+      "filters": [
+       [
+        "due_date",
+        "inDateRange",
+        [
+         "{today}",
+         "{today+30}"
+        ]
+       ]
+      ]
+     },
+     {
+      "view": "payables",
+      "measures": [
+       "open_count",
+       "outstanding"
+      ],
+      "group_by": [
+       "aging_bucket"
+      ]
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "DOC-FIN-D03",
+   "source": "docx Finance D",
+   "team": "CFO",
+   "question": "What is our net working capital trend over the last three month-ends?",
+   "orgs": [
+    24,
+    25
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "Working capital at 31 Jul, 31 Aug, 30 Sep 2026 (and today) per organization",
+   "expect": {
+    "ref": [
+     {
+      "view": "balance_sheet",
+      "measures": [
+       "working_capital"
+      ],
+      "as_of": "2026-07-31"
+     },
+     {
+      "view": "balance_sheet",
+      "measures": [
+       "working_capital"
+      ],
+      "as_of": "2026-08-31"
+     },
+     {
+      "view": "balance_sheet",
+      "measures": [
+       "working_capital"
+      ],
+      "as_of": "2026-09-30"
+     },
+     {
+      "view": "balance_sheet",
+      "measures": [
+       "working_capital"
+      ],
+      "as_of": "today"
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "DOC-FIN-D04",
+   "source": "docx Finance D",
+   "team": "CFO",
+   "question": "What are DSO and DPO today?",
+   "orgs": [
+    27
+   ],
+   "behavior": "partial",
+   "priority": "P2",
+   "must_show": "Either an approximation with the method shown (receivables / sales x days) or a plain 'not available'; no unexplained figure",
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "outstanding"
+      ]
+     },
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "period": [
+       "{today-90}",
+       "today"
+      ]
+     }
+    ]
+   },
+   "kind": "partial",
+   "context": []
+  },
+  {
+   "id": "DOC-FIN-D08",
+   "source": "docx Finance D",
+   "team": "Finance",
+   "question": "Show overdue payables bucket-wise.",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "Says open bills have no due date recorded (all in 'No due date'), so no aging by due date is possible",
+   "expect": {
+    "ref": [
+     {
+      "view": "payables",
+      "measures": [
+       "overdue_amount",
+       "overdue_count"
+      ],
+      "group_by": [
+       "aging_bucket"
+      ]
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "DOC-FIN-D10",
+   "source": "docx Finance D",
+   "team": "Finance",
+   "question": "What % of receivables are from our top 10 debtors?",
+   "orgs": [
+    27
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "Top 10 customers' share of outstanding receivables, with the total",
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "outstanding"
+      ],
+      "group_by": [
+       "customer_name"
+      ],
+      "order": [
+       "outstanding",
+       "desc"
+      ],
+      "limit": 10
+     },
+     {
+      "view": "receivables",
+      "measures": [
+       "outstanding"
+      ]
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "DOC-FIN-D16",
+   "source": "docx Finance D",
+   "team": "Collections",
+   "question": "Which large invoices above AED 10,000 are due this week?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "Open invoices due this week over AED 10,000; or says there are none",
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "outstanding"
+      ],
+      "group_by": [
+       "document_number",
+       "customer_name",
+       "due_date",
+       "days_overdue"
+      ],
+      "filters": [
+       [
+        "due_date",
+        "inDateRange",
+        [
+         "{week_start}",
+         "{week_end}"
+        ]
+       ],
+       [
+        "outstanding",
+        "gt",
+        [
+         "10000"
+        ]
+       ]
+      ],
+      "order": [
+       "outstanding",
+       "desc"
+      ],
+      "limit": 20
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "DOC-SALES-A06",
+   "source": "docx Sales A",
+   "team": "Sales",
+   "question": "What is the average invoice value this year?",
+   "orgs": [
+    27
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "Net sales / invoice count, with both inputs shown",
+   "expect": {
+    "ref": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales",
+       "invoice_count"
+      ],
+      "period": "ytd"
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "DOC-SALES-A07",
+   "source": "docx Sales A",
+   "team": "Sales",
+   "question": "Which customers bought more in September than in August?",
+   "orgs": [
+    27
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "Customers with higher invoiced sales in September than August, with both amounts",
+   "expect": {
+    "ref": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "group_by": [
+       "customer_name"
+      ],
+      "period": [
+       "2026-09-01",
+       "2026-09-30"
+      ],
+      "limit": 100
+     },
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales"
+      ],
+      "group_by": [
+       "customer_name"
+      ],
+      "period": [
+       "2026-08-01",
+       "2026-08-31"
+      ],
+      "limit": 100
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "DOC-SALES-B11",
+   "source": "docx Sales B",
+   "team": "Sales",
+   "question": "Which customers made partial payments?",
+   "orgs": [
+    27
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "Says no customer has a partial payment on an open invoice (all open invoices are unpaid in full)",
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "outstanding",
+       "open_count"
+      ],
+      "group_by": [
+       "customer_name"
+      ],
+      "filters": [
+       [
+        "status",
+        "equals",
+        [
+         "PARTIALLY_PAID"
+        ]
+       ]
+      ],
+      "limit": 50
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "DOC-AP-E18",
+   "source": "docx Accounting E",
+   "team": "Finance",
+   "question": "Show the top 20 vendors by unpaid amount.",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "20 vendors ranked by outstanding payables, with organization",
+   "expect": {
+    "ref": [
+     {
+      "view": "payables",
+      "measures": [
+       "outstanding",
+       "open_count"
+      ],
+      "group_by": [
+       "vendor_name"
+      ],
+      "order": [
+       "outstanding",
+       "desc"
+      ],
+      "limit": 20
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "DOC-AR-D11",
+   "source": "docx Accounting D",
+   "team": "Finance",
+   "question": "Which receivable entries are older than 180 days?",
+   "orgs": [
+    27
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "Count and amount of open invoices more than 180 days overdue (or older than 180 days, stated), sample list",
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "outstanding",
+       "open_count"
+      ],
+      "filters": [
+       [
+        "days_overdue",
+        "gt",
+        [
+         "180"
+        ]
+       ]
+      ]
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "DOC-ROOT-B02",
+   "source": "docx Shared B",
+   "team": "CFO",
+   "question": "Why did receivables increase this month?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "not_available",
+   "priority": "P2",
+   "must_show": "Says receivables have no history by date (only today's open items), so a month-on-month change cannot be explained; may give today's figure",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says receivables have no history by date (only today's open items), so a month-on-month change cannot be explained; may give today's figure"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "DOC-ROOT-B03",
+   "source": "docx Shared B",
+   "team": "CFO",
+   "question": "Why did margins drop in Q3 compared with Q2?",
+   "orgs": [
+    24,
+    25
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "Q2 vs Q3 revenue, profit and margin per organization, and the reason in the figures (Q3 revenue turned negative)",
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue",
+       "net_profit",
+       "net_margin_pct"
+      ],
+      "period": [
+       "2026-04-01",
+       "2026-06-30"
+      ]
+     },
+     {
+      "view": "pnl",
+      "measures": [
+       "revenue",
+       "net_profit",
+       "net_margin_pct"
+      ],
+      "period": [
+       "2026-07-01",
+       "2026-09-30"
+      ]
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "DOC-EXEC-A01",
+   "source": "docx Shared A",
+   "team": "Founder",
+   "question": "What are the top things I should know today across finance?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "answer",
+   "priority": "P2",
+   "must_show": "A short list built from real figures (losses, negative cash, overdue receivables); every number traceable to a tool",
+   "expect": {
+    "ref": [
+     {
+      "view": "pnl",
+      "measures": [
+       "net_profit"
+      ],
+      "period": "ytd"
+     },
+     {
+      "view": "balance_sheet",
+      "measures": [
+       "cash_and_bank"
+      ],
+      "as_of": "today"
+     },
+     {
+      "view": "receivables",
+      "measures": [
+       "overdue_amount"
+      ]
+     }
+    ]
+   },
+   "kind": "metric",
+   "context": []
+  },
+  {
+   "id": "CST-03",
+   "source": "xlsx",
+   "team": "Accountant",
+   "question": "Which accounts have unreconciled balances and by how much?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "not_available",
+   "priority": "P1",
+   "must_show": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "CST-04",
+   "source": "xlsx",
+   "team": "Accountant",
+   "question": "Which bank transactions are still uncategorized or unmatched?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "not_available",
+   "priority": "P2",
+   "must_show": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "ARS-04",
+   "source": "xlsx",
+   "team": "Finance",
+   "question": "Which receipts are unallocated or partially allocated?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "not_available",
+   "priority": "P1",
+   "must_show": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "APS-04",
+   "source": "xlsx",
+   "team": "Finance",
+   "question": "Which vendor payments are unallocated or not matched to bills?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "not_available",
+   "priority": "P2",
+   "must_show": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "ACS-02",
+   "source": "xlsx",
+   "team": "Accountant",
+   "question": "Which transactions are still in draft or pending approval?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "not_available",
+   "priority": "P2",
+   "must_show": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "ACS-05",
+   "source": "xlsx",
+   "team": "Controller",
+   "question": "Which entries were backdated today?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "not_available",
+   "priority": "P2",
+   "must_show": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "ACS-06",
+   "source": "xlsx",
+   "team": "Accountant",
+   "question": "What transactions are missing attachments or narration?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "not_available",
+   "priority": "P1",
+   "must_show": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "REC-01",
+   "source": "xlsx",
+   "team": "Accountant",
+   "question": "What is bank reconciliation status across all accounts?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "not_available",
+   "priority": "P2",
+   "must_show": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "CLS-01",
+   "source": "xlsx",
+   "team": "Controller",
+   "question": "What is month-end close status right now?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "not_available",
+   "priority": "P1",
+   "must_show": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "WFS-01",
+   "source": "xlsx",
+   "team": "Finance",
+   "question": "What approvals are pending right now (invoices, bills, payments, journals)?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "not_available",
+   "priority": "P2",
+   "must_show": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "CST-G02",
+   "source": "xlsx",
+   "team": "Finance",
+   "question": "Which bank accounts have no sync in the last 24 hours?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "not_available",
+   "priority": "P2",
+   "must_show": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "MDC-01",
+   "source": "xlsx",
+   "team": "Accountant",
+   "question": "Which customers are missing TRN or tax profile details?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "not_available",
+   "priority": "P1",
+   "must_show": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "CTC-01",
+   "source": "xlsx",
+   "team": "CA",
+   "question": "Are we on track for Corporate Tax return readiness for this tax period?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "not_available",
+   "priority": "P2",
+   "must_show": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "EXP-L03",
+   "source": "xlsx",
+   "team": "Finance",
+   "question": "What are the last 10 vendor payments?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "not_available",
+   "priority": "P1",
+   "must_show": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "RECPT-L01",
+   "source": "xlsx",
+   "team": "Finance",
+   "question": "Show me the last 10 receipts",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "not_available",
+   "priority": "P2",
+   "must_show": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "JE-L01",
+   "source": "xlsx",
+   "team": "Accountant",
+   "question": "Show me the last 10 journal entries",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "not_available",
+   "priority": "P2",
+   "must_show": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "BILL-L04",
+   "source": "xlsx",
+   "team": "Billing",
+   "question": "Show me the last 10 draft invoices",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "not_available",
+   "priority": "P2",
+   "must_show": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "INS-01",
+   "source": "xlsx",
+   "team": "Operations",
+   "question": "What is current inventory status (value, low-stock, out-of-stock)?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "not_available",
+   "priority": "P2",
+   "must_show": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "CF-01",
+   "source": "xlsx",
+   "team": "Founder",
+   "question": "What is our projected cash balance for the next 30 days?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "not_available",
+   "priority": "P1",
+   "must_show": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "REVF-01",
+   "source": "xlsx",
+   "team": "Finance",
+   "question": "Based on the current invoicing trend, what is forecast revenue for this month?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "not_available",
+   "priority": "P2",
+   "must_show": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "CF-08",
+   "source": "xlsx",
+   "team": "Founder",
+   "question": "How many months of runway do we have at the current burn rate?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "not_available",
+   "priority": "P2",
+   "must_show": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Says plainly this data is not available; offers the closest figure; no invented numbers or app steps"
+   },
+   "kind": "unsupported",
+   "context": []
+  },
+  {
+   "id": "VATC-01",
+   "source": "xlsx compliance",
+   "team": "Finance",
+   "question": "Are we VAT filing-ready for the current period?",
+   "orgs": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33
+   ],
+   "behavior": "partial",
+   "priority": "P1",
+   "must_show": "Gives the current VAT position from the data; says filing-readiness checks (missing fields, reconciliations) are not available",
+   "expect": {
+    "ref": [
+     {
+      "view": "vat",
+      "measures": [
+       "net_vat_payable"
+      ],
+      "period": "this_quarter"
+     }
+    ]
+   },
+   "kind": "partial",
+   "context": []
+  },
+  {
+   "id": "INV-ACT01",
+   "source": "xlsx executionaction",
+   "team": "Finance",
+   "question": "Create an invoice for customer Lakshit for AED 5,000 of consulting services.",
+   "orgs": [
+    27
+   ],
+   "behavior": "action",
+   "priority": "P1",
+   "must_show": "Declines to create/send/post/submit (read-only assistant), says where to do it in the app; nothing claimed as done",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Declines to create/send/post/submit (read-only assistant), says where to do it in the app; nothing claimed as done"
+   },
+   "kind": "action",
+   "context": []
+  },
+  {
+   "id": "INV-ACT04",
+   "source": "xlsx executionaction",
+   "team": "Finance",
+   "question": "Send an invoice reminder to all overdue customers above AED 10,000.",
+   "orgs": [
+    27
+   ],
+   "behavior": "action",
+   "priority": "P2",
+   "must_show": "Declines to create/send/post/submit (read-only assistant), says where to do it in the app; nothing claimed as done",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Declines to create/send/post/submit (read-only assistant), says where to do it in the app; nothing claimed as done"
+   },
+   "kind": "action",
+   "context": []
+  },
+  {
+   "id": "TAX-ACT05",
+   "source": "xlsx executionaction",
+   "team": "Finance",
+   "question": "Submit the VAT return.",
+   "orgs": [
+    27
+   ],
+   "behavior": "action",
+   "priority": "P1",
+   "must_show": "Declines to create/send/post/submit (read-only assistant), says where to do it in the app; nothing claimed as done",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Declines to create/send/post/submit (read-only assistant), says where to do it in the app; nothing claimed as done"
+   },
+   "kind": "action",
+   "context": []
+  },
+  {
+   "id": "CLOSE-ACT05",
+   "source": "xlsx executionaction",
+   "team": "Finance",
+   "question": "Lock the accounting period for September.",
+   "orgs": [
+    27
+   ],
+   "behavior": "action",
+   "priority": "P2",
+   "must_show": "Declines to create/send/post/submit (read-only assistant), says where to do it in the app; nothing claimed as done",
+   "expect": {
+    "ref": [],
+    "must_refuse": "Declines to create/send/post/submit (read-only assistant), says where to do it in the app; nothing claimed as done"
+   },
+   "kind": "action",
+   "context": []
+  },
+  {
+   "id": "INV-ACT05",
+   "source": "xlsx executionaction",
+   "team": "Collections",
+   "question": "Draft a payment reminder for customer Lakshit mentioning their oldest overdue invoice.",
+   "orgs": [
+    27
+   ],
+   "behavior": "partial",
+   "priority": "P1",
+   "must_show": "A reminder text using the real invoice number, amount and due date from the data; says it was drafted, not sent",
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "outstanding"
+      ],
+      "group_by": [
+       "document_number",
+       "customer_name",
+       "due_date",
+       "days_overdue"
+      ],
+      "filters": [
+       [
+        "customer_name",
+        "equals",
+        [
+         "Lakshit"
+        ]
+       ],
+       [
+        "days_overdue",
+        "gt",
+        [
+         "0"
+        ]
+       ]
+      ],
+      "order": [
+       "days_overdue",
+       "desc"
+      ],
+      "limit": 3
+     }
+    ]
+   },
+   "kind": "partial",
+   "context": []
+  },
+  {
+   "id": "JE-ACT01",
+   "source": "xlsx executionaction",
+   "team": "Accountant",
+   "question": "Draft a journal entry for accrued rent for January.",
+   "orgs": [
+    25
+   ],
+   "behavior": "clarify",
+   "priority": "P2",
+   "must_show": "Asks for the rent amount (or gives a template without invented amounts); says it cannot post",
+   "expect": {
+    "ref": []
+   },
+   "kind": "clarify",
+   "context": []
+  }
+ ]
+}

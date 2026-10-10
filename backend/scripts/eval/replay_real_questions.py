@@ -127,8 +127,23 @@ _TIME = {"pnl": "pnl.transaction_date", "sales": "sales.document_date", "purchas
          "vat": "vat.document_date", "balance_sheet": "balance_sheet.transaction_date"}
 
 
+#: Relative dates in reference specs, resolved on the day of the run: {today}, {today+3},
+#: {week_start} (Monday), {week_end} (Sunday), each with an optional +/- day offset.
+_DATE_TOKEN = re.compile(r"^\{(today|week_start|week_end)([+-]\d+)?\}$")
+
+
+def _resolve(value: Any, today: datetime.date) -> str:
+    m = _DATE_TOKEN.match(str(value))
+    if not m:
+        return str(value)
+    base = {"today": today,
+            "week_start": today - datetime.timedelta(days=today.weekday()),
+            "week_end": today + datetime.timedelta(days=6 - today.weekday())}[m.group(1)]
+    return (base + datetime.timedelta(days=int(m.group(2) or 0))).isoformat()
+
+
 def _date(value: str, today: datetime.date) -> datetime.date:
-    return today if value == "today" else datetime.date.fromisoformat(value)
+    return today if value == "today" else datetime.date.fromisoformat(_resolve(value, today))
 
 
 def _range(period: Any, today: datetime.date) -> Tuple[datetime.date, datetime.date]:
@@ -149,7 +164,8 @@ def cube_query(spec: Dict[str, Any], today: datetime.date) -> Dict[str, Any]:
     query: Dict[str, Any] = {
         "measures": [f"{v}.{m}" for m in spec["measures"]],
         "dimensions": dims,
-        "filters": [{"member": f"{v}.{m}", "operator": op, "values": vals} for m, op, vals in spec.get("filters", [])],
+        "filters": [{"member": f"{v}.{m}", "operator": op, "values": [_resolve(x, today) for x in vals]}
+                    for m, op, vals in spec.get("filters", [])],
         "limit": spec.get("limit", 500),
     }
     if v == "balance_sheet":
