@@ -5,13 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "gemini-brain"
 version = "0.1.0"
-description = "Hybrid AI orchestration engine: Gemini routes, Accutax API serves, Claude reasons."
+description = "Accutax AI backend: a tool-using agent on AWS Bedrock over Cube figures, UAE VAT law and the app guide."
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "Proprietary"}
 
 dependencies = [
-    "google-genai>=1.0.0",
     "boto3>=1.28.0",
     "botocore>=1.31.0",
     "psycopg2-binary>=2.9.0",

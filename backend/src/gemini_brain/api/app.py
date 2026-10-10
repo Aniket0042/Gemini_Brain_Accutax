@@ -54,7 +54,7 @@ DESCRIPTION = """
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifespan context manager to auto-initialize DB tables on startup and cleanup clients."""
+    """Lifespan context manager: create DB tables and start background workers on startup, stop them on shutdown."""
     try:
         from gemini_brain.api.auth import init_auth_db
         init_auth_db()
@@ -66,38 +66,6 @@ async def lifespan(app: FastAPI):
         initialize_tables()
     except Exception as e:
         logger.warning("Chat session tables auto-initialization skipped or failed on startup: %s", e)
-
-    # Phase F: Proactively inspect Accutax REST API auth token health on startup.
-    # inspect_jwt_token() only ever looks at the static seed token in isolation,
-    # so its EXPIRED/error log reads as a real outage even when it isn't one —
-    # every interactive request actually uses the caller's own session token,
-    # and every unattended call falls through to the auto-refreshing service
-    # account (see auth/service_token.py) before ever touching the seed. Add
-    # that context here so an expired seed doesn't look like a live incident
-    # on deployments that configured a service account.
-    try:
-        from gemini_brain.auth.token_monitor import inspect_jwt_token
-        from gemini_brain.config.settings import settings
-        health = inspect_jwt_token()
-        if health.status in ("EXPIRED", "MISSING", "INVALID"):
-            if settings.accutax_service_email and settings.accutax_service_password:
-                logger.info(
-                    "ACCUTAX_AUTH_TOKEN is %s, but a service account is configured "
-                    "(ACCUTAX_SERVICE_EMAIL) — unattended REST calls auto-refresh via "
-                    "login and are unaffected. Interactive requests use each user's own "
-                    "session token regardless.",
-                    health.status,
-                )
-            else:
-                logger.warning(
-                    "ACCUTAX_AUTH_TOKEN is %s and no service account is configured — "
-                    "unattended REST calls (scheduled jobs, empty-result SQL "
-                    "verification) will fail with HTTP 401 until it is renewed or "
-                    "ACCUTAX_SERVICE_EMAIL/ACCUTAX_SERVICE_PASSWORD are set.",
-                    health.status,
-                )
-    except Exception as e:
-        logger.warning("JWT token health inspection skipped on startup: %s", e)
 
     try:
         from gemini_brain.artifacts.store import start_sweeper
@@ -117,11 +85,6 @@ async def lifespan(app: FastAPI):
     try:
         from gemini_brain.artifacts.store import stop_sweeper
         stop_sweeper()
-    except Exception:
-        pass
-    try:
-        from gemini_brain.api_client.accutax_client import close_client_async
-        await close_client_async()
     except Exception:
         pass
 

@@ -6,8 +6,7 @@ Values are loaded from the process environment (and optionally from a .env file
 via python-dotenv) at import time.
 
 Original locations:
-  - gemini_brain_adapter.py  (GEMINI_API_KEY, ACCUTAX_USER_ID)
-  - api_agent.py             (ACCUTAX_BASE_URL, ACCUTAX_AUTH_TOKEN, ACCUTAX_USER_ID)
+  - api_agent.py             (ACCUTAX_BASE_URL)
   - executor.py              (DB_HOST … DB_PASSWORD)
   - bedrock_client.py        (BEDROCK_REGION, BEDROCK_MODEL_ID, etc.)
 """
@@ -34,12 +33,6 @@ load_dotenv(_ENV_FILE, override=False)
 
 class GeminiBrainSettings(BaseSettings):
     """Centralised, validated configuration for the Gemini Brain package."""
-
-    # ── Google Gemini ──────────────────────────────────────────
-    gemini_api_key: str = Field(
-        default="",
-        description="Google Gemini API key.",
-    )
 
     # ── AWS Bedrock ────────────────────────────────────────────
     bedrock_region: str = Field(default="ap-south-1")
@@ -74,34 +67,6 @@ class GeminiBrainSettings(BaseSettings):
             "from App Guidance answers into the live app — see "
             "knowledge/guide_loader.py SECTION_ROUTES. Override via "
             "ACCUTAX_APP_URL for production."
-        ),
-    )
-    accutax_auth_token: str = Field(
-        default="",
-        description=(
-            "Long-lived seed/fallback bearer token. Used only when no per-request "
-            "user token is available and no service account is configured — it is a "
-            "~24h JWT and goes stale. Prefer the service account fields below."
-        ),
-    )
-    accutax_service_email: str = Field(
-        default="",
-        description=(
-            "Service-account email. When set with accutax_service_password, "
-            "unattended API calls re-authenticate before expiry instead of relying "
-            "on the static accutax_auth_token. Never used in place of a real user "
-            "token — see auth/service_token.py."
-        ),
-    )
-    accutax_service_password: str = Field(
-        default="",
-        description="Service-account password. Supply via environment, never commit.",
-    )
-    accutax_user_id: str = Field(
-        default="18",
-        description=(
-            "Default user ID for Accutax API calls.  Kept as a string because "
-            "some endpoints require userId as a quoted string value."
         ),
     )
 

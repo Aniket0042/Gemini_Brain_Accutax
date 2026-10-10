@@ -583,8 +583,8 @@ def health_check() -> HealthResponse:
     tags=["Health & Diagnostics"],
     summary="Check All AI Models & Services Health",
     description=(
-        "Pings Google Gemini 2.5 Flash, the two configured AWS Bedrock Claude models, "
-        "Accutax REST API, and PostgreSQL DB. Measures latency and returns diagnostic status & sample responses."
+        "Pings the agent's AWS Bedrock model(s), the Cube semantic layer and PostgreSQL. "
+        "Measures latency and returns diagnostic status & sample responses."
     ),
 )
 def check_models_get() -> ModelHealthResponse:

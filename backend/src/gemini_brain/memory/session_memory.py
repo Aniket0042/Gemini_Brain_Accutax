@@ -1,20 +1,17 @@
 """
-session_memory.py — Session history, conversation state, thread auto-titling, and project context.
+session_memory.py — Session history, conversation state, and project context.
 
-Extracted from memory.py lines 617-639 (rename_thread), 670-784 (get_history_by_session, save_message_by_session, get_state_by_session, update_state_by_session),
-890-931 (get_thread_name, maybe_auto_title), and 1145-1229 (get_project_context_by_session).
+Extracted from memory.py lines 670-784 (get_history_by_session, save_message_by_session, get_state_by_session, update_state_by_session),
+and 1145-1229 (get_project_context_by_session).
 """
 from __future__ import annotations
 
 import logging
-import os
 import uuid
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import psycopg2.extras
 
-from gemini_brain.config.constants import GEMINI_MODEL
-from gemini_brain.config.settings import settings
 from gemini_brain.db.connection import get_connection
 
 logger = logging.getLogger("gemini_brain.memory.session_memory")
@@ -742,107 +739,6 @@ def update_state_by_session(
                 conn.close()
             except Exception:
                 pass
-
-
-def get_thread_name(session_id: str, db_name: str = "") -> Optional[str]:
-    """Retrieve the name of a specific session."""
-    if not is_valid_uuid(session_id):
-        return None
-    conn = get_connection(db_name)
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            "SELECT name FROM public.model_arena_chat_sessions WHERE id = %s",
-            (session_id,),
-        )
-        row = cur.fetchone()
-        return row[0] if row else None
-    except Exception as e:
-        logger.error("Failed to get thread name: %s", e)
-        return None
-    finally:
-        cur.close()
-        conn.close()
-
-
-def rename_thread(session_id: str, new_name: str, db_name: str = "") -> None:
-    """Rename a specific chat thread."""
-    if not is_valid_uuid(session_id):
-        return
-    conn = None
-    cur = None
-    try:
-        conn = get_connection(db_name)
-        cur = conn.cursor()
-        cur.execute(
-            """
-            UPDATE public.model_arena_chat_sessions 
-            SET name = %s, updated_at = CURRENT_TIMESTAMP 
-            WHERE id = %s
-        """,
-            (new_name, session_id),
-        )
-        conn.commit()
-        logger.info("Renamed thread id=%s to '%s'", session_id, new_name)
-    except Exception as e:
-        if conn:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
-        logger.error("Failed to rename thread: %s", e)
-    finally:
-        if cur:
-            try:
-                cur.close()
-            except Exception:
-                pass
-        if conn:
-            try:
-                conn.close()
-            except Exception:
-                pass
-
-
-def maybe_auto_title(
-    session_id: str,
-    user_question: str,
-    call_gemini: Optional[Callable[[str, str, int], Tuple[str, int, int]]] = None,
-    db_name: str = "",
-) -> None:
-    """Auto-title session using Gemini 2.5 Flash if name is 'New Chat'."""
-    if not is_valid_uuid(session_id):
-        return
-    try:
-        current_name = get_thread_name(session_id, db_name)
-        if current_name == "New Chat":
-            prompt = f'Summarize this financial query in 3 words or less (no punctuation, start directly): "{user_question}"'
-            if call_gemini is not None:
-                title_text, _, _ = call_gemini("You are a title summarizer.", prompt, 100)
-            else:
-                from google import genai
-                from google.genai import types
-
-                api_key = settings.gemini_api_key or os.getenv(
-                    "GEMINI_API_KEY", ""
-                )
-                client = genai.Client(api_key=api_key)
-                resp = client.models.generate_content(
-                    model=GEMINI_MODEL,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        thinking_config=types.ThinkingConfig(thinking_budget=0),
-                        temperature=0.0,
-                        max_output_tokens=100,
-                    ),
-                )
-                title_text = resp.text if resp else ""
-
-            title = title_text.strip().replace('"', "").replace("'", "") if title_text else None
-            if title:
-                rename_thread(session_id, title, db_name)
-    except Exception as e:
-        logger.warning("Auto-titling failed for session %s: %s", session_id, e)
 
 
 def get_project_context_by_session(

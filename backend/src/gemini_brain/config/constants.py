@@ -13,11 +13,6 @@ All values are preserved exactly as found in the original source.
 from __future__ import annotations
 
 # ─────────────────────────────────────────────────────────────
-# Gemini model
-# ─────────────────────────────────────────────────────────────
-GEMINI_MODEL: str = "gemini-3.5-flash"
-
-# ─────────────────────────────────────────────────────────────
 # Bedrock / Claude model identifiers
 # ─────────────────────────────────────────────────────────────
 HAIKU3_ID: str = "anthropic.claude-3-haiku-20240307-v1:0"
@@ -215,19 +210,3 @@ ENDPOINT_DESCRIPTIONS: dict[str, str] = {
     "/report/expense-by-category": "Retrieving category expense breakdown",
     "/bank/manual/accounts": "Retrieving bank account details",
 }
-
-
-# ── Default acting user ──────────────────────────────────────────────────────
-# Several call paths accept a user_id and fell back to the literal 18 — a real
-# account from an old fixture. The value is only ever a fallback for internal
-# and test paths; authenticated requests always carry the caller's own id from
-# the JWT. Sourced from ACCUTAX_USER_ID so it is configurable rather than magic.
-def _default_user_id() -> int:
-    from gemini_brain.config.settings import settings
-    try:
-        return int(settings.accutax_user_id)
-    except (TypeError, ValueError):
-        return 0
-
-
-DEFAULT_USER_ID: int = _default_user_id()

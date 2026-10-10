@@ -1,96 +1,81 @@
-"""Unit tests for Model Diagnostics and Health Check endpoint."""
-from unittest.mock import MagicMock, patch
+"""Unit tests for the health check of the agent's model(s), Cube and PostgreSQL."""
+from unittest.mock import patch
+
 from fastapi.testclient import TestClient
 
 from gemini_brain.api.app import app
-from gemini_brain.health.model_health_checker import (
-    check_all_models_and_services,
-    check_gemini_model,
-)
+from gemini_brain.health import model_health_checker as health
+from gemini_brain.semantic.cube_client import CubeError
 
 client = TestClient(app)
 
+MODEL_OK = {"name": "AWS Bedrock Claude Sonnet 5", "model_id": "in.anthropic.claude-sonnet-5",
+            "provider": "AWS Bedrock", "status": "ok", "latency_ms": 250, "sample_response": "OK", "error": None}
+CUBE_OK = {"service": "Cube semantic layer", "target": "http://127.0.0.1:4000/cubejs-api/v1/meta",
+           "status": "ok", "http_code": 200, "latency_ms": 40, "error": None}
+DB_OK = {"service": "PostgreSQL Database Engine", "target": "127.0.0.1:5432/accutax", "status": "ok",
+         "latency_ms": 10, "error": None}
 
-@patch("gemini_brain.health.model_health_checker.check_gemini_model")
-@patch("gemini_brain.health.model_health_checker.check_bedrock_model")
-@patch("gemini_brain.health.model_health_checker.check_accutax_api")
-@patch("gemini_brain.health.model_health_checker.check_postgres_db")
-def test_model_health_checker_aggregated(mock_db, mock_api, mock_bedrock, mock_gemini):
-    mock_gemini.return_value = {
-        "name": "Google Gemini 2.5 Flash",
-        "model_id": "gemini-2.5-flash",
-        "provider": "Google GenAI",
-        "status": "ok",
-        "latency_ms": 150,
-        "sample_response": "OK",
-        "error": None,
-    }
-    mock_bedrock.return_value = {
-        "name": "AWS Bedrock Claude 3.5 Sonnet",
-        "model_id": "apac.anthropic.claude-3-5-sonnet-20241022-v2:0",
-        "provider": "AWS Bedrock",
-        "status": "ok",
-        "latency_ms": 250,
-        "sample_response": "OK",
-        "error": None,
-    }
-    mock_api.return_value = {
-        "service": "Accutax REST API",
-        "target": "http://13.127.157.108:8081/health",
-        "status": "ok",
-        "http_code": 200,
-        "latency_ms": 50,
-        "error": None,
-    }
-    mock_db.return_value = {
-        "service": "PostgreSQL Database Engine",
-        "target": "127.0.0.1:5435/accutax_bk_1_5",
-        "status": "ok",
-        "latency_ms": 10,
-        "error": None,
-    }
 
-    res = check_all_models_and_services()
+def test_the_agent_models_are_the_planner_and_a_different_writer(monkeypatch):
+    monkeypatch.setattr(health.settings, "agent_model_id", "planner-model")
+    monkeypatch.setattr(health.settings, "agent_answer_model_id", "")
+    assert health.agent_model_ids() == ["planner-model"]
+    monkeypatch.setattr(health.settings, "agent_answer_model_id", "writer-model")
+    assert health.agent_model_ids() == ["planner-model", "writer-model"]
+    monkeypatch.setattr(health.settings, "agent_answer_model_id", "planner-model")
+    assert health.agent_model_ids() == ["planner-model"]
+
+
+@patch.object(health, "check_postgres_db", return_value=DB_OK)
+@patch.object(health, "check_cube", return_value=CUBE_OK)
+@patch.object(health, "check_bedrock_model", return_value=MODEL_OK)
+def test_all_ok_checks_the_agent_model_cube_and_postgres(mock_bedrock, mock_cube, mock_db, monkeypatch):
+    monkeypatch.setattr(health.settings, "agent_model_id", "planner-model")
+    monkeypatch.setattr(health.settings, "agent_answer_model_id", "")
+    res = health.check_all_models_and_services()
     assert res["overall_status"] == "ok"
-    assert res["summary"]["models_healthy"] == 3
-    assert res["summary"]["services_healthy"] == 2
+    assert res["summary"] == {"models_tested": 1, "models_healthy": 1, "services_tested": 2, "services_healthy": 2}
+    assert mock_bedrock.call_args.args[0] == "planner-model"
+    assert [s["service"] for s in res["services"]] == ["Cube semantic layer", "PostgreSQL Database Engine"]
+
+
+@patch.object(health, "check_postgres_db", return_value=DB_OK)
+@patch.object(health, "check_bedrock_model", return_value=MODEL_OK)
+def test_cube_down_is_degraded(mock_bedrock, mock_db, monkeypatch):
+    def unreachable(**kwargs):
+        raise CubeError("Cube unreachable: connection refused")
+
+    monkeypatch.setattr(health.cube_client, "meta", unreachable)
+    res = health.check_all_models_and_services()
+    assert res["overall_status"] == "degraded"
+    cube = res["services"][0]
+    assert cube["status"] == "error" and "unreachable" in cube["error"]
+
+
+def test_cube_meta_with_views_is_ok(monkeypatch):
+    seen = {}
+
+    def meta(**kwargs):
+        seen.update(kwargs)
+        return {"cubes": [{"name": "pnl"}, {"name": "sales"}]}
+
+    monkeypatch.setattr(health.cube_client, "meta", meta)
+    res = health.check_cube()
+    assert res["status"] == "ok" and res["http_code"] == 200
+    assert seen["organization_ids"] == [0]   # schema only: no organization's data is in scope
 
 
 @patch("gemini_brain.api.routes.check_all_models_and_services")
 def test_get_health_models_endpoint(mock_check):
     mock_check.return_value = {
         "overall_status": "ok",
-        "summary": {
-            "models_tested": 3,
-            "models_healthy": 3,
-            "services_tested": 2,
-            "services_healthy": 2,
-        },
-        "models": [
-            {
-                "name": "Google Gemini 2.5 Flash",
-                "model_id": "gemini-2.5-flash",
-                "provider": "Google GenAI",
-                "status": "ok",
-                "latency_ms": 120,
-                "sample_response": "OK",
-                "error": None,
-            }
-        ],
-        "services": [
-            {
-                "service": "Accutax REST API",
-                "target": "http://13.127.157.108:8081/health",
-                "status": "ok",
-                "http_code": 200,
-                "latency_ms": 45,
-                "error": None,
-            }
-        ],
+        "summary": {"models_tested": 1, "models_healthy": 1, "services_tested": 2, "services_healthy": 2},
+        "models": [MODEL_OK],
+        "services": [CUBE_OK, DB_OK],
     }
-
     response = client.get("/api/v1/health/models")
     assert response.status_code == 200
     data = response.json()
     assert data["overall_status"] == "ok"
-    assert len(data["models"]) == 1
+    assert len(data["models"]) == 1 and len(data["services"]) == 2

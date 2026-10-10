@@ -93,10 +93,6 @@ class _MemoryStore:
         return None
 
     @staticmethod
-    def maybe_auto_title(*args, **kwargs):
-        return None
-
-    @staticmethod
     def verify_session_ownership(*args, **kwargs):
         return True
 
@@ -107,7 +103,7 @@ def install_memory_store() -> _MemoryStore:
     modules = (session_memory, context_window)
     names = ("ensure_session", "save_message_by_session", "get_history_by_session", "count_messages_by_session",
              "get_first_user_message_by_session", "get_state_by_session", "update_state_by_session",
-             "get_session_record", "update_last_assistant_blocks", "maybe_auto_title", "verify_session_ownership")
+             "get_session_record", "update_last_assistant_blocks", "verify_session_ownership")
     for module in modules:
         for name in names:
             if hasattr(module, name):

@@ -11,6 +11,8 @@ Guide section 11.3. For each organization and window:
 
 Writes a CSV of every difference above 0.01 to logs/ and exits non-zero when
 any exists. Run where both Cube and the Accutax API are reachable (the VM).
+The Accutax call needs a valid Accutax token in ACCUTAX_AUTH_TOKEN (environment
+or .env); without one the P&L comparison is skipped for each window.
 
     python scripts/eval/cube_reconcile.py --orgs 24-33
 """
@@ -19,6 +21,7 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime as dt
+import os
 import sys
 import time
 from decimal import Decimal
@@ -26,7 +29,9 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from gemini_brain.api_client.accutax_client import call_api  # noqa: E402
+import httpx  # noqa: E402
+
+from gemini_brain.config.settings import settings  # noqa: E402  (also loads .env into the environment)
 from gemini_brain.semantic import cube_client  # noqa: E402
 
 TOLERANCE = Decimal("0.01")
@@ -49,8 +54,14 @@ def windows(today: dt.date) -> List[Tuple[str, str, str]]:
 
 
 def accutax_pnl(org: int, start: str, end: str) -> Optional[Dict[str, Decimal]]:
-    ok, body = call_api("/report/profit-loss-with-accounts", {},
-                        {"organization_id": org, "start_date": start, "end_date": end}, timeout=60)
+    token = os.getenv("ACCUTAX_AUTH_TOKEN", "")
+    try:
+        resp = httpx.get(settings.accutax_base_url.rstrip("/") + "/report/profit-loss-with-accounts",
+                         params={"organization_id": org, "start_date": start, "end_date": end},
+                         headers={"Authorization": f"Bearer {token}"} if token else {}, timeout=60)
+        ok, body = resp.status_code == 200, (resp.json() if resp.status_code == 200 else resp.text)
+    except (httpx.HTTPError, ValueError) as e:
+        ok, body = False, e
     if not ok or not isinstance(body, dict):
         print(f"  Accutax call failed for org {org} {start}..{end}: {str(body)[:200]}")
         return None

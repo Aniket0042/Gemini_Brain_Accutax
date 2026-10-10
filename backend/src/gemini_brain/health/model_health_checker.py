@@ -1,69 +1,39 @@
 """
-model_health_checker.py — Diagnostic utility to test and monitor all configured AI models and services.
+model_health_checker.py — Health of what the agent depends on: its Bedrock model(s), Cube and PostgreSQL.
+
+Serves GET/POST /api/v1/health/models. The response shape (models + services) is the one the
+frontend's model-health modal reads.
 """
 from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-import requests
 import psycopg2
 
-from gemini_brain.config.constants import GEMINI_MODEL, model_label
+from gemini_brain.config.constants import SONNET5_ID, model_label
 from gemini_brain.config.settings import settings
 from gemini_brain.reasoning.bedrock_client import BedrockAdapter
+from gemini_brain.semantic import cube_client
 
 logger = logging.getLogger("gemini_brain.health.model_health_checker")
 
+#: Cube's meta call needs an organization scope in its token. Meta returns the schema only, never
+#: rows, so a scope that matches no organization is enough.
+_META_SCOPE = [0]
+_CUBE_TIMEOUT_SECONDS = 10.0
 
-def check_gemini_model(test_prompt: str = "Respond with 'OK'") -> Dict[str, Any]:
-    """Test connection and output generation from Google Gemini 2.5 Flash."""
-    t0 = time.time()
-    model_name = "Google Gemini 2.5 Flash"
-    model_id = GEMINI_MODEL
 
-    if not settings.gemini_api_key:
-        return {
-            "name": model_name,
-            "model_id": model_id,
-            "provider": "Google GenAI",
-            "status": "error",
-            "latency_ms": 0,
-            "sample_response": None,
-            "error": "GEMINI_API_KEY is not configured.",
-        }
+def _elapsed_ms(t0: float) -> int:
+    return int((time.time() - t0) * 1000)
 
-    try:
-        from google import genai
-        client = genai.Client(api_key=settings.gemini_api_key)
-        resp = client.models.generate_content(
-            model=model_id,
-            contents=test_prompt,
-        )
-        elapsed_ms = int((time.time() - t0) * 1000)
-        output_text = (resp.text or "").strip()
-        return {
-            "name": model_name,
-            "model_id": model_id,
-            "provider": "Google GenAI",
-            "status": "ok",
-            "latency_ms": elapsed_ms,
-            "sample_response": output_text,
-            "error": None,
-        }
-    except Exception as e:
-        elapsed_ms = int((time.time() - t0) * 1000)
-        logger.error("Gemini health check failed: %s", e)
-        return {
-            "name": model_name,
-            "model_id": model_id,
-            "provider": "Google GenAI",
-            "status": "error",
-            "latency_ms": elapsed_ms,
-            "sample_response": None,
-            "error": str(e),
-        }
+
+def agent_model_ids() -> List[str]:
+    """The Bedrock models the agent calls: the planner, and the answer writer when it differs."""
+    planner = settings.agent_model_id or SONNET5_ID
+    writer = settings.agent_answer_model_id or planner
+    return [planner] if writer == planner else [planner, writer]
 
 
 def check_bedrock_model(
@@ -80,115 +50,100 @@ def check_bedrock_model(
             messages=[{"role": "user", "content": [{"text": test_prompt}]}],
             max_tokens=50,
         ).strip()
-        elapsed_ms = int((time.time() - t0) * 1000)
         return {
             "name": name,
             "model_id": model_id,
             "provider": "AWS Bedrock",
             "status": "ok",
-            "latency_ms": elapsed_ms,
+            "latency_ms": _elapsed_ms(t0),
             "sample_response": output_text,
             "error": None,
         }
     except Exception as e:
-        elapsed_ms = int((time.time() - t0) * 1000)
         logger.error("Bedrock model %s health check failed: %s", model_id, e)
         return {
             "name": name,
             "model_id": model_id,
             "provider": "AWS Bedrock",
             "status": "error",
-            "latency_ms": elapsed_ms,
+            "latency_ms": _elapsed_ms(t0),
             "sample_response": None,
             "error": str(e),
         }
 
 
-def check_accutax_api() -> Dict[str, Any]:
-    """Test connection to the Accutax REST API backend."""
+def check_cube() -> Dict[str, Any]:
+    """Cube answers its meta call: reachable, the JWT secret matches, and the model compiled."""
     t0 = time.time()
-    target_url = settings.accutax_base_url.rstrip("/")
+    target = settings.cube_api_url.rstrip("/") + "/cubejs-api/v1/meta"
     try:
-        resp = requests.get(target_url, timeout=3.0)
-        elapsed_ms = int((time.time() - t0) * 1000)
-        is_ok = resp.status_code < 500
+        body = cube_client.meta(organization_ids=_META_SCOPE, subject="health-check",
+                                deadline=time.monotonic() + _CUBE_TIMEOUT_SECONDS)
+        views = len(body.get("cubes") or [])
+        ok = views > 0
         return {
-            "service": "Accutax REST API",
-            "target": target_url,
-            "status": "ok" if is_ok else "error",
-            "http_code": resp.status_code,
-            "latency_ms": elapsed_ms,
-            "error": None if is_ok else f"HTTP {resp.status_code}",
+            "service": "Cube semantic layer",
+            "target": target,
+            "status": "ok" if ok else "error",
+            "http_code": 200,
+            "latency_ms": _elapsed_ms(t0),
+            "error": None if ok else "Cube returned no views",
         }
     except Exception as e:
-        elapsed_ms = int((time.time() - t0) * 1000)
+        logger.error("Cube health check failed: %s", e)
         return {
-            "service": "Accutax REST API",
-            "target": target_url,
+            "service": "Cube semantic layer",
+            "target": target,
             "status": "error",
             "http_code": None,
-            "latency_ms": elapsed_ms,
+            "latency_ms": _elapsed_ms(t0),
             "error": str(e),
         }
 
 
 def check_postgres_db() -> Dict[str, Any]:
-    """Test connection to the PostgreSQL database."""
+    """Test connection to the PostgreSQL database (logins and chat history)."""
     t0 = time.time()
     conn_str = (
         f"host={settings.db_host} port={settings.db_port} "
         f"dbname={settings.db_name} user={settings.db_user} "
         f"password={settings.db_password or ''}"
     )
+    target = f"{settings.db_host}:{settings.db_port}/{settings.db_name}"
     try:
         conn = psycopg2.connect(conn_str, connect_timeout=3)
         with conn.cursor() as cur:
             cur.execute("SELECT 1;")
             cur.fetchone()
         conn.close()
-        elapsed_ms = int((time.time() - t0) * 1000)
         return {
             "service": "PostgreSQL Database Engine",
-            "target": f"{settings.db_host}:{settings.db_port}/{settings.db_name}",
+            "target": target,
             "status": "ok",
-            "latency_ms": elapsed_ms,
+            "latency_ms": _elapsed_ms(t0),
             "error": None,
         }
     except Exception as e:
-        elapsed_ms = int((time.time() - t0) * 1000)
         return {
             "service": "PostgreSQL Database Engine",
-            "target": f"{settings.db_host}:{settings.db_port}/{settings.db_name}",
+            "target": target,
             "status": "error",
-            "latency_ms": elapsed_ms,
+            "latency_ms": _elapsed_ms(t0),
             "error": str(e),
         }
 
 
 def check_all_models_and_services(test_prompt: str = "Respond with 'OK'") -> Dict[str, Any]:
-    """Run health checks across all AI models, REST API, and PostgreSQL database."""
-    logger.info("Executing comprehensive model and service health diagnostics...")
+    """Run the health checks for the agent's model(s), Cube and PostgreSQL."""
+    logger.info("Executing agent model and service health diagnostics...")
 
-    # 1. AI Models Diagnostics
-    models_status = [
-        check_gemini_model(test_prompt),
-        check_bedrock_model(settings.bedrock_model_id, f"AWS Bedrock {model_label(settings.bedrock_model_id)}", test_prompt),
-        check_bedrock_model(settings.bedrock_model_id_fast, f"AWS Bedrock {model_label(settings.bedrock_model_id_fast)}",
-                            test_prompt),
-    ]
+    models_status = [check_bedrock_model(model_id, f"AWS Bedrock {model_label(model_id)}", test_prompt)
+                     for model_id in agent_model_ids()]
+    services_status = [check_cube(), check_postgres_db()]
 
-    # 2. Services Diagnostics
-    services_status = [
-        check_accutax_api(),
-        check_postgres_db(),
-    ]
-
-    all_models_ok = all(m["status"] == "ok" for m in models_status)
-    all_services_ok = all(s["status"] == "ok" for s in services_status)
-    overall_status = "ok" if (all_models_ok and all_services_ok) else "degraded"
-
+    all_ok = all(m["status"] == "ok" for m in models_status) and all(s["status"] == "ok" for s in services_status)
     return {
-        "overall_status": overall_status,
+        "overall_status": "ok" if all_ok else "degraded",
         "summary": {
             "models_tested": len(models_status),
             "models_healthy": sum(1 for m in models_status if m["status"] == "ok"),
