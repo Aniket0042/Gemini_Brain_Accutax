@@ -1,4 +1,4 @@
-"""Unit-test isolation for report generation and live organization lookups."""
+"""Unit-test isolation for report generation, live organization lookups and the VAT knowledge base."""
 import pytest
 
 
@@ -40,3 +40,33 @@ def _no_report_narration_model(monkeypatch):
         raise RuntimeError("report narration model is not available in unit tests")
 
     monkeypatch.setattr(narrator, "_model_call", _offline)
+
+
+@pytest.fixture(autouse=True)
+def _no_live_org_existence_check(monkeypatch):
+    """Unit tests never ask the database whether an organization exists.
+
+    The runner's empty-result explanation (_explain_empty) checks this, and an
+    org the configured database lacks turns an EMPTY answer into
+    TENANT_NOT_IN_DATABASE. The check reports "could not determine", as it
+    does when the database is unreachable; tests of that path patch it
+    themselves.
+    """
+    from gemini_brain.orchestrator import gemini_brain_runner
+
+    monkeypatch.setattr(gemini_brain_runner, "organization_exists", lambda org_id, db_name="": None)
+
+
+@pytest.fixture(autouse=True)
+def _vat_kb_off(monkeypatch):
+    """Unit tests never search the VAT knowledge base named in .env.
+
+    With it on, "what is VAT?" is answered from the knowledge base or not
+    depending on whether an earlier test already loaded the index (a cold
+    load outlasts the search timeout). Tests of the knowledge base switch it
+    on themselves.
+    """
+    from gemini_brain.config.settings import settings
+
+    monkeypatch.setattr(settings, "vat_kb_enabled", False)
+    monkeypatch.setattr(settings, "vat_kb_shadow", False)

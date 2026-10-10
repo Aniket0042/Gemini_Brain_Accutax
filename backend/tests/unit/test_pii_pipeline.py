@@ -33,13 +33,20 @@ def test_pipeline_redaction_e2e():
 
     mock_save_msg = MagicMock()
 
+    # The turn is written by memory.conversation_window, so the history write is
+    # patched there; the session checks and reads are kept off the database too.
     with patch("gemini_brain.orchestrator.gemini_brain_runner.classify_intent", return_value=({"type": 4, "reason": "data_query"}, 10, 10)) as mock_classify, \
          patch("gemini_brain.orchestrator.gemini_brain_runner.select_endpoint", return_value=({"endpoint": "/income/total", "query_params": {}}, 10, 10)) as mock_endpoint_sel, \
          patch("gemini_brain.api_client.accutax_client.call_api_resilient", return_value=Retrieved(Outcome.OK, payload={"total": 100000.00}, tier="live_api", endpoint="/income/total")), \
          patch("gemini_brain.orchestrator.gemini_brain_runner.reason_over_data", return_value=("Total sales is AED 100,000.00", "Claude Haiku 4.5", 15, 15)) as mock_reasoner, \
-         patch("gemini_brain.orchestrator.gemini_brain_runner.save_message_by_session", mock_save_msg), \
-         patch("gemini_brain.orchestrator.gemini_brain_runner.update_conversation_state_hybrid_by_session"), \
-         patch("gemini_brain.orchestrator.gemini_brain_runner.maybe_auto_title"):
+         patch("gemini_brain.memory.session_memory.verify_session_ownership", return_value=True), \
+         patch("gemini_brain.orchestrator.gemini_brain_runner.get_state_by_session", return_value={}), \
+         patch("gemini_brain.orchestrator.gemini_brain_runner.attach_working_memory", side_effect=lambda sid, uid, org, state, db_name="": state), \
+         patch("gemini_brain.memory.conversation_window.ensure_session", return_value=True), \
+         patch("gemini_brain.memory.conversation_window.save_message_by_session", mock_save_msg), \
+         patch("gemini_brain.memory.conversation_window.update_conversation_state_hybrid_by_session"), \
+         patch("gemini_brain.memory.conversation_window.maybe_auto_title"), \
+         patch("gemini_brain.memory.conversation_window.maybe_roll_summary"):
 
         res = runner.run(query=raw_query, organization_id=69, session_id="5c2bb4d7-4a00-4bf4-9c38-bdcd7e537ade")
 

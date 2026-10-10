@@ -118,10 +118,18 @@ def no_live_db_verification(monkeypatch):
     database configured, that call can silently flip an EMPTY outcome to OK/PARTIAL,
     which has nothing to do with what these tests are checking. Force it off so
     these tests are hermetic regardless of what .env points at.
+
+    The verifier registry is emptied too: _retry_widened() skips widening for any
+    endpoint with a registered SQL verifier (the verifier is the cheaper check),
+    and /report/sales-by-customer has one. That skip has its own test below.
     """
     monkeypatch.setattr(
         "gemini_brain.orchestrator.gemini_brain_runner._verify_empty_via_sql",
         lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "gemini_brain.orchestrator.gemini_brain_runner._EMPTY_RESULT_SQL_VERIFIERS",
+        {},
     )
 
 
@@ -248,5 +256,30 @@ def test_widening_failure_degrades_to_the_empty_answer(mock_intent, mock_sel):
                return_value=("Nothing recorded.", "Claude Haiku 4.5", 10, 5)):
         res = runner.run("sales by customer this month", organization_id=1)
 
+    assert res["status"] == "empty"
+    assert res["notice"]["code"] == "NO_ROWS"
+
+
+@patch("gemini_brain.orchestrator.gemini_brain_runner.select_endpoint")
+@patch("gemini_brain.orchestrator.gemini_brain_runner.classify_intent")
+def test_endpoint_with_sql_verifier_is_not_widened(mock_intent, mock_sel, monkeypatch):
+    """The SQL cross-check answers an empty result instead of extra REST calls."""
+    monkeypatch.setattr(
+        "gemini_brain.orchestrator.gemini_brain_runner._EMPTY_RESULT_SQL_VERIFIERS",
+        {"/report/sales-by-customer": ("sales_by_customer", lambda q, org: {})},
+    )
+    mock_intent.return_value = ({"type": 4, "reason": "fetch"}, 10, 5)
+    mock_sel.return_value = ({"endpoint": "/report/sales-by-customer", "path_params": {},
+                              "query_params": dict(RECENT_WINDOW)}, 10, 5)
+
+    runner = _make_runner()
+    runner._retrieve = MagicMock(return_value=_empty())
+    runner._db_fallback = MagicMock()
+
+    with patch("gemini_brain.orchestrator.gemini_brain_runner.reason_over_data",
+               return_value=("Nothing recorded.", "Claude Haiku 4.5", 10, 5)):
+        res = runner.run("sales by customer this month", organization_id=1)
+
+    assert runner._retrieve.call_count == 1, "a verified endpoint must not be widened"
     assert res["status"] == "empty"
     assert res["notice"]["code"] == "NO_ROWS"

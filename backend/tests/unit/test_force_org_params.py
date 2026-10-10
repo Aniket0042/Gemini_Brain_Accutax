@@ -81,8 +81,18 @@ def test_camel_case_org_is_replaced_even_without_spec():
 
 # ── Multi-org runs skip REST endpoints with no org parameter ─────────────────
 
-def _retrieve(sel: dict, exists, accepted, org_scoped_only: bool):
-    """Run one retrieval; return (result, whether HTTP was called)."""
+#: What the org-filtered SQL substitute for a skipped endpoint returns, unless a
+#: test says otherwise: unavailable, so the skip itself is what comes back.
+SQL_DOWN = Retrieved(Outcome.UNAVAILABLE, tier="sql_report", reason="db_unavailable")
+
+
+def _retrieve(sel: dict, exists, accepted, org_scoped_only: bool, report: Retrieved = SQL_DOWN):
+    """Run one retrieval; return (result, whether HTTP was called).
+
+    A skipped endpoint falls back to its org-filtered SQL report (see
+    ORG_SCOPED_SUBSTITUTES); that report is stubbed with `report`, so these
+    tests never reach a database.
+    """
     runner = GeminiBrainRunner(api_key="test-key")
     runner._org_scoped_rest_only = org_scoped_only
     ok = Retrieved(Outcome.OK, payload={"rows": [1]}, tier="live_api", endpoint=sel["endpoint"])
@@ -90,6 +100,7 @@ def _retrieve(sel: dict, exists, accepted, org_scoped_only: bool):
          patch("gemini_brain.orchestrator.gemini_brain_runner.result_cache.set_sync"), \
          patch("gemini_brain.config.accutax_openapi.path_exists", return_value=exists), \
          patch("gemini_brain.config.accutax_openapi.query_param_names", return_value=accepted), \
+         patch("gemini_brain.reports.engine.run_report_safe", return_value=report), \
          patch("gemini_brain.api_client.accutax_client.call_api_resilient", return_value=ok) as call:
         res = runner._retrieve(sel, 4, "", QueryTrace(org_id=4), auth_token="t")
     return res, call.called
@@ -120,6 +131,16 @@ def test_multi_org_run_skips_known_unscoped_endpoint_without_spec():
     sel = {"endpoint": "/income/total", "path_params": {}, "query_params": {}}
     res, called = _retrieve(sel, None, None, org_scoped_only=True)
     assert not called and res.reason == "not_org_scoped"
+
+
+def test_multi_org_run_answers_skipped_endpoint_from_org_filtered_report():
+    sel = {"endpoint": "/income/total", "path_params": {}, "query_params": {}}
+    report = Retrieved(Outcome.OK, payload={"summary": {"total_income": 5}}, tier="sql_report",
+                       endpoint="rpt_income_total")
+    res, called = _retrieve(sel, None, None, org_scoped_only=True, report=report)
+    assert not called
+    assert res.outcome is Outcome.OK
+    assert res.endpoint == "rpt_income_total" and res.tier == "sql_report_fallback"
 
 
 def test_multi_org_run_calls_other_endpoint_without_spec():

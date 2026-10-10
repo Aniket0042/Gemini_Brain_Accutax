@@ -24,9 +24,11 @@ def test_explicit_org_id_accepted(mock_classify):
     mock_classify.return_value = ({"type": 1, "reason": "faq"}, 10, 10)
     runner._call_llm = MagicMock(return_value=("Direct Answer", 10, 10))
 
-    # Explicit organization_id=42 passed
-    res = runner.run(query="How to create invoice?", organization_id=42)
+    # Explicit organization_id=42 passed. Not a "how to" question: those are
+    # routed to app guidance (type 2) before the classifier runs.
+    res = runner.run(query="What does Accutax do?", organization_id=42)
     assert res is not None
+    assert mock_classify.call_count == 1
     assert res["answer"] == "Direct Answer"
     assert res["routing_info"]["type"] == 1
 
