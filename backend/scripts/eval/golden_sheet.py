@@ -32,7 +32,7 @@ from openpyxl.worksheet.datavalidation import DataValidation  # noqa: E402
 
 from gemini_brain.config.settings import settings  # noqa: E402
 from gemini_brain.semantic import periods  # noqa: E402
-from gemini_brain.sql_fallback.db_connection import get_connection  # noqa: E402
+from gemini_brain.db.connection import get_connection  # noqa: E402
 from replay_real_questions import reference  # noqa: E402
 
 CASES_FILE = _BACKEND_ROOT / "tests" / "data" / "golden_accounting.json"

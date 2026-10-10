@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 from psycopg2 import extensions
 
-from gemini_brain.sql_fallback import db_connection as db
+from gemini_brain.db import connection as db
 
 IDLE, INTRANS, INERROR, UNKNOWN = (extensions.TRANSACTION_STATUS_IDLE, extensions.TRANSACTION_STATUS_INTRANS,
                                    extensions.TRANSACTION_STATUS_INERROR, extensions.TRANSACTION_STATUS_UNKNOWN)

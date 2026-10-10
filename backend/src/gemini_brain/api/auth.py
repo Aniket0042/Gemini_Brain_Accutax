@@ -15,7 +15,7 @@ from fastapi.security import OAuth2PasswordBearer
 import bcrypt
 
 from gemini_brain.config.settings import settings
-from gemini_brain.sql_fallback.db_connection import get_connection
+from gemini_brain.db.connection import get_connection
 
 logger = logging.getLogger("gemini_brain.api.auth")
 

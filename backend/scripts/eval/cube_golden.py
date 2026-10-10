@@ -23,7 +23,7 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from gemini_brain.semantic import query_metrics  # noqa: E402
 from gemini_brain.semantic.catalog import ToolInputError, clear_cache  # noqa: E402
-from gemini_brain.sql_fallback.db_connection import close_pools, get_connection  # noqa: E402
+from gemini_brain.db.connection import close_pools, get_connection  # noqa: E402
 
 TOL = Decimal("0.01")
 TODAY = dt.datetime.now(ZoneInfo("Asia/Dubai")).date()

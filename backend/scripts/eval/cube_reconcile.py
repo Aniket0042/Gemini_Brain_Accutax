@@ -210,7 +210,7 @@ def main() -> int:
 
     from zoneinfo import ZoneInfo
 
-    from gemini_brain.sql_fallback.db_connection import get_connection
+    from gemini_brain.db.connection import get_connection
 
     conn = get_connection()
     conn.set_session(readonly=True)

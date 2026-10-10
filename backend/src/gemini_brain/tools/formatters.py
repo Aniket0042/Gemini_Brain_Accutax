@@ -929,7 +929,7 @@ def _lookup_record_ids(table: str, column: str, values: List[str]) -> List[tuple
         return []
     org_id, db_name = scope
     try:
-        from gemini_brain.sql_fallback.db_connection import get_connection
+        from gemini_brain.db.connection import get_connection
 
         conn = get_connection(db_name=db_name or "")
         try:

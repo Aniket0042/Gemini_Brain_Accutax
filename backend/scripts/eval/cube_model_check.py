@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Tuple
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from gemini_brain.sql_fallback.db_connection import get_connection  # noqa: E402
+from gemini_brain.db.connection import get_connection  # noqa: E402
 
 SEMANTIC = Path(__file__).resolve().parents[3] / "semantic"
 #: Cube -> its period column; cubes not listed are balances or current status.

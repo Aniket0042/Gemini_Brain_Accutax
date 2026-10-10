@@ -15,7 +15,7 @@ import psycopg2.extras
 
 from gemini_brain.config.constants import GEMINI_MODEL
 from gemini_brain.config.settings import settings
-from gemini_brain.sql_fallback.db_connection import get_connection
+from gemini_brain.db.connection import get_connection
 
 logger = logging.getLogger("gemini_brain.memory.session_memory")
 

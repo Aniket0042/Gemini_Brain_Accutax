@@ -28,7 +28,7 @@ The shape is right: tag, measure, move shared code, delete, test, deploy. The im
 
 ### Confirmed
 
-- `agent/law.py:55` imports `DIRECT_ANSWER_SYSTEM_PROMPT` from `orchestrator/gemini_brain_runner.py:2880`. `scripts/eval/vat_kb_eval.py` imports it too.
+- `agent/law.py:55` imports `DIRECT_ANSWER_SYSTEM_PROMPT` from `orchestrator/gemini_brain_runner.py:363`. (Correction, 10 Oct: `scripts/eval/vat_kb_eval.py` imports `GeminiBrainRunner`, not the prompt; it drives the old path.)
 - `routes.py` old-path parts: `run_query` and `stream_query` bodies after the agent branch, `run_query_all_models` (`POST /query/all`), `_org_meta`, `_multi_org_run_kwargs`, `agent_shadow` calls, `GeminiBrainRunner`/`run_multi_org`/`plan_query` imports.
 - `agent/preview.py`: `primary()`, `allowed()`, `requested()`, `_allowlist()`, `MODEL_LABEL` exist only for the switch and the preview allowlist.
 - Frontend: `PolicyPicker.jsx` (`ALL_MODELS`, model menu), `api.js` (`/query/all` call), `ResponseView.jsx` (`ModelAnswerCard`, `MultiModelResponseCard`), `App.jsx:1193` (`use_api`) and `App.jsx:1212` (`/query/all` branch), `QueryInput.jsx:144` (`picker_hidden`).
@@ -54,7 +54,7 @@ Computed with an AST reachability walk from `api/app.py`, `api/auth.py`, `agent/
 | `api/routes.py:52-56` | `GeminiBrainRunner`, `run_multi_org*`, `plan_query` | Remove with the old-path routes |
 | `gemini_brain/__init__.py:19` | `GeminiBrainRunner` (lazy re-export) | Remove the re-export |
 | `scripts/eval/replay_real_questions.py` | orchestrator, multi_org, conversation_window, db_connection | Make agent-only |
-| `scripts/eval/vat_kb_eval.py` | `DIRECT_ANSWER_SYSTEM_PROMPT` | Repoint |
+| `scripts/eval/vat_kb_eval.py` | `GeminiBrainRunner` | Delete in commit D, or rewrite against `agent/law.py` |
 | `scripts/eval/{cube_golden,cube_model_check,cube_reconcile,golden_sheet}.py` | `db_connection` | Repoint |
 | `tests/unit/conftest.py` | `orchestrator.gemini_brain_runner` | Remove that fixture |
 
@@ -178,11 +178,22 @@ On the VM, record the deployed commit: `git -C /opt/accutax-ai rev-parse HEAD`.
 
 The agent code does not change in this plan, so after the delete the answers should match within known variance (VAT-law answers r128 and r131 flip between runs). Compare case by case, not only the totals.
 
+Before-score, 10 Oct 2026 (VM on 66e2db2, eval copy in `/tmp/agent_eval_removal/before`, graded by hand):
+
+| Set | Pass | Partial | Fail | p50 | p95 | Cost |
+|---|---|---|---|---|---|---|
+| Real (89) | 80 | 9 | 0 | 8.2 s | 22.8 s | $2.13 |
+| Golden (76) | 67 | 7 | 2 | 9.0 s | 22.1 s | $1.54 |
+
+Golden fails: APS-02 and DOC-FIN-C03. Six golden cases that expect a refusal (EXP-L03, JE-L01, INS-01, CF-01, REVF-01, CF-08) now have data behind them and were graded on correctness. The after-score uses the same grades file and the same rules.
+
 ### Step 3 — Move the shared code (commit C, behaviour unchanged)
 
 1. Create `gemini_brain/db/__init__.py` and `gemini_brain/db/connection.py`. Move the whole of `sql_fallback/db_connection.py` (pool, `get_connection`, `organization_exists`, `execute_sql_function`, `close_pools`). Leave a one-line re-export in `sql_fallback/db_connection.py` so the old code still runs until commit D.
 2. Repoint `api/auth.py`, `memory/schema.py`, `memory/session_memory.py`, `tools/formatters.py`, `scripts/eval/{cube_golden,cube_model_check,cube_reconcile,golden_sheet,replay_real_questions}.py` and `tests/unit/test_db_pool.py` to `gemini_brain.db.connection`.
-3. Move `DIRECT_ANSWER_SYSTEM_PROMPT` into `vat_kb/prompts.py`. Import it from there in `agent/law.py`, `scripts/eval/vat_kb_eval.py` and (until commit D) `gemini_brain_runner.py`.
+3. Move `DIRECT_ANSWER_SYSTEM_PROMPT` into `vat_kb/prompts.py`. Import it from there in `agent/law.py` and (until commit D) `gemini_brain_runner.py`.
+
+As done (10 Oct): the module was moved with `git mv`, and `sql_fallback/db_connection.py` became a shim that puts `gemini_brain.db.connection` in `sys.modules` under the old name. Both paths are the same module object, so a test that patches either path patches the same functions. The moved prompt was checked to be the identical string.
 4. Checks: full unit suite equals the step 0 baseline; node semantic tests pass; `python -c "import gemini_brain.api.app"` works.
 
 ### Step 4 — Delete wave 1 (commit D)
@@ -202,7 +213,7 @@ Backend:
 7. `config/settings.py` and `.env.example`: remove `agent_mode`, `agent_preview_users`, `multi_org_fetch_deadline_seconds`, `multi_org_plan_log`, `verify_enforce`, `accutax_org_id`, `metrics_backend`, `metrics_shadow_log`. `agent_shadow_log` goes in commit E with `agent/shadow.py`. Grep each one first.
 8. `tests/unit/conftest.py`: remove the `organization_exists` fixture.
 9. Tests: rewrite and delete per section 3.
-10. `scripts/eval/replay_real_questions.py`: remove `--path current` and the old-path imports; the in-memory session store stays. Delete scripts that only drive the old path: `evaluate_routing_harness.py`, `multi_org_eval.py`, `multi_org_plan_report.py`, `shadow_review.py`. Grep each first.
+10. `scripts/eval/vat_kb_eval.py`: delete, or rewrite against `agent/law.py`. `scripts/eval/replay_real_questions.py`: remove `--path current` and the old-path imports; the in-memory session store stays. Delete scripts that only drive the old path: `evaluate_routing_harness.py`, `multi_org_eval.py`, `multi_org_plan_report.py`, `shadow_review.py`. Grep each first.
 11. Delete every `__pycache__/` under `backend/`.
 12. Leftover grep. Must return nothing outside `docs/` and `scripts/archive/`:
 

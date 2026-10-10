@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from gemini_brain.sql_fallback.db_connection import get_connection
+from gemini_brain.db.connection import get_connection
 
 logger = logging.getLogger("gemini_brain.memory.schema")
 

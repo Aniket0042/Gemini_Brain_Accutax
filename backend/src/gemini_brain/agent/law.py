@@ -52,7 +52,7 @@ def answer(question: str, messages: List[Dict[str, Any]], brief: bool = False) -
     if about_the_organizations(question):
         return None
     try:
-        from gemini_brain.orchestrator.gemini_brain_runner import DIRECT_ANSWER_SYSTEM_PROMPT
+        from gemini_brain.vat_kb.prompts import DIRECT_ANSWER_SYSTEM_PROMPT
         from gemini_brain.reasoning.bedrock_client import BedrockAdapter
         from gemini_brain.vat_kb.answer import tidy_answer
         from gemini_brain.vat_kb.augment import augment

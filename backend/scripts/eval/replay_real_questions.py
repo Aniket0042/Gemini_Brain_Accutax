@@ -47,7 +47,7 @@ from gemini_brain.orchestrator.gemini_brain_runner import GeminiBrainRunner  # n
 from gemini_brain.orchestrator.multi_org import run_multi_org  # noqa: E402
 from gemini_brain.orchestrator.multi_org_plan import plan_query  # noqa: E402
 from gemini_brain.semantic import cube_client, periods  # noqa: E402
-from gemini_brain.sql_fallback.db_connection import get_connection  # noqa: E402
+from gemini_brain.db.connection import get_connection  # noqa: E402
 
 CASES_FILE = _BACKEND_ROOT / "tests" / "data" / "real_questions.json"
 CASE_TIMEOUT_SECONDS = 150

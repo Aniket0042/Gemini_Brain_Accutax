@@ -130,7 +130,7 @@ class GeminiBrainSettings(BaseSettings):
 
     db_pool_enabled: bool = Field(
         default=True,
-        description="Reuse database connections (sql_fallback/db_connection.py). False opens one per query.",
+        description="Reuse database connections (db/connection.py). False opens one per query.",
     )
     db_pool_max: int = Field(
         default=10,
