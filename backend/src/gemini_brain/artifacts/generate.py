@@ -94,10 +94,9 @@ def _parse_narrative_lines(text: str) -> List[Tuple[str, str]]:
     """Line-based split of the narrator's own markdown subset (paragraphs,
     '-'/'*' bullets, '#'/'##' headings) into (kind, text) pairs.
 
-    Not a general markdown parser — the narration prompt (claude_reasoner.py)
-    deliberately restricts the model to this subset ("Write markdown: one
-    short opening line, then bullets" / "Do not build a markdown table"), so
-    tables/code/images never appear here and don't need handling.
+    Not a general markdown parser — narration was written to this subset
+    (short paragraphs and bullets, no tables), so tables/code/images are not
+    expected here and are not handled.
     """
     out: List[Tuple[str, str]] = []
     for raw_line in (text or "").splitlines():

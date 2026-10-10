@@ -60,8 +60,7 @@ def record_api_trace(
     source: str = "live_api",
 ) -> None:
     """Record a single Accutax REST API call (or a cache hit standing in for
-    one — see result_cache in gemini_brain_runner._retrieve) into the active
-    trace context. `source` distinguishes a real HTTP round trip ("live_api")
+    one) into the active trace context. `source` distinguishes a real HTTP round trip ("live_api")
     from a served-from-cache result ("cache") so the frontend can badge it
     instead of implying a network call that never happened.
     """

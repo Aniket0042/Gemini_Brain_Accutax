@@ -52,9 +52,8 @@ def track_context_window_usage(
     unauthenticated/internal call) — the caller should omit the meter in that
     case rather than show a fabricated per-request-only number.
 
-    Read-modify-write against conversation_state, same non-atomic pattern
-    already used by conversation_window.maybe_roll_summary for the same
-    column — acceptable here since a lost increment under concurrent turns on
+    Read-modify-write against conversation_state (not atomic) — acceptable
+    here since a lost increment under concurrent turns on
     one session just undercounts the meter slightly, never corrupts it.
     """
     if not session_id or not is_valid_uuid(session_id):

@@ -274,7 +274,7 @@ Do not edit `.env` in this change. `AGENT_MODE` and the old keys stay; unknown k
 Then:
 
 1. `cd /opt/accutax-ai && git pull`
-2. `find backend -name __pycache__ -type d -prune -exec rm -rf {} +`
+2. `find backend -name __pycache__ -type d -prune -exec rm -rf {} +`, then `find backend/src -type d -empty -delete`. Found on the 10 Oct deploy: once `__pycache__` is gone, the deleted packages remain as empty folders, which Python would import as namespace packages.
 3. `pip install -e "backend[vat_kb]"` (venv), then `cd frontend && npm run build`
 4. `chown -R geminibrain /opt/accutax-ai`, then `chown root:root semantic/cube.env && chmod 600 semantic/cube.env`
 5. `systemctl restart accutax-ai-api`

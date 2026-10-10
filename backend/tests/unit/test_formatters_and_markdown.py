@@ -1,8 +1,7 @@
-"""Unit tests for Phase 3: Formatters, empty answer generator, and markdown normalizer."""
+"""Unit tests for Phase 3: Formatters and markdown normalizer."""
 import pytest
 
 from gemini_brain.formatting.markdown import normalize_markdown
-from gemini_brain.formatting.empty_answer import subject_for, build_empty_answer
 from gemini_brain.tools.formatters import render, format_aed
 
 
@@ -37,25 +36,6 @@ def test_normalize_markdown_empty_or_none():
     assert normalize_markdown(None) == ""
     assert normalize_markdown("") == ""
     assert normalize_markdown("   \n\n  ") == ""
-
-
-def test_subject_for_discovery():
-    class DummyTool:
-        name = "fetch_overdue_invoices"
-
-    assert subject_for(None, tool_spec=DummyTool()) == "overdue invoices"
-    assert subject_for("/report/ar-aging-summary") == "report ar aging summary"
-    assert subject_for(None, None, "give me all bills for Al Futtaim") == "bills"
-    assert subject_for(None, None, "what is our total tax liability") == "tax records"
-    assert subject_for(None, None, "show something unknown") == "your records"
-
-
-def test_build_empty_answer():
-    ans = build_empty_answer("any overdue invoices?", "invoices")
-    assert "invoices" in ans
-    assert "confirmed result from your books" in ans
-    assert "Suggestions:" in ans
-    assert "Try expanding your date range" in ans
 
 
 def test_render_empty_or_none_data():
