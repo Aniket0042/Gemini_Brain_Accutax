@@ -63,14 +63,6 @@ class GeminiBrainSettings(BaseSettings):
         ge=1,
         description="Total attempts per Bedrock call at the SDK level (boto3's legacy default is 5).",
     )
-    multi_org_fetch_deadline_seconds: float = Field(
-        default=40.0,
-        gt=0,
-        description=(
-            "How long a multi-org answer waits for the organizations' data. Organizations still "
-            "running are reported as not answered in time, and their queued work is cancelled."
-        ),
-    )
 
     # ── Accutax Backend API ────────────────────────────────────
     accutax_base_url: str = Field(default="http://13.127.157.108:8081")
@@ -124,9 +116,6 @@ class GeminiBrainSettings(BaseSettings):
             "db_name field. The configured db_name is always allowed."
         ),
     )
-    #: Numeric grounding runs in shadow mode until this is on: the report is
-    #: produced and logged either way, but only enforcement alters the answer.
-    verify_enforce: bool = Field(default=False)
 
     db_pool_enabled: bool = Field(
         default=True,
@@ -141,12 +130,6 @@ class GeminiBrainSettings(BaseSettings):
     db_password: Optional[str] = Field(
         default=None,
         description="PostgreSQL password. Must be supplied via environment.",
-    )
-
-    # ── Defaults ───────────────────────────────────────────────
-    accutax_org_id: Optional[int] = Field(
-        default=None,
-        description="Organization/tenant ID. Must be passed explicitly or resolved dynamically.",
     )
 
     # ── API Server & Security Settings ─────────────────────────
@@ -205,13 +188,6 @@ class GeminiBrainSettings(BaseSettings):
         description=(
             "Allow one query to name several organizations (MULTI_ORG_ENABLED). "
             "Off: a request naming more than one organization is refused."
-        ),
-    )
-    multi_org_plan_log: str = Field(
-        default="logs/multi_org_plans.jsonl",
-        description=(
-            "JSON-lines file recording how each multi-organization question was planned and laid "
-            "out (redacted question, no IDs), relative to backend/. Empty turns it off."
         ),
     )
     seed_test_users: str = Field(
@@ -319,36 +295,12 @@ class GeminiBrainSettings(BaseSettings):
     )
     cube_jwt_audience: str = Field(default="accutax-cube")
     cube_jwt_issuer: str = Field(default="gemini-brain")
-    metrics_backend: str = Field(
-        default="sql",
-        description=(
-            "Which backend answers multi-org metric questions: 'sql' (the rpt_ reports), "
-            "'shadow' (SQL answers; Cube is compared off the request path and logged), "
-            "or 'cube' (not wired yet; Phase 1b)."
-        ),
-    )
-    metrics_shadow_log: str = Field(
-        default="logs/metrics_shadow.jsonl",
-        description=(
-            "JSON-lines file of SQL-vs-Cube metric comparisons in shadow mode, relative to "
-            "backend/. Holds organization IDs and figures, no user IDs. Empty turns it off."
-        ),
-    )
     report_timezone: str = Field(
         default="Asia/Dubai",
         description="Time zone that turns period presets such as 'ytd' into dates.",
     )
 
-    # ── Tool-using agent (Phase 2, docs/ai-architecture-review-2026-10.md section 6.3) ──
-    agent_mode: str = Field(
-        default="off",
-        description=(
-            "'off'; 'shadow': the current path answers and the agent answers the same question "
-            "off the request path; both answers are logged to AGENT_SHADOW_LOG. Users never see "
-            "the agent's answer in shadow mode; or 'primary': the agent answers every chat, the "
-            "model picker is hidden, and the current path is used only when this is set back."
-        ),
-    )
+    # ── Tool-using agent (docs/ai-architecture-review-2026-10.md section 6.3) ──
     agent_model_id: str = Field(
         default="",
         description="Bedrock model the agent plans and writes with. Empty = the Sonnet 5 profile (SONNET5_ID).",
@@ -360,13 +312,6 @@ class GeminiBrainSettings(BaseSettings):
             "Empty = the planner model. A faster model here cuts most of the agent's time."
         ),
     )
-    agent_preview_users: str = Field(
-        default="",
-        description=(
-            "Comma-separated login emails or user ids that see 'Accutax Agent (preview)' in the model picker "
-            "and can have their chats answered by the agent. Empty = nobody; everyone else keeps the current path."
-        ),
-    )
     agent_max_tool_calls: int = Field(default=6, ge=1, le=12)
     agent_deadline_seconds: float = Field(default=45.0, ge=5.0, le=120.0)
     agent_answer_log: str = Field(
@@ -376,13 +321,6 @@ class GeminiBrainSettings(BaseSettings):
             "for example logs/agent_answers.jsonl: masked question, user and organization ids, route, tool calls, "
             "figure check, time, tokens, cost, status and answer. Rotates at 50 MB, keeping 5 files. "
             "Empty (the default) turns it off."
-        ),
-    )
-    agent_shadow_log: str = Field(
-        default="logs/agent_shadow.jsonl",
-        description=(
-            "JSON-lines file of current-path vs agent answers in shadow mode, relative to backend/. "
-            "Holds the redacted question, both answers and the tool calls, no user IDs. Empty turns it off."
         ),
     )
 

@@ -1,7 +1,7 @@
 """
 answer_log.py — One JSON line per agent answer, for reviewing real use.
 
-Every answer the agent gives (AGENT_MODE=primary, or the preview) is written to
+Every answer the agent gives is written to
 AGENT_ANSWER_LOG: the question with personal data masked, the route, each tool
 call, the figure check, time, tokens, cost, status and the answer. Reviewing it
 shows what users ask, which answers failed or could not be verified, and where

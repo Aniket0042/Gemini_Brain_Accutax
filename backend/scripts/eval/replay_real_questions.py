@@ -1,17 +1,15 @@
 """
-replay_real_questions.py — Replay real chat questions through the current answer path.
+replay_real_questions.py — Replay real chat questions through the agent.
 
-Runs every case in tests/data/real_questions.json through the same entry points
-the /query route uses (run_multi_org for several organizations, the runner for
-one), against the configured database, Accutax API and Bedrock. With
-METRICS_BACKEND=shadow the multi-org metric answers are also compared with Cube
-in the shadow log, as for real traffic.
+Runs every case in tests/data/real_questions.json (or --cases, e.g. the golden
+set) through the agent the /query route uses, against the configured Cube and
+Bedrock.
 
 Follow-up cases replay inside the conversation of the case they follow. Thread
 memory is kept in this process only: nothing is written to the chat tables.
 
 For every case the reference Cube queries in "expect" are run directly (ledger
-basis in "ref", the document basis the current path uses in "alt"), and the
+basis in "ref", the document basis in "alt"), and the
 answer is checked for those figures. The figure check is a screen, not the
 grade: answers are read and graded by hand from the Markdown sheet.
 
@@ -19,7 +17,7 @@ Costs real Bedrock calls: about one to four per case.
 
 Usage (from backend/, on a host that reaches Cube):
   .venv/bin/python scripts/eval/replay_real_questions.py
-  .venv/bin/python scripts/eval/replay_real_questions.py --path agent
+  .venv/bin/python scripts/eval/replay_real_questions.py --cases tests/data/golden_accounting.json
   .venv/bin/python scripts/eval/replay_real_questions.py --only r080,r081 --out /tmp/replay
 """
 from __future__ import annotations
@@ -41,11 +39,7 @@ for path in (_BACKEND_ROOT / "src", _BACKEND_ROOT):
         sys.path.insert(0, str(path))
 
 from gemini_brain.config.settings import settings  # noqa: E402
-from gemini_brain.memory import conversation_window, session_memory  # noqa: E402
-from gemini_brain.orchestrator import gemini_brain_runner, multi_org  # noqa: E402
-from gemini_brain.orchestrator.gemini_brain_runner import GeminiBrainRunner  # noqa: E402
-from gemini_brain.orchestrator.multi_org import run_multi_org  # noqa: E402
-from gemini_brain.orchestrator.multi_org_plan import plan_query  # noqa: E402
+from gemini_brain.memory import session_memory  # noqa: E402
 from gemini_brain.semantic import cube_client, periods  # noqa: E402
 from gemini_brain.db.connection import get_connection  # noqa: E402
 
@@ -58,7 +52,7 @@ REFUSAL_WORDS = ("not available", "isn't available", "is not tracked", "not trac
 # ── Thread memory in this process only ───────────────────────────────────────
 
 class _MemoryStore:
-    """Stands in for the session_memory functions the answer path calls."""
+    """Stands in for the session_memory functions the agent calls."""
 
     def __init__(self) -> None:
         self.messages: Dict[str, List[Dict[str, Any]]] = {}
@@ -109,8 +103,8 @@ class _MemoryStore:
 
 def install_memory_store() -> _MemoryStore:
     store = _MemoryStore()
-    from gemini_brain.memory import context_window, state_extractor
-    modules = (session_memory, conversation_window, state_extractor, context_window, gemini_brain_runner, multi_org)
+    from gemini_brain.memory import context_window
+    modules = (session_memory, context_window)
     names = ("ensure_session", "save_message_by_session", "get_history_by_session", "count_messages_by_session",
              "get_first_user_message_by_session", "get_state_by_session", "update_state_by_session",
              "get_session_record", "update_last_assistant_blocks", "maybe_auto_title", "verify_session_ownership")
@@ -247,8 +241,8 @@ def figure_screen(refs: List[Dict[str, Any]], answer: str) -> Optional[Dict[str,
 
 # ── Replay ───────────────────────────────────────────────────────────────────
 
-#: "current" replays the answer path users get today; "agent" the Phase 2 agent.
-_PATH = "current"
+#: Only "agent" is left; the name stays in report file names so runs compare across versions.
+_PATH = "agent"
 _STORE: Optional[_MemoryStore] = None
 
 
@@ -264,22 +258,7 @@ def ask_agent(question: str, orgs: List[int], meta: Dict[int, Dict[str, Any]], s
 
 
 def ask(question: str, orgs: List[int], meta: Dict[int, Dict[str, Any]], session_id: Optional[str]) -> Dict[str, Any]:
-    if _PATH == "agent":
-        return ask_agent(question, orgs, meta, session_id)
-    if len(orgs) > 1:
-        return run_multi_org(
-            question, orgs, {o: meta[o] for o in orgs},
-            runner_factory=GeminiBrainRunner,
-            run_kwargs={"allowed_org_ids": orgs, "user_id": 0, "db_name": "", "use_api": True, "auth_token": "",
-                        "model": "auto", "effort": None, "ui_context": None, "brief": False,
-                        "selected_model_key": None, "session_id": session_id},
-            planner=plan_query,
-        )
-    return GeminiBrainRunner().run(
-        query=question, organization_id=orgs[0], db_name="", use_api=True, user_id=0, session_id=None,
-        selected_model_key=None, allowed_org_ids=orgs, auth_token="", model="auto", effort=None,
-        ui_context=None, brief=False,
-    )
+    return ask_agent(question, orgs, meta, session_id)
 
 
 def ask_with_timeout(*args: Any) -> Tuple[Optional[Dict[str, Any]], Optional[str], float]:
@@ -367,8 +346,8 @@ def main() -> int:
     parser.add_argument("--cases", default=str(CASES_FILE))
     parser.add_argument("--only", default="", help="Comma-separated case ids")
     parser.add_argument("--out", default=str(Path(__file__).parent), help="Directory for the report")
-    parser.add_argument("--path", choices=("current", "agent"), default="current",
-                        help="Answer path to replay: the current one, or the Phase 2 agent")
+    parser.add_argument("--path", choices=("agent",), default="agent",
+                        help="Answer path to replay; only the agent is left")
     args = parser.parse_args()
     global _PATH, _STORE
     _PATH = args.path
@@ -387,7 +366,7 @@ def main() -> int:
     meta = {int(i): {"name": n, "currency": c or ""} for i, n, c in cur.fetchall()}
     conn.close()
 
-    print(f"{len(cases)} cases · path {_PATH} · today {today} · METRICS_BACKEND={settings.metrics_backend}", flush=True)
+    print(f"{len(cases)} cases · path {_PATH} · today {today}", flush=True)
     sessions: Dict[str, str] = {}
     report = []
     for case in cases:

@@ -1,5 +1,5 @@
 """Unit tests for Phase 4: FastAPI & SSE layer resilience and correlation IDs."""
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 import pytest
 
@@ -56,10 +56,9 @@ def test_validation_error_returns_user_safe_envelope(authed_client):
     assert "request_id" in data
 
 
-@patch("gemini_brain.api.routes.GeminiBrainRunner")
-def test_query_success_returns_normalized_envelope(mock_runner_cls, authed_client):
-    mock_runner = MagicMock()
-    mock_runner.run.return_value = {
+@patch("gemini_brain.api.routes.agent_preview.answer")
+def test_query_success_returns_normalized_envelope(mock_answer, authed_client):
+    mock_answer.return_value = {
         "answer": "Total revenue is AED 100,000.00",
         "sql": None,
         "results": [{"total": 100000}],
@@ -68,7 +67,6 @@ def test_query_success_returns_normalized_envelope(mock_runner_cls, authed_clien
         "agent_trace": [],
         "routing_info": None,
     }
-    mock_runner_cls.return_value = mock_runner
 
     resp = authed_client.post(
         "/api/v1/query",
@@ -82,11 +80,9 @@ def test_query_success_returns_normalized_envelope(mock_runner_cls, authed_clien
     assert "request_id" in data
 
 
-@patch("gemini_brain.api.routes.GeminiBrainRunner")
-def test_query_stream_catches_fatal_error_and_emits_notice(mock_runner_cls, authed_client):
-    mock_runner = MagicMock()
-    mock_runner.run_stream.side_effect = TimeoutError("Connection to LLM timed out")
-    mock_runner_cls.return_value = mock_runner
+@patch("gemini_brain.api.routes.agent_preview.answer")
+def test_query_stream_catches_fatal_error_and_emits_notice(mock_answer, authed_client):
+    mock_answer.side_effect = TimeoutError("Connection to LLM timed out")
 
     resp = authed_client.post(
         "/api/v1/query/stream",

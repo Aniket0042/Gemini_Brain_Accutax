@@ -98,12 +98,17 @@ def _bearer(allowed: list[int]) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-@pytest.mark.parametrize("path", ["/api/v1/query", "/api/v1/query/stream", "/api/v1/query/all"])
+@pytest.mark.parametrize("path", ["/api/v1/query", "/api/v1/query/stream"])
 def test_query_routes_refuse_unassigned_org_without_running(client, path):
-    with patch("gemini_brain.api.routes.GeminiBrainRunner") as runner:
+    with patch("gemini_brain.api.routes.agent_preview.answer") as answer:
         resp = client.post(path, json={"query": "revenue", "organization_id": 9}, headers=_bearer([5]))
     assert resp.status_code == 403
-    runner.assert_not_called()
+    answer.assert_not_called()
+
+
+def test_the_model_comparison_route_is_gone(client):
+    resp = client.post("/api/v1/query/all", json={"query": "revenue", "organization_id": 5}, headers=_bearer([5]))
+    assert resp.status_code in (404, 405)
 
 
 def test_session_list_refuses_unassigned_org(client):
@@ -204,28 +209,27 @@ def test_tenant_dropdown_never_offers_an_org_outside_allow_list(monkeypatch):
 # ── organization_ids contract ────────────────────────────────────────────────
 
 def _runner_org(client, body: dict, allowed: list[int]):
-    """POST /query and return (status, organization_id the runner received)."""
-    with patch("gemini_brain.api.routes.GeminiBrainRunner") as runner_cls:
-        runner_cls.return_value.run.return_value = {"answer": "ok"}
+    """POST /query and return (status, organization ids the agent answered for)."""
+    with patch("gemini_brain.api.routes.agent_preview.answer", return_value={"answer": "ok"}) as answer:
         resp = client.post("/api/v1/query", json={"query": "revenue", **body}, headers=_bearer(allowed))
-    calls = runner_cls.return_value.run.call_args_list
-    return resp.status_code, (calls[0].kwargs["organization_id"] if calls else "not called")
+    calls = answer.call_args_list
+    return resp.status_code, (calls[0].args[1] if calls else "not called")
 
 
 def test_single_org_in_list_runs_like_organization_id(client):
-    assert _runner_org(client, {"organization_ids": [5]}, [5, 6]) == (200, 5)
+    assert _runner_org(client, {"organization_ids": [5]}, [5, 6]) == (200, [5])
 
 
 def test_legacy_organization_id_still_works(client):
-    assert _runner_org(client, {"organization_id": 6}, [5, 6]) == (200, 6)
+    assert _runner_org(client, {"organization_id": 6}, [5, 6]) == (200, [6])
 
 
-def test_no_org_named_leaves_default_to_runner(client):
-    assert _runner_org(client, {}, [5, 6]) == (200, None)
+def test_no_org_named_runs_on_the_first_allowed_org(client):
+    assert _runner_org(client, {}, [5, 6]) == (200, [5])
 
 
 def test_duplicate_ids_collapse_to_one_org(client):
-    assert _runner_org(client, {"organization_ids": [5, 5]}, [5]) == (200, 5)
+    assert _runner_org(client, {"organization_ids": [5, 5]}, [5]) == (200, [5])
 
 
 def test_unassigned_org_in_list_refuses_request(client):
@@ -245,15 +249,9 @@ def test_several_orgs_refused_while_flag_off(client, monkeypatch):
     assert _runner_org(client, {"organization_ids": [5, 6]}, [5, 6]) == (400, "not called")
 
 
-def test_several_orgs_run_once_per_org_when_flag_on(client, monkeypatch):
+def test_several_orgs_go_to_the_agent_together_when_flag_on(client, monkeypatch):
     monkeypatch.setattr(auth.settings, "multi_org_enabled", True)
-    with patch("gemini_brain.api.routes.GeminiBrainRunner") as runner_cls,          patch("gemini_brain.api.routes._org_meta", lambda user, orgs: {o: {} for o in orgs}):
-        runner_cls.return_value.run.return_value = {"answer": "ok"}
-        resp = client.post("/api/v1/query", json={"query": "revenue", "organization_ids": [5, 6]},
-                           headers=_bearer([5, 6]))
-    assert resp.status_code == 200
-    ran = sorted(c.kwargs["organization_id"] for c in runner_cls.return_value.run.call_args_list)
-    assert ran == [5, 6]
+    assert _runner_org(client, {"organization_ids": [5, 6]}, [5, 6]) == (200, [5, 6])
 
 
 def test_unassigned_org_is_403_even_with_flag_off(client, monkeypatch):

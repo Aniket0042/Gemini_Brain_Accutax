@@ -1,10 +1,9 @@
-"""Phase 2 agent: tool scoping, the bounded loop and shadow logging, with Bedrock and Cube faked."""
-import json
+"""Phase 2 agent: tool scoping and the bounded loop, with Bedrock and Cube faked."""
 import time
 
 import pytest
 
-from gemini_brain.agent import loop, shadow, tools
+from gemini_brain.agent import loop, tools
 from gemini_brain.semantic.catalog import ToolInputError
 from gemini_brain.semantic.cube_client import CubeError
 
@@ -206,43 +205,6 @@ def test_history_alternates_and_starts_with_the_user():
     assert [m["role"] for m in messages] == ["user", "assistant", "user", "assistant", "user"]
     assert messages[2]["content"][0]["text"] == "and\n\nlast quarter?"
     assert messages[-1]["content"][0]["text"] == "now only the top 2"
-
-
-# ── Shadow ───────────────────────────────────────────────────────────────────
-
-def test_shadow_is_off_by_default(monkeypatch):
-    monkeypatch.setattr(shadow.settings, "agent_mode", "off")
-    assert shadow.start("q", ORGS, META, {"answer": "a"}) is None
-    assert shadow.thread_history("8f14e45f-ceea-467f-a8f5-3c3c3c3c3c3c") == []
-
-
-def test_shadow_logs_both_answers(monkeypatch, tmp_path):
-    log = tmp_path / "agent_shadow.jsonl"
-    monkeypatch.setattr(shadow.settings, "agent_mode", "shadow")
-    monkeypatch.setattr(shadow.settings, "agent_shadow_log", str(log))
-    monkeypatch.setattr("gemini_brain.pii.redactor.redact_pii", lambda text: (text, {}))
-    monkeypatch.setattr(loop, "run_agent", lambda *a, **k: loop.AgentResult(
-        answer="Agent answer", status="ok", tool_calls=[{"name": "query_metrics", "ok": True}]))
-    thread = shadow.start("Compare revenue", ORGS, lambda: META,
-                          {"answer": "Current answer", "status": "ok", "routing_info": {"path": "multi_org"}})
-    thread.join(5)
-    record = json.loads(log.read_text(encoding="utf-8").strip())
-    assert record["question"] == "Compare revenue" and record["org_ids"] == ORGS
-    assert record["current"]["answer"] == "Current answer" and record["current"]["path"] == "multi_org"
-    assert record["agent"]["answer"] == "Agent answer" and record["agent"]["tool_calls"][0]["name"] == "query_metrics"
-
-
-def test_shadow_off_never_looks_up_organizations(monkeypatch):
-    monkeypatch.setattr(shadow.settings, "agent_mode", "off")
-    assert shadow.start("q", ORGS, lambda: pytest.fail("must not be called"), {}) is None
-
-
-def test_shadow_skips_a_question_when_every_slot_is_busy(monkeypatch):
-    monkeypatch.setattr(shadow.settings, "agent_mode", "shadow")
-    monkeypatch.setattr(shadow, "_slots", shadow.threading.BoundedSemaphore(1))
-    shadow._slots.acquire()
-    assert shadow.start("q", ORGS, META, {}) is None
-    shadow._slots.release()
 
 
 # ── Law route, answer model, parallel calls, caching ─────────────────────────

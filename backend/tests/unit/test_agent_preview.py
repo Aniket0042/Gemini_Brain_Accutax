@@ -1,4 +1,4 @@
-"""Agent preview: who sees it, how a request is routed, what it streams and saves. Agent and Cube faked."""
+"""The agent answer path: the one model, the routes, what it streams and saves. Agent and Cube faked."""
 import asyncio
 import json
 
@@ -14,30 +14,13 @@ OTHER = CurrentUser(user_id=777, email="someone@test.com", allowed_org_ids=[24])
 
 
 @pytest.fixture(autouse=True)
-def _allowlist(monkeypatch):
-    monkeypatch.setattr(preview.settings, "agent_preview_users", "testuserdummy2@test.com, 9001")
+def _org_meta(monkeypatch):
+    monkeypatch.setattr(routes, "_agent_org_meta", lambda orgs, user: lambda: {})
 
 
-def test_allowlist_matches_email_in_any_case_or_user_id(monkeypatch):
-    assert preview.allowed(TESTER)
-    assert not preview.allowed(OTHER)
-    assert preview.allowed(CurrentUser(user_id=9001, email="", allowed_org_ids=[]))
-    monkeypatch.setattr(preview.settings, "agent_preview_users", "")
-    assert not preview.allowed(TESTER)
-
-
-def test_picker_shows_the_preview_only_to_allowed_users():
-    keys = lambda user: [m.key for m in routes.list_model_catalog(current_user=user).models]
-    assert keys(TESTER)[0] == preview.MODEL_KEY
-    assert preview.MODEL_KEY not in keys(OTHER)
-
-
-def test_preview_scope():
-    ask = lambda model: QueryRequest(query="Revenue?", model=model)
-    assert routes._preview_scope(ask(preview.MODEL_KEY), TESTER, [24, 25]) == [24, 25]
-    assert routes._preview_scope(ask(preview.MODEL_KEY), TESTER, []) == [24]   # no org named: the first allowed
-    assert routes._preview_scope(ask("auto"), TESTER, [24]) is None
-    assert routes._preview_scope(ask(preview.MODEL_KEY), OTHER, [24]) is None  # stale selection: normal path
+def test_agent_scope():
+    assert routes._agent_scope(TESTER, [24, 25]) == [24, 25]
+    assert routes._agent_scope(TESTER, []) == [24]   # no org named: the first allowed
 
 
 def _fake_answer(calls):
@@ -49,14 +32,13 @@ def _fake_answer(calls):
         return {"answer": "Org One revenue was AED 5,809,352.", "status": "ok",
                 "token_usage": {"llm_calls": 2, "cost_usd": 0.02},
                 "routing_info": {"type": 1, "type_label": "Figures (governed metrics)", "path": "agent_tools"},
-                "policy": {"model": preview.MODEL_KEY, "model_label": preview.MODEL_LABEL, "auto": False}}
+                "policy": {"model": preview.MODEL_KEY, "model_label": preview.PRIMARY_LABEL, "auto": False}}
     return answer
 
 
 def test_query_route_answers_with_the_agent(monkeypatch):
     calls = []
     monkeypatch.setattr(routes.agent_preview, "answer", _fake_answer(calls))
-    monkeypatch.setattr(routes, "_org_meta", lambda user, orgs: {})
     payload = QueryRequest(query="Revenue this year?", model=preview.MODEL_KEY, organization_id=24)
     response = asyncio.run(routes.run_query(payload, current_user=TESTER))
     assert response.answer.startswith("Org One revenue")
@@ -66,9 +48,8 @@ def test_query_route_answers_with_the_agent(monkeypatch):
 
 def test_stream_route_sends_a_status_per_tool_then_the_answer(monkeypatch):
     monkeypatch.setattr(routes.agent_preview, "answer", _fake_answer([]))
-    monkeypatch.setattr(routes, "_org_meta", lambda user, orgs: {})
     payload = QueryRequest(query="Revenue?", model=preview.MODEL_KEY, organization_id=24)
-    events = [json.loads(e[len("data: "):]) for e in routes._preview_events(payload, TESTER, [24])]
+    events = [json.loads(e[len("data: "):]) for e in routes._agent_events(payload, TESTER, [24])]
     assert [e.get("status") for e in events[:-1]] == ["Reading your question…", "Fetching figures: pnl…",
                                                       "Listing documents: bills…"]
     assert events[-1]["final_result"]["answer"].startswith("Org One revenue")
@@ -90,7 +71,7 @@ def test_answer_saves_the_turn_and_reports_the_route(monkeypatch):
     out = preview.answer("AED 8,000 error: disclosure?", [24, 25], lambda: {}, session_id="5f0c8a43-1111-4222-8333-944455556666",
                          user_id=501)
     assert out["routing_info"]["path"] == "agent_law" and out["status"] == "ok"
-    assert out["policy"]["model_label"] == preview.MODEL_LABEL
+    assert out["policy"]["model_label"] == preview.PRIMARY_LABEL
     assert seen == {"history": [{"role": "user", "content": "earlier"}], "subject": "agent-preview:501"}
     assert scopes == [{"organization_ids": [24, 25]}]
     assert saved == [("user", "AED 8,000 error: disclosure?"), ("assistant", "Correct it in the next return [1].")]
@@ -170,36 +151,26 @@ def test_cash_forecast_step_label():
     assert preview.step_label("list_documents", {"type": "journal_lines"}) == "Listing documents: journal lines…"
 
 
-@pytest.fixture
-def _primary(monkeypatch):
-    monkeypatch.setattr(preview.settings, "agent_mode", "primary")
-
-
-def test_primary_mode_answers_everyone_with_the_agent(_primary, monkeypatch):
+def test_every_user_is_answered_by_the_agent_whatever_model_they_send(monkeypatch):
     calls = []
     monkeypatch.setattr(routes.agent_preview, "answer", _fake_answer(calls))
-    response = asyncio.run(routes.run_query(QueryRequest(query="Revenue?", model="auto", organization_id=24),
+    response = asyncio.run(routes.run_query(QueryRequest(query="Revenue?", model="claude-sonnet", effort="fast",
+                                                         use_api=False, organization_id=24),
                                             current_user=OTHER))
     assert response.answer.startswith("Org One revenue") and calls[0]["orgs"] == [24]
-    assert routes._preview_scope(QueryRequest(query="Revenue?", model="claude-sonnet"), OTHER, []) == [24]
 
 
-def test_primary_mode_serves_one_model_and_hides_the_picker(_primary):
+def test_the_catalog_serves_one_model_and_hides_the_picker():
     catalog = routes.list_model_catalog(current_user=OTHER)
     assert [m.key for m in catalog.models] == [preview.MODEL_KEY]
     assert catalog.models[0].label == "Accutax AI" and "Preview" not in catalog.models[0].description
-    assert catalog.picker_hidden and catalog.default_model == preview.MODEL_KEY
+    assert catalog.picker_hidden and catalog.default_model == preview.MODEL_KEY and catalog.efforts == []
 
 
-def test_primary_answers_are_labelled_accutax_ai(_primary, monkeypatch):
+def test_answers_are_labelled_accutax_ai(monkeypatch):
     monkeypatch.setattr(loop, "run_agent", lambda *a, **k: loop.AgentResult(answer="AED 10.", status="ok"))
     out = preview.answer("Revenue?", [24], lambda: {}, session_id=None, user_id=501)
     assert out["policy"]["model_label"] == "Accutax AI"
-
-
-def test_other_modes_keep_the_picker():
-    catalog = routes.list_model_catalog(current_user=OTHER)
-    assert not catalog.picker_hidden and preview.MODEL_KEY not in [m.key for m in catalog.models]
 
 
 def test_law_answers_keep_their_fta_sources_for_the_citation_chips(monkeypatch):
@@ -226,9 +197,8 @@ def test_the_stream_route_passes_brief(monkeypatch):
         seen.update(kw)
         return {"answer": "x", "status": "ok"}
     monkeypatch.setattr(routes.agent_preview, "answer", fake)
-    monkeypatch.setattr(routes, "_agent_org_meta", lambda orgs, user: lambda: {})
     payload = QueryRequest(query="Revenue?", model=preview.MODEL_KEY, organization_id=24, brief=True)
-    list(routes._preview_events(payload, TESTER, [24]))
+    list(routes._agent_events(payload, TESTER, [24]))
     assert seen["brief"] is True
 
 

@@ -417,111 +417,6 @@ const OrgChips = ({ organizations }) => {
 };
 
 /**
- * ModelAnswerCard — one model's answer within a multi-model ("All Models")
- * response. A trimmed-down version of AssistantResponseCard's content area:
- * same block/markdown/notice rendering, no per-message action toolbar (copy/
- * regenerate/etc. don't make sense per-card in a comparison view) — those
- * live once on the MultiModelResponseCard wrapper instead.
- */
-const ModelAnswerCard = ({ response }) => {
-  const notice = response?.notice;
-  const content = (response?.answer || '').trim();
-  const blocks = response?.blocks;
-  const showBlocks = hasPortedBlocks(blocks);
-  const sources = citationSources(blocks);
-  const answerComponents = useMemo(
-    () => (sources ? { ...customMarkdownComponents, a: citationLinkRenderer(sources) } : customMarkdownComponents),
-    [sources],
-  );
-  const tableMarkdown = response?.table_markdown;
-  const isError = Boolean(response?.error || response?.status === 'failed');
-  const modelLabel = response?.policy?.model_label || response?.policy?.model || 'Model';
-  const elapsedSeconds = response?.token_usage?.elapsed_seconds;
-
-  return (
-    <div style={styles.modelCard}>
-      <div style={styles.modelCardHeader}>
-        <span style={styles.modelCardLabel}>{modelLabel}</span>
-        {elapsedSeconds !== undefined && elapsedSeconds !== null && (
-          <span style={styles.metricPill} title="Response generation latency">
-            <Clock size={11} color="var(--warning)" />
-            <span>{elapsedSeconds}s</span>
-          </span>
-        )}
-      </div>
-
-      {notice && <NoticeCard notice={notice} />}
-
-      {showBlocks ? (
-        <div className="data-table-container" style={styles.markdownWrapper}>
-          <BlockRenderer blocks={blocks} verification={response?.verification} />
-        </div>
-      ) : (
-        tableMarkdown && (
-          <div className="data-table-container">
-            <div className="markdown-body" style={styles.markdownWrapper}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={customMarkdownComponents}>
-                {tableMarkdown}
-              </ReactMarkdown>
-            </div>
-          </div>
-        )
-      )}
-
-      {content ? (
-        <div className="markdown-body" style={styles.markdownWrapper}>
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={answerComponents}>
-            {linkCitations(content, sources)}
-          </ReactMarkdown>
-        </div>
-      ) : (
-        !notice && !tableMarkdown && (
-          <div style={styles.emptyNotice}>
-            <span>{isError ? 'This model failed to respond.' : 'No response generated.'}</span>
-          </div>
-        )
-      )}
-
-      {/* Database Queries SQL Traces (controlled by VITE_SHOW_SQL_TRACES in .env) */}
-      <SqlTraceCard
-        sqlTraces={response?.sql_traces}
-        fallbackSql={response?.sql}
-      />
-
-      {/* Accutax REST API call traces (controlled by VITE_SHOW_API_TRACES in .env) */}
-      <ApiTraceCard apiTraces={response?.api_traces} />
-
-      {/* Bedrock/Claude LLM call traces (controlled by VITE_SHOW_LLM_TRACES in .env) */}
-      <LlmTraceCard llmTraces={response?.llm_traces} />
-    </div>
-  );
-};
-
-/**
- * MultiModelResponseCard — "All Models" dev comparison result: one
- * ModelAnswerCard per model that was queried, stacked vertically.
- */
-const MultiModelResponseCard = ({ msg }) => {
-  const responses = msg.responses || [];
-  return (
-    <div className="turn-wrapper" style={styles.assistantRow}>
-      <div style={styles.avatarBox}>
-        <AssistantMark size={16} color="var(--surface)" />
-      </div>
-      <div style={styles.assistantContentCol}>
-        <div style={styles.multiModelHeader}>
-          <Layers size={13} />
-          <span>All Models — {responses.length} response{responses.length === 1 ? '' : 's'}</span>
-        </div>
-        {responses.map((response, i) => (
-          <ModelAnswerCard key={i} response={response} />
-        ))}
-      </div>
-    </div>
-  );
-};
-
-/**
  * ResponseView — Renders full conversation list sequentially in clean ChatGPT/Gemini layout.
  */
 const UserMessage = ({ msg }) => {
@@ -596,9 +491,6 @@ export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant
           );
         }
 
-        if (msg.isMultiModel) {
-          return <MultiModelResponseCard key={idx} msg={msg} />;
-        }
 
         return (
           <AssistantResponseCard
@@ -623,36 +515,6 @@ const styles = {
     gap: '20px',
     paddingBottom: '40px',
     width: '100%',
-  },
-  multiModelHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    fontSize: 'var(--text-xs)',
-    fontWeight: 600,
-    letterSpacing: '0.03em',
-    textTransform: 'uppercase',
-    color: 'var(--ink-faint)',
-  },
-  modelCard: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-    backgroundColor: 'var(--surface)',
-    borderRadius: 'var(--radius-md)',
-    padding: '16px',
-    border: '1px solid var(--border-soft)',
-  },
-  modelCardHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '8px',
-  },
-  modelCardLabel: {
-    fontSize: 'var(--text-ui)',
-    fontWeight: 600,
-    color: 'var(--ink)',
   },
   userTurnWrapper: {
     display: 'flex',

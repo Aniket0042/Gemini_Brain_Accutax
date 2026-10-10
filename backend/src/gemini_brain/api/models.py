@@ -217,17 +217,6 @@ class QueryResponse(BaseModel):
     )
 
 
-class MultiModelQueryResponse(BaseModel):
-    """Response payload for POST /api/v1/query/all — one QueryResponse per
-    available model, run at the same query and effort='exhaustive'. Dev-only
-    comparison option; each entry self-describes which model answered via its
-    own `policy.model_label`."""
-
-    responses: List[QueryResponse] = Field(
-        ..., description="One QueryResponse per model that was queried."
-    )
-
-
 class PolicySchema(BaseModel):
     """Which model answered, at what effort, and what verification ran."""
 
@@ -288,7 +277,7 @@ class ModelCatalogResponse(BaseModel):
     efforts: List[EffortInfo] = Field(default_factory=list)
     default_model: str = "auto"
     default_effort: str = "auto"
-    #: True when one model answers every chat (AGENT_MODE=primary): the client hides the picker.
+    #: True when one model answers every chat (always, now): the client hides the picker.
     picker_hidden: bool = False
 
 

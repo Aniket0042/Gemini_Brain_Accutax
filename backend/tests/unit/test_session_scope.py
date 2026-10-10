@@ -13,7 +13,6 @@ from gemini_brain.api.app import app
 from gemini_brain.api.auth import create_access_token
 from gemini_brain.memory import session_memory
 from gemini_brain.memory.session_memory import session_scope
-from gemini_brain.orchestrator import multi_org
 
 SID = str(uuid.uuid4())
 
@@ -52,18 +51,18 @@ def test_session_scope(rec, expected):
 # ── Queries are held to the thread's organizations ───────────────────────────
 
 def _query(client, body: dict, scope: Optional[List[int]], allowed: List[int], owner: int = 7):
-    """POST /query continuing thread SID; returns (status, org ids the runner ran)."""
+    """POST /query continuing thread SID; returns (status, org ids the agent ran on)."""
     rec = _record(scope, owner) if scope is not None else None
-    with patch.object(session_memory, "get_session_record", return_value=rec), \
-         patch("gemini_brain.api.routes.GeminiBrainRunner") as runner_cls, \
-         patch("gemini_brain.api.routes._org_meta", lambda user, orgs: {o: {} for o in orgs}), \
-         patch.object(multi_org, "_persist_turn"), \
-         patch.object(multi_org, "_load_history", return_value=[]):
-        runner_cls.return_value.run.return_value = {"answer": "ok"}
+    ran: List[int] = []
+
+    def fake_answer(question, orgs, org_meta, **kwargs):
+        ran.extend(orgs)
+        return {"answer": "ok", "status": "ok"}
+
+    with patch.object(session_memory, "get_session_record", return_value=rec),          patch("gemini_brain.api.routes.agent_preview.answer", fake_answer):
         resp = client.post("/api/v1/query", json={"query": "revenue", "session_id": SID, **body},
                            headers=_bearer(allowed))
-    ran = sorted(c.kwargs["organization_id"] for c in runner_cls.return_value.run.call_args_list)
-    return resp.status_code, ran
+    return resp.status_code, sorted(ran)
 
 
 def test_query_for_other_org_in_same_thread_is_refused(client):
@@ -207,65 +206,3 @@ def test_listing_filters_by_allowed_orgs(monkeypatch):
     sql, params = cur.executed[-1]
     assert "<@ %s::int[]" in sql and "= %s::int[]" in sql
     assert params == (7, [5, 6], [5, 6], 20)
-
-
-# ── Multi-org thread memory ──────────────────────────────────────────────────
-
-class RewriteRunner:
-    calls: List[Dict[str, Any]] = []
-
-    def run(self, **kwargs):
-        RewriteRunner.calls.append(kwargs)
-        return {"answer": "x", "status": "ok", "results": [{"v": 1}], "token_usage": {}}
-
-    def _call_llm(self, system, user_text, **kwargs):
-        if kwargs.get("purpose") == "multi_org_standalone":
-            return "What was revenue in Q2 2026?", 40, 10
-        return "Compared.", 0, 0
-
-
-def test_period_follow_up_is_resolved_in_code_before_fan_out():
-    RewriteRunner.calls = []
-    history = [{"role": "user", "content": "Revenue in Q1 2025?"}, {"role": "assistant", "content": "..."}]
-    with patch.object(multi_org, "_load_history", return_value=history), \
-         patch.object(multi_org, "_persist_turn") as persist:
-        res = multi_org.run_multi_org(
-            "and Q2?", [5, 6], {}, runner_factory=RewriteRunner,
-            run_kwargs={"session_id": SID, "user_id": 7, "allowed_org_ids": [5, 6]},
-        )
-    # The thread's year carries over; no model rewrite is needed.
-    assert {c["query"] for c in RewriteRunner.calls} == {"Revenue in Q2 2025?"}
-    assert all(c["session_id"] is None for c in RewriteRunner.calls)
-    assert res["token_usage"]["input_tokens"] == 0
-    args = persist.call_args.args
-    assert args[0] == SID and args[2] == [5, 6] and args[3] == "and Q2?"
-
-
-def test_open_follow_up_is_rewritten_with_thread_history_before_fan_out():
-    RewriteRunner.calls = []
-    history = [{"role": "user", "content": "Revenue in Q2 2026?"}, {"role": "assistant", "content": "..."}]
-    with patch.object(multi_org, "_load_history", return_value=history), \
-         patch.object(multi_org, "_persist_turn"):
-        res = multi_org.run_multi_org(
-            "why is it so different between them?", [5, 6], {}, runner_factory=RewriteRunner,
-            run_kwargs={"session_id": SID, "user_id": 7, "allowed_org_ids": [5, 6]},
-        )
-    assert {c["query"] for c in RewriteRunner.calls} == {"What was revenue in Q2 2026?"}
-    assert res["token_usage"]["input_tokens"] >= 40
-
-
-def test_no_session_means_no_rewrite_and_no_persist():
-    RewriteRunner.calls = []
-    with patch.object(multi_org, "_load_history") as load, patch.object(multi_org, "_persist_turn") as persist:
-        multi_org.run_multi_org("revenue", [5, 6], {}, runner_factory=RewriteRunner,
-                                run_kwargs={"allowed_org_ids": [5, 6]})
-    load.assert_not_called()
-    persist.assert_not_called()
-    assert {c["query"] for c in RewriteRunner.calls} == {"revenue"}
-
-
-def test_persist_refused_for_thread_of_other_org_set():
-    with patch.object(session_memory, "ensure_session", return_value=False), \
-         patch("gemini_brain.memory.conversation_window.persist_turn_and_maybe_summarize") as write:
-        multi_org._persist_turn(SID, 7, [5, 6], "q", {"answer": "a"}, RewriteRunner(), "")
-    write.assert_not_called()

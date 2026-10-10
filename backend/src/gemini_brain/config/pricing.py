@@ -61,9 +61,8 @@ def gemini_brain_cost(
 ) -> float:
     """Calculate total USD cost for a single Gemini Brain run.
 
-    This is the *exact* formula from the original ``GeminiBrainRunner._cost``
-    static method (gemini_brain_adapter.py lines 511-519).  The Gemini portion
-    uses fixed Flash pricing; the Bedrock portion branches on model-ID substring.
+    This is the *exact* cost formula of the old answer path (now removed).
+    The Gemini portion uses fixed Flash pricing; the Bedrock portion branches on model-ID substring.
 
     Parameters
     ----------

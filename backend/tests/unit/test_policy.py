@@ -1,54 +1,7 @@
 """Tests for model registry, effort tiers, auto mode and the grounding verifier."""
-from gemini_brain.agents.executor import assert_read_only
-from gemini_brain.agents.finance_agent import _like, _lit
 from gemini_brain.policy import choose_policy, list_models
 from gemini_brain.policy.effort import EFFORT_ORDER, EFFORT_TIERS, escalate, resolve_effort
 from gemini_brain.policy.verifier import verify_answer
-
-import pytest
-
-
-# ── SQL literal safety ────────────────────────────────────────────────
-
-def test_lit_escapes_quotes():
-    assert _lit("O'Brien") == "'O''Brien'"
-
-
-def test_lit_neutralises_injection():
-    """The payload survives as text but cannot terminate the literal early."""
-    out = _lit("x' OR '1'='1")
-    assert out.startswith("'") and out.endswith("'")
-    # Every quote from the input is doubled, so no quote closes the literal
-    # anywhere but at the very end.
-    assert "'" not in out[1:-1].replace("''", "")
-
-
-def test_lit_passes_numbers_unquoted():
-    assert _lit(42) == "42"
-    assert _lit(None) == "NULL"
-
-
-def test_like_escapes_wildcards():
-    # A user searching for a literal % must not match everything.
-    assert r"\%" in _like("100%")
-
-
-@pytest.mark.parametrize("sql", [
-    "SELECT 1; DROP TABLE income",
-    "DO $$ BEGIN PERFORM 1; END $$",
-    "SELECT pg_read_file('/etc/passwd')",
-    "UPDATE income SET amount = 0",
-    "CREATE TABLE evil (id int)",
-    "COPY income TO PROGRAM 'sh'",
-])
-def test_assert_read_only_blocks(sql):
-    with pytest.raises(ValueError):
-        assert_read_only(sql)
-
-
-def test_assert_read_only_allows_select_and_cte():
-    assert_read_only("SELECT * FROM income WHERE organization_id = 27;")
-    assert_read_only("WITH x AS (SELECT 1) SELECT * FROM x")
 
 
 # ── Effort tiers ──────────────────────────────────────────────────────
@@ -175,48 +128,6 @@ def test_verifier_ignores_years():
 
 def test_verifier_is_a_noop_on_empty_answer():
     assert verify_answer("", PAYLOAD).grounding_rate == 1.0
-
-
-# ── Ageing-qualifier routing guard ────────────────────────────────────
-# Regression: "show me top 5 vendors with overdue of 90 days" matched the
-# top_vendors rule, which ranks by spend, and the overdue qualifier was
-# silently dropped — answering a different question than the one asked.
-
-from gemini_brain.router.rules import get_sql_fast_path_rules, redirect_for_aging
-
-
-def _first_task(question):
-    for pattern, task, _ in get_sql_fast_path_rules():
-        if pattern.search(question):
-            return task
-    return None
-
-
-@pytest.mark.parametrize("question,expected", [
-    ("show me top 5 vendors with overdue of 90 days", "ap_aging"),
-    ("top 5 vendors past due", "ap_aging"),
-    ("top 10 customers with outstanding balances", "ar_aging"),
-    ("top 5 customers in arrears", "ar_aging"),
-])
-def test_ranking_with_ageing_qualifier_redirects(question, expected):
-    task = _first_task(question)
-    assert task is not None, "expected a fast-path match to redirect"
-    assert redirect_for_aging(task, question) == expected
-
-
-@pytest.mark.parametrize("question", [
-    "top 5 vendors",
-    "top 10 customers",
-    "sales by customer this year",
-])
-def test_plain_ranking_is_left_alone(question):
-    task = _first_task(question)
-    assert redirect_for_aging(task, question) is None
-
-
-def test_non_ranking_rules_are_never_redirected():
-    assert redirect_for_aging("profit_loss", "overdue profit and loss") is None
-    assert redirect_for_aging("ap_aging", "overdue bills 90 days") is None
 
 
 def test_renamed_sonnet_key_still_resolves():

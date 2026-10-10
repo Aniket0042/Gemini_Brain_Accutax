@@ -238,6 +238,16 @@ Checks for commit D (all must pass before commit E starts):
 3. `python -c "import gemini_brain.api.app"` in the project venv, to catch a missing import that tests patch over.
 4. Start the API locally and check `/api/v1/health`, login, `/tenants`, `/sessions`, `/models`, one `/query/stream`.
 
+As done (10 Oct), where commit D differs from the list above:
+
+- `agent/shadow.py` and `config/api_catalog.py` were deleted in D, not E. `agent/shadow.py` reads `agent_mode`, and the `AGENT_MODE` switch goes in D; `api_catalog.py` imports `accutax_openapi`. `agent_shadow_log` went with it.
+- `tools/__init__.py` re-exported the deleted tool modules; it is now a docstring only.
+- `/query` and `/query/stream` refuse a user with no organization with 403 before the agent runs (`_agent_scope`). An unassigned org is still a plain 403 before the stream opens.
+- The frontend still calls `GET /models`, only to spot an expired token (it was the app's only session check). Move that check before `/models` is removed in step 9.
+- `index.css` was not changed: the `pp-*` classes are shared with the answer canvas and the tenant switcher.
+- `scripts/eval/vat_kb_eval.py` was deleted. `tests/data/demo_set.json` and `acceptance_prompts.json` were kept (no code uses them; not old-path results).
+- `tests/test_tenant_isolation_api.py` was rewritten against the agent and passes again; it stubs the live org lookup like `tests/unit/conftest.py`.
+
 ### Step 5 — Delete wave 2 (commit E)
 
 1. Delete the wave 2 list in section 2, and `agent_shadow_log` from settings.

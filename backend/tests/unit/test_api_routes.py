@@ -1,5 +1,5 @@
 """Unit tests for FastAPI REST API endpoints & Swagger documentation."""
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from gemini_brain.api.app import app
@@ -29,11 +29,9 @@ def test_openapi_schema_endpoint():
     assert "/api/v1/query" in schema["paths"]
 
 
-@patch("gemini_brain.api.routes.GeminiBrainRunner")
-def test_query_endpoint_success(mock_runner_cls):
-    mock_runner = MagicMock()
-    mock_runner_cls.return_value = mock_runner
-    mock_runner.run.return_value = {
+@patch("gemini_brain.api.routes.agent_preview.answer")
+def test_query_endpoint_success(mock_answer):
+    mock_answer.return_value = {
         "answer": "Test answer",
         "sql": None,
         "results": [],

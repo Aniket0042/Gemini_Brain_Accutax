@@ -7,7 +7,7 @@ const nameOf = (t) => t?.display_name || t?.name || t?.org_name || `Organization
 
 /**
  * TenantSwitcher — the org-context dropdown, lives in the header. Reuses the
- * same pp-* popover classes as the composer's model/effort pickers so every
+ * same pp-* popover classes as the answer canvas menus so every
  * dropdown in the app shares one visual language.
  *
  * With `multiOrgEnabled`, each row is a checkbox and the choice is committed

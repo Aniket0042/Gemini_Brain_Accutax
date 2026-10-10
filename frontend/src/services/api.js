@@ -49,37 +49,6 @@ export const fetchQueryResponse = async (payload, token = '', signal = undefined
   return responseData;
 };
 
-/**
- * fetchAllModelsResponse — dev comparison option. Runs the same query
- * against every available model (POST /api/v1/query/all) and returns
- * { responses: [...] }, one QueryResponse-shaped entry per model. No
- * streaming variant — waits for every model before returning.
- */
-export const fetchAllModelsResponse = async (payload, token = '', signal = undefined) => {
-  const headers = {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-  };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  const response = await fetch('/api/v1/query/all', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload),
-    signal,
-  });
-
-  const responseData = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    throw new Error((responseData && responseData.detail) || `Server returned status ${response.status}`);
-  }
-
-  return responseData;
-};
-
 export const fetchModelHealth = async (token = '') => {
   const headers = { 'Accept': 'application/json' };
   if (token) {
@@ -172,6 +141,8 @@ export const streamQueryResponse = (payload, onChunk, onError, onComplete, token
   return controller;
 };
 
+// GET /models lists the one answering model; the app only uses the call to
+// spot an expired session (see App.jsx).
 export const fetchModelCatalog = async (token = '') => {
   const headers = { 'Accept': 'application/json' };
   if (token) {

@@ -1,12 +1,11 @@
-"""Tests for the App Guidance guide: section matching, prompt context, route
-sanitizing, deep-link buttons and the no-match guardrail."""
+"""Tests for the App Guidance guide: section matching, prompt context and route
+sanitizing."""
 import re
 
 import pytest
 
 from gemini_brain.config.settings import settings
 from gemini_brain.knowledge import guide_loader as gl
-from gemini_brain.orchestrator import gemini_brain_runner as runner
 
 GUIDE = gl.load_app_guide()
 HEADINGS = [s.heading for s in gl._parse_sections(GUIDE)]
@@ -196,90 +195,3 @@ def test_no_match_context_is_orientation_only():
     context = gl.guide_context_for("what is EBITDA")
     assert "Sidebar layout" in context
     assert "## " not in context
-
-
-def test_guardrail_added_only_for_no_match_how_to():
-    no_match = runner._guide_prompt_block("how do I do payroll", gl.guide_coverage_for("how do I do payroll"))
-    assert runner.NO_GUIDE_MATCH_RULE.strip() in no_match
-
-    matched_cov = gl.guide_coverage_for("how do I create an invoice")
-    matched = runner._guide_prompt_block("how do I create an invoice", matched_cov)
-    assert runner.NO_GUIDE_MATCH_RULE.strip() not in matched
-    assert "## Creating an Invoice" in matched
-
-    concept = runner._guide_prompt_block("what is EBITDA", None)
-    assert runner.NO_GUIDE_MATCH_RULE.strip() not in concept
-
-
-@pytest.mark.parametrize(
-    "query,expected",
-    [
-        ("how do I see overdue invoices", "Viewing the Aged Receivables (AR Aging) Report"),
-        ("how do I view the profit and loss report", "Viewing the Profit & Loss Report"),
-        ("where can I see the balance sheet", "Viewing the Balance Sheet"),
-        ("how do I see sales by customer", "Viewing Sales by Customer and Statements of Account"),
-        ("how to record an expense", "Recording an Expense or Vendor Bill"),
-        ("where is the VAT summary", "Viewing the VAT Summary"),
-        ("steps to create a purchase order", "Creating a Purchase Order"),
-        ("walk me through bank reconciliation", "Bank Reconciliation"),
-    ],
-)
-def test_how_to_phrasing_routes_to_guide(query, expected):
-    assert runner._how_to_guide_section(query) == expected
-
-
-@pytest.mark.parametrize(
-    "query",
-    [
-        "show me profit and loss this month",
-        "how much did we sell last month",
-        "how many invoices are overdue",
-        "what is my bank balance",
-        "overdue invoices",
-        "how do I do payroll",
-        "",
-    ],
-)
-def test_data_or_uncovered_questions_are_not_pre_routed(query):
-    assert runner._how_to_guide_section(query) is None
-
-
-def _state(*user_turns):
-    msgs = []
-    for turn in user_turns:
-        msgs.append({"role": "user", "content": turn})
-        msgs.append({"role": "assistant", "content": "answer"})
-    return {"_memory_messages": msgs}
-
-
-def test_referential_follow_up_borrows_previous_topic():
-    state = _state("how do I create a purchase order")
-    assert runner._effective_guide_query("what about step 3?", state) == "how do I create a purchase order"
-
-
-def test_new_uncovered_question_keeps_own_no_match():
-    state = _state("how do I create a purchase order")
-    assert runner._effective_guide_query("how do I do payroll", state) == "how do I do payroll"
-
-
-def test_matched_query_is_used_as_is():
-    state = _state("how do I create a purchase order")
-    assert runner._effective_guide_query("how do I add a branch", state) == "how do I add a branch"
-
-
-def test_follow_up_without_history_stays_unmatched():
-    assert runner._effective_guide_query("what about step 3?", {}) == "what about step 3?"
-
-
-def test_record_coverage_skips_non_how_to_types():
-    assert runner._record_guide_coverage(4, "show me revenue") is None
-    assert runner._record_guide_coverage(6, "what is accrual accounting") is None
-    assert runner._record_guide_coverage(2, "how do I create an invoice")["status"] == "verified"
-
-
-def test_link_block_only_for_mapped_match():
-    block = runner._guide_link_block(gl.guide_coverage_for("how do I add a branch"))
-    assert block["type"] == "action_button"
-    assert block["url"].endswith("/branches")
-    assert runner._guide_link_block(gl.guide_coverage_for("what is EBITDA")) is None
-    assert runner._guide_link_block(None) is None

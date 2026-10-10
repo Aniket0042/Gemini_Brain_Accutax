@@ -9,7 +9,7 @@ import { Header } from './components/Header';
 import { IntroSuggestions } from './components/IntroSuggestions';
 import { ModelHealthModal } from './components/ModelHealthModal';
 import { AnswerCanvas } from './components/canvas/AnswerCanvas';
-import { fetchQueryResponse, streamQueryResponse, fetchAllModelsResponse, fetchTenants, fetchModelCatalog, fetchSessionMessages, createChatSession, deleteChatSession } from './services/api';
+import { fetchQueryResponse, streamQueryResponse, fetchTenants, fetchModelCatalog, fetchSessionMessages, createChatSession, deleteChatSession } from './services/api';
 import { Trash2 } from 'lucide-react';
 import { useAuth0 } from '@auth0/auth0-react';
 
@@ -287,16 +287,9 @@ export default function App() {
     setTheme((prev) => (prev === 'system' ? 'light' : prev === 'light' ? 'dark' : 'system'));
   };
 
-  // Model selection. Defaults to auto — the backend policy router picks, and
-  // explains its choice in the response. Effort is no longer user-selectable:
-  // every query runs at the highest tier its model supports (backend default).
-  const [modelCatalog, setModelCatalog] = useState(null);
-  // 'loading' | 'ready' | 'error' — drives what the picker says when the
-  // catalog endpoint is unreachable, instead of silently showing only "Auto".
-  const [catalogState, setCatalogState] = useState('loading');
-  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('accutax_model') || 'auto');
+  // One model (the agent, "Accutax AI") answers every chat, so there is no
+  // model picker and no model or effort to send.
   const [brief, setBrief] = useState(() => localStorage.getItem('accutax_brief') === '1');
-  const [catalogReloadKey, setCatalogReloadKey] = useState(0);
 
   // Conversation History List state
   const [conversation, setConversation] = useState([]);
@@ -1064,41 +1057,25 @@ export default function App() {
   };
 
   // Handle Query Submission
-  // Load the model/effort catalog once authenticated. The picker falls back to
-  // "Auto" alone if this fails, so a catalog outage never blocks asking a question.
+  // Check the stored token once authenticated: a token the service no longer
+  // accepts (most often after a restart) sends the user back to sign in. The
+  // model list itself is no longer used; move this check when /models goes.
   useEffect(() => {
     const token = currentUser?.access_token;
     if (!token) return;
     let cancelled = false;
-    setCatalogState('loading');
-    fetchModelCatalog(token)
-      .then((data) => {
-        if (cancelled) return;
-        setModelCatalog(data);
-        setCatalogState('ready');
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        if (err.code === 'SESSION_EXPIRED') {
-          handleLogout();
-          return;
-        }
-        console.warn('Model catalog unavailable:', err.message);
-        setCatalogState('error');
-      });
+    fetchModelCatalog(token).catch((err) => {
+      if (cancelled) return;
+      if (err.code === 'SESSION_EXPIRED') {
+        handleLogout();
+        return;
+      }
+      console.warn('Session check unavailable:', err.message);
+    });
     return () => {
       cancelled = true;
     };
-  }, [currentUser?.access_token, catalogReloadKey]);
-
-  // Bumped by the picker's Retry, so a backend that comes back up recovers
-  // without the user reloading the page.
-  const retryCatalog = () => setCatalogReloadKey((k) => k + 1);
-
-  const handleModelChange = (key) => {
-    setSelectedModel(key);
-    localStorage.setItem('accutax_model', key);
-  };
+  }, [currentUser?.access_token]);
 
   const handleBriefChange = (on) => {
     setBrief(Boolean(on));
@@ -1196,12 +1173,8 @@ export default function App() {
         ? { organization_ids: scopeOrgIds }
         : { organization_id: activeTenant?.organization_id }),
       session_id: widgetSessionId || undefined,
-      use_api: true,
-      model: overrides.model || selectedModel,
       ui_context: uiContext,
       brief: overrides.brief ?? brief,
-      // No effort field — the backend defaults every query to 'exhaustive'
-      // (capped automatically per model), so there's nothing to send here.
     };
 
     const token = currentUser?.access_token || '';
@@ -1213,54 +1186,6 @@ export default function App() {
       queryControllerRef.current = null;
       setIsLoading(false);
     };
-
-    if (payload.model === 'all') {
-      // Dev comparison option: one request to /query/all, no streaming —
-      // wait for every model, then render every answer at once.
-      const controller = new AbortController();
-      queryControllerRef.current = controller;
-      try {
-        const res = await fetchAllModelsResponse(payload, token, controller.signal);
-        if (controller.signal.aborted) return;
-        setConversation((prev) => {
-          const updated = [...prev];
-          const lastIdx = updated.length - 1;
-          if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
-            updated[lastIdx] = {
-              ...updated[lastIdx],
-              isMultiModel: true,
-              responses: res.responses || [],
-              isStreaming: false,
-            };
-          }
-          return updated;
-        });
-      } catch (err) {
-        if (controller.signal.aborted) return;
-        const errorRes = {
-          answer: `Error: ${err.message}`,
-          error: err.message,
-          token_usage: { input_tokens: 0, output_tokens: 0, llm_calls: 0, cost_usd: 0, elapsed_seconds: 0 },
-          agent_trace: [],
-        };
-        setConversation((prev) => {
-          const updated = [...prev];
-          const lastIdx = updated.length - 1;
-          if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
-            updated[lastIdx] = {
-              ...updated[lastIdx],
-              responseData: errorRes,
-              streamingText: errorRes.answer,
-              isStreaming: false,
-            };
-          }
-          return updated;
-        });
-      } finally {
-        releaseQuery(controller);
-      }
-      return;
-    }
 
     if (isStreaming) {
       // Live Server-Sent Events (SSE) Streaming
@@ -1615,11 +1540,6 @@ export default function App() {
             isStreaming={isStreaming}
             setIsStreaming={setIsStreaming}
             variant="compact"
-            catalog={modelCatalog}
-            catalogState={catalogState}
-            onRetryCatalog={retryCatalog}
-            model={selectedModel}
-            onModelChange={handleModelChange}
             brief={brief}
             onBriefChange={handleBriefChange}
           />

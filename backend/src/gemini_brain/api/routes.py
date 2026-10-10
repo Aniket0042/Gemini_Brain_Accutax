@@ -4,7 +4,6 @@ routes.py — FastAPI route definitions for Gemini Brain.
 from __future__ import annotations
 
 import json
-from collections import Counter
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Generator, Optional
@@ -27,14 +26,12 @@ from gemini_brain.api.auth import (
     verify_password,
 )
 from gemini_brain.api.models import (
-    EffortInfo,
     HealthResponse,
     ModelCatalogResponse,
     ModelInfo,
     LoginRequest,
     ModelDiagnosticRequest,
     ModelHealthResponse,
-    MultiModelQueryResponse,
     QueryRequest,
     QueryResponse,
     TenantInfo,
@@ -46,18 +43,10 @@ from gemini_brain.api.models import (
     ChatMessageSchema,
     ChatMessageListResponse,
 )
-from gemini_brain.api_client.accutax_client import active_auth_token
 from gemini_brain.config.settings import settings
 from gemini_brain.health.model_health_checker import check_all_models_and_services
-from gemini_brain.orchestrator.gemini_brain_runner import GeminiBrainRunner
-from gemini_brain.orchestrator.multi_org import run_multi_org, run_multi_org_stream
 from gemini_brain.agent import preview as agent_preview
-from gemini_brain.agent import shadow as agent_shadow
-from gemini_brain.orchestrator.multi_org_plan import plan_query
-from gemini_brain.policy import choose_policy, list_models
-from gemini_brain.policy.effort import DEFAULT_EFFORT, EFFORT_ORDER, EFFORT_TIERS
 from gemini_brain.resilience import (
-    ErrorCode,
     HTTP_FOR_CODE,
     classify_exception,
     notice_for,
@@ -207,41 +196,20 @@ def login_json(payload: LoginRequest) -> TokenResponse:
     "/models",
     response_model=ModelCatalogResponse,
     tags=["Models"],
-    summary="List Selectable Models and Effort Tiers",
+    summary="List the Answering Model",
     description=(
-        "Returns the models this user may choose between and the effort tiers each supports, "
-        "so the client never hardcodes model identifiers."
+        "Every chat is answered by the agent, so this lists one model and tells the client to "
+        "hide the picker. Kept for clients that still ask for it."
     ),
 )
 def list_model_catalog(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> ModelCatalogResponse:
-    """Serve the model registry and effort ladder for the picker UI."""
-    if agent_preview.primary():
-        # Every chat is answered by the agent: one model, no picker.
-        return ModelCatalogResponse(models=[ModelInfo(**agent_preview.catalog_entry())], efforts=[],
-                                    default_model=agent_preview.MODEL_KEY, default_effort=DEFAULT_EFFORT,
-                                    picker_hidden=True)
-    models = [ModelInfo(**m) for m in list_models()]
-    if agent_preview.allowed(current_user):
-        models.insert(0, ModelInfo(**agent_preview.catalog_entry()))
-    return ModelCatalogResponse(
-        models=models,
-        efforts=[
-            EffortInfo(
-                name=tier.name,
-                label=tier.label,
-                description=tier.description,
-                target_latency=tier.target_latency,
-                adds=tier.adds(),
-                max_retrievals=tier.max_retrievals,
-            )
-            for name in EFFORT_ORDER
-            for tier in [EFFORT_TIERS[name]]
-        ],
-        default_model="auto",
-        default_effort=DEFAULT_EFFORT,
-    )
+    """The single agent entry, with the picker hidden."""
+    return ModelCatalogResponse(models=[ModelInfo(**agent_preview.catalog_entry())], efforts=[],
+                                default_model=agent_preview.MODEL_KEY, default_effort="exhaustive",
+                                picker_hidden=True)
+
 
 
 @router.get(
@@ -286,21 +254,17 @@ def _query_orgs(payload: QueryRequest, current_user: CurrentUser, *, action: str
     return orgs
 
 
-def _preview_scope(payload: QueryRequest, current_user: CurrentUser, orgs: list[int]) -> Optional[list[int]]:
-    """The organizations an agent-preview request runs on, or None when it is not one.
-
-    The picker shows the preview only to allowed users; a stale selection from anyone
-    else falls back to the normal path. With AGENT_MODE=primary every request is one.
-    """
-    if not agent_preview.primary() and (
-            not agent_preview.requested(payload.model) or not agent_preview.allowed(current_user)):
-        return None
+def _agent_scope(current_user: CurrentUser, orgs: list[int]) -> list[int]:
+    """The organizations a chat runs on: those it names, else the caller's first allowed one."""
     scope = orgs or [int(o) for o in (current_user.allowed_org_ids or [])[:1]]
-    return scope or None
+    if not scope:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="No organization is available for this account.")
+    return scope
 
 
-def _preview_events(payload: QueryRequest, current_user: CurrentUser, orgs: list[int]) -> Generator[str, None, None]:
-    """SSE for an agent-preview answer: a status line per tool call, then the final result."""
+def _agent_events(payload: QueryRequest, current_user: CurrentUser, orgs: list[int]) -> Generator[str, None, None]:
+    """SSE for an agent answer: a status line per tool call, then the final result."""
     import queue
     import threading
 
@@ -315,16 +279,31 @@ def _preview_events(payload: QueryRequest, current_user: CurrentUser, orgs: list
                 progress=events.put, brief=bool(payload.brief),
             )
         except Exception as e:  # noqa: BLE001 - answer() never raises; this is belt and braces
-            logger.warning("agent preview failed: %s", e, exc_info=True)
+            logger.warning("agent answer failed: %s", e, exc_info=True)
+            box["error"] = e
         finally:
             events.put(None)
 
-    threading.Thread(target=work, name="agent-preview", daemon=True).start()
+    threading.Thread(target=work, name="agent-answer", daemon=True).start()
     yield f"data: {json.dumps({'status': 'Reading your question…', 'type': 'agent'})}\n\n"
     while (message := events.get()) is not None:
         yield f"data: {json.dumps({'status': message, 'type': 'agent'})}\n\n"
-    result = box.get("result") or {"answer": "", "status": "failed"}
-    yield f"data: {json.dumps({'final_result': normalize_envelope(result)}, default=str)}\n\n"
+    if "result" in box:
+        yield f"data: {json.dumps({'final_result': normalize_envelope(box['result'])}, default=str)}\n\n"
+        return
+    rid = new_request_id()
+    code = classify_exception(box.get("error") or RuntimeError("no answer"))
+    err_notice = notice_for(code, request_id=rid)
+    err_env = normalize_envelope({
+        "answer": err_notice["message"],
+        "error": code.value,
+        "status": "degraded" if err_notice.get("retryable") else "failed",
+        "notice": err_notice,
+        "request_id": rid,
+    })
+    yield f"data: {json.dumps({'type': 'error', 'notice': err_notice})}\n\n"
+    yield f"data: {json.dumps({'final_result': err_env})}\n\n"
+
 
 
 def _require_multi_org_enabled(orgs: list[int]) -> None:
@@ -375,50 +354,6 @@ def _agent_org_meta(orgs: list[int], current_user: CurrentUser) -> Callable[[], 
     """Org names and currencies for the agent, from Cube (no Accutax endpoint). Looked up only when called."""
     from gemini_brain.semantic import org_directory
     return lambda: org_directory.lookup(orgs, subject=f"agent-org-meta:{current_user.user_id}")
-
-
-def _org_meta(current_user: CurrentUser, orgs: list[int]) -> dict[int, dict[str, Any]]:
-    """Display name and currency for each authorized org, for labelling a comparison."""
-    known = {
-        int(t["id"]): t
-        for t in fetch_accutax_accessible_orgs(current_user.accutax_token, current_user.user_id)
-    }
-    # Names from every org the user can reach, not only the selected ones, so
-    # a name shared with an unselected org is still told apart.
-    missing = [o for o in {*orgs, *(current_user.allowed_org_ids or [])} if o not in known]
-    if missing:
-        known.update({int(t["id"]): t for t in fetch_organizations_from_db(missing)})
-
-    def base_name(oid: int) -> str:
-        return (known.get(oid) or {}).get("name") or f"Organization {oid}"
-
-    name_counts = Counter(base_name(oid) for oid in known)
-    # An unknown currency stays empty, so the comparison never labels an
-    # amount with a currency it does not have. A name two orgs share gets the
-    # org ID, so chips, headings and the comparison never mix them up.
-    return {
-        o: {"name": base_name(o) + (f" (ID {o})" if name_counts[base_name(o)] > 1 else ""),
-            "currency": (known.get(o) or {}).get("currency") or ""}
-        for o in orgs
-    }
-
-
-def _multi_org_run_kwargs(payload: QueryRequest, current_user: CurrentUser) -> dict[str, Any]:
-    """Per-org runner.run arguments; organization_id and session_id are set per org."""
-    return {
-        "db_name": payload.db_name,
-        "use_api": payload.use_api,
-        "user_id": current_user.user_id,
-        "selected_model_key": payload.selected_model_key,
-        "allowed_org_ids": current_user.allowed_org_ids,
-        "auth_token": current_user.raw_token,
-        "model": payload.model,
-        "effort": payload.effort,
-        "ui_context": payload.ui_context.model_dump() if payload.ui_context else None,
-        "brief": bool(payload.brief),
-        # Used once for the whole org set; each per-org run gets none.
-        "session_id": payload.session_id,
-    }
 
 
 @router.get(
@@ -679,96 +614,27 @@ def check_models_post(payload: ModelDiagnosticRequest) -> ModelHealthResponse:
     status_code=status.HTTP_200_OK,
     summary="Execute Financial Query (Authenticated)",
     description=(
-        "Routes a natural language financial query through Google Gemini (classification) "
-        "and Anthropic Claude on AWS Bedrock (data reasoning), enforcing tenant isolation."
+        "Answers a natural language financial question with the agent (figures from Cube, "
+        "VAT law from the knowledge base), enforcing tenant isolation."
     ),
 )
 async def run_query(
     payload: QueryRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> QueryResponse:
-    """Execute a synchronous financial query through Gemini Brain with tenant isolation enforcement."""
+    """Answer one question with the agent. model, effort, use_api and selected_model_key are ignored."""
     import asyncio
-    orgs = _query_orgs(payload, current_user, action="query")
-    preview_orgs = _preview_scope(payload, current_user, orgs)
-    if preview_orgs is not None:
+    orgs = _agent_scope(current_user, _query_orgs(payload, current_user, action="query"))
+    try:
         result = await asyncio.to_thread(
-            agent_preview.answer, payload.query, preview_orgs, _agent_org_meta(preview_orgs, current_user),
+            agent_preview.answer, payload.query, orgs, _agent_org_meta(orgs, current_user),
             session_id=payload.session_id, user_id=current_user.user_id, db_name=payload.db_name,
             brief=bool(payload.brief),
         )
         return QueryResponse(**normalize_envelope(result))
-    if agent_preview.requested(payload.model):
-        payload = payload.model_copy(update={"model": "auto"})
-    organization_id = orgs[0] if orgs else None
-    # Set request-scoped bearer token for any downstream Accutax REST calls
-    token_reset = active_auth_token.set(current_user.raw_token)
-    try:
-        runner = GeminiBrainRunner()
-        
-        def _run():
-            from gemini_brain.observability.sql_tracer import start_sql_trace, get_sql_traces, clear_sql_trace
-            from gemini_brain.observability.api_tracer import start_api_trace, get_api_traces, clear_api_trace
-            from gemini_brain.observability.llm_tracer import start_llm_trace, get_llm_traces, clear_llm_trace
-            rid = new_request_id()
-            start_sql_trace(trace_id=rid)
-            start_api_trace(trace_id=rid)
-            start_llm_trace(trace_id=rid)
-            history = agent_shadow.thread_history(payload.session_id, payload.db_name)
-            try:
-                if len(orgs) > 1:
-                    res = run_multi_org(
-                        payload.query, orgs, _org_meta(current_user, orgs),
-                        runner_factory=GeminiBrainRunner,
-                        run_kwargs=_multi_org_run_kwargs(payload, current_user),
-                        planner=plan_query,
-                    )
-                else:
-                    res = runner.run(
-                        query=payload.query,
-                        organization_id=organization_id,
-                        db_name=payload.db_name,
-                        use_api=payload.use_api,
-                        user_id=current_user.user_id,
-                        session_id=payload.session_id,
-                        selected_model_key=payload.selected_model_key,
-                        allowed_org_ids=current_user.allowed_org_ids,
-                        auth_token=current_user.raw_token,
-                        model=payload.model,
-                        effort=payload.effort,
-                        ui_context=payload.ui_context.model_dump() if payload.ui_context else None,
-                        brief=bool(payload.brief),
-                    )
-                traces = get_sql_traces(trace_id=rid)
-                if traces and isinstance(res, dict):
-                    res["sql_traces"] = traces
-                    if not res.get("sql"):
-                        res["sql"] = traces[0]["sql"]
-                api_traces = get_api_traces(trace_id=rid)
-                if api_traces and isinstance(res, dict):
-                    res["api_traces"] = api_traces
-                llm_traces = get_llm_traces(trace_id=rid)
-                if llm_traces and isinstance(res, dict):
-                    res["llm_traces"] = llm_traces
-                agent_shadow.start(payload.query, orgs, _agent_org_meta(orgs, current_user), res, history=history)
-                return res
-            finally:
-                clear_sql_trace(trace_id=rid)
-                clear_api_trace(trace_id=rid)
-                clear_llm_trace(trace_id=rid)
-            
-        result = await asyncio.to_thread(_run)
-        return QueryResponse(**normalize_envelope(result))
-    except ValueError as ve:
-        logger.warning("Tenant or validation error processing query: %s", ve)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(ve),
-        ) from ve
     except Exception as e:
         logger.error("Unhandled exception processing query: %s", e, exc_info=True)
         code = classify_exception(e)
-        status_code = HTTP_FOR_CODE.get(code, 500)
         notice_obj = notice_for(code, request_id=new_request_id())
         envelope = normalize_envelope({
             "answer": notice_obj["message"],
@@ -776,94 +642,7 @@ async def run_query(
             "status": "degraded" if notice_obj.get("retryable") else "failed",
             "notice": notice_obj,
         })
-        return JSONResponse(status_code=status_code, content=envelope)
-    finally:
-        try:
-            active_auth_token.reset(token_reset)
-        except ValueError:
-            active_auth_token.set("")
-
-
-@router.post(
-    "/query/all",
-    response_model=MultiModelQueryResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Execute Financial Query Against Every Available Model (Dev)",
-    description=(
-        "Dev-only comparison option: runs the same query against every model "
-        "this deployment has credentials for, each at effort='exhaustive', "
-        "and returns every answer. Synchronous only — no streaming variant."
-    ),
-    tags=["Gemini Brain AI Engine", "Dev"],
-)
-async def run_query_all_models(
-    payload: QueryRequest,
-    current_user: CurrentUser = Depends(get_current_user),
-) -> MultiModelQueryResponse:
-    """Fan the same query out to every available model and collect every answer."""
-    import asyncio
-    orgs = _query_orgs(payload, current_user, action="query.all_models")
-    if len(orgs) > 1:
-        # Models x organizations multiplies cost; this dev route stays single-org.
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Model comparison runs against one organization at a time.",
-        )
-    organization_id = orgs[0] if orgs else None
-    available_keys = [m["key"] for m in list_models() if m["available"]]
-    auth_token = current_user.raw_token
-
-    def _run_one(model_key: str) -> dict:
-        # ContextVars are per-OS-thread unless explicitly propagated, so each
-        # worker thread sets its own copy from the captured token rather than
-        # relying on it being inherited from the request thread.
-        token_reset = active_auth_token.set(auth_token)
-        try:
-            runner = GeminiBrainRunner()
-            result = runner.run(
-                query=payload.query,
-                organization_id=organization_id,
-                db_name=payload.db_name,
-                use_api=payload.use_api,
-                user_id=current_user.user_id,
-                session_id=payload.session_id,
-                allowed_org_ids=current_user.allowed_org_ids,
-                auth_token=auth_token,
-                model=model_key,
-                effort="exhaustive",
-                ui_context=payload.ui_context.model_dump() if payload.ui_context else None,
-                brief=bool(payload.brief),
-            )
-            return normalize_envelope(result)
-        except Exception as e:
-            logger.warning("query/all: model %s failed: %s", model_key, e)
-            code = classify_exception(e)
-            notice_obj = notice_for(code, request_id=new_request_id())
-            return normalize_envelope({
-                "answer": notice_obj["message"],
-                "error": code.value,
-                "status": "failed",
-                "notice": notice_obj,
-                "policy": {"model": model_key, "model_label": model_key},
-            })
-        finally:
-            try:
-                active_auth_token.reset(token_reset)
-            except ValueError:
-                active_auth_token.set("")
-
-    if not available_keys:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="No models are currently configured/available.",
-        )
-
-    # Use asyncio.gather to run all blocking operations in the default thread pool
-    # concurrently without blocking the main FastAPI event loop.
-    tasks = [asyncio.to_thread(_run_one, key) for key in available_keys]
-    results = await asyncio.gather(*tasks)
-
-    return MultiModelQueryResponse(responses=[QueryResponse(**r) for r in results])
+        return JSONResponse(status_code=HTTP_FOR_CODE.get(code, 500), content=envelope)
 
 
 @router.post(
@@ -878,123 +657,12 @@ def stream_query(
     payload: QueryRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> StreamingResponse:
-    """Stream query execution status chunks via Server-Sent Events (SSE)."""
+    """Stream the agent's tool steps and its answer via Server-Sent Events (SSE)."""
     # Checked before the stream opens, so a refused org is a plain 403 and no
     # event is ever emitted for it.
-    orgs = _query_orgs(payload, current_user, action="query.stream")
-    preview_orgs = _preview_scope(payload, current_user, orgs)
-    if preview_orgs is not None:
-        return StreamingResponse(
-            _preview_events(payload, current_user, preview_orgs),
-            media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
-        )
-    if agent_preview.requested(payload.model):
-        payload = payload.model_copy(update={"model": "auto"})
-    organization_id = orgs[0] if orgs else None
-
-    def event_generator() -> Generator[str, None, None]:
-        from gemini_brain.observability.sql_tracer import start_sql_trace, get_sql_traces, clear_sql_trace
-        from gemini_brain.observability.api_tracer import start_api_trace, get_api_traces, clear_api_trace
-        from gemini_brain.observability.llm_tracer import start_llm_trace, get_llm_traces, clear_llm_trace
-        rid = new_request_id()
-        token_reset = active_auth_token.set(current_user.raw_token)
-        start_sql_trace(trace_id=rid)
-        start_api_trace(trace_id=rid)
-        start_llm_trace(trace_id=rid)
-        chunks = None
-        try:
-            history = agent_shadow.thread_history(payload.session_id, payload.db_name)
-            if len(orgs) > 1:
-                chunks = run_multi_org_stream(
-                    payload.query, orgs, _org_meta(current_user, orgs),
-                    runner_factory=GeminiBrainRunner,
-                    run_kwargs=_multi_org_run_kwargs(payload, current_user),
-                    planner=plan_query,
-                )
-            else:
-                chunks = GeminiBrainRunner().run_stream(
-                    query=payload.query,
-                    organization_id=organization_id,
-                    db_name=payload.db_name,
-                    use_api=payload.use_api,
-                    user_id=current_user.user_id,
-                    session_id=payload.session_id,
-                    selected_model_key=payload.selected_model_key,
-                    allowed_org_ids=current_user.allowed_org_ids,
-                    auth_token=current_user.raw_token,
-                    model=payload.model,
-                    effort=payload.effort,
-                    ui_context=payload.ui_context.model_dump() if payload.ui_context else None,
-                    brief=bool(payload.brief),
-                )
-            for chunk in chunks:
-                if isinstance(chunk, dict) and "final_result" in chunk:
-                    traces = get_sql_traces(trace_id=rid)
-                    if traces and isinstance(chunk["final_result"], dict):
-                        chunk["final_result"]["sql_traces"] = traces
-                        if not chunk["final_result"].get("sql"):
-                            chunk["final_result"]["sql"] = traces[0]["sql"]
-                    api_traces = get_api_traces(trace_id=rid)
-                    if api_traces and isinstance(chunk["final_result"], dict):
-                        chunk["final_result"]["api_traces"] = api_traces
-                    llm_traces = get_llm_traces(trace_id=rid)
-                    if llm_traces and isinstance(chunk["final_result"], dict):
-                        chunk["final_result"]["llm_traces"] = llm_traces
-                    chunk["final_result"] = normalize_envelope(chunk["final_result"])
-                    agent_shadow.start(payload.query, orgs, _agent_org_meta(orgs, current_user),
-                                       chunk["final_result"], history=history)
-                yield f"data: {json.dumps(chunk, default=str)}\n\n"
-        except ValueError as ve:
-            code = ErrorCode.TENANT_FORBIDDEN if "tenant" in str(ve).lower() else ErrorCode.VALIDATION_FAILED
-            err_notice = notice_for(code, request_id=rid)
-            err_env = normalize_envelope({
-                "answer": err_notice["message"],
-                "error": code.value,
-                "status": "failed",
-                "notice": err_notice,
-                "request_id": rid,
-            })
-            yield f"data: {json.dumps({'type': 'error', 'notice': err_notice})}\n\n"
-            yield f"data: {json.dumps({'final_result': err_env})}\n\n"
-        except Exception as e:
-            code = classify_exception(e)
-            err_notice = notice_for(code, request_id=rid)
-            err_env = normalize_envelope({
-                "answer": err_notice["message"],
-                "error": code.value,
-                "status": "degraded" if err_notice.get("retryable") else "failed",
-                "notice": err_notice,
-                "request_id": rid,
-            })
-            yield f"data: {json.dumps({'type': 'error', 'notice': err_notice})}\n\n"
-            yield f"data: {json.dumps({'final_result': err_env})}\n\n"
-        finally:
-            # Stop or a dropped connection closes this generator; close the
-            # pipeline's too, so its cleanup (cancelling queued per-org work)
-            # runs now rather than whenever it is garbage-collected.
-            close = getattr(chunks, "close", None)
-            if close is not None:
-                try:
-                    close()
-                except Exception as e:
-                    logger.debug("stream pipeline close failed: %s", e)
-            clear_sql_trace(trace_id=rid)
-            clear_api_trace(trace_id=rid)
-            clear_llm_trace(trace_id=rid)
-            try:
-                active_auth_token.reset(token_reset)
-            except ValueError:
-                active_auth_token.set("")
-
+    orgs = _agent_scope(current_user, _query_orgs(payload, current_user, action="query.stream"))
     return StreamingResponse(
-        event_generator(),
+        _agent_events(payload, current_user, orgs),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
     )
-
-

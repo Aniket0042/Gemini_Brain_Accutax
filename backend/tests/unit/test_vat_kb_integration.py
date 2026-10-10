@@ -1,7 +1,7 @@
 """Phase 2 tests for the VAT knowledge base: the detector (R8), the answer prompt and Sources block
-(R9-R11), the runner hook (R12), the off switch, shadow mode and every fallback."""
+(R9-R11), the off switch, shadow mode and every fallback. The agent's law route is tested in test_agent.py."""
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -295,57 +295,6 @@ def test_warm_up_does_nothing_when_off(monkeypatch):
     assert augment_mod.warm_up_in_background() is None
 
 
-# ── Runner hook (R12): the knowledge-answer path end to end, with Bedrock mocked ──
-def _runner():
-    from gemini_brain.orchestrator.gemini_brain_runner import GeminiBrainRunner
-    runner = GeminiBrainRunner(api_key="test-api-key")
-    runner._call_llm = MagicMock(return_value=("The recipient accounts for the VAT [1].", 10, 5))
-    return runner
-
-
-@patch("gemini_brain.orchestrator.gemini_brain_runner.classify_intent")
-def test_runner_switch_off_uses_default_model_and_no_sources(mock_intent, monkeypatch):
-    monkeypatch.setattr(settings, "vat_kb_enabled", False)
-    monkeypatch.setattr(settings, "vat_kb_shadow", False)
-    mock_intent.return_value = ({"type": 6, "reason": "concept"}, 10, 5)
-    runner = _runner()
-    res = runner.run("Who accounts for VAT on metal scrap sold between registrants?", organization_id=1)
-    kwargs = runner._call_llm.call_args.kwargs
-    assert "model_id" not in kwargs and kwargs["purpose"] == "direct_answer"
-    assert "UAE VAT KNOWLEDGE BASE" not in runner._call_llm.call_args.args[0]
-    assert not any(b.get("type") == "fta_sources" for b in res["blocks"])
-    assert not any(e.get("step") == "vat_kb" for e in res["agent_trace"])
-
-
-@patch("gemini_brain.orchestrator.gemini_brain_runner.classify_intent")
-def test_runner_switch_on_answers_with_sources(mock_intent, kb_on, monkeypatch):
-    monkeypatch.setattr(augment_mod, "_search", lambda q: _result())
-    mock_intent.return_value = ({"type": 6, "reason": "concept"}, 10, 5)
-    runner = _runner()
-    res = runner.run("Who pays the VAT when we buy metal scrap from a registered supplier for recycling?",
-                     organization_id=1)
-    kwargs = runner._call_llm.call_args.kwargs
-    assert kwargs["model_id"] == settings.bedrock_model_id
-    assert "UAE VAT KNOWLEDGE BASE" in runner._call_llm.call_args.args[0]
-    assert res["answer"].startswith("The recipient accounts")
-    assert any(b.get("type") == "fta_sources" and b["sources"][0]["url"] == "https://tax.gov.ae/a.pdf"
-               for b in res["blocks"])
-    assert any(e.get("step") == "vat_kb" and e.get("status") == "used" for e in res["agent_trace"])
-
-
-@patch("gemini_brain.orchestrator.gemini_brain_runner.classify_intent")
-def test_runner_switch_on_with_broken_kb_answers_as_today(mock_intent, kb_on, monkeypatch):
-    def boom(q):
-        raise RuntimeError("corrupt build")
-    monkeypatch.setattr(augment_mod, "_search", boom)
-    mock_intent.return_value = ({"type": 6, "reason": "concept"}, 10, 5)
-    runner = _runner()
-    res = runner.run("Is the reverse charge applied to metal scrap supplies between registrants?", organization_id=1)
-    assert "model_id" not in runner._call_llm.call_args.kwargs
-    assert "UAE VAT KNOWLEDGE BASE" not in runner._call_llm.call_args.args[0]
-    assert res["status"] == "ok" and res["answer"]
-
-
 def test_app_guidance_type_is_allowed_for_law_questions(kb_on, monkeypatch):
     # the "How do I ..." pre-router labels "How do I value a deemed supply?" as type 2
     monkeypatch.setattr(augment_mod, "_search", lambda q: _result())
@@ -402,95 +351,6 @@ def test_rerouted_question_is_searched_once(kb_on, monkeypatch):
     assert calls == [BAD_DEBT]
 
 
-@patch("gemini_brain.orchestrator.gemini_brain_runner.classify_intent")
-def test_runner_reroutes_vat_question_classified_as_data(mock_intent, kb_on, monkeypatch):
-    monkeypatch.setattr(augment_mod, "_search", lambda q: _result())
-    mock_intent.return_value = ({"type": 4, "reason": "has amounts"}, 10, 5)
-    runner = _runner()
-    q = ("An invoice for AED 210,000 including VAT; the customer paid 25%. "
-         "How much output tax can we adjust under bad debt relief?")
-    res = runner.run(q, organization_id=1, use_api=False)
-    assert res["routing_info"]["path"] == "gemini_direct" and res["routing_info"]["type"] == 6
-    assert runner._call_llm.call_args.kwargs["model_id"] == settings.bedrock_model_id
-    assert any(e.get("step") == "vat_kb" and e.get("status") == "used" for e in res["agent_trace"])
-
-
-# ── Multi-org planner: VAT law questions are answered once, not as a per-org VAT figure ──
-CHANGED_2026 = "What changed in UAE VAT from 1 January 2026 under Federal Decree-Law No. 16 of 2025?"
-
-
-def _plan(query):
-    from gemini_brain.orchestrator import multi_org_plan
-    runner = MagicMock()
-    with patch.object(multi_org_plan, "fast_route", return_value=None), \
-         patch.object(multi_org_plan, "_how_to_guide_section", return_value=None), \
-         patch.object(multi_org_plan, "classify_intent", return_value=({"type": 4, "reason": "vat"}, 5, 2)), \
-         patch.object(multi_org_plan, "select_endpoint", return_value=(None, 0, 0)):
-        return multi_org_plan.plan_query(query, 5, runner, 1)
-
-
-def test_multi_org_vat_law_question_is_answered_once_when_on(kb_on, monkeypatch):
-    from gemini_brain.orchestrator.multi_org_plan import DIRECT
-    monkeypatch.setattr(augment_mod, "_search", lambda q: _result())
-    plan = _plan(CHANGED_2026)
-    assert plan.kind == DIRECT and plan.source == "vat_kb"
-
-
-def test_multi_org_planning_unchanged_when_off(monkeypatch):
-    monkeypatch.setattr(settings, "vat_kb_enabled", False)
-    search = MagicMock()
-    monkeypatch.setattr(augment_mod, "_search", search)
-    plan = _plan(CHANGED_2026)
-    assert plan is None or plan.source != "vat_kb"
-    search.assert_not_called()
-
-
-def test_multi_org_vat_figure_question_still_fetches_data(kb_on, monkeypatch):
-    monkeypatch.setattr(augment_mod, "_search", lambda q: _result())
-    plan = _plan("Show me my VAT payable for this quarter")
-    assert plan is None or plan.source != "vat_kb"
-
-
-def test_multi_org_weak_match_keeps_todays_planning(kb_on, monkeypatch):
-    monkeypatch.setattr(augment_mod, "_search", lambda q: _result(confident=False))
-    plan = _plan(CHANGED_2026)
-    assert plan is None or plan.source != "vat_kb"
-
-
-@patch("gemini_brain.orchestrator.gemini_brain_runner._guide_link_block",
-       return_value={"type": "action_button", "label": "Open in Accutax", "url": "http://x"})
-@patch("gemini_brain.orchestrator.gemini_brain_runner.classify_intent")
-def test_runner_drops_app_button_on_vat_answer(mock_intent, _guide, kb_on, monkeypatch):
-    monkeypatch.setattr(augment_mod, "_search", lambda q: _result())
-    mock_intent.return_value = ({"type": 6, "reason": "concept"}, 10, 5)
-    res = _runner().run("Who accounts for VAT on metal scrap supplies between registrants?", organization_id=1)
-    assert not any(b.get("type") == "action_button" for b in res["blocks"])
-
-
-@patch("gemini_brain.orchestrator.gemini_brain_runner._guide_link_block",
-       return_value={"type": "action_button", "label": "Open in Accutax", "url": "http://x"})
-@patch("gemini_brain.orchestrator.gemini_brain_runner.classify_intent")
-def test_runner_keeps_app_button_when_off(mock_intent, _guide, monkeypatch):
-    monkeypatch.setattr(settings, "vat_kb_enabled", False)
-    mock_intent.return_value = ({"type": 1, "reason": "faq"}, 10, 5)
-    res = _runner().run("Which screen shows the VAT settings?", organization_id=1)
-    assert any(b.get("type") == "action_button" for b in res["blocks"])
-
-
-@patch("gemini_brain.orchestrator.gemini_brain_runner.classify_intent")
-def test_vat_answer_figures_count_as_grounded(mock_intent, kb_on, monkeypatch):
-    # figures quoted from the FTA passages must not show up as "unverified"
-    monkeypatch.setattr(augment_mod, "_search", lambda q: _result())
-    mock_intent.return_value = ({"type": 6, "reason": "concept"}, 10, 5)
-    runner = _runner()
-    runner._call_llm = MagicMock(return_value=(
-        "Under Cabinet Decision No. 153 of 2025 the recipient accounts for VAT from 14 January 2026 [1].", 10, 5))
-    res = runner.run("Who accounts for VAT on metal scrap between registrants?", organization_id=1,
-                     model="claude-sonnet", effort="exhaustive")
-    verification = res.get("verification") or {}
-    assert verification.get("unmatched", []) == []
-
-
 def test_tidy_answer_drops_lead_in_and_uncited_closing_only():
     from gemini_brain.vat_kb.answer import tidy_answer
     body = "**Key points:**\n- **Rate:** 14% per annum [1]"
@@ -499,18 +359,6 @@ def test_tidy_answer_drops_lead_in_and_uncited_closing_only():
     assert tidy_answer(body + "\n\nThis is a significant change for businesses.") == body
     cited = "The penalty is 14% per annum [1].\n\n" + body + "\n\nThis replaced the old rules [2]."
     assert tidy_answer(cited) == cited                      # facts with citations are never removed
-
-
-def test_vat_law_question_is_not_rewritten_in_a_multi_org_thread(monkeypatch):
-    from gemini_brain.config.settings import settings
-    from gemini_brain.orchestrator.multi_org import needs_rewrite
-    monkeypatch.setattr(settings, "vat_kb_enabled", True)
-    monkeypatch.setattr(settings, "vat_kb_dir", "E:/kb")
-    # asked after a late-payment question, this was rewritten into the late-payment question again
-    assert not needs_rewrite("How do I value a deemed supply of services?")
-    assert needs_rewrite("and for exports?") and needs_rewrite("What about free zones?")
-    monkeypatch.setattr(settings, "vat_kb_enabled", False)
-    assert needs_rewrite("How do I value a deemed supply of services?")      # switch off: as before
 
 
 def test_tidy_answer_turns_gpt_oss_citations_into_source_numbers():

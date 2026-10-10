@@ -19,14 +19,6 @@ def _no_live_org_lookup(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _no_multi_org_plan_log_file(monkeypatch):
-    """Unit tests never append to the real multi-org plan log; tests of it set their own path."""
-    from gemini_brain.config.settings import settings
-
-    monkeypatch.setattr(settings, "multi_org_plan_log", "")
-
-
-@pytest.fixture(autouse=True)
 def _no_report_narration_model(monkeypatch):
     """Unit tests never call Bedrock for report narration.
 
@@ -40,21 +32,6 @@ def _no_report_narration_model(monkeypatch):
         raise RuntimeError("report narration model is not available in unit tests")
 
     monkeypatch.setattr(narrator, "_model_call", _offline)
-
-
-@pytest.fixture(autouse=True)
-def _no_live_org_existence_check(monkeypatch):
-    """Unit tests never ask the database whether an organization exists.
-
-    The runner's empty-result explanation (_explain_empty) checks this, and an
-    org the configured database lacks turns an EMPTY answer into
-    TENANT_NOT_IN_DATABASE. The check reports "could not determine", as it
-    does when the database is unreachable; tests of that path patch it
-    themselves.
-    """
-    from gemini_brain.orchestrator import gemini_brain_runner
-
-    monkeypatch.setattr(gemini_brain_runner, "organization_exists", lambda org_id, db_name="": None)
 
 
 @pytest.fixture(autouse=True)

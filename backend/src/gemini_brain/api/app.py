@@ -100,12 +100,6 @@ async def lifespan(app: FastAPI):
         logger.warning("JWT token health inspection skipped on startup: %s", e)
 
     try:
-        from gemini_brain.config.accutax_openapi import refresh_in_background
-        refresh_in_background()
-    except Exception as e:
-        logger.warning("Accutax OpenAPI preload skipped: %s", e)
-
-    try:
         from gemini_brain.artifacts.store import start_sweeper
         start_sweeper()
     except Exception as e:

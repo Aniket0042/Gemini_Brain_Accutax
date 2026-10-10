@@ -3,17 +3,13 @@ test_tenant_isolation_api.py — HTTP-level end-to-end test suite for production
 """
 from __future__ import annotations
 
-import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from gemini_brain.api.app import create_app
-from gemini_brain.api.auth import (
-    create_access_token,
-    init_auth_db,
-)
+from gemini_brain.api.auth import create_access_token
 
 
 @pytest.fixture(scope="module")
@@ -25,87 +21,37 @@ def app_client():
         yield client
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(autouse=True)
+def _org_access_from_token(monkeypatch):
+    """No live Accutax or database org lookup: access comes from the org list signed into the token."""
+    from gemini_brain.api import auth
+
+    monkeypatch.setattr(auth, "_fetch_accutax_orgs", lambda token, user_id: None)
+    monkeypatch.setattr(auth, "_query_user_allowed_orgs", lambda user_id, db_name="": None)
+    auth._DB_ORG_CACHE.clear()
+    auth._ACCUTAX_ORG_CACHE.clear()
+
+
+@pytest.fixture
 def mock_brain_runner():
-    """Mock GeminiBrainRunner execution to isolate HTTP API enforcement testing."""
-    with patch("gemini_brain.api.routes.GeminiBrainRunner") as mock_cls:
-        instance = MagicMock()
-        instance.run.return_value = {
+    """Fake the agent so only the HTTP-level enforcement runs. Records each call's orgs and user."""
+    calls = []
+
+    def answer(question, orgs, org_meta, *, session_id=None, user_id=0, db_name="", progress=None, brief=False):
+        calls.append({"orgs": list(orgs), "user_id": user_id})
+        if progress:
+            progress("Fetching figures: pnl…")
+        return {
             "answer": "Test Answer",
-            "sql": None,
-            "results": [],
-            "error": None,
-            "token_usage": {
-                "input_tokens": 10,
-                "output_tokens": 10,
-                "llm_calls": 1,
-                "cost_usd": 0.001,
-                "elapsed_seconds": 0.1,
-            },
-            "agent_trace": [],
-            "routing_info": {
-                "type": 1,
-                "type_label": "General / FAQ",
-                "path": "gemini_direct",
-                "reason": "Test",
-            },
+            "status": "ok",
+            "token_usage": {"input_tokens": 10, "output_tokens": 10, "llm_calls": 1, "cost_usd": 0.001,
+                            "elapsed_seconds": 0.1},
+            "routing_info": {"type": 1, "type_label": "Figures (governed metrics)", "path": "agent_tools",
+                             "reason": "Test"},
         }
 
-        def mock_stream_chunks():
-            yield {"status": "Processing", "type": "test"}
-            yield {
-                "final_result": {
-                    "answer": "Test Stream Answer",
-                    "sql": None,
-                    "results": [],
-                    "error": None,
-                    "token_usage": {
-                        "input_tokens": 10,
-                        "output_tokens": 10,
-                        "llm_calls": 1,
-                        "cost_usd": 0.001,
-                        "elapsed_seconds": 0.1,
-                    },
-                    "agent_trace": [],
-                    "routing_info": None,
-                }
-            }
-
-        # Re-apply real _enforce_tenant_isolation logic onto mock instance
-        from gemini_brain.orchestrator.gemini_brain_runner import GeminiBrainRunner
-        real_runner = GeminiBrainRunner()
-        instance._enforce_tenant_isolation = real_runner._enforce_tenant_isolation
-        instance._resolve_organization = real_runner._resolve_organization
-
-        # Delegate run and run_stream to run real _enforce_tenant_isolation before returning mock result
-        def real_enforced_run(*args, **kwargs):
-            real_runner._enforce_tenant_isolation(
-                organization_id=kwargs.get("organization_id"),
-                query=kwargs.get("query", ""),
-                db_name=kwargs.get("db_name", ""),
-                allowed_org_ids=kwargs.get("allowed_org_ids"),
-                user_id=kwargs.get("user_id", 18),
-                session_id=kwargs.get("session_id"),
-            )
-            return instance.run.return_value
-
-        def real_enforced_run_stream(*args, **kwargs):
-            real_runner._enforce_tenant_isolation(
-                organization_id=kwargs.get("organization_id"),
-                query=kwargs.get("query", ""),
-                db_name=kwargs.get("db_name", ""),
-                allowed_org_ids=kwargs.get("allowed_org_ids"),
-                user_id=kwargs.get("user_id", 18),
-                session_id=kwargs.get("session_id"),
-            )
-            for chunk in mock_stream_chunks():
-                yield chunk
-
-        instance.run.side_effect = real_enforced_run
-        instance.run_stream.side_effect = real_enforced_run_stream
-
-        mock_cls.return_value = instance
-        yield instance
+    with patch("gemini_brain.api.routes.agent_preview.answer", answer):
+        yield calls
 
 
 class TestTenantIsolationAPI:
@@ -156,6 +102,7 @@ class TestTenantIsolationAPI:
         )
         assert response.status_code == 200
         assert response.json()["answer"] == "Test Answer"
+        assert mock_brain_runner == [{"orgs": [14], "user_id": 101}]
 
     def test_single_org_user_query_auto_defaults_to_single_allowed_org(self, app_client, mock_brain_runner):
         """Single-org user omitting organization_id auto-defaults to their 1 allowed org."""
@@ -168,6 +115,7 @@ class TestTenantIsolationAPI:
             headers=headers,
         )
         assert response.status_code == 200
+        assert mock_brain_runner[0]["orgs"] == [14]
 
     def test_single_org_user_query_unauthorized_org_rejected(self, app_client, mock_brain_runner):
         """Single-org user attempting to query unauthorized org (id=99) is rejected."""
@@ -179,8 +127,8 @@ class TestTenantIsolationAPI:
             json={"query": "What is our revenue?", "organization_id": 99},
             headers=headers,
         )
-        assert response.status_code == 400
-        assert "Access denied" in response.json()["detail"]
+        assert response.status_code == 403
+        assert mock_brain_runner == []
 
     def test_multi_org_user_query_either_allowed_org_succeeds(self, app_client, mock_brain_runner):
         """Multi-org user querying either allowed org (14 or 44) succeeds."""
@@ -194,15 +142,16 @@ class TestTenantIsolationAPI:
         # Query org 44
         res2 = app_client.post("/api/v1/query", json={"query": "Revenue", "organization_id": 44}, headers=headers)
         assert res2.status_code == 200
+        assert [c["orgs"] for c in mock_brain_runner] == [[14], [44]]
 
-    def test_multi_org_user_ambiguous_query_without_org_rejected(self, app_client, mock_brain_runner):
-        """Multi-org user omitting organization_id when query doesn't specify one is rejected."""
+    def test_multi_org_user_query_without_org_runs_on_first_allowed_org(self, app_client, mock_brain_runner):
+        """Multi-org user omitting organization_id is answered for their first allowed org, never another."""
         token = create_access_token(user_id=102, email="user_multi@example.com", allowed_org_ids=[14, 44])
         headers = {"Authorization": f"Bearer {token}"}
 
         response = app_client.post("/api/v1/query", json={"query": "What is our revenue?"}, headers=headers)
-        assert response.status_code == 400
-        assert "Multiple organizations available" in response.json()["detail"]
+        assert response.status_code == 200
+        assert mock_brain_runner[0]["orgs"] == [14]
 
     def test_no_org_user_query_rejected(self, app_client, mock_brain_runner):
         """No-org user (allowed_org_ids=[]) is rejected regardless of parameters."""
@@ -214,8 +163,8 @@ class TestTenantIsolationAPI:
             json={"query": "What is our revenue?", "organization_id": 14},
             headers=headers,
         )
-        assert response.status_code == 400
-        assert "Access denied: User has no assigned organizations" in response.json()["detail"]
+        assert response.status_code in (401, 403)
+        assert mock_brain_runner == []
 
     def test_tampered_token_rejected_401(self, app_client):
         """Tampered JWT token is rejected with 401."""
@@ -248,14 +197,15 @@ class TestTenantIsolationAPI:
             headers=headers,
         )
         assert response.status_code == 200
+        assert mock_brain_runner[0]["user_id"] == 101
 
     def test_stream_no_token_rejected_401(self, app_client):
         """Streaming query without token is rejected with HTTP 401 before stream connection opens."""
         response = app_client.post("/api/v1/query/stream", json={"query": "What is our revenue?"})
         assert response.status_code == 401
 
-    def test_stream_unauthorized_org_emits_error_event(self, app_client, mock_brain_runner):
-        """Streaming query for an unauthorized org (id=99) emits SSE error event."""
+    def test_stream_unauthorized_org_refused_before_the_stream_opens(self, app_client, mock_brain_runner):
+        """Streaming query for an unauthorized org (id=99) is a plain 403; no event is emitted."""
         token = create_access_token(user_id=101, email="user_single@example.com", allowed_org_ids=[14])
         headers = {"Authorization": f"Bearer {token}"}
 
@@ -264,11 +214,9 @@ class TestTenantIsolationAPI:
             json={"query": "What is total revenue?", "organization_id": 99},
             headers=headers,
         )
-        assert response.status_code == 200
-        assert "text/event-stream" in response.headers.get("content-type", "")
-        content = response.text
-        assert "Access denied" in content
-        assert '"type": "error"' in content
+        assert response.status_code == 403
+        assert "data:" not in response.text
+        assert mock_brain_runner == []
 
     def test_stream_allowed_org_succeeds(self, app_client, mock_brain_runner):
         """Streaming query for an allowed org (id=14) streams progress and final result."""
@@ -282,7 +230,8 @@ class TestTenantIsolationAPI:
         )
         assert response.status_code == 200
         assert "text/event-stream" in response.headers.get("content-type", "")
-        assert "data:" in response.text
+        assert "Fetching figures: pnl" in response.text and "final_result" in response.text
+        assert mock_brain_runner[0]["orgs"] == [14]
 
     def test_missing_jwt_secret_raises_error(self):
         """Verifies that if JWT_SECRET is unconfigured/empty, get_jwt_secret raises ValueError."""
