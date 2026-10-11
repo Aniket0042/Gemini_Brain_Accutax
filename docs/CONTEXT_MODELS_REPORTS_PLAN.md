@@ -1,6 +1,6 @@
 # Session context, model picker and weekly reports: plan
 
-Status: approved to start, 11 Oct 2026. Phase 1 built, tested and deployed 11 Oct (1706295; 1.6 skipped). Next: Phase 2, model picker.
+Status: approved to start, 11 Oct 2026. Phase 1 deployed 11 Oct (1706295). Phase 2 deployed 11 Oct with Sonnet 5 only (3750dd8; neither Haiku passed). Next: Phase 3, weekly reports.
 Scope: the agent path (`agent/loop.py`, `agent/preview.py`), the Cube model in `semantic/`, and the chat frontend.
 
 ## 1. Order and why
@@ -129,6 +129,7 @@ Steps:
    - Result: neither Haiku is within 5% of Sonnet 5. **Neither ships.** `AGENT_MODELS` stays `sonnet-5`, so the picker stays hidden. The picker code, the per-model caching fix and the Haiku 3 crash fix can still deploy; nothing changes for users.
    - Options later: Haiku 4.5 as the planner with Sonnet 5 writing the answer (untested; on 7 Oct a Haiku writer was the problem); or a newer Haiku (Haiku 5.5 exists only on a `global.` profile, a data-location decision).
 4. Deploy with the models that pass; smoke test only.
+   **Done 11 Oct with Sonnet 5 only:** 3750dd8 pushed and deployed (frontend rebuilt; backup `/opt/accutax-ai-frontend-dist.bak-pre-phase2`). The VM `.env` has no `AGENT_MODELS`, so the picker is hidden and answers still say "Accutax AI". Smoke 16/17; the one fail is the smoke check's own mistake, as on the phase 1 deploy. A request for `haiku-3` answered with Sonnet 5. To offer a model later, set `AGENT_MODELS=sonnet-5,<key>` in `/opt/accutax-ai/.env` and restart `accutax-ai-api` (no rebuild). Rollback: check out 1c5a881, rebuild the frontend or restore the backup, and restart.
 
 ### 2.2 Backend
 
