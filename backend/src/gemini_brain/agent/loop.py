@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from gemini_brain.agent import history as thread_history
+from gemini_brain.agent import models as agent_models
 from gemini_brain.agent import law, tools
 from gemini_brain.agent.prompt import system_prompt
 from gemini_brain.config.constants import SONNET5_ID
@@ -48,8 +49,9 @@ _NUMBER_IN_TEXT = re.compile(r"\d[\d,]*(?:\.\d+)?")
 _DIGITS = re.compile(r"\d+")
 _IDENTIFIER = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)[\w./#-]+$")
 _CACHE_POINT = {"cachePoint": {"type": "default"}}
-#: Turned off for the process if Bedrock ever refuses a cache point.
-_cache = {"on": True}
+#: Bedrock model ids that refused a cache point in this process. Per model: one model that cannot cache
+#: must not turn caching off for the others.
+_no_cache: set = set()
 
 
 @dataclass
@@ -90,21 +92,27 @@ def _messages(history: Optional[Sequence[Dict[str, Any]]], question: str,
     return out
 
 
-def _cached(system: str, specs: List[Dict[str, Any]]) -> tuple:
-    if not _cache["on"]:
+def _caching(model_id: str) -> bool:
+    return agent_models.caches(model_id) and model_id not in _no_cache
+
+
+def _cached(system: str, specs: List[Dict[str, Any]], model_id: str = "") -> tuple:
+    if not _caching(model_id):
         return [{"text": system}], specs
     return [{"text": system}, _CACHE_POINT], specs + [_CACHE_POINT]
 
 
 def _converse(adapter: Any, system: str, messages: List[Dict[str, Any]], specs: List[Dict[str, Any]]) -> Dict[str, Any]:
-    sys_blocks, tool_list = _cached(system, specs)
+    model_id = getattr(adapter, "model_id", "")
+    caching = _caching(model_id)
+    sys_blocks, tool_list = _cached(system, specs, model_id)
     try:
         return adapter.converse_with_tools(sys_blocks, messages, tool_list, max_tokens=MAX_ANSWER_TOKENS, purpose="agent")
     except Exception as e:
-        if not _cache["on"] or "cache" not in str(e).lower():
+        if not caching or "cach" not in str(e).lower():
             raise
-        logger.warning("agent: prompt caching refused, continuing without it: %s", e)
-        _cache["on"] = False
+        logger.warning("agent: prompt caching refused for %s, continuing without it: %s", model_id, e)
+        _no_cache.add(model_id)
         return adapter.converse_with_tools([{"text": system}], messages, specs,
                                            max_tokens=MAX_ANSWER_TOKENS, purpose="agent")
 

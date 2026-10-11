@@ -16,7 +16,7 @@ META = {24: {"name": "Org One", "currency": "AED"}, 25: {"name": "Org Two", "cur
 def _no_presidio(monkeypatch):
     monkeypatch.setattr(loop, "redact_pii", lambda text: (text, {}))
     monkeypatch.setattr(loop.law, "answer", lambda question, messages, brief=False: None)
-    monkeypatch.setitem(loop._cache, "on", True)
+    monkeypatch.setattr(loop, "_no_cache", set())
 
 
 def _ctx(deadline=60.0):
@@ -251,7 +251,9 @@ def test_a_refused_cache_point_is_dropped_for_good(monkeypatch, agent):
     monkeypatch.setattr(loop, "BedrockAdapter", NoCache)
     FakeAdapter.script = [final("Plain answer.")]
     result = loop.run_agent("Hello", ORGS, META)
-    assert result.answer == "Plain answer." and loop._cache["on"] is False
+    assert result.answer == "Plain answer."
+    refused = FakeAdapter.log[0]["model"]
+    assert not loop._caching(refused) and loop._caching("in.anthropic.claude-haiku-4-5-20251001-v1:0")
 
 
 @pytest.mark.parametrize("question", [

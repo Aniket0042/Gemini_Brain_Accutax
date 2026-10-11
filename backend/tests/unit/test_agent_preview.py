@@ -24,7 +24,7 @@ def test_agent_scope():
 
 
 def _fake_answer(calls):
-    def answer(question, orgs, org_meta, *, session_id, user_id, db_name="", progress=None, brief=False):
+    def answer(question, orgs, org_meta, *, session_id, user_id, db_name="", progress=None, brief=False, **_):
         calls.append({"question": question, "orgs": orgs, "session_id": session_id, "user_id": user_id})
         if progress:
             progress("Fetching figures: pnl…")
@@ -32,14 +32,14 @@ def _fake_answer(calls):
         return {"answer": "Org One revenue was AED 5,809,352.", "status": "ok",
                 "token_usage": {"llm_calls": 2, "cost_usd": 0.02},
                 "routing_info": {"type": 1, "type_label": "Figures (governed metrics)", "path": "agent_tools"},
-                "policy": {"model": preview.MODEL_KEY, "model_label": preview.PRIMARY_LABEL, "auto": False}}
+                "policy": {"model": "sonnet-5", "model_label": preview.PRIMARY_LABEL, "auto": False}}
     return answer
 
 
 def test_query_route_answers_with_the_agent(monkeypatch):
     calls = []
     monkeypatch.setattr(routes.agent_preview, "answer", _fake_answer(calls))
-    payload = QueryRequest(query="Revenue this year?", model=preview.MODEL_KEY, organization_id=24)
+    payload = QueryRequest(query="Revenue this year?", model="sonnet-5", organization_id=24)
     response = asyncio.run(routes.run_query(payload, current_user=TESTER))
     assert response.answer.startswith("Org One revenue")
     assert response.routing_info.path == "agent_tools"
@@ -48,7 +48,7 @@ def test_query_route_answers_with_the_agent(monkeypatch):
 
 def test_stream_route_sends_a_status_per_tool_then_the_answer(monkeypatch):
     monkeypatch.setattr(routes.agent_preview, "answer", _fake_answer([]))
-    payload = QueryRequest(query="Revenue?", model=preview.MODEL_KEY, organization_id=24)
+    payload = QueryRequest(query="Revenue?", model="sonnet-5", organization_id=24)
     events = [json.loads(e[len("data: "):]) for e in routes._agent_events(payload, TESTER, [24])]
     assert [e.get("status") for e in events[:-1]] == ["Reading your question…", "Fetching figures: pnl…",
                                                       "Listing documents: bills…"]
@@ -167,11 +167,11 @@ def test_every_user_is_answered_by_the_agent_whatever_model_they_send(monkeypatc
     assert response.answer.startswith("Org One revenue") and calls[0]["orgs"] == [24]
 
 
-def test_the_catalog_serves_one_model_and_hides_the_picker():
+def test_the_catalog_serves_one_model_and_hides_the_picker_by_default():
     catalog = routes.list_model_catalog(current_user=OTHER)
-    assert [m.key for m in catalog.models] == [preview.MODEL_KEY]
-    assert catalog.models[0].label == "Accutax AI" and "Preview" not in catalog.models[0].description
-    assert catalog.picker_hidden and catalog.default_model == preview.MODEL_KEY and catalog.efforts == []
+    assert [m.key for m in catalog.models] == ["sonnet-5"]
+    assert catalog.models[0].label == "Claude Sonnet 5"
+    assert catalog.picker_hidden and catalog.default_model == "sonnet-5" and catalog.efforts == []
 
 
 def test_answers_are_labelled_accutax_ai(monkeypatch):
@@ -204,7 +204,7 @@ def test_the_stream_route_passes_brief(monkeypatch):
         seen.update(kw)
         return {"answer": "x", "status": "ok"}
     monkeypatch.setattr(routes.agent_preview, "answer", fake)
-    payload = QueryRequest(query="Revenue?", model=preview.MODEL_KEY, organization_id=24, brief=True)
+    payload = QueryRequest(query="Revenue?", model="sonnet-5", organization_id=24, brief=True)
     list(routes._agent_events(payload, TESTER, [24]))
     assert seen["brief"] is True
 

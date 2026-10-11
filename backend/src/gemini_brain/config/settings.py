@@ -277,6 +277,21 @@ class GeminiBrainSettings(BaseSettings):
             "Empty = the planner model. A faster model here cuts most of the agent's time."
         ),
     )
+    agent_models: str = Field(
+        default="sonnet-5",
+        description=(
+            "Comma-separated model keys users can pick (agent/models.py): sonnet-5, haiku-4.5, haiku-3. "
+            "The default (sonnet-5) is always offered. Switch a model on only after it passes the real and "
+            "golden question sets. One model means no picker."
+        ),
+    )
+    agent_model_users: str = Field(
+        default="",
+        description=(
+            "Comma-separated emails or user ids who may pick models other than the default. "
+            "Empty = everyone who can use the agent."
+        ),
+    )
     agent_max_tool_calls: int = Field(default=6, ge=1, le=12)
     agent_deadline_seconds: float = Field(default=45.0, ge=5.0, le=120.0)
     agent_answer_log: str = Field(

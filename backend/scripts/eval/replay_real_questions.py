@@ -20,6 +20,7 @@ Usage (from backend/, on a host that reaches Cube):
   .venv/bin/python scripts/eval/replay_real_questions.py --cases tests/data/golden_accounting.json
   .venv/bin/python scripts/eval/replay_real_questions.py --only r080,r081 --out /tmp/replay
   .venv/bin/python scripts/eval/replay_real_questions.py --cases tests/data/followup_chains.json
+  .venv/bin/python scripts/eval/replay_real_questions.py --model haiku-4.5   (a picker model, not the default)
 
 For the follow-up chains, each turn is also checked for the context it should carry ("carry": the tool
 call it should make), for asking instead of guessing ("asks"), and for the file or chart the thread asked
@@ -327,6 +328,8 @@ def file_check(expected: str, got: Optional[str]) -> Dict[str, Any]:
 
 #: Only "agent" is left; the name stays in report file names so runs compare across versions.
 _PATH = "agent"
+#: Picker model key to answer with (agent/models.py); the default model when empty.
+_MODEL = ""
 _STORE: Optional[_MemoryStore] = None
 
 
@@ -336,9 +339,13 @@ def ask_agent(question: str, orgs: List[int], meta: Dict[int, Dict[str, Any]], s
     # The thread context the app gives the agent (preview.thread_context), from this process's memory store.
     thread = preview.thread_context(session_id, orgs, 0) if session_id and _STORE else preview.Thread()
     delivery = preview.delivery_for(question, thread)
+    from gemini_brain.agent import models as agent_models
+    picked = agent_models.get(_MODEL) if _MODEL else None
+    model_ids = {} if not picked or picked.key == agent_models.DEFAULT_KEY else {
+        "model_id": picked.bedrock_id(), "answer_model_id": picked.bedrock_id()}
     result = run_agent(question, orgs, {o: meta[o] for o in orgs}, history=thread.messages, turn_specs=thread.specs,
                        earlier_figures=thread.figures, attachment=preview.attachment(question, delivery),
-                       subject="replay-agent")
+                       subject="replay-agent", **model_ids)
     if session_id and _STORE:
         _STORE.save_message_by_session(session_id, "user", question)
         _STORE.save_message_by_session(session_id, "assistant", result.answer)
@@ -443,11 +450,14 @@ def main() -> int:
     parser.add_argument("--cases", default=str(CASES_FILE))
     parser.add_argument("--only", default="", help="Comma-separated case ids")
     parser.add_argument("--out", default=str(Path(__file__).parent), help="Directory for the report")
+    parser.add_argument("--model", default="", help="Picker model key to answer with, e.g. haiku-4.5 "
+                                                     "(agent/models.py); default: the default model")
     parser.add_argument("--path", choices=("agent",), default="agent",
                         help="Answer path to replay; only the agent is left")
     args = parser.parse_args()
-    global _PATH, _STORE
+    global _PATH, _STORE, _MODEL
     _PATH = args.path
+    _MODEL = args.model
 
     spec = json.loads(Path(args.cases).read_text(encoding="utf-8"))
     by_id = {c["id"]: c for c in spec["cases"]}
@@ -463,7 +473,7 @@ def main() -> int:
     meta = {int(i): {"name": n, "currency": c or ""} for i, n, c in cur.fetchall()}
     conn.close()
 
-    print(f"{len(cases)} cases · path {_PATH} · today {today}", flush=True)
+    print(f"{len(cases)} cases · path {_PATH} · model {_MODEL or 'default'} · today {today}", flush=True)
     sessions: Dict[str, str] = {}
     report = []
     for case in cases:
@@ -485,7 +495,7 @@ def main() -> int:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    out = out_dir / f"replay_real_questions_{_PATH}_{stamp}.json"
+    out = out_dir / f"replay_real_questions_{_PATH}{'_' + _MODEL if _MODEL else ''}_{stamp}.json"
     out.write_text(json.dumps({"today": str(today), "cases": report}, indent=1, default=str, ensure_ascii=False),
                    encoding="utf-8")
     out.with_suffix(".md").write_text(sheet(stamp, report), encoding="utf-8")

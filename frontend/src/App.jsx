@@ -287,9 +287,18 @@ export default function App() {
     setTheme((prev) => (prev === 'system' ? 'light' : prev === 'light' ? 'dark' : 'system'));
   };
 
-  // One model (the agent, "Accutax AI") answers every chat, so there is no
-  // model picker and no model or effort to send.
+  // The agent answers every chat; the user may pick which Claude model it uses
+  // (GET /api/v1/models). The server checks the pick and hides the picker when
+  // only one model is offered. Effort is not user-selectable.
   const [brief, setBrief] = useState(() => localStorage.getItem('accutax_brief') === '1');
+  const [modelCatalog, setModelCatalog] = useState(null);
+  const [model, setModel] = useState(() => {
+    try {
+      return localStorage.getItem('accutax_model') || '';
+    } catch {
+      return '';
+    }
+  });
 
   // Conversation History List state
   const [conversation, setConversation] = useState([]);
@@ -1057,14 +1066,20 @@ export default function App() {
   };
 
   // Handle Query Submission
-  // Check the stored token once authenticated: a token the service no longer
-  // accepts (most often after a restart) sends the user back to sign in. The
-  // model list itself is no longer used; move this check when /models goes.
+  // Load the models this user may pick. This also checks the stored token: a
+  // token the service no longer accepts (most often after a restart) sends the
+  // user back to sign in.
   useEffect(() => {
     const token = currentUser?.access_token;
     if (!token) return;
     let cancelled = false;
-    fetchModelCatalog(token).catch((err) => {
+    fetchModelCatalog(token).then((catalog) => {
+      if (cancelled || !catalog) return;
+      setModelCatalog(catalog);
+      // A remembered pick the server no longer offers falls back to its default.
+      const keys = (catalog.models || []).map((m) => m.key);
+      setModel((prev) => (keys.includes(prev) ? prev : catalog.default_model || keys[0] || ''));
+    }).catch((err) => {
       if (cancelled) return;
       if (err.code === 'SESSION_EXPIRED') {
         handleLogout();
@@ -1080,6 +1095,13 @@ export default function App() {
   const handleBriefChange = (on) => {
     setBrief(Boolean(on));
     localStorage.setItem('accutax_brief', on ? '1' : '0');
+  };
+
+  const handleModelChange = (key) => {
+    setModel(key);
+    try {
+      localStorage.setItem('accutax_model', key);
+    } catch { /* ignore */ }
   };
 
   const handleSubmitQuery = async (queryText, overrides = {}) => {
@@ -1175,6 +1197,8 @@ export default function App() {
       session_id: widgetSessionId || undefined,
       ui_context: uiContext,
       brief: overrides.brief ?? brief,
+      // Without a picker, "auto": the server uses the default model.
+      model: (modelCatalog && !modelCatalog.picker_hidden && model) || 'auto',
     };
 
     const token = currentUser?.access_token || '';
@@ -1542,6 +1566,9 @@ export default function App() {
             variant="compact"
             brief={brief}
             onBriefChange={handleBriefChange}
+            catalog={modelCatalog}
+            model={model}
+            onModelChange={handleModelChange}
           />
           <div style={styles.composerFooter}>
             <p style={styles.composerFooterText}>

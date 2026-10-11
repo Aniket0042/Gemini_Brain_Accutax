@@ -45,6 +45,7 @@ from gemini_brain.api.models import (
 )
 from gemini_brain.config.settings import settings
 from gemini_brain.health.model_health_checker import check_all_models_and_services
+from gemini_brain.agent import models as agent_models
 from gemini_brain.agent import preview as agent_preview
 from gemini_brain.resilience import (
     HTTP_FOR_CODE,
@@ -196,19 +197,26 @@ def login_json(payload: LoginRequest) -> TokenResponse:
     "/models",
     response_model=ModelCatalogResponse,
     tags=["Models"],
-    summary="List the Answering Model",
+    summary="List the Models This User Can Pick",
     description=(
-        "Every chat is answered by the agent, so this lists one model and tells the client to "
-        "hide the picker. Kept for clients that still ask for it."
+        "The Claude models that can answer for this user (the same agent, tools and data with each). "
+        "One model means the client hides the picker. Send the chosen key as `model` on /query."
     ),
 )
 def list_model_catalog(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> ModelCatalogResponse:
-    """The single agent entry, with the picker hidden."""
-    return ModelCatalogResponse(models=[ModelInfo(**agent_preview.catalog_entry())], efforts=[],
-                                default_model=agent_preview.MODEL_KEY, default_effort="exhaustive",
-                                picker_hidden=True)
+    """The models the deployment offers (AGENT_MODELS) that this user may pick (AGENT_MODEL_USERS)."""
+    choices = agent_models.allowed(current_user.user_id, current_user.email)
+    return ModelCatalogResponse(models=[ModelInfo(**m.to_public()) for m in choices], efforts=[],
+                                default_model=agent_models.DEFAULT_KEY, default_effort="exhaustive",
+                                picker_hidden=len(choices) <= 1)
+
+
+def _model_choice(payload: QueryRequest, current_user: CurrentUser) -> dict:
+    """The model the request asks for and the keys this user may pick; agent_preview.answer resolves them."""
+    return {"model_key": payload.model or payload.selected_model_key,
+            "allowed_models": [m.key for m in agent_models.allowed(current_user.user_id, current_user.email)]}
 
 
 
@@ -276,7 +284,7 @@ def _agent_events(payload: QueryRequest, current_user: CurrentUser, orgs: list[i
             box["result"] = agent_preview.answer(
                 payload.query, orgs, _agent_org_meta(orgs, current_user),
                 session_id=payload.session_id, user_id=current_user.user_id, db_name=payload.db_name,
-                progress=events.put, brief=bool(payload.brief),
+                progress=events.put, brief=bool(payload.brief), **_model_choice(payload, current_user),
             )
         except Exception as e:  # noqa: BLE001 - answer() never raises; this is belt and braces
             logger.warning("agent answer failed: %s", e, exc_info=True)
@@ -622,14 +630,14 @@ async def run_query(
     payload: QueryRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> QueryResponse:
-    """Answer one question with the agent. model, effort, use_api and selected_model_key are ignored."""
+    """Answer one question with the agent, with the model the user picked (`model`). effort and use_api are ignored."""
     import asyncio
     orgs = _agent_scope(current_user, _query_orgs(payload, current_user, action="query"))
     try:
         result = await asyncio.to_thread(
             agent_preview.answer, payload.query, orgs, _agent_org_meta(orgs, current_user),
             session_id=payload.session_id, user_id=current_user.user_id, db_name=payload.db_name,
-            brief=bool(payload.brief),
+            brief=bool(payload.brief), **_model_choice(payload, current_user),
         )
         return QueryResponse(**normalize_envelope(result))
     except Exception as e:

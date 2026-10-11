@@ -17,7 +17,6 @@ from gemini_brain.config.settings import settings
 
 logger = logging.getLogger("gemini_brain.agent.preview")
 
-MODEL_KEY = "accutax-agent"
 PRIMARY_LABEL = "Accutax AI"
 
 _STEP = {
@@ -27,22 +26,6 @@ _STEP = {
     "search_vat_kb": "Searching UAE VAT law",
     "app_guide": "Checking the Accutax guide",
 }
-
-
-def catalog_entry() -> Dict[str, Any]:
-    """The one model GET /models lists, in the shape of api.models.ModelInfo."""
-    return {
-        "key": MODEL_KEY,
-        "label": PRIMARY_LABEL,
-        "description": ("Answers on governed figures (Cube): ledger P&L, balance sheet, general ledger, invoices, "
-                        "bills, VAT, inventory, bank, cash forecast, files and charts, plus UAE VAT law."),
-        "provider": "bedrock",
-        "supports": ["tools"],
-        "efforts": [],
-        "latency_class": "standard",
-        "primary": True,
-        "available": True,
-    }
 
 
 def step_label(name: str, params: Any) -> str:
@@ -57,13 +40,22 @@ def step_label(name: str, params: Any) -> str:
 
 def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[], Dict[int, Dict[str, Any]]], *,
            session_id: Optional[str], user_id: int, db_name: str = "",
-           progress: Optional[Callable[[str], None]] = None, brief: bool = False) -> Dict[str, Any]:
-    """Answer with the agent and save the turn. Returns a QueryResponse-shaped dict. Never raises."""
+           progress: Optional[Callable[[str], None]] = None, brief: bool = False,
+           model_key: Optional[str] = None, allowed_models: Optional[Sequence[str]] = None) -> Dict[str, Any]:
+    """Answer with the agent and save the turn. Returns a QueryResponse-shaped dict. Never raises.
+    `model_key`: the model the user picked ("auto" or None: the thread's last pick, else the default);
+    `allowed_models`: the keys this user may pick (agent/models.allowed), checked here."""
+    from gemini_brain.agent import models as agent_models
     from gemini_brain.agent.loop import run_agent
 
     started = time.monotonic()
     orgs = [int(o) for o in organization_ids]
     thread = thread_context(session_id, orgs, user_id, db_name)
+    allowed_keys = list(allowed_models or [agent_models.DEFAULT_KEY])
+    model = agent_models.resolve(model_key, allowed_keys, thread.model_key)
+    # The default model keeps the agent's own settings (AGENT_MODEL_ID, AGENT_ANSWER_MODEL_ID).
+    model_ids = {} if model.key == agent_models.DEFAULT_KEY else {
+        "model_id": model.bedrock_id(), "answer_model_id": model.bedrock_id()}
     try:
         meta = org_meta() or {}
     except Exception as e:  # noqa: BLE001 - names only label the answer
@@ -77,7 +69,7 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
     try:
         result = run_agent(question, orgs, meta, history=thread.messages, turn_specs=thread.specs,
                            earlier_figures=thread.figures, subject=f"agent-preview:{user_id}", progress=on_tool,
-                           brief=brief, attachment=attached)
+                           brief=brief, attachment=attached, **model_ids)
     finally:
         traces = _collect_traces(rid)
     data = getattr(result, "data", None) or []
@@ -88,7 +80,7 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
                      delivery=delivery)
     if session_id:
         if _save_turn(session_id, user_id, orgs, question, answer_text, db_name, blocks):
-            record_turn(session_id, question, result.tool_calls, delivery, data, db_name)
+            record_turn(session_id, question, result.tool_calls, delivery, data, db_name, model_key=model.key)
 
     usage = dict(result.usage or {})
     usage["elapsed_seconds"] = round(time.monotonic() - started, 2)
@@ -105,9 +97,9 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
             "type_label": "UAE VAT law (knowledge base)" if result.route == "law" else "Figures (governed metrics)",
             "path": f"agent_{result.route}",
             "reason": f"{PRIMARY_LABEL}: {len(result.tool_calls)} tool call(s)",
-            "bedrock_model": settings.agent_model_id or None,
+            "bedrock_model": None if result.route == "law" else model.bedrock_id(),
         },
-        "policy": {"model": MODEL_KEY, "model_label": PRIMARY_LABEL, "auto": False},
+        "policy": _policy(model, result.route, picker=len(allowed_keys) > 1),
         "verification": result.verification or None,
         "blocks": blocks or None,
         "api_traces": traces.get("api", []),
@@ -121,6 +113,20 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
 
 
 UNAVAILABLE = "UPSTREAM_UNAVAILABLE"
+#: conversation_state key: the model that answered the thread's last turn, used when the next request says "auto".
+MODEL_STATE_KEY = "model_key"
+
+
+def _policy(model: Any, route: str, *, picker: bool) -> Dict[str, Any]:
+    """The answer strip's model chip. Without a picker it keeps the product name. With one, law answers say
+    so: they come from the knowledge base's own model whatever was picked."""
+    if not picker:
+        label = PRIMARY_LABEL
+    elif route == "law":
+        label = f"{PRIMARY_LABEL} · UAE VAT law"
+    else:
+        label = model.label
+    return {"model": model.key, "model_label": label, "auto": False}
 
 
 def _status_and_notice(result: Any) -> tuple:
@@ -278,6 +284,7 @@ class Thread:
     specs: List[Dict[str, Any]] = field(default_factory=list)
     delivery: Optional[Dict[str, Any]] = None
     figures: List[float] = field(default_factory=list)
+    model_key: Optional[str] = None
 
 
 def thread_context(session_id: Optional[str], organization_ids: Sequence[int], user_id: int,
@@ -310,12 +317,15 @@ def thread_context(session_id: Optional[str], organization_ids: Sequence[int], u
         logger.warning("agent preview: no history for %s: %s", session_id, e)
         messages = []
     return Thread(messages=list(messages or []), specs=list(state.get(history.STATE_KEY) or []),
-                  delivery=state.get(history.DELIVERY_KEY), figures=history.earlier_figures(state))
+                  delivery=state.get(history.DELIVERY_KEY), figures=history.earlier_figures(state),
+                  model_key=state.get(MODEL_STATE_KEY))
 
 
 def record_turn(session_id: str, question: str, tool_calls: Sequence[Dict[str, Any]], delivery: Any = None,
-                data: Optional[Sequence[Dict[str, Any]]] = None, db_name: str = "") -> None:
-    """Save what this turn queried, its chart or file request and the figures it fetched, for later turns."""
+                data: Optional[Sequence[Dict[str, Any]]] = None, db_name: str = "",
+                model_key: Optional[str] = None) -> None:
+    """Save what this turn queried, its chart or file request, the figures it fetched and the model that
+    answered, for later turns."""
     try:
         from gemini_brain.agent import history
         from gemini_brain.memory.session_memory import get_state_by_session, update_state_by_session
@@ -323,6 +333,8 @@ def record_turn(session_id: str, question: str, tool_calls: Sequence[Dict[str, A
         state = history.add_spec(state, question, tool_calls)
         state = history.add_figures(state, data or [])
         state[history.DELIVERY_KEY] = _delivery_state(delivery)
+        if model_key:
+            state[MODEL_STATE_KEY] = model_key
         update_state_by_session(session_id, state, db_name=db_name)
     except Exception as e:  # noqa: BLE001 - later turns only lose some context
         logger.warning("agent preview: turn context not saved for %s: %s", session_id, e)

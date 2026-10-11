@@ -85,11 +85,50 @@ Tenant scope always comes from the request, never from stored context or the sum
 
 ## 4. Phase 2: model picker (about 3–5 days)
 
-### 2.1 Choose models from evidence
+### 2.1 Models (decided 11 Oct)
 
-- Candidates: Sonnet 5 (current default), Sonnet 5.5 (same price), Haiku 4.5 ("Fast"), Opus 5.5 ("Deep", only if callable on Bedrock through the `in.`/`global.` profiles; verify).
-- Run the real and golden sets per model. Ship only models within about 5% of the default's pass rate.
-- Haiku as the answer writer was rejected on 7 Oct for reasoning errors. If it still fails, drop it.
+Rule (user, 11 Oct): Claude models only, the same ones as the old model picker (`policy/registry.py` at tag `pre-old-path-removal`), all served in India.
+
+| Picker option | Model | Bedrock ID | Condition |
+|---|---|---|---|
+| Balanced (default) | Claude Sonnet 5 | `in.anthropic.claude-sonnet-5` | Proven: real 82/7/0, golden 67/7/2 |
+| Fast | Claude Haiku 4.5 | `in.anthropic.claude-haiku-4-5-20251001-v1:0` | Ships only if within about 5% of Sonnet 5 on the real and golden sets; it was rejected as the answer writer on 7 Oct |
+| Cheapest | Claude Haiku 3 | `anthropic.claude-3-haiku-20240307-v1:0` (on demand in ap-south-1) | Same 5% rule. The old picker marked it deprecated and "simple single-figure lookups only", so it is likely to fail |
+
+Dropped: Opus (user, 11 Oct); all non-Claude models (GPT, Gemini, Gemma, open-weight models; user, 11 Oct); Claude models with only a `global.` profile (Sonnet 5.5, Haiku 5.5), because global routing can serve requests outside India.
+
+Basis: Bedrock model and inference-profile listing from the VM's credentials, ap-south-1 and us-east-1, 11 Oct. Sonnet 5 and Haiku 4.5 are already called by the app; Haiku 3 was the app's model until 7 Oct.
+
+Steps:
+1. Access test: one short tool-call question each to Haiku 4.5 and Haiku 3, a few cents. Confirms tool calling through Converse with the agent's tools.
+   **Done 11 Oct** ("What is revenue this year?", org 27, through `run_agent` on the VM):
+   - Haiku 4.5: works. One `query_metrics` call (pnl revenue, YTD), answer grounded, prompt caching works (7,791 tokens cached), 3.1 s, $0.012.
+   - Haiku 3: Bedrock refuses prompt caching for it ("You invoked an unsupported model or your request did not allow prompt caching"). With caching off from the start it calls the agent's tools correctly. Through `run_agent` it failed: the loop's cache fallback retried and hit a `ParamValidationError`.
+   - Must fix in the build: the cache switch in `agent/loop.py` (`_cache["on"]`) is global for the process, so one Haiku 3 question would turn prompt caching off for every model and every user until restart. Make caching a per-model setting in the registry (off for Haiku 3), and find and fix the retry's `ParamValidationError`.
+2. Build and unit-test 2.2–2.5 with no paid runs.
+   **Built 11 Oct (not committed):**
+   - `agent/models.py`: the three models, keys `sonnet-5` / `haiku-4.5` / `haiku-3`, per-model caching (off for Haiku 3). `resolve()`: the picked key if allowed; "auto" keeps the thread's last pick; anything else gives the default.
+   - Settings: `AGENT_MODELS` (default `sonnet-5`, so nothing changes on deploy until a model passes its tests) and `AGENT_MODEL_USERS` (allowlist for the non-default models; empty means everyone).
+   - `GET /models` lists what the user may pick; `picker_hidden` when there is one. `/query` and `/query/stream` pass `model`. The default model keeps `AGENT_MODEL_ID` / `AGENT_ANSWER_MODEL_ID`. VAT law keeps its own model.
+   - The thread remembers its model (`conversation_state.model_key`). The answer strip shows the model when a picker is offered ("Accutax AI · UAE VAT law" for law answers); without a picker it still says "Accutax AI".
+   - Caching fix: `loop._no_cache` is per model id, and `BedrockAdapter._no_cache_models` replaces the class-wide `_cache_point_enabled`. On a refusal the adapter now drops the cache points instead of replacing the system prompt with an empty text block, which was the Haiku 3 `ParamValidationError`.
+   - Frontend: `components/ModelPicker.jsx` (old `.pp-*` styles) in the composer, disabled while an answer runs; the pick is remembered in localStorage and sent as `model`.
+   - Eval harness: `--model <key>`.
+   - Tests: `tests/unit/test_agent_models.py` (17). Full unit suite 1477 passed, 0 failed; frontend build passes. Not checked in a browser locally: the login needs the shared database, which this machine cannot reach.
+3. One run of the real and golden sets per candidate (about $4 per model), graded by hand against Sonnet 5.
+   **Done 11 Oct, reduced to 15 prompts per model at the user's request** (10 real: r006, r020, r042, r043, r045, r057, r071, r085, r100, r177; 5 golden: DEF-L03, EXP-L06, DOC-FIN-A03, DOC-FIN-A11, DOC-ROOT-B03; all 15 pass with Sonnet 5). Cost $0.34 for both models.
+
+   | Model | Pass | Partial | Fail | Median time | Cost for 15 |
+   |---|---|---|---|---|---|
+   | Sonnet 5 (11 Oct regression run) | 15 | 0 | 0 | about 8 s | about $0.35 |
+   | Haiku 4.5 | 11 | 1 | 3 | about 3.5 s | $0.18 |
+   | Haiku 3 | 3 | 2 | 10 | about 9 s | $0.16 |
+
+   - Haiku 4.5 failures: r020 asked which organizations to compare instead of answering (all 10 were selected); DEF-L03 said one customer (Jyoti) was the only one overdue more than 30 days and listed her invoices, while Sonnet listed 10 customers; DOC-FIN-A11 gave 76.5% from AED 9,722,853, where the figure is 7,722,853 (60.8%). r042 partial: said six organizations had no revenue, when their revenue is negative.
+   - Haiku 3 failures include invented figures (r100: a P&L table of 1,234,567 / 456,789 placeholder values), wrong periods (r043 used full-year 2025, r045 last year instead of this year), tool calls it could not form (r071, EXP-L06, DOC-FIN-A03: answered that the data was unavailable), and a wrong receivables total (r020).
+   - Result: neither Haiku is within 5% of Sonnet 5. **Neither ships.** `AGENT_MODELS` stays `sonnet-5`, so the picker stays hidden. The picker code, the per-model caching fix and the Haiku 3 crash fix can still deploy; nothing changes for users.
+   - Options later: Haiku 4.5 as the planner with Sonnet 5 writing the answer (untested; on 7 Oct a Haiku writer was the problem); or a newer Haiku (Haiku 5.5 exists only on a `global.` profile, a data-location decision).
+4. Deploy with the models that pass; smoke test only.
 
 ### 2.2 Backend
 
@@ -106,7 +145,7 @@ The model key is stored in `conversation_state`; the answer shows "Answered by X
 
 ### 2.4 Frontend
 
-Dropdown in the composer, disabled while an answer runs; the last choice remembered in localStorage; labels Fast / Balanced / Deep with a cost hint. Check the leftover code at `App.jsx:291` and `App.jsx:1062`.
+Dropdown in the composer, disabled while an answer runs; the last choice remembered in localStorage; labels Balanced / Fast / Cheapest with a cost hint. Check the leftover code at `App.jsx:291` and `App.jsx:1062`.
 
 ### 2.5 Cost guard
 

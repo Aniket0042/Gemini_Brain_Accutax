@@ -136,13 +136,24 @@ def _extract_text_with_passthrough_fallback(content: List[Dict[str, Any]]) -> st
 
 # ── BedrockAdapter class ─────────────────────────────────────────────────────
 
+def _cache_refused(err: str) -> bool:
+    """Bedrock refused a cache point ("cachePoint is not supported", "did not allow prompt caching")."""
+    return "cachepoint" in err or "cache_point" in err or "prompt caching" in err
+
+
+def _without_cache_points(blocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The same system or tool blocks without cache points (never an empty text block in their place)."""
+    return [b for b in blocks or [] if not (isinstance(b, dict) and "cachePoint" in b)]
+
+
 class BedrockAdapter:
     """LLM adapter for any AWS Bedrock Claude model.
 
     Tracks token usage per instance and implements prompt caching where supported.
     """
 
-    _cache_point_enabled: bool = True
+    #: Model ids that refused a cache point in this process: caching stays on for every other model.
+    _no_cache_models: set = set()
 
     def __init__(self, model_id: str, label: str = ""):
         self.model_id = model_id
@@ -153,6 +164,10 @@ class BedrockAdapter:
         self._cache_read_tokens = 0
         self._cache_write_tokens = 0
         self._largest_context = 0
+
+    def _stop_caching(self) -> None:
+        BedrockAdapter._no_cache_models.add(self.model_id)
+        logger.warning("Prompt caching not supported for %s — continuing without it for this model", self.model_id)
 
     def reset_tokens(self) -> None:
         """Reset internal token counters."""
@@ -168,7 +183,7 @@ class BedrockAdapter:
         if isinstance(system_prompt, list):
             return system_prompt
         supports = (
-            BedrockAdapter._cache_point_enabled
+            self.model_id not in BedrockAdapter._no_cache_models
             and any(m in self.model_id.lower() for m in CACHE_SUPPORTED_MODELS)
             and not any(self.model_id.startswith(p) for p in CROSS_REGION_PREFIXES)
         )
@@ -231,11 +246,9 @@ class BedrockAdapter:
                 return retry_with_backoff(_call)
             except Exception as e:
                 err = str(e).lower()
-                if "cachepoint" in err or "cache_point" in err or "prompt caching" in err:
-                    BedrockAdapter._cache_point_enabled = False
-                    logger.warning("Prompt caching not supported for %s — disabling", self.model_id)
-                    plain = system_prompt if isinstance(system_prompt, str) else ""
-                    system[:] = [{"text": plain}]
+                if _cache_refused(err):
+                    self._stop_caching()
+                    system[:] = _without_cache_points(system)
                     return retry_with_backoff(_call)
                 raise
         finally:
@@ -283,11 +296,9 @@ class BedrockAdapter:
                 resp = client.converse_stream(**kwargs)
             except Exception as e:
                 err = str(e).lower()
-                if "cachepoint" in err or "cache_point" in err or "prompt caching" in err:
-                    BedrockAdapter._cache_point_enabled = False
-                    logger.warning("Prompt caching not supported for %s — disabling", self.model_id)
-                    plain = system_prompt if isinstance(system_prompt, str) else ""
-                    kwargs["system"] = [{"text": plain}]
+                if _cache_refused(err):
+                    self._stop_caching()
+                    kwargs["system"] = _without_cache_points(kwargs["system"])
                     resp = client.converse_stream(**kwargs)
                 else:
                     raise
@@ -320,6 +331,7 @@ class BedrockAdapter:
         See `converse()` above for what `purpose` does.
         """
         system = self._build_system_array(system_prompt)
+        tools = list(tools or [])
         call_usage: Dict[str, Any] = {}
 
         def _call():
@@ -344,11 +356,10 @@ class BedrockAdapter:
                 return retry_with_backoff(_call)
             except Exception as e:
                 err = str(e).lower()
-                if "cachepoint" in err or "cache_point" in err or "prompt caching" in err:
-                    BedrockAdapter._cache_point_enabled = False
-                    logger.warning("Prompt caching not supported for %s — disabling", self.model_id)
-                    plain = system_prompt if isinstance(system_prompt, str) else ""
-                    system[:] = [{"text": plain}]
+                if _cache_refused(err):
+                    self._stop_caching()
+                    system[:] = _without_cache_points(system)
+                    tools[:] = _without_cache_points(tools)
                     return retry_with_backoff(_call)
                 raise
         finally:

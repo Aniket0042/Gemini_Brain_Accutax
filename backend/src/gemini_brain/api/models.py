@@ -71,7 +71,7 @@ class QueryRequest(BaseModel):
     )
     model: Optional[str] = Field(
         default="auto",
-        description="Model key from GET /api/v1/models, or 'auto' to let the system choose.",
+        description="Model key from GET /api/v1/models, or 'auto' for the thread's last pick (else the default).",
         examples=["auto"],
     )
     effort: Optional[str] = Field(

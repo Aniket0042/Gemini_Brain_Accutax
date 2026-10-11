@@ -1,5 +1,6 @@
 import React, { useState, useRef, useLayoutEffect } from 'react';
 import { ArrowUp, Square, Paperclip } from 'lucide-react';
+import { ModelPicker } from './ModelPicker';
 
 /**
  * QueryInput — the chat composer.
@@ -22,6 +23,9 @@ export const QueryInput = ({
   variant = 'compact',
   brief = false,
   onBriefChange = () => {},
+  catalog = null,
+  model = '',
+  onModelChange = () => {},
 }) => {
   const [prompt, setPrompt] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -125,6 +129,7 @@ export const QueryInput = ({
           {/* Effort is not user-selectable: every query runs at the highest
               tier its model supports. */}
           <div className="pp-inline" style={{ ...styles.rightActions, gridArea: 'actions' }}>
+            <ModelPicker catalog={catalog} model={model} onModelChange={onModelChange} disabled={isLoading} />
             <button
               type="button"
               className={`brief-pill${brief ? ' is-on' : ''}`}
