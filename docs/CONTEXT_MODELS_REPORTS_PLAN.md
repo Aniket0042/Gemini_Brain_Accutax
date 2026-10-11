@@ -1,6 +1,6 @@
 # Session context, model picker and weekly reports: plan
 
-Status: approved to start, 11 Oct 2026. Phase 1 built and tested 11 Oct (1.6 skipped; 1.8 passed, including the real and golden regression sets). Next: commit and deploy on the user's go.
+Status: approved to start, 11 Oct 2026. Phase 1 built, tested and deployed 11 Oct (1706295; 1.6 skipped). Next: Phase 2, model picker.
 Scope: the agent path (`agent/loop.py`, `agent/preview.py`), the Cube model in `semantic/`, and the chat frontend.
 
 ## 1. Order and why
@@ -173,8 +173,9 @@ Golden reports for orgs 24 and 25 hand-checked against the Accutax screens; ever
 | 1.4 Ask when unclear | built 11 Oct: two prompt rules ("fix it" asks and calls no tools; no claimed corrections) |
 | 1.5 Earlier figures as verifier evidence | built 11 Oct: figures of the last 3 turns in conversation_state, passed to the verifier |
 | 1.6 Structured per-turn context | skipped (user, 11 Oct); build only if the 1.8 test still fails f26f |
-| 1.7 Security rule | built 11 Oct: `preview.thread_context` uses a thread only when it belongs to the caller and has the request's organizations. This also closes a gap found on the way: `/query` read any thread's history by session id without an owner check |
-| 1.8 Exit check | passed 11 Oct: follow-up set 48/48, 2/2, 2/2; real 82/7/0 (was 78/11/0); golden 67/7/2 (was 66/8/2). Next: commit and deploy on the user's go |
+| 1.7 Security rule | built 11 Oct: `preview.thread_context` uses a thread only when it belongs to the caller and has the request's organizations. This is a second layer: the routes already refuse another user's thread and a different set of organizations (`_match_session_scope` in `api/routes.py`, HTTP 403). An earlier note here, and the 1706295 commit message, wrongly said `/query` had no owner check; the 11 Oct smoke test got the 403 from the route |
+| 1.8 Exit check | passed 11 Oct: follow-up set 48/48, 2/2, 2/2; real 82/7/0 (was 78/11/0); golden 67/7/2 (was 66/8/2) |
+| Deploy | 11 Oct: committed 1706295, pushed, deployed to the VM (health 200, clean startup). Smoke 15/16: the one fail was the smoke check's own mistake ("and last quarter?" followed an invoice list, and the agent listed last quarter's invoices, which is right). File carried into a follow-up; another user's thread refused with 403. Rollback: `git checkout 87dd10a` in /opt/accutax-ai and restart `accutax-ai-api` (no .env or schema change) |
 
 **1.8 result, one run (11 Oct), eval copy `/tmp/agent_eval_ctx12`, graded by hand:**
 
