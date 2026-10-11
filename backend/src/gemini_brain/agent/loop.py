@@ -19,6 +19,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
+from gemini_brain.agent import history as thread_history
 from gemini_brain.agent import law, tools
 from gemini_brain.agent.prompt import system_prompt
 from gemini_brain.config.constants import SONNET5_ID
@@ -30,7 +31,6 @@ from gemini_brain.semantic import periods
 
 logger = logging.getLogger("gemini_brain.agent.loop")
 
-MAX_HISTORY_MESSAGES = 6
 MAX_ANSWER_TOKENS = 3000
 #: Below this many seconds left, another model call would not finish in time.
 MIN_SECONDS_FOR_MODEL_CALL = 4.0
@@ -68,14 +68,16 @@ class AgentResult:
     blocks: List[Dict[str, Any]] = field(default_factory=list)
 
 
-def _messages(history: Optional[Sequence[Dict[str, Any]]], question: str) -> List[Dict[str, Any]]:
-    """Bedrock messages: earlier turns (redacted, roles alternating, starting with the user), then the question."""
+def _messages(history: Optional[Sequence[Dict[str, Any]]], question: str,
+              turn_specs: Optional[Sequence[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+    """Bedrock messages: earlier turns (redacted, roles alternating, starting with the user), then the question.
+    The newest turns go whole, up to the history budget; older ones as a summary before them (history.py)."""
+    summary, kept = thread_history.select(history or [], turn_specs)
     out: List[Dict[str, Any]] = []
-    for m in list(history or [])[-MAX_HISTORY_MESSAGES:]:
-        role = "assistant" if str(m.get("role")).lower() == "assistant" else "user"
-        text = str(m.get("content") or "").strip()
-        if not text or (not out and role == "assistant"):
-            continue
+    if summary:
+        out.append({"role": "user", "content": [{"text": redact_pii(summary)[0]}]})
+    for m in kept:
+        role, text = m["role"], m["content"]
         if role == "user":
             text = redact_pii(text)[0]
         if out and out[-1]["role"] == role:
@@ -156,11 +158,15 @@ def _identifier_digits(payload: Any, out: List[str], depth: int = 0) -> None:
             _identifier_digits(v, out, depth + 1)
 
 
-def _evidence(results: Sequence[Dict[str, Any]]) -> List[Any]:
-    """What the verifier may match figures against: the results, their magnitudes (the verifier reads
-    "-143,160" in prose as 143160), and numbers quoted inside text results."""
+def _evidence(results: Sequence[Dict[str, Any]], earlier: Optional[Sequence[float]] = None) -> List[Any]:
+    """What the verifier may match figures against: the results, figures earlier turns of the thread fetched
+    (an answer may reuse them), their magnitudes (the verifier reads "-143,160" in prose as 143160), and numbers
+    quoted inside text results."""
     evidence: List[Any] = list(results)
     values: List[float] = []
+    if earlier:
+        evidence.append([float(v) for v in earlier])
+        values.extend(float(v) for v in earlier)
     _numbers(list(results), values)
     evidence.append([abs(v) for v in values if v < 0])
     # Digits inside identifiers ("INV-BULK-26-20241216180347-114231", "JE-24-2026-00000773") are part of the
@@ -181,6 +187,8 @@ def run_agent(
     org_meta: Dict[int, Dict[str, Any]],
     *,
     history: Optional[Sequence[Dict[str, Any]]] = None,
+    turn_specs: Optional[Sequence[Dict[str, Any]]] = None,
+    earlier_figures: Optional[Sequence[float]] = None,
     subject: str = "agent",
     model_id: Optional[str] = None,
     answer_model_id: Optional[str] = None,
@@ -190,7 +198,9 @@ def run_agent(
     brief: bool = False,
     attachment: Optional[str] = None,
 ) -> AgentResult:
-    """Answer one question. Never raises. `progress(tool_name, tool_input)` is called before each tool runs."""
+    """Answer one question. Never raises. `progress(tool_name, tool_input)` is called before each tool runs.
+    `history`: the thread's earlier messages; `turn_specs`: what its turns queried (history.add_spec);
+    `earlier_figures`: numbers earlier turns fetched, which an answer may reuse (checked by the verifier)."""
     started = time.monotonic()
     deadline = started + (deadline_seconds or settings.agent_deadline_seconds)
     budget = max_tool_calls or settings.agent_max_tool_calls
@@ -206,7 +216,7 @@ def run_agent(
     answer, status = "", "ok"
 
     try:
-        messages = _messages(history, redact_pii(question)[0])
+        messages = _messages(history, redact_pii(question)[0], turn_specs)
         law_answer = law.answer(question, [dict(m) for m in messages], brief=brief)
         if law_answer is not None:
             return AgentResult(answer=law_answer.answer, status="ok", usage=law_answer.usage, route="law",
@@ -260,7 +270,8 @@ def run_agent(
         logger.warning("agent failed: %s", e, exc_info=True)
         status, answer = "error", answer or ""
 
-    report = verify_answer(answer, _evidence(ok_results), enforce=False) if answer and status == "ok" else None
+    report = (verify_answer(answer, _evidence(ok_results, earlier_figures), enforce=False)
+              if answer and status == "ok" else None)
     return AgentResult(
         answer=answer,
         status=status,

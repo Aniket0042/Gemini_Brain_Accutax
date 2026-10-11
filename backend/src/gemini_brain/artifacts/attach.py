@@ -6,7 +6,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 from gemini_brain.artifacts import theme
-from gemini_brain.artifacts.delivery import detect_delivery
+from gemini_brain.artifacts.delivery import Delivery, detect_delivery
 from gemini_brain.artifacts.insights import add_takeaways
 from gemini_brain.artifacts.integrity import verify_document
 from gemini_brain.artifacts.narrator import write_narrative
@@ -104,6 +104,7 @@ def attach_delivery(
     title: Optional[str] = None,
     answer_text: Optional[str] = None,
     provenance: Optional[Provenance] = None,
+    delivery: Optional[Delivery] = None,
 ) -> List[Dict[str, Any]]:
     """Append canvas/artifact blocks when the user asked for a graph or file.
 
@@ -122,7 +123,8 @@ def attach_delivery(
     endpoint, row count, window notice) is printed on every output.
     """
     out = list(blocks or [])
-    delivery = detect_delivery(query)
+    # A delivery carried over from the previous turn of the thread, or the one the query names.
+    delivery = delivery or detect_delivery(query)
     if delivery.mode == "none":
         return _with_chart_colors(out)
 

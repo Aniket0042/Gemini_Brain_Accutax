@@ -61,10 +61,15 @@ def test_answer_saves_the_turn_and_reports_the_route(monkeypatch):
     monkeypatch.setattr(memory, "get_history_by_session", lambda sid, limit=6, db_name="": [{"role": "user", "content": "earlier"}])
     monkeypatch.setattr(memory, "ensure_session", lambda sid, uid, db_name="", **scope: scopes.append(scope) or True)
     monkeypatch.setattr(memory, "save_message_by_session", lambda sid, role, text, db_name="": saved.append((role, text)))
+    state = {"turn_specs": [{"q": "earlier", "calls": []}]}
+    monkeypatch.setattr(memory, "get_state_by_session", lambda sid, db_name="": dict(state))
+    monkeypatch.setattr(memory, "update_state_by_session", lambda sid, new, db_name="": state.update(new))
+    monkeypatch.setattr(memory, "get_session_record", lambda sid, db_name="": {
+        "user_id": 501, "organization_ids": [24, 25], "conversation_state": dict(state)})
     seen = {}
 
-    def fake_run_agent(question, orgs, meta, *, history, subject, progress, **_):
-        seen.update(history=history, subject=subject)
+    def fake_run_agent(question, orgs, meta, *, history, turn_specs, subject, progress, **_):
+        seen.update(history=history, subject=subject, specs=list(turn_specs))
         return loop.AgentResult(answer="Correct it in the next return [1].", status="ok", route="law", usage={"llm_calls": 1})
 
     monkeypatch.setattr(loop, "run_agent", fake_run_agent)
@@ -72,9 +77,11 @@ def test_answer_saves_the_turn_and_reports_the_route(monkeypatch):
                          user_id=501)
     assert out["routing_info"]["path"] == "agent_law" and out["status"] == "ok"
     assert out["policy"]["model_label"] == preview.PRIMARY_LABEL
-    assert seen == {"history": [{"role": "user", "content": "earlier"}], "subject": "agent-preview:501"}
+    assert seen == {"history": [{"role": "user", "content": "earlier"}], "subject": "agent-preview:501",
+                    "specs": [{"q": "earlier", "calls": []}]}
     assert scopes == [{"organization_ids": [24, 25]}]
     assert saved == [("user", "AED 8,000 error: disclosure?"), ("assistant", "Correct it in the next return [1].")]
+    assert state["turn_specs"][-1] == {"q": "AED 8,000 error: disclosure?", "calls": []}
 
 
 def test_step_labels():
@@ -234,8 +241,11 @@ def test_the_context_window_meter_shows_the_latest_context_size(monkeypatch):
     seen = []
     monkeypatch.setattr(cw, "set_context_window_usage",
                         lambda sid, tokens, db_name="": seen.append((sid, tokens)) or {"used": tokens})
-    for name in ("get_history_by_session", "ensure_session", "save_message_by_session"):
-        monkeypatch.setattr(memory, name, lambda *a, **k: [] if name == "get_history_by_session" else True)
+    monkeypatch.setattr(memory, "get_history_by_session", lambda *a, **k: [])
+    for name in ("ensure_session", "save_message_by_session", "update_state_by_session"):
+        monkeypatch.setattr(memory, name, lambda *a, **k: True)
+    monkeypatch.setattr(memory, "get_state_by_session", lambda *a, **k: {})
+    monkeypatch.setattr(memory, "get_session_record", lambda *a, **k: None)
     sid = "5f0c8a43-1111-4222-8333-944455556666"
     monkeypatch.setattr(loop, "run_agent", lambda *a, **k: loop.AgentResult(answer="x", status="ok", usage={
         "input_tokens": 1200, "cache_read_tokens": 20000, "output_tokens": 600, "llm_calls": 2,

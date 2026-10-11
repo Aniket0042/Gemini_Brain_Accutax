@@ -19,6 +19,11 @@ Usage (from backend/, on a host that reaches Cube):
   .venv/bin/python scripts/eval/replay_real_questions.py
   .venv/bin/python scripts/eval/replay_real_questions.py --cases tests/data/golden_accounting.json
   .venv/bin/python scripts/eval/replay_real_questions.py --only r080,r081 --out /tmp/replay
+  .venv/bin/python scripts/eval/replay_real_questions.py --cases tests/data/followup_chains.json
+
+For the follow-up chains, each turn is also checked for the context it should carry ("carry": the tool
+call it should make), for asking instead of guessing ("asks"), and for the file or chart the thread asked
+for ("file"). These are screens too.
 """
 from __future__ import annotations
 
@@ -235,6 +240,89 @@ def figure_screen(refs: List[Dict[str, Any]], answer: str) -> Optional[Dict[str,
     return {"hits": hits, "total": total, "share": round(hits / total, 2)} if total else None
 
 
+# ── Follow-up checks (tests/data/followup_chains.json) ───────────────────────
+
+_FIGURE_TOOLS = ("query_metrics", "list_documents", "cash_forecast")
+
+
+def _member(name: Any) -> str:
+    """'sales.customer_name' and 'customer_name' compare equal."""
+    return str(name).split(".")[-1]
+
+
+def _data_calls(calls: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [c for c in calls if c.get("ok") and c.get("name") in _FIGURE_TOOLS]
+
+
+def _period_ok(expected: Any, given: Any, today: datetime.date) -> bool:
+    given = given if isinstance(given, dict) else {}
+    if isinstance(expected, str) and given.get("preset") == expected:
+        return True
+    try:
+        start, end = _range(expected, today)
+    except Exception:  # noqa: BLE001 - an unknown preset in the spec matches nothing
+        return False
+    return given.get("start") == start.isoformat() and given.get("end") == end.isoformat()
+
+
+def carry_mismatches(expected: Dict[str, Any], call: Dict[str, Any], today: datetime.date) -> List[str]:
+    """What differs between one acceptable call in expect.carry and one tool call; [] when it matches."""
+    if call.get("name") != expected.get("tool"):
+        return ["tool"]
+    given = call.get("input") or {}
+    out: List[str] = []
+    for key in ("view", "type", "granularity"):
+        if key in expected and given.get(key) != expected[key]:
+            out.append(key)
+    measures = {_member(m) for m in given.get("measures") or []}
+    if expected.get("measures") and expected["measures"] != ["*"] and not set(expected["measures"]) <= measures:
+        out.append("measures")
+    if "period" in expected and not _period_ok(expected["period"], given.get("period"), today):
+        out.append("period")
+    group_by = {_member(g) for g in given.get("group_by") or []}
+    if not set(expected.get("group_by") or []) <= group_by:
+        out.append("group_by")
+    if set(expected.get("not_group_by") or []) & group_by:
+        out.append("not_group_by")
+    filters = given.get("filters") or []
+    for member, operator, values in expected.get("filters") or []:
+        if not any(_member(f.get("member")) == member
+                   and operator in ("*", f.get("operator"))
+                   and (values == "*" or sorted(map(str, values)) == sorted(map(str, f.get("values") or [])))
+                   for f in filters if isinstance(f, dict)):
+            out.append(f"filter {member}")
+    stale = {_member(f.get("member")) for f in filters if isinstance(f, dict)} & set(expected.get("not_filters") or [])
+    out += [f"stale filter {m}" for m in sorted(stale)]
+    if "limit" in expected and given.get("limit") != expected["limit"]:
+        out.append("limit")
+    return out
+
+
+def carry_check(alternatives: List[Dict[str, Any]], calls: List[Dict[str, Any]], today: datetime.date) -> Dict[str, Any]:
+    """Did the turn carry the earlier context into its query? One acceptable call must match a successful call;
+    an alternative with tool None passes when the turn made no figure call."""
+    data = _data_calls(calls)
+    best: Optional[List[str]] = None
+    for expected in alternatives:
+        if expected.get("tool") is None:
+            if not data:
+                return {"ok": True, "matched": "no call"}
+            continue
+        for call in data:
+            missing = carry_mismatches(expected, call, today)
+            if not missing:
+                return {"ok": True, "matched": expected.get("view") or expected.get("type")}
+            if best is None or len(missing) < len(best):
+                best = missing
+    return {"ok": False, "closest_misses": best if best is not None else ["no figure call"]}
+
+
+def file_check(expected: str, got: Optional[str]) -> Dict[str, Any]:
+    """Would the app attach the file or chart the thread asked for? `got`: what ask_agent says it attaches
+    (preview.attachment of the delivery chosen for this turn of the thread)."""
+    return {"ok": bool(got) and expected in got.lower(), "expected": expected, "got": got}
+
+
 # ── Replay ───────────────────────────────────────────────────────────────────
 
 #: Only "agent" is left; the name stays in report file names so runs compare across versions.
@@ -243,14 +331,21 @@ _STORE: Optional[_MemoryStore] = None
 
 
 def ask_agent(question: str, orgs: List[int], meta: Dict[int, Dict[str, Any]], session_id: Optional[str]) -> Dict[str, Any]:
+    from gemini_brain.agent import preview
     from gemini_brain.agent.loop import run_agent
-    history = _STORE.get_history_by_session(session_id, limit=6) if session_id and _STORE else []
-    result = run_agent(question, orgs, {o: meta[o] for o in orgs}, history=history, subject="replay-agent")
+    # The thread context the app gives the agent (preview.thread_context), from this process's memory store.
+    thread = preview.thread_context(session_id, orgs, 0) if session_id and _STORE else preview.Thread()
+    delivery = preview.delivery_for(question, thread)
+    result = run_agent(question, orgs, {o: meta[o] for o in orgs}, history=thread.messages, turn_specs=thread.specs,
+                       earlier_figures=thread.figures, attachment=preview.attachment(question, delivery),
+                       subject="replay-agent")
     if session_id and _STORE:
         _STORE.save_message_by_session(session_id, "user", question)
         _STORE.save_message_by_session(session_id, "assistant", result.answer)
+        preview.record_turn(session_id, question, result.tool_calls, delivery, result.data)
     return {"answer": result.answer, "status": result.status, "token_usage": result.usage,
-            "routing_info": {"path": "agent"}, "tool_calls": result.tool_calls, "verification": result.verification}
+            "routing_info": {"path": "agent"}, "tool_calls": result.tool_calls, "verification": result.verification,
+            "attachment": preview.attachment(question, delivery)}
 
 
 def ask(question: str, orgs: List[int], meta: Dict[int, Dict[str, Any]], session_id: Optional[str]) -> Dict[str, Any]:
@@ -290,16 +385,15 @@ def _table_rows(result: Dict[str, Any]) -> List[Any]:
 def run_case(case: Dict[str, Any], meta: Dict[int, Dict[str, Any]], sessions: Dict[str, str],
              by_id: Dict[str, Dict[str, Any]], today: datetime.date) -> Dict[str, Any]:
     orgs = case["orgs"]
-    session_id = None
-    if len(orgs) > 1:
-        context = case.get("context") or []
-        if context and context[-1] in sessions:
-            session_id = sessions[context[-1]]
-        else:
-            session_id = str(uuid.uuid4())
-            for cid in context:  # earlier turns not replayed yet: replay them into this thread first
-                ask_with_timeout(by_id[cid]["question"], orgs, meta, session_id)
-        sessions[case["id"]] = session_id
+    # Every case gets a thread, as every chat in the app has one; single-organization follow-ups included.
+    context = case.get("context") or []
+    if context and context[-1] in sessions:
+        session_id = sessions[context[-1]]
+    else:
+        session_id = str(uuid.uuid4())
+        for cid in context:  # earlier turns not replayed yet: replay them into this thread first
+            ask_with_timeout(by_id[cid]["question"], orgs, meta, session_id)
+    sessions[case["id"]] = session_id
 
     result, error, elapsed = ask_with_timeout(case["question"], orgs, meta, session_id)
     result = result or {}
@@ -326,8 +420,15 @@ def run_case(case: Dict[str, Any], meta: Dict[int, Dict[str, Any]], sessions: Di
         checks["says_unavailable"] = any(w in answer.lower() for w in REFUSAL_WORDS)
     if expect.get("kb"):
         checks["cites"] = bool(re.search(r"\[\d+\]", answer))
+    if expect.get("carry"):
+        checks["carry"] = carry_check(expect["carry"], result.get("tool_calls") or [], today)
+    if expect.get("clarify"):
+        checks["asks"] = "?" in answer and not _data_calls(result.get("tool_calls") or [])
+    if expect.get("file"):
+        checks["file"] = file_check(expect["file"], result.get("attachment"))
     return {
         "id": case["id"], "kind": case["kind"], "orgs": orgs, "question": case["question"],
+        "chain": case.get("chain"), "category": case.get("category"),
         "context": case.get("context") or [], "note": expect.get("note"),
         "seconds": elapsed, "llm_calls": usage.get("llm_calls"), "cost_usd": usage.get("cost_usd"),
         "path": routing.get("path"), "layout": routing.get("layout"),
@@ -372,7 +473,9 @@ def main() -> int:
         fig = c["figures_ledger"] or c["figures_documents"]
         print(f"{case['id']} {case['kind']:12} {outcome['seconds']:>6}s llm={outcome['llm_calls']} "
               f"status={c['status']} ledger={(c['figures_ledger'] or {}).get('share')} "
-              f"docs={(c['figures_documents'] or {}).get('share')}{' ERR ' + c['error'] if c['error'] else ''}",
+              f"docs={(c['figures_documents'] or {}).get('share')}"
+              f"{' carry=' + str(c['carry']['ok']) if c.get('carry') else ''}"
+              f"{' ERR ' + c['error'] if c['error'] else ''}",
               flush=True)
 
     for t in threading.enumerate():  # let shadow comparisons finish writing
@@ -395,6 +498,7 @@ def sheet(stamp: str, report: List[Dict[str, Any]]) -> str:
     times = sorted(r["seconds"] for r in report)
     p95 = times[min(len(times) - 1, int(0.95 * len(times)))] if times else None
     lines = [f"# Real-question replay — {stamp}", "", f"{len(report)} cases · p95 {p95}s", ""]
+    lines += followup_summary(report)
     for r in report:
         c = r["checks"]
         lines += [f"## {r['id']} · {r['kind']} · {r['seconds']}s · {r['path'] or ''}/{r['layout'] or ''}",
@@ -417,6 +521,34 @@ def sheet(stamp: str, report: List[Dict[str, Any]]) -> str:
             lines += ["", "Table: " + json.dumps(r["tables"][:15], default=str, ensure_ascii=False)]
         lines += ["", "---", ""]
     return "\n".join(lines)
+
+
+def followup_summary(report: List[Dict[str, Any]]) -> List[str]:
+    """Pass counts of the follow-up checks (carry, asks, file) per category; [] for sets without them."""
+    counts: Dict[str, Dict[str, List[int]]] = {}
+    for r in report:
+        for check in ("carry", "asks", "file"):
+            value = r["checks"].get(check)
+            if value is None:
+                continue
+            ok = value if isinstance(value, bool) else bool(value.get("ok"))
+            tally = counts.setdefault(r.get("category") or "-", {}).setdefault(check, [0, 0])
+            tally[0] += ok
+            tally[1] += 1
+    if not counts:
+        return []
+    lines = ["Follow-up checks (screens, not the grade):", ""]
+    totals: Dict[str, List[int]] = {}
+    for category in sorted(counts):
+        parts = []
+        for check, (ok, n) in sorted(counts[category].items()):
+            parts.append(f"{check} {ok}/{n}")
+            totals.setdefault(check, [0, 0])
+            totals[check][0] += ok
+            totals[check][1] += n
+        lines.append(f"- {category}: " + ", ".join(parts))
+    lines += ["- **all**: " + ", ".join(f"{c} {ok}/{n}" for c, (ok, n) in sorted(totals.items())), ""]
+    return lines
 
 
 if __name__ == "__main__":

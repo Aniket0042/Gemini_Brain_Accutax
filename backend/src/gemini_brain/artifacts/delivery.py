@@ -137,6 +137,34 @@ def detect_delivery(query: str) -> Delivery:
     return Delivery(mode="none")
 
 
+#: A follow-up that reshapes the previous answer ("add net profit to it", "same for last year",
+#: "now by quarter"), as opposed to a new standalone question.
+FOLLOW_UP = re.compile(
+    r"^\s*(?:and|now|also|same|then|but|just|only|instead|make it|what about|how about|add|remove|drop|include|"
+    r"exclude|redo|split|break it|show it|change)\b"
+    r"|\b(?:to it|to that|from it|the same|same (?:for|but|as|thing)|instead)\b",
+    re.IGNORECASE,
+)
+FOLLOW_UP_MAX_WORDS = 14
+
+
+def carry_delivery(query: str, previous: Optional[dict]) -> Delivery:
+    """The delivery for `query` in a thread: its own, or the previous turn's chart or file when `query`
+    is a short follow-up that reshapes that answer and names no delivery itself."""
+    own = detect_delivery(query)
+    if own.mode != "none" or not previous or previous.get("mode") in (None, "none"):
+        return own
+    words = len((query or "").split())
+    if words > FOLLOW_UP_MAX_WORDS or not FOLLOW_UP.search(query or ""):
+        return own
+    return Delivery(mode=previous["mode"], format=previous.get("format"), chart_hint=previous.get("chart_hint"))
+
+
+def as_state(delivery: Delivery) -> dict:
+    """The delivery as saved in conversation_state for the next turn."""
+    return {"mode": delivery.mode, "format": delivery.format, "chart_hint": delivery.chart_hint}
+
+
 def _wants_financial_report(text: str) -> bool:
     has_report = bool(re.search(r"\b(reports?|statements?)\b", text, re.IGNORECASE))
     has_fin = bool(re.search(
