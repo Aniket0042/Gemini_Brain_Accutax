@@ -140,9 +140,9 @@ def test_auto_keeps_the_threads_last_model_and_the_turn_saves_it(monkeypatch):
     seen = {}
     _fake_agent(monkeypatch, seen)
     keys = ["sonnet-5", "haiku-4.5", "haiku-3"]
-    preview.answer("and last quarter?", [24], lambda: {}, session_id="s", user_id=1, model_key="auto", allowed_models=keys)
+    preview.answer("and last quarter?", [24], lambda: {}, session_id="7c1e2a90-4b3d-4f6e-9a8b-0d1c2e3f4a5b", user_id=1, model_key="auto", allowed_models=keys)
     assert seen["model_id"] == HAIKU3_ID
-    preview.answer("Revenue?", [24], lambda: {}, session_id="s", user_id=1, model_key="haiku-4.5", allowed_models=keys)
+    preview.answer("Revenue?", [24], lambda: {}, session_id="7c1e2a90-4b3d-4f6e-9a8b-0d1c2e3f4a5b", user_id=1, model_key="haiku-4.5", allowed_models=keys)
     assert state[preview.MODEL_STATE_KEY] == "haiku-4.5"
 
 

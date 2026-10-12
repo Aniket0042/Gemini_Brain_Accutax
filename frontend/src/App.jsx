@@ -11,6 +11,7 @@ import { ModelHealthModal } from './components/ModelHealthModal';
 import { AnswerCanvas } from './components/canvas/AnswerCanvas';
 import { fetchQueryResponse, streamQueryResponse, fetchTenants, fetchModelCatalog, fetchSessionMessages, createChatSession, deleteChatSession } from './services/api';
 import { Trash2 } from 'lucide-react';
+import { isSessionId, newSessionId } from './services/sessionId';
 import { useAuth0 } from '@auth0/auth0-react';
 
 // Minimal fallback shown only until /api/v1/tenants responds. Deliberately
@@ -323,7 +324,7 @@ export default function App() {
       if (new URLSearchParams(window.location.search).get('handoff') === '1') return null;
       const id = sessionStorage.getItem(ACTIVE_SESSION_KEY);
       if (id && readDeletedSessions().has(id)) return null;
-      return id || null;
+      return isSessionId(id) ? id : null;
     } catch {
       return null;
     }
@@ -516,7 +517,7 @@ export default function App() {
       sanitizeSensitiveQueryParams({ includeHandoff: true });
       return;
     }
-    if (incomingSessionId) setWidgetSessionId(incomingSessionId);
+    if (isSessionId(incomingSessionId)) setWidgetSessionId(incomingSessionId);
     lastHandoffSessionRef.current = incomingSessionId;
     if (data.orgId) {
       localStorage.setItem('gemini_brain_active_org', String(data.orgId));
@@ -613,11 +614,7 @@ export default function App() {
   useEffect(() => {
     if (widgetSessionId) return undefined;
     if (!handoffSettled) return undefined;
-    const minted =
-      typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `chat-${Date.now()}`;
-    setWidgetSessionId(minted);
+    setWidgetSessionId(newSessionId());
     return undefined;
   }, [widgetSessionId, handoffSettled]);
 
@@ -987,7 +984,8 @@ export default function App() {
     setActiveHistoryId(id);
     activeHistoryIdRef.current = id;
     setHistoryDirty(false);
-    if (entry.sessionId) setWidgetSessionId(entry.sessionId);
+    // Chats saved before ids were always UUIDs ("chat-<ms>") have no server thread; continue them on a new one.
+    setWidgetSessionId(isSessionId(entry.sessionId) ? entry.sessionId : newSessionId());
     setResponseData(null);
     setStreamLogs([]);
     setIsLoading(false);
@@ -1146,10 +1144,7 @@ export default function App() {
       activeHistoryIdRef.current = currentHistoryId;
 
       if (!currentSessionId) {
-        currentSessionId =
-          typeof crypto !== 'undefined' && crypto.randomUUID
-            ? crypto.randomUUID()
-            : `chat-${Date.now()}`;
+        currentSessionId = newSessionId();
         setWidgetSessionId(currentSessionId);
       }
 

@@ -131,6 +131,17 @@ def test_a_new_or_unreadable_thread_gives_no_context(monkeypatch):
     assert preview.thread_context("sid", [24], 7) == preview.Thread()
 
 
+def test_only_uuid_session_ids_are_used(caplog):
+    # Over plain HTTP an old frontend sent "chat-<ms>": no thread can be stored under it, so the answer
+    # runs as a new chat and the log says why.
+    sid = "3f2b8c1e-9d4a-4e6b-8a1c-2b7d5e9f0a13"
+    assert preview.usable_session_id(sid) == sid
+    assert preview.usable_session_id(None) is None
+    with caplog.at_level("WARNING"):
+        assert preview.usable_session_id("chat-1791786631401") is None
+    assert "not a UUID" in caplog.text
+
+
 def test_figures_keep_the_last_turns_only():
     state = {}
     for i in range(history.FIGURE_TURNS + 2):

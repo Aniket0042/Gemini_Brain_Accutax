@@ -50,6 +50,7 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
 
     started = time.monotonic()
     orgs = [int(o) for o in organization_ids]
+    session_id = usable_session_id(session_id)
     thread = thread_context(session_id, orgs, user_id, db_name)
     allowed_keys = list(allowed_models or [agent_models.DEFAULT_KEY])
     model = agent_models.resolve(model_key, allowed_keys, thread.model_key)
@@ -285,6 +286,19 @@ class Thread:
     delivery: Optional[Dict[str, Any]] = None
     figures: List[float] = field(default_factory=list)
     model_key: Optional[str] = None
+
+
+def usable_session_id(session_id: Optional[str]) -> Optional[str]:
+    """The thread id, or None when it is not a UUID. Threads are stored by UUID, so any other id
+    (an old client's "chat-<ms>") can neither be read nor saved: the answer runs as a new chat."""
+    if not session_id:
+        return None
+    from gemini_brain.memory.session_memory import is_valid_uuid
+    if is_valid_uuid(session_id):
+        return session_id
+    logger.warning("agent preview: session_id %r is not a UUID; the thread's history is neither read nor saved",
+                   str(session_id)[:64])
+    return None
 
 
 def thread_context(session_id: Optional[str], organization_ids: Sequence[int], user_id: int,
