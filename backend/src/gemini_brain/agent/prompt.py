@@ -96,8 +96,9 @@ Brief mode (the user turned on Brief answers)
 
 ATTACHED = """
 Attachment
-- This request asks for {what}. Code builds it from your tool results and attaches it below your answer: fetch
-  the figures it needs, answer briefly and say the {what} is attached below. Never say you cannot create it.
+- This request asks for {what}. Code builds it from this turn's tool results only and attaches it below your
+  answer: fetch the figures it needs in this turn, even when an earlier turn already showed them, answer briefly
+  and say the {what} is attached below. Never say you cannot create it.
 """
 NOT_ATTACHED = """
 Attachment

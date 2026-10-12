@@ -90,7 +90,8 @@ class FakeAdapter:
 
     def converse_with_tools(self, system, messages, tools_, max_tokens=0, purpose=""):
         self.sent.append([dict(m) for m in messages])
-        FakeAdapter.log.append({"model": self.model_id, "system": system, "tools": tools_})
+        FakeAdapter.log.append({"model": self.model_id, "system": system, "tools": tools_,
+                                "last": (messages[-1].get("content") or [{}])[-1].get("text") if messages else None})
         step = FakeAdapter.script[min(FakeAdapter.step, len(FakeAdapter.script) - 1)]
         FakeAdapter.step += 1
         self.calls += 1
@@ -146,6 +147,26 @@ def test_a_cut_off_answer_is_asked_once_to_be_shorter(agent):
     FakeAdapter.script = [tool_use("query_metrics", {}), cut, final("Short summary: AED 5,809,352.")]
     result = loop.run_agent("Monthly trend since 2025", ORGS, META)
     assert result.answer == "Short summary: AED 5,809,352." and result.usage["llm_calls"] == 3
+
+
+def test_a_chart_follow_up_that_fetched_nothing_is_asked_once_to_fetch(agent):
+    # "show me the graphs for the same": the figures are in history, but the chart is built only from this
+    # turn's tool results, so an answer without a data call is sent back once.
+    FakeAdapter.script = [final("The chart is attached below."), tool_use("query_metrics", {}),
+                          final("Chart attached below: AED 5,809,352.")]
+    result = loop.run_agent("show me the graphs for the same", ORGS, META, attachment="chart")
+    assert [c["name"] for c in result.tool_calls] == ["query_metrics"] and result.data
+    assert result.answer == "Chart attached below: AED 5,809,352."
+    assert "fetched none" in (FakeAdapter.log[1]["last"] or "")
+
+
+def test_the_fetch_nudge_is_sent_once_and_never_without_an_attachment(agent):
+    FakeAdapter.script = [final("No figures needed.")]
+    assert loop.run_agent("thanks", ORGS, META).usage["llm_calls"] == 1
+    FakeAdapter.step = 0
+    FakeAdapter.script = [final("Still nothing."), final("Still nothing.")]
+    result = loop.run_agent("chart it", ORGS, META, attachment="chart")
+    assert result.answer == "Still nothing." and result.usage["llm_calls"] == 2
 
 
 def test_an_invented_figure_is_reported(agent):

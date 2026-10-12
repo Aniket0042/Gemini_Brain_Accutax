@@ -45,6 +45,11 @@ WRAP_UP = "Time or tool budget is nearly used up. Do not call more tools: answer
 #: Sent once when an answer comes back cut off or empty (usually a table too long for the answer).
 SHORTER = ("Your answer was cut off or empty. Answer again in under 250 words from the tool results you have: "
            "summarise long series per organization (total, best and worst period) instead of a full table.")
+#: Sent once when a chart or file was asked for but the answer fetched nothing ("show me the graphs for the
+#: same"): code builds the attachment only from this turn's tool results, not from figures in earlier messages.
+FETCH_FOR_ATTACHMENT = ("The {what} is built only from tool results fetched in this turn, and you fetched none. "
+                        "Call the data tools now for the figures the {what} should show (for a follow-up, the same "
+                        "query as the earlier turn), then answer briefly.")
 _NUMBER_IN_TEXT = re.compile(r"\d[\d,]*(?:\.\d+)?")
 _DIGITS = re.compile(r"\d+")
 _IDENTIFIER = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)[\w./#-]+$")
@@ -235,7 +240,7 @@ def run_agent(
         today = periods.today_in(settings.report_timezone)
         system = system_prompt(org_meta, orgs, today, settings.report_timezone, brief=brief, attachment=attachment)
         specs = tools.specs(ctx)
-        used, asked_shorter, adapter = 0, False, planner
+        used, asked_shorter, asked_fetch, adapter = 0, False, False, planner
         while True:
             if deadline - time.monotonic() < MIN_SECONDS_FOR_MODEL_CALL:
                 status, answer = "deadline", OUT_OF_TIME
@@ -252,6 +257,10 @@ def run_agent(
                     if not message.get("content"):
                         message["content"] = [{"text": "(empty)"}]
                     messages.append({"role": "user", "content": [{"text": SHORTER}]})
+                    continue
+                if attachment and not data and not asked_fetch and used < budget:
+                    asked_fetch = True
+                    messages.append({"role": "user", "content": [{"text": FETCH_FOR_ATTACHMENT.format(what=attachment)}]})
                     continue
                 break
             allowed = uses[:max(0, budget - used)]
