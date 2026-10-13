@@ -84,7 +84,7 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
     cards = _document_cards(docs)
     blocks = cards + tiles.kpi_tiles(data) + list(getattr(result, "blocks", None) or []) + links.guide_buttons(data)
     blocks += _files(question, result, orgs, meta, user_id=user_id, session_id=session_id, answer_text=answer_text,
-                     delivery=delivery)
+                     delivery=delivery, documents=docs)
     if session_id:
         if _save_turn(session_id, user_id, orgs, question, answer_text, db_name, blocks,
                       user_blocks=[_chips(docs)] if docs else None):
@@ -267,7 +267,8 @@ def _plain(row: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _files(question: str, result: Any, orgs: List[int], meta: Dict[int, Dict[str, Any]], *, user_id: int,
-           session_id: Optional[str], answer_text: str, delivery: Any = None) -> List[Dict[str, Any]]:
+           session_id: Optional[str], answer_text: str, delivery: Any = None,
+           documents: Sequence[Any] = ()) -> List[Dict[str, Any]]:
     """Chart, canvas and download blocks when the user asked for a file or a chart; [] otherwise. Never raises."""
     try:
         delivery = delivery if delivery is not None else delivery_for(question)
@@ -275,6 +276,9 @@ def _files(question: str, result: Any, orgs: List[int], meta: Dict[int, Dict[str
             return []
         from gemini_brain.artifacts.attach import attach_delivery
         rows = export_rows(getattr(result, "data", None) or [])
+        if not rows and documents:  # nothing from the books to draw: use the figures of the attached files
+            from gemini_brain.uploads.blocks import file_rows
+            rows = file_rows(documents)
         single = orgs[0] if len(orgs) == 1 else None
         return attach_delivery(
             question, rows, [], status="ok" if rows else "empty", user_id=user_id, organization_id=single,

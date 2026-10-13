@@ -135,7 +135,8 @@ Attached files
 """
 ATTACHED = """
 Attachment
-- This request asks for {what}. Code builds it from this turn's tool results only and attaches it below your
+- This request asks for {what}. Code builds it from this turn's tool results, or from the attached files' figures when
+  no tool returned rows, and attaches it below your
   answer: fetch the figures it needs in this turn, even when an earlier turn already showed them, answer briefly
   and say the {what} is attached below. Never say you cannot create it.
 """

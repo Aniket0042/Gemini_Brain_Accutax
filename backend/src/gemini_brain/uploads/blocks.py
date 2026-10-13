@@ -69,3 +69,23 @@ def documents_block(docs: Sequence[Any]) -> Optional[Dict[str, Any]]:
             "note": doc.payload.get("note") or "",
         })
     return {"type": "documents", "items": items}
+
+
+def file_rows(docs: Sequence[Any]) -> List[Dict[str, Any]]:
+    """The figures of the attached files as table rows, for a chart or an Excel/CSV/PDF export of the files themselves.
+
+    Two or more bills: one row per bill. One bill: one row per line. A statement: one row per line. Anything else: [].
+    """
+    bills = [d for d in docs if d.extract.is_bill]
+    if len(bills) >= 2:
+        return [{"file": d.rec.filename, "supplier": ex.vendor_name, "number": ex.document_number, "date": ex.date,
+                 "currency": ex.currency, "subtotal": ex.subtotal, "vat": ex.tax_total, "total": ex.grand_total}
+                for d in bills for ex in [d.extract]]
+    if len(bills) == 1 and bills[0].extract.items:
+        return [{"description": i.description, "quantity": i.quantity, "rate": i.rate, "amount": i.amount}
+                for i in bills[0].extract.items]
+    for d in docs:
+        if d.extract.statement_lines:
+            return [{"date": ln.date, "reference": ln.reference, "description": ln.description, "debit": ln.debit,
+                     "credit": ln.credit, "balance": ln.balance} for ln in d.extract.statement_lines]
+    return []
