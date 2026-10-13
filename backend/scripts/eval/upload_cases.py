@@ -480,6 +480,14 @@ def books_statement(supplier: Dict[str, Any]) -> Dict[str, Any]:
             "lines": lines, "currency": supplier.get("currency", "AED")}
 
 
+def unrecorded_variant(b: Dict[str, Any]) -> Dict[str, Any]:
+    """The recorded bill moved 20 days and re-priced: same supplier, but not the same date or total, so it is not 'likely the same'."""
+    import datetime
+    net = round(b["net"] + 777.77, 2)
+    day = datetime.date.fromisoformat(b["date"]) + datetime.timedelta(days=20)
+    return {**b, "net": net, "vat": round(net * 0.05, 2), "date": day.isoformat()}
+
+
 def books_bill(b: Dict[str, Any], vendor: str, *, number: Optional[str] = None) -> Dict[str, Any]:
     net = round(b["net"], 2)
     return {"vendor": vendor, "vendor_address": "United Arab Emirates", "trn": "100000000000003", "number": number or b["number"],
@@ -518,7 +526,7 @@ def build_files(out: Path, real_dir: Optional[Path] = None, books: Optional[Dict
         recorded = render_bill_pdf(books_bill(bill, vendor))
         files["books_bill_recorded.pdf"] = recorded
         files["books_bill_recorded_scan.pdf"] = to_scan_pdf(recorded)
-        files["books_bill_not_recorded.pdf"] = render_bill_pdf(books_bill(bill, vendor, number=f"{bill['number']}-X9"))
+        files["books_bill_not_recorded.pdf"] = render_bill_pdf(books_bill(unrecorded_variant(bill), vendor, number=f"{bill['number']}-X9"))
         supplier = books.get("supplier") or {}
         if len(supplier.get("bills") or []) >= 6:
             files["books_statement.pdf"] = render_statement_pdf(books_statement(supplier))

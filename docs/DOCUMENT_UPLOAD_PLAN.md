@@ -338,6 +338,14 @@ Each case lists expected fields, expected check results, the expected match, and
 - Pilot one week with internal users. Review every answer with attachments in the answer log; track reading cost per page and failures.
 - Rollback: `UPLOADS_ENABLED=false` hides the paperclip; nothing else changes.
 
+**Phase 6 status (2026-10-13), deployed on the VM `106.51.80.81`:**
+
+- Deployed from branch `deploy/vm-3535` (first commit `88d98d3`, then the statement prompt fix `a15e13c`). Uploads are stored in `/var/lib/accutax-uploads` (owner `geminibrain`, mode 700). `UPLOADS_ENABLED=true`; `UPLOAD_USERS` is the same list as `AGENT_PREVIEW_USERS`. nginx has `client_max_body_size 12m` on `/api/`: a 3 MB file passes, a 14 MB file gets 413.
+- Books cases run on the VM against organization 27 (organization 24 has no bills). Result: **4 of 4 pass**, and 10 of 11 other answers pass by rule at the last full run, with the last failure fixed and rerun.
+- Two findings from these runs. (1) The agent only compared statement lines to the books, not the books to the statement lines, so it missed a real bill left off the statement. The prompt now says a statement is compared both ways. (2) Two cases were badly designed: the sample statement used only 12 of the supplier's 35 bills, and the "not recorded" bill had the same supplier, date and total as a recorded one, which the rule correctly calls "likely the same". The sample now uses every bill of the supplier, and the "not recorded" bill is moved 20 days and re-priced.
+- Rollback: restore `/opt/accutax-ai-frontend-dist.bak-pre-uploads`, `/root/gemini-brain.conf.pre-uploads` and `/root/accutax-ai.env.pre-uploads`, run `git checkout 00fabc6`, set `UPLOADS_ENABLED=false`.
+- Still open: a disk-use alert for `/var/lib/accutax-uploads`, the answer-time baseline, a look at the live UI in a browser, and the one-week pilot.
+
 ### Exit check (before opening to all users)
 
 - Field accuracy on the eval set: supplier, TRN, number, date, total and VAT correct on at least 18 of 20 files.
