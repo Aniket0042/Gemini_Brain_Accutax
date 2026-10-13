@@ -536,6 +536,14 @@ h1, h2, h3, h4, h5 {
 }
 .markdown-body th:first-child { border-top-left-radius: var(--radius-sm); }
 .markdown-body th:last-child { border-top-right-radius: var(--radius-sm); }
+/* Cells wrap between words, never inside one ("Not claimable yet" must not split as "claimabl/e"). */
+.markdown-body th,
+.markdown-body td {
+  word-break: normal;
+  overflow-wrap: normal;
+  min-width: 7ch;
+}
+.markdown-body th { white-space: nowrap; }
 .markdown-body td {
   padding: 7px 12px;
   border-bottom: 1px solid var(--border-soft);
