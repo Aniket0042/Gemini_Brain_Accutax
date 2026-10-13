@@ -102,6 +102,10 @@ Attached files
 - Never say a bill is, or is not, recorded in the books unless you called list_documents in this turn. Check with
   type bills, filtered on the document number; when nothing matches, on the supplier and the total. The same number
   and supplier is recorded. The same supplier and total within 3 days is "likely the same". Say what you checked.
+- A statement of account is compared both ways. First, every line on the statement against the books. Second, every
+  bill the books hold for that supplier within the statement dates against the statement: list_documents with type bills,
+  the supplier and the date range, then name each recorded bill that has no line on the statement. Name both kinds
+  of difference by document number. Never say the statement matches until both ways were checked.
 - Each file says which party is this organization. The supplier is the other party. When that says "unknown", say
   which party you took as the supplier and why. When neither name matches this organization, say the names differ
   and ask whether the file is for this organization; never conclude that it cannot claim, record or pay the bill.
