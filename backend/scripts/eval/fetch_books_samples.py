@@ -43,7 +43,7 @@ def fetch(org_id: int, limit: int = 100) -> dict:
         "organization_name": (usable[0].get("organization_name") if usable else None) or f"Organization {org_id}",
         "bills": usable[:5],
         "supplier": {"name": name, "currency": supplier_bills[0]["currency"] if supplier_bills else "AED",
-                     "bills": supplier_bills[:12]},
+                     "bills": supplier_bills[:40]},
     }
 
 
