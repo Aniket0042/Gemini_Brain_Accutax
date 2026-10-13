@@ -12,6 +12,7 @@ import { CodeChrome } from './blocks/CodeBlock';
 import { SqlTraceCard } from './SqlTraceCard';
 import { ApiTraceCard } from './ApiTraceCard';
 import { LlmTraceCard } from './LlmTraceCard';
+import { MessageAttachments } from './AttachmentChips';
 import { 
   Sparkles, ShieldAlert, Code2, Layers, 
   ChevronDown, ChevronUp, Copy, Check, 
@@ -182,6 +183,7 @@ const AssistantResponseCard = ({
   activeTenant,
   onOpenCanvas,
   token,
+  onPreviewFile,
 }) => {
   const [copied, copy] = useCopied();
   const [showSql, setShowSql] = useState(false);
@@ -274,6 +276,7 @@ const AssistantResponseCard = ({
                 verification={responseData?.verification}
                 onOpenCanvas={onOpenCanvas}
                 token={token}
+                onPreviewFile={onPreviewFile}
               />
             </div>
           ) : (
@@ -419,11 +422,12 @@ const OrgChips = ({ organizations }) => {
 /**
  * ResponseView — Renders full conversation list sequentially in clean ChatGPT/Gemini layout.
  */
-const UserMessage = ({ msg }) => {
+const UserMessage = ({ msg, token, onPreviewFile }) => {
   const [copied, copy] = useCopied();
   return (
     <div className="turn-wrapper" style={styles.userTurnWrapper}>
       <div style={styles.userMsgWrapper}>
+        <MessageAttachments items={msg.attachments} token={token} onOpen={onPreviewFile} />
         <div style={styles.userBubble}>
           {msg.content}
         </div>
@@ -448,7 +452,7 @@ const UserMessage = ({ msg }) => {
   );
 };
 
-export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant, onRegenerate, onOpenCanvas, token }) => {
+export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant, onRegenerate, onOpenCanvas, token, onPreviewFile }) => {
   if (!conversation || conversation.length === 0) return null;
 
   return (
@@ -457,7 +461,7 @@ export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant
         const isUser = msg.role === 'user';
 
         if (isUser) {
-          return <UserMessage key={idx} msg={msg} />;
+          return <UserMessage key={idx} msg={msg} token={token} onPreviewFile={onPreviewFile} />;
         }
 
         // Assistant Turn
@@ -501,6 +505,7 @@ export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant
             activeTenant={activeTenant}
             onOpenCanvas={onOpenCanvas}
             token={token}
+            onPreviewFile={onPreviewFile}
           />
         );
       })}

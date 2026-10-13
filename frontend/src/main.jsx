@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { Auth0Provider } from '@auth0/auth0-react'
 import App from './App.jsx'
+import { ErrorBoundary } from './components/ErrorBoundary.jsx'
 import './index.css'
 
 const domain = import.meta.env.VITE_AUTH0_DOMAIN;
@@ -15,6 +16,7 @@ const auth0Enabled = window.isSecureContext && domain && clientId;
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
+    <ErrorBoundary>
     {auth0Enabled ? (
       <Auth0Provider
         domain={domain}
@@ -28,5 +30,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     ) : (
       <App />
     )}
+    </ErrorBoundary>
   </React.StrictMode>,
 )

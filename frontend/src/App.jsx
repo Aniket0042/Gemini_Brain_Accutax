@@ -9,7 +9,10 @@ import { Header } from './components/Header';
 import { IntroSuggestions } from './components/IntroSuggestions';
 import { ModelHealthModal } from './components/ModelHealthModal';
 import { AnswerCanvas } from './components/canvas/AnswerCanvas';
-import { fetchQueryResponse, streamQueryResponse, fetchTenants, fetchModelCatalog, fetchSessionMessages, createChatSession, deleteChatSession } from './services/api';
+import { fetchQueryResponse, streamQueryResponse, fetchTenants, fetchModelCatalog, fetchSessionMessages, createChatSession, deleteChatSession, fetchUploadConfig } from './services/api';
+import { chipsFromBlocks, kindGroup } from './services/attachments';
+import { clearUploadBlobs } from './services/uploadBlobs';
+import { FilePreviewPanel, ImageLightbox } from './components/FilePreview';
 import { Trash2 } from 'lucide-react';
 import { isSessionId, newSessionId } from './services/sessionId';
 import { useAuth0 } from '@auth0/auth0-react';
@@ -58,7 +61,13 @@ function mapWidgetConversation(turns = []) {
 function mapApiTranscript(messages = [], contextWindow = null) {
   const mapped = messages.map((msg) => {
     if (msg.role === 'user') {
-      return { role: 'user', content: msg.content, timestamp: msg.created_at ? Date.parse(msg.created_at) : Date.now() };
+      const attachments = chipsFromBlocks(msg.blocks); // the files this question carried
+      return {
+        role: 'user',
+        content: msg.content,
+        timestamp: msg.created_at ? Date.parse(msg.created_at) : Date.now(),
+        ...(attachments.length ? { attachments } : {}),
+      };
     }
     const blocks = Array.isArray(msg.blocks) ? msg.blocks : [];
     return {
@@ -293,6 +302,8 @@ export default function App() {
   // only one model is offered. Effort is not user-selectable.
   const [brief, setBrief] = useState(() => localStorage.getItem('accutax_brief') === '1');
   const [modelCatalog, setModelCatalog] = useState(null);
+  // Whether this user may attach files, and the limits (GET /uploads/config). Off until the server says on.
+  const [uploadConfig, setUploadConfig] = useState({ enabled: false });
   const [model, setModel] = useState(() => {
     try {
       return localStorage.getItem('accutax_model') || '';
@@ -304,6 +315,9 @@ export default function App() {
   // Conversation History List state
   const [conversation, setConversation] = useState([]);
   const [canvasOpen, setCanvasOpen] = useState(false);
+  // A file attached in chat that is open for preview: a document beside the chat, an image over it.
+  const [previewFile, setPreviewFile] = useState(null);
+  const [lightboxFile, setLightboxFile] = useState(null);
   const [canvasSpec, setCanvasSpec] = useState(null);
   const [canvasArtifact, setCanvasArtifact] = useState(null);
   const [canvasArtifacts, setCanvasArtifacts] = useState([]);
@@ -1090,6 +1104,28 @@ export default function App() {
     };
   }, [currentUser?.access_token]);
 
+  useEffect(() => {
+    const token = currentUser?.access_token;
+    if (!token) {
+      setUploadConfig({ enabled: false });
+      return undefined;
+    }
+    let cancelled = false;
+    fetchUploadConfig(token).then((config) => {
+      if (!cancelled) setUploadConfig(config || { enabled: false });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.access_token]);
+
+  // A different chat: its files are not this chat's. Close any preview and forget the files fetched for it.
+  useEffect(() => {
+    setPreviewFile(null);
+    setLightboxFile(null);
+    clearUploadBlobs();
+  }, [widgetSessionId]);
+
   const handleBriefChange = (on) => {
     setBrief(Boolean(on));
     localStorage.setItem('accutax_brief', on ? '1' : '0');
@@ -1122,7 +1158,12 @@ export default function App() {
     setHistoryDirty(true); // real activity — this session now deserves its position bumped
 
     // 1. Add User Turn & Assistant Loading Placeholder to conversation
-    const userTurn = { role: 'user', content: queryText, timestamp: Date.now() };
+    const userTurn = {
+      role: 'user',
+      content: queryText,
+      timestamp: Date.now(),
+      ...(overrides.attachmentChips?.length ? { attachments: overrides.attachmentChips } : {}),
+    };
     const assistantTurn = {
       role: 'assistant',
       isStreaming: true,
@@ -1192,6 +1233,7 @@ export default function App() {
       session_id: widgetSessionId || undefined,
       ui_context: uiContext,
       brief: overrides.brief ?? brief,
+      ...(overrides.attachments?.length ? { attachments: overrides.attachments } : {}),
       // Without a picker, "auto": the server uses the default model.
       model: (modelCatalog && !modelCatalog.picker_hidden && model) || 'auto',
     };
@@ -1470,6 +1512,11 @@ export default function App() {
   const hasStartedChat = conversation.length > 0;
   const userName = currentUser?.email?.split('@')[0] || 'there';
   const showCanvas = canvasOpen && (canvasSpec || canvasArtifact);
+  const showFilePreview = Boolean(previewFile);
+  const handlePreviewFile = (item) => {
+    if (kindGroup(item.kind) === 'image') setLightboxFile(item);
+    else setPreviewFile(item);
+  };
   // Most recent assistant turn's context_window snapshot (cumulative session
   // usage against the fixed budget) — scan from the end since not every turn
   // necessarily carries one (e.g. an error envelope built without calling run()).
@@ -1501,7 +1548,7 @@ export default function App() {
         />
       </div>
 
-      <div className={`main-content${showCanvas ? ' has-canvas' : ''}`}>
+      <div className={`main-content${showCanvas || showFilePreview ? ' has-canvas' : ''}`}>
         <div className="chat-column">
         <Header
           sessionTitle={hasStartedChat ? conversation[0].content : ''}
@@ -1538,6 +1585,7 @@ export default function App() {
                   activeTenant={activeTenant}
                   onRegenerate={handleSubmitQuery}
                   token={currentUser?.access_token}
+                  onPreviewFile={handlePreviewFile}
                   onOpenCanvas={(block) => {
                     if (block?.spec) setCanvasSpec(block.spec);
                     setCanvasOpen(true);
@@ -1564,6 +1612,11 @@ export default function App() {
             catalog={modelCatalog}
             model={model}
             onModelChange={handleModelChange}
+            uploadConfig={uploadConfig}
+            sessionId={widgetSessionId}
+            orgIds={scopeOrgIds}
+            token={currentUser?.access_token || ''}
+            onPreviewFile={handlePreviewFile}
           />
           <div style={styles.composerFooter}>
             <p style={styles.composerFooterText}>
@@ -1577,7 +1630,17 @@ export default function App() {
       </div>
         </div>
 
-        {showCanvas && (
+        {showFilePreview && (
+          <FilePreviewPanel
+            key={previewFile.id || previewFile.name}
+            item={previewFile}
+            token={currentUser?.access_token}
+            width={canvasWidth}
+            onWidthChange={setCanvasWidth}
+            onClose={() => setPreviewFile(null)}
+          />
+        )}
+        {!showFilePreview && showCanvas && (
           <AnswerCanvas
             spec={canvasSpec}
             artifact={canvasArtifact}
@@ -1587,6 +1650,9 @@ export default function App() {
             onWidthChange={setCanvasWidth}
             onClose={() => setCanvasOpen(false)}
           />
+        )}
+        {lightboxFile && (
+          <ImageLightbox item={lightboxFile} token={currentUser?.access_token} onClose={() => setLightboxFile(null)} />
         )}
 
       {/* Tenant Authentication & Switcher Modal */}

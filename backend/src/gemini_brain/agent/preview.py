@@ -41,10 +41,12 @@ def step_label(name: str, params: Any) -> str:
 def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[], Dict[int, Dict[str, Any]]], *,
            session_id: Optional[str], user_id: int, db_name: str = "",
            progress: Optional[Callable[[str], None]] = None, brief: bool = False,
-           model_key: Optional[str] = None, allowed_models: Optional[Sequence[str]] = None) -> Dict[str, Any]:
+           model_key: Optional[str] = None, allowed_models: Optional[Sequence[str]] = None,
+           documents: Optional[Sequence[Any]] = None) -> Dict[str, Any]:
     """Answer with the agent and save the turn. Returns a QueryResponse-shaped dict. Never raises.
     `model_key`: the model the user picked ("auto" or None: the thread's last pick, else the default);
-    `allowed_models`: the keys this user may pick (agent/models.allowed), checked here."""
+    `allowed_models`: the keys this user may pick (agent/models.allowed), checked here.
+    `documents`: the files attached to this question (uploads.context.resolve), already checked."""
     from gemini_brain.agent import models as agent_models
     from gemini_brain.agent.loop import run_agent
 
@@ -63,6 +65,8 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
         logger.warning("agent preview: organization names unavailable: %s", e)
         meta = {}
 
+    docs = list(documents or [])
+    doc_prompt, doc_ids, doc_evidence = _document_context(docs, thread, meta, orgs)
     on_tool = (lambda name, params: progress(step_label(name, params))) if progress else None
     delivery = delivery_for(question, thread)
     attached = attachment(question, delivery)
@@ -70,18 +74,23 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
     try:
         result = run_agent(question, orgs, meta, history=thread.messages, turn_specs=thread.specs,
                            earlier_figures=thread.figures, subject=f"agent-preview:{user_id}", progress=on_tool,
-                           brief=brief, attachment=attached, **model_ids)
+                           brief=brief, attachment=attached, documents=doc_prompt, document_ids=doc_ids,
+                           document_evidence=doc_evidence, user_id=user_id, session_id=session_id, **model_ids)
     finally:
         traces = _collect_traces(rid)
     data = getattr(result, "data", None) or []
     answer_text = result.answer or "I could not produce an answer for that request. Please try again."
     answer_text = links.link_documents(answer_text, links.document_links(data))
-    blocks = tiles.kpi_tiles(data) + list(getattr(result, "blocks", None) or []) + links.guide_buttons(data)
+    cards = _document_cards(docs)
+    blocks = cards + tiles.kpi_tiles(data) + list(getattr(result, "blocks", None) or []) + links.guide_buttons(data)
     blocks += _files(question, result, orgs, meta, user_id=user_id, session_id=session_id, answer_text=answer_text,
                      delivery=delivery)
     if session_id:
-        if _save_turn(session_id, user_id, orgs, question, answer_text, db_name, blocks):
-            record_turn(session_id, question, result.tool_calls, delivery, data, db_name, model_key=model.key)
+        if _save_turn(session_id, user_id, orgs, question, answer_text, db_name, blocks,
+                      user_blocks=[_chips(docs)] if docs else None):
+            record_turn(session_id, question, result.tool_calls, delivery, data, db_name, model_key=model.key,
+                        documents=docs)
+            _mark_attached(docs)
 
     usage = dict(result.usage or {})
     usage["elapsed_seconds"] = round(time.monotonic() - started, 2)
@@ -109,7 +118,7 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
                         for call in result.tool_calls],
     }
     answer_log.record(question, orgs, user_id=user_id, session_id=session_id, brief=brief, attachment=attached,
-                      result=result, response=response)
+                      result=result, response=response, documents=_log_documents(docs))
     return response
 
 
@@ -286,6 +295,8 @@ class Thread:
     delivery: Optional[Dict[str, Any]] = None
     figures: List[float] = field(default_factory=list)
     model_key: Optional[str] = None
+    #: Files attached earlier in this thread that still exist: id -> short summary (uploads.context.state_entry).
+    documents: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
 
 def usable_session_id(session_id: Optional[str]) -> Optional[str]:
@@ -330,14 +341,17 @@ def thread_context(session_id: Optional[str], organization_ids: Sequence[int], u
     except Exception as e:  # noqa: BLE001
         logger.warning("agent preview: no history for %s: %s", session_id, e)
         messages = []
+    remembered = _remembered_documents(state)
+    figures = history.earlier_figures(state) + [
+        float(e[k]) for e in remembered.values() for k in ("subtotal", "tax", "total") if isinstance(e.get(k), (int, float))]
     return Thread(messages=list(messages or []), specs=list(state.get(history.STATE_KEY) or []),
-                  delivery=state.get(history.DELIVERY_KEY), figures=history.earlier_figures(state),
-                  model_key=state.get(MODEL_STATE_KEY))
+                  delivery=state.get(history.DELIVERY_KEY), figures=figures,
+                  model_key=state.get(MODEL_STATE_KEY), documents=remembered)
 
 
 def record_turn(session_id: str, question: str, tool_calls: Sequence[Dict[str, Any]], delivery: Any = None,
                 data: Optional[Sequence[Dict[str, Any]]] = None, db_name: str = "",
-                model_key: Optional[str] = None) -> None:
+                model_key: Optional[str] = None, documents: Optional[Sequence[Any]] = None) -> None:
     """Save what this turn queried, its chart or file request, the figures it fetched and the model that
     answered, for later turns."""
     try:
@@ -349,6 +363,9 @@ def record_turn(session_id: str, question: str, tool_calls: Sequence[Dict[str, A
         state[history.DELIVERY_KEY] = _delivery_state(delivery)
         if model_key:
             state[MODEL_STATE_KEY] = model_key
+        if documents:
+            from gemini_brain.uploads import context as upload_context
+            state = upload_context.add_to_state(state, documents)
         update_state_by_session(session_id, state, db_name=db_name)
     except Exception as e:  # noqa: BLE001 - later turns only lose some context
         logger.warning("agent preview: turn context not saved for %s: %s", session_id, e)
@@ -372,8 +389,64 @@ def _delivery_state(delivery: Any) -> Optional[Dict[str, Any]]:
     return as_state(delivery)
 
 
+def _document_context(docs: Sequence[Any], thread: "Thread", meta: Dict[int, Dict[str, Any]],
+                      orgs: Sequence[int]) -> tuple:
+    """(prompt block, ids read_document may serve, verifier evidence) for this question's files and the
+    thread's earlier ones. ("", (), []) when the chat has no files."""
+    if not docs and not thread.documents:
+        return "", (), []
+    from gemini_brain.uploads import context as upload_context
+    names = upload_context.own_names(meta, orgs)
+    block = upload_context.prompt_block(docs, names, earlier=thread.documents)
+    ids = tuple(dict.fromkeys([d.rec.id for d in docs] + list(thread.documents)))
+    return block, ids, upload_context.evidence(docs, thread.documents)
+
+
+def _remembered_documents(state: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    try:
+        from gemini_brain.uploads import context as upload_context
+        return upload_context.remembered(state)
+    except Exception as e:  # noqa: BLE001 - the thread still answers without its file summaries
+        logger.warning("agent preview: remembered files not read: %s", e)
+        return {}
+
+
+def _document_cards(docs: Sequence[Any]) -> List[Dict[str, Any]]:
+    """A card per file of this question, under the answer. [] when there are none or the cards cannot be built."""
+    if not docs:
+        return []
+    try:
+        from gemini_brain.uploads.blocks import documents_block
+        block = documents_block(docs)
+        return [block] if block else []
+    except Exception as e:  # noqa: BLE001 - the answer is complete without the cards
+        logger.warning("agent preview: file cards not built: %s", e)
+        return []
+
+
+def _chips(docs: Sequence[Any]) -> Dict[str, Any]:
+    from gemini_brain.uploads import context as upload_context
+    return upload_context.chips(docs)
+
+
+def _mark_attached(docs: Sequence[Any]) -> None:
+    """The files were sent with a question: from now on they live as long as the thread."""
+    try:
+        from gemini_brain.uploads import store
+        store.mark_attached([d.rec.id for d in docs])
+    except Exception as e:  # noqa: BLE001 - an unmarked draft only expires early
+        logger.warning("agent preview: attachments not marked as sent: %s", e)
+
+
+def _log_documents(docs: Sequence[Any]) -> Optional[List[Dict[str, Any]]]:
+    return [{"id": d.rec.id, "kind": d.rec.kind, "type": d.extract.document_type, "source": d.payload.get("source"),
+             "cost_usd": (d.payload.get("usage") or {}).get("cost_usd"),
+             "checks_failed": d.rec.checks_failed} for d in docs] or None
+
+
 def _save_turn(session_id: str, user_id: int, orgs: List[int], question: str, text: str, db_name: str,
-               blocks: Optional[List[Dict[str, Any]]] = None) -> bool:
+               blocks: Optional[List[Dict[str, Any]]] = None,
+               user_blocks: Optional[List[Dict[str, Any]]] = None) -> bool:
     """Save the question and answer to the thread. False when the turn was not saved."""
     try:
         from gemini_brain.memory.session_memory import ensure_session, save_message_by_session
@@ -381,7 +454,10 @@ def _save_turn(session_id: str, user_id: int, orgs: List[int], question: str, te
         if not ensure_session(session_id, user_id, db_name=db_name, **scope):
             logger.warning("agent preview: session %s refused this scope; turn not saved", session_id)
             return False
-        save_message_by_session(session_id, "user", question, db_name=db_name)
+        if user_blocks:  # the file chips, so the thread shows them when it is reopened
+            save_message_by_session(session_id, "user", question, db_name=db_name, blocks=user_blocks)
+        else:
+            save_message_by_session(session_id, "user", question, db_name=db_name)
         save_message_by_session(session_id, "assistant", text, db_name=db_name)
         if blocks:
             from gemini_brain.memory.session_memory import update_last_assistant_blocks

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import date
+from typing import Optional
 
 from gemini_brain.vat_kb.calc import calculations_for, monthly_equivalents
 from gemini_brain.vat_kb.retrieval import SearchResult
@@ -143,9 +144,11 @@ def _source_line(n: int, chunk) -> str:
     return " | ".join(parts)
 
 
-def prompt_block(question: str, result: SearchResult) -> str:
-    """System-prompt section: answer rules, exact calculations, and the sources grouped by number."""
-    numbers = {chunk.url: n for n, chunk in enumerate(result.sources(), 1)}
+def prompt_block(question: str, result: SearchResult, numbers: Optional[dict] = None) -> str:
+    """System-prompt section: answer rules, exact calculations, and the sources grouped by number.
+    `numbers`: url -> number to use instead of 1, 2, 3 ... (an answer that searched more than once numbers all its
+    sources in one list, so [2] is the same document wherever it is cited)."""
+    numbers = numbers or {chunk.url: n for n, chunk in enumerate(result.sources(), 1)}
     grouped: dict[int, list] = {}
     firsts: dict[int, object] = {}
     for hit in result.hits:
@@ -233,7 +236,7 @@ def tidy_answer(answer: str) -> str:
     return "\n\n".join(paras) if paras else answer
 
 
-def sources_block(question: str, result: SearchResult) -> dict:
+def sources_block(question: str, result: SearchResult, numbers: Optional[dict] = None) -> dict:
     """The cited FTA documents for the citation chips and the sources list under the answer.
 
     Built from the document list and the retrieved passages, never from model output, so a title
@@ -243,7 +246,8 @@ def sources_block(question: str, result: SearchResult) -> dict:
     for hit in result.hits:                       # hits are best-first: keep each document's best passage
         best.setdefault(hit.chunk.url, hit)
     sources, rows = [], []
-    for n, chunk in enumerate(result.sources(), 1):
+    for index, chunk in enumerate(result.sources(), 1):
+        n = numbers[chunk.url] if numbers else index
         issued = chunk.issue_date if chunk.issue_date and chunk.issue_date.upper() != "NA" else ""
         sources.append({
             "n": n,

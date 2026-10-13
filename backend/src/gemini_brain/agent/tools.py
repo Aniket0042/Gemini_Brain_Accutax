@@ -12,9 +12,10 @@ from __future__ import annotations
 import concurrent.futures
 import copy
 import logging
+import re
 import time
-from dataclasses import dataclass
-from typing import Any, Dict, List, Sequence, Tuple
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from gemini_brain.config.settings import settings
 from gemini_brain.semantic import cash_forecast, list_documents, query_metrics
@@ -67,11 +68,40 @@ APP_GUIDE_SPEC = {"toolSpec": {
 }}
 
 
+READ_DOCUMENT_SPEC = {"toolSpec": {
+    "name": "read_document",
+    "description": (
+        "More of a file the user attached in this chat than the question's block shows: the rest of a long text, "
+        "all the lines of a bill or statement, or the fields and checks again. Only for files of this chat, by id."
+    ),
+    "inputSchema": {"json": {
+        "type": "object",
+        "properties": {
+            "document_id": {"type": "string", "description": "The id of the attached file."},
+            "part": {"type": "string", "enum": ["text", "items", "statement_lines", "fields"]},
+            "offset": {"type": "integer", "description": "Where to start: a character for text, a row for lines."},
+            "limit": {"type": "integer", "description": "How much to return; capped."},
+        },
+        "required": ["document_id", "part"],
+    }},
+}}
+
+
 @dataclass
 class ToolContext:
     organization_ids: List[int]
     subject: str
     deadline: float  # time.monotonic() value for the whole request
+    #: For read_document: whose chat this is and which attached files it holds. Empty = the tool is not offered.
+    user_id: Optional[int] = None
+    session_id: Optional[str] = None
+    document_ids: Sequence[str] = ()
+    #: The FTA documents this request's VAT searches found, numbered once for the whole answer: url -> n, the source
+    #: entries (as vat_kb.answer.sources_block makes them) and the numbers in their passages. `fta_block()` turns them
+    #: into the sources block under the answer, so a [2] in the text is always the same document.
+    fta_numbers: Dict[str, int] = field(default_factory=dict)
+    fta_sources: List[Dict[str, Any]] = field(default_factory=list)
+    fta_evidence: List[float] = field(default_factory=list)
 
     def scope(self, requested: Any) -> List[int]:
         """The selected organizations, narrowed to the ones the model named. Never widened."""
@@ -106,7 +136,10 @@ def specs(ctx: ToolContext) -> List[Dict[str, Any]]:
             out.append(_with_scope(cash_forecast.tool_spec()))
     except Exception as e:  # noqa: BLE001 - the agent still answers law and how-to questions
         logger.warning("agent: Cube catalog unavailable, figure tools left out: %s", e)
-    return out + [VAT_KB_SPEC, APP_GUIDE_SPEC]
+    out += [VAT_KB_SPEC, APP_GUIDE_SPEC]
+    if ctx.document_ids:
+        out.append(READ_DOCUMENT_SPEC)
+    return out
 
 
 def execute(name: str, params: Any, ctx: ToolContext) -> Tuple[Dict[str, Any], bool]:
@@ -122,6 +155,8 @@ def execute(name: str, params: Any, ctx: ToolContext) -> Tuple[Dict[str, Any], b
             return _search_vat_kb(params, ctx), True
         if name == "app_guide":
             return _app_guide(params), True
+        if name == "read_document":
+            return _read_document(params, ctx), True
         return {"error": f"Unknown tool {name!r}"}, False
     except ToolInputError as e:
         return {"error": str(e)}, False
@@ -131,6 +166,25 @@ def execute(name: str, params: Any, ctx: ToolContext) -> Tuple[Dict[str, Any], b
     except Exception as e:  # noqa: BLE001
         logger.warning("agent: tool %s failed: %s", name, e, exc_info=True)
         return {"error": f"The {name} tool failed. Tell the user this part could not be answered."}, False
+
+
+def _read_document(params: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
+    """More of an attached file. Only files of this chat and this user; anything else is a tool error."""
+    from gemini_brain.uploads import context as upload_context
+    from gemini_brain.uploads import store
+
+    upload_id = str(params.get("document_id") or "").strip()
+    if upload_id not in set(ctx.document_ids) or ctx.user_id is None:
+        raise ToolInputError("document_id is not a file attached in this chat")
+    rec = store.get_for_user(upload_id, ctx.user_id, session_id=ctx.session_id, action="read_document")
+    payload = store.load_extract(upload_id) if rec is not None else None
+    if rec is None or payload is None:
+        raise ToolInputError("that file is no longer available")
+    try:
+        return upload_context.read_part(upload_context.AttachedDocument(rec, payload), str(params.get("part") or ""),
+                                        params.get("offset") or 0, params.get("limit"))
+    except (ValueError, TypeError) as e:
+        raise ToolInputError(str(e)) from None
 
 
 def _question(params: Dict[str, Any]) -> str:
@@ -157,8 +211,16 @@ def _search_vat_kb(params: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
     if not result.hits:
         return {"available": True, "confident": False,
                 "note": "No FTA source matches this question. Say so; do not answer from memory."}
-    from gemini_brain.vat_kb.answer import prompt_block
-    return {"available": True, "confident": bool(result.confident), "sources_and_rules": prompt_block(question, result)}
+    from gemini_brain.vat_kb.answer import prompt_block, sources_block
+    # One numbering for every search of this request: a document found twice keeps its number.
+    for chunk in result.sources():
+        ctx.fta_numbers.setdefault(chunk.url, len(ctx.fta_numbers) + 1)
+    block = sources_block(question, result, ctx.fta_numbers)
+    known = {s["n"] for s in ctx.fta_sources}
+    ctx.fta_sources += [s for s in block["sources"] if s["n"] not in known]
+    ctx.fta_evidence += block["evidence_numbers"]
+    return {"available": True, "confident": bool(result.confident),
+            "sources_and_rules": prompt_block(question, result, ctx.fta_numbers)}
 
 
 def _app_guide(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -172,6 +234,23 @@ def _app_guide(params: Dict[str, Any]) -> Dict[str, Any]:
     else:
         out["guide"] = guide_context_for(question)
     return out
+
+
+_CITE = re.compile(r"\[(\d{1,2}(?:\s*,\s*\d{1,2})*)\]")
+
+
+def fta_block(ctx: ToolContext, answer: str) -> Optional[Dict[str, Any]]:
+    """The sources block for an answer that cites FTA documents found by search_vat_kb: only the documents it cites,
+    under their numbers. None when the answer cites none (or the request made no VAT search)."""
+    if not ctx.fta_sources or not answer:
+        return None
+    cited = {int(n) for m in _CITE.finditer(answer) for n in re.split(r"\s*,\s*", m.group(1))}
+    sources = sorted((s for s in ctx.fta_sources if s["n"] in cited), key=lambda s: s["n"])
+    if not sources:
+        return None
+    rows = [f"{s['n']}. [{s['title']}]({s['url']})" + (f" (issued {s['issued']})" if s.get("issued") else "") for s in sources]
+    return {"type": "fta_sources", "authority": "Federal Tax Authority", "jurisdiction": "UAE", "sources": sources,
+            "evidence_numbers": sorted(set(ctx.fta_evidence)), "text": "**Sources — Federal Tax Authority**\n\n" + "\n".join(rows)}
 
 
 def result_rows(results: Sequence[Dict[str, Any]]) -> int:

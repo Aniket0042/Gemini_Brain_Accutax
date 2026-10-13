@@ -3,6 +3,8 @@
  * Handles JWT authentication, query submission, live SSE streaming, and model health diagnostics.
  */
 
+import { uploadErrorMessage } from './attachments';
+
 export const loginUser = async (email, password) => {
   const response = await fetch('/api/v1/auth/login-json', {
     method: 'POST',
@@ -89,14 +91,20 @@ export const streamQueryResponse = (payload, onChunk, onError, onComplete, token
         if (response.status === 401) {
           localStorage.removeItem('gemini_brain_user');
         }
-        const errorData = await response.json().catch(() => null);
+        // Read the body once: a second read of a used body fails.
+        const raw = await response.text().catch(() => '');
+        let errorData = null;
+        try { errorData = JSON.parse(raw); } catch { /* not JSON */ }
         if (errorData && errorData.notice) {
           onChunk({ final_result: errorData });
           if (onComplete) onComplete();
           return;
         }
-        const errorText = await response.text().catch(() => response.statusText);
-        throw new Error(`Streaming failed (${response.status}): ${errorText}`);
+        // A refused attachment (404, 409, 422 ...) comes with a plain message for the user.
+        const detail = errorData && errorData.detail;
+        if (typeof detail === 'string' && detail) throw new Error(detail);
+        if (detail && typeof detail === 'object' && detail.message) throw new Error(String(detail.message));
+        throw new Error(`Streaming failed (${response.status}): ${raw || response.statusText}`);
       }
 
       const reader = response.body.getReader();
@@ -256,3 +264,68 @@ export const deleteChatSession = async (sessionId, token = '') => {
   throw new Error((data && data.detail) || 'Failed to delete chat session');
 };
 
+// ── Files attached in chat (docs/DOCUMENT_UPLOAD_PLAN.md) ────────────────────
+
+const authHeaders = (token) => (token ? { Authorization: `Bearer ${token}` } : {});
+
+// What the composer needs: whether this user may attach files, and the limits. A failure means "off".
+export const fetchUploadConfig = async (token = '') => {
+  try {
+    const response = await fetch('/api/v1/uploads/config', { headers: { Accept: 'application/json', ...authHeaders(token) } });
+    if (!response.ok) return { enabled: false };
+    return await response.json();
+  } catch {
+    return { enabled: false };
+  }
+};
+
+const failure = (status, body) => {
+  const err = new Error(uploadErrorMessage(status, body));
+  err.status = status;
+  err.code = body && body.detail && body.detail.code ? body.detail.code : '';
+  return err;
+};
+
+// Upload one file with progress (fetch has none). Returns { promise, abort }; the promise resolves to the
+// server's UploadInfo and rejects with an Error whose message is for the user.
+export const uploadFile = (file, { sessionId, organizationIds = [], token = '', onProgress } = {}) => {
+  const xhr = new XMLHttpRequest();
+  const promise = new Promise((resolve, reject) => {
+    xhr.open('POST', '/api/v1/uploads');
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.setRequestHeader('Accept', 'application/json');
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
+    };
+    xhr.onload = () => {
+      let body = null;
+      try { body = JSON.parse(xhr.responseText); } catch { /* not JSON */ }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(body);
+      else reject(failure(xhr.status, body));
+    };
+    xhr.onerror = () => reject(failure(0, null));
+    xhr.onabort = () => reject(Object.assign(new Error('Upload cancelled.'), { aborted: true }));
+    const form = new FormData();
+    form.append('file', file, file.name);
+    form.append('session_id', sessionId);
+    form.append('organization_ids', (organizationIds || []).join(','));
+    xhr.send(form);
+  });
+  return { promise, abort: () => xhr.abort() };
+};
+
+export const fetchUpload = async (uploadId, token = '') => {
+  const response = await fetch(`/api/v1/uploads/${encodeURIComponent(uploadId)}`, {
+    headers: { Accept: 'application/json', ...authHeaders(token) },
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw failure(response.status, body);
+  return body;
+};
+
+// Removes a file that was not sent yet. Best effort: a draft the server keeps expires after a day.
+export const deleteUpload = async (uploadId, token = '') => {
+  try {
+    await fetch(`/api/v1/uploads/${encodeURIComponent(uploadId)}`, { method: 'DELETE', headers: authHeaders(token) });
+  } catch { /* ignore */ }
+};

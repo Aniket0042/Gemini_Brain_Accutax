@@ -110,7 +110,7 @@ function formatGenerated(iso) {
   }
 }
 
-function CanvasResizer({ width, onWidthChange }) {
+export function CanvasResizer({ width, onWidthChange }) {
   const dragRef = useRef(null);
 
   const onPointerDown = (event) => {

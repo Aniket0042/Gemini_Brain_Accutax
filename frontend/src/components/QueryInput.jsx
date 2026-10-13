@@ -1,6 +1,9 @@
 import React, { useState, useRef, useLayoutEffect } from 'react';
 import { ArrowUp, Square, Paperclip } from 'lucide-react';
 import { ModelPicker } from './ModelPicker';
+import { AttachmentChips, StarterPrompts } from './AttachmentChips';
+import { useAttachments } from '../hooks/useAttachments';
+import { attachmentsToSend, starterPrompts, DEFAULT_ACCEPT } from '../services/attachments';
 
 /**
  * QueryInput — the chat composer.
@@ -15,6 +18,10 @@ import { ModelPicker } from './ModelPicker';
  * Both shapes are one CSS grid with the same three children; only the grid
  * areas change. The textarea is never re-mounted, so switching shape keeps
  * the cursor position and focus.
+ *
+ * Files: the paperclip, drag and drop onto the composer, and pasting an image attach files to the
+ * question (docs/DOCUMENT_UPLOAD_PLAN.md). Each is uploaded at once and read in the background; the
+ * question can be sent when every file is ready. The paperclip is hidden when uploads are off.
  */
 export const QueryInput = ({
   onSubmitQuery,
@@ -26,8 +33,16 @@ export const QueryInput = ({
   catalog = null,
   model = '',
   onModelChange = () => {},
+  uploadConfig = null,
+  sessionId = null,
+  orgIds = [],
+  token = '',
+  onPreviewFile = () => {},
 }) => {
   const [prompt, setPrompt] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef(null);
+  const attach = useAttachments({ config: uploadConfig, sessionId, orgIds, token });
   const [isFocused, setIsFocused] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const textareaRef = useRef(null);
@@ -75,22 +90,57 @@ export const QueryInput = ({
 
   const handleSubmit = (e) => {
     if (e) e.preventDefault();
-    if (!prompt.trim() || isLoading) return;
-    onSubmitQuery(prompt, { brief });
+    if (!prompt.trim() || isLoading || attach.blocked) return;
+    const files = attachmentsToSend(attach.items);
+    onSubmitQuery(prompt, files.ids.length ? { brief, attachments: files.ids, attachmentChips: files.chips } : { brief });
     setPrompt('');
+    attach.clear();
   };
 
   const hasText = Boolean(prompt.trim());
+  const hasTiles = attach.items.length > 0;   // files in the box: its shape changes
+  const canSend = hasText && !attach.blocked;
+  const starters = hasText ? [] : starterPrompts(attach.items);
+
+  const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
+  const dragHandlers = attach.enabled ? {
+    onDragEnter: (e) => { if (hasFiles(e)) { e.preventDefault(); setIsDragging(true); } },
+    onDragOver: (e) => { if (hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } },
+    onDragLeave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setIsDragging(false); },
+    onDrop: (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      setIsDragging(false);
+      attach.addFiles(e.dataTransfer.files);
+    },
+  } : {};
+
+  // A pasted screenshot is a file; pasted text (even with a picture beside it, as from Excel) stays text.
+  const handlePaste = (e) => {
+    if (!attach.enabled) return;
+    const files = Array.from(e.clipboardData?.files || []);
+    if (files.length === 0 || e.clipboardData.getData('text/plain')) return;
+    e.preventDefault();
+    attach.addFiles(files);
+  };
 
   return (
     <div style={isHero ? styles.heroWrapper : styles.compactWrapper}>
-      <form onSubmit={handleSubmit} style={styles.form}>
+      <form onSubmit={handleSubmit} style={styles.form} {...dragHandlers}>
+        <StarterPrompts prompts={starters} onPick={(text) => { setPrompt(text); textareaRef.current?.focus(); }} />
+        {attach.message && (
+          <div className="attach-message" role="alert">
+            <span>{attach.message}</span>
+            <button type="button" onClick={attach.dismissMessage} aria-label="Dismiss">×</button>
+          </div>
+        )}
         <div
-          className={`composer${expanded ? ' is-expanded' : ''}`}
+          className={`composer${expanded ? ' is-expanded' : ''}${isDragging ? ' is-dragging' : ''}`}
           style={{
             ...styles.composer,
             ...(expanded ? styles.composerExpanded : styles.composerCollapsed),
             ...(isHero && !expanded ? styles.heroCollapsed : {}),
+            ...(hasTiles ? withFilesStyle(expanded) : {}),
             borderColor: isFocused ? 'var(--border-strong)' : 'var(--border)',
             boxShadow: isFocused ? '0 0 0 3px rgba(var(--ink-rgb), 0.06)' : '0 2px 8px rgba(0,0,0,0.05)',
           }}
@@ -99,9 +149,35 @@ export const QueryInput = ({
             if (e.target === e.currentTarget) textareaRef.current?.focus();
           }}
         >
-          <button type="button" style={{ ...styles.attachBtn, gridArea: 'attach' }} title="Attach file">
-            <Paperclip size={17} color="var(--ink-soft)" />
-          </button>
+          {hasTiles && (
+            <div style={{ gridArea: 'files', minWidth: 0 }}>
+              <AttachmentChips items={attach.items} token={token} onRemove={attach.remove} onOpen={onPreviewFile} />
+            </div>
+          )}
+          {attach.enabled && (
+            <>
+              <button
+                type="button"
+                style={{ ...styles.attachBtn, gridArea: 'attach' }}
+                title={`Attach a file (PDF, photo, Word, Excel or CSV; up to ${uploadConfig.max_files || 3} files)`}
+                aria-label="Attach a file"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Paperclip size={17} color="var(--ink-soft)" />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                hidden
+                accept={(uploadConfig.accept && uploadConfig.accept.length ? uploadConfig.accept : DEFAULT_ACCEPT).join(',')}
+                onChange={(e) => {
+                  attach.addFiles(e.target.files);
+                  e.target.value = ''; // the same file can be chosen again after it was removed
+                }}
+              />
+            </>
+          )}
 
           <textarea
             ref={textareaRef}
@@ -112,6 +188,7 @@ export const QueryInput = ({
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
             onChange={(e) => setPrompt(e.target.value)}
+            onPaste={handlePaste}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -156,16 +233,16 @@ export const QueryInput = ({
                 type="submit"
                 style={{
                   ...styles.sendCircle,
-                  backgroundColor: hasText ? 'var(--accent)' : 'var(--surface-2)',
-                  color: hasText ? '#ffffff' : 'var(--ink-faint)',
-                  cursor: hasText ? 'pointer' : 'default',
-                  boxShadow: hasText ? '0 2px 8px var(--accent-glow)' : 'none',
-                  opacity: hasText ? 1 : 0.6,
+                  backgroundColor: canSend ? 'var(--accent)' : 'var(--surface-2)',
+                  color: canSend ? '#ffffff' : 'var(--ink-faint)',
+                  cursor: canSend ? 'pointer' : 'default',
+                  boxShadow: canSend ? '0 2px 8px var(--accent-glow)' : 'none',
+                  opacity: canSend ? 1 : 0.6,
                 }}
-                disabled={!hasText}
-                title={hasText ? 'Send Message (Enter)' : 'Enter your question'}
+                disabled={!canSend}
+                title={attach.blocked && hasText ? attach.blockedReason : hasText ? 'Send Message (Enter)' : 'Enter your question'}
               >
-                <ArrowUp size={16} strokeWidth={2.5} color={hasText ? '#ffffff' : 'var(--ink-faint)'} />
+                <ArrowUp size={16} strokeWidth={2.5} color={canSend ? '#ffffff' : 'var(--ink-faint)'} />
               </button>
             )}
           </div>
@@ -174,6 +251,15 @@ export const QueryInput = ({
     </div>
   );
 };
+
+/** With files in it the box is a rounded rectangle with the tiles in a row on top, as in a chat app. */
+const withFilesStyle = (expanded) => ({
+  gridTemplateAreas: expanded
+    ? '"files files files" "text text text" "attach . actions"'
+    : '"files files files" "attach text actions"',
+  borderRadius: '24px',
+  padding: '12px 8px 8px 10px',
+});
 
 const styles = {
   heroWrapper: {

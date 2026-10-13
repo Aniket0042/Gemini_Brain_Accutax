@@ -10,6 +10,7 @@ import { ArtifactBlock } from './ArtifactBlock';
 import { ActionButtonBlock } from './ActionButtonBlock';
 import { CollapsibleGroupBlock } from './CollapsibleGroupBlock';
 import { FtaSourcesBlock } from './FtaSourcesBlock';
+import { DocumentCardsBlock } from './DocumentCardsBlock';
 
 /**
  * BLOCK_REGISTRY — the one place a new block type gets wired up.
@@ -26,6 +27,7 @@ const BLOCK_REGISTRY = {
   action_button: ActionButtonBlock,
   collapsible_group: CollapsibleGroupBlock,
   fta_sources: FtaSourcesBlock,
+  documents: DocumentCardsBlock,
 };
 
 /**
@@ -40,7 +42,7 @@ function UnknownBlock({ block }) {
   return <p style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-soft)' }}>{fallbackText}</p>;
 }
 
-export function BlockRenderer({ blocks, verification, onOpenCanvas, token }) {
+export function BlockRenderer({ blocks, verification, onOpenCanvas, token, onPreviewFile }) {
   if (!Array.isArray(blocks) || blocks.length === 0) return null;
 
   return (
@@ -54,6 +56,7 @@ export function BlockRenderer({ blocks, verification, onOpenCanvas, token }) {
             verification={verification}
             onOpenCanvas={onOpenCanvas}
             token={token}
+            onPreviewFile={onPreviewFile}
           />
         );
       })}
@@ -75,6 +78,6 @@ export function chatFacingBlocks(blocks) {
   return blocks.filter((b) => {
     if (b?.type === 'canvas' || b?.type === 'artifact') return false;
     if (hasTable && b?.type === 'kpi_grid') return false;
-    return ['markdown', 'chart', 'table', 'kpi_grid', 'collapsible_group', 'fta_sources'].includes(b?.type);
+    return ['markdown', 'chart', 'table', 'kpi_grid', 'collapsible_group', 'fta_sources', 'documents'].includes(b?.type);
   });
 }

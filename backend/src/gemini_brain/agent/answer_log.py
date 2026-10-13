@@ -41,7 +41,8 @@ def log_path() -> Optional[Path]:
 
 
 def record(question: str, organization_ids: Sequence[int], *, user_id: Any, session_id: Optional[str],
-           brief: bool, attachment: Optional[str], result: Any, response: Dict[str, Any]) -> None:
+           brief: bool, attachment: Optional[str], result: Any, response: Dict[str, Any],
+           documents: Optional[Sequence[Dict[str, Any]]] = None) -> None:
     """Log one answer. `result` is the AgentResult, `response` the envelope sent to the user."""
     try:
         from gemini_brain.pii.redactor import redact_pii
@@ -56,6 +57,7 @@ def record(question: str, organization_ids: Sequence[int], *, user_id: Any, sess
             "question": redact_pii(question or "")[0],
             "brief": bool(brief),
             "attachment": attachment,
+            "documents": list(documents) if documents else None,  # ids, types and cost only; never file content
             "route": getattr(result, "route", None),
             "agent_status": getattr(result, "status", None),
             "status": response.get("status"),

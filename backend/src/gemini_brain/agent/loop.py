@@ -76,9 +76,10 @@ class AgentResult:
 
 
 def _messages(history: Optional[Sequence[Dict[str, Any]]], question: str,
-              turn_specs: Optional[Sequence[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+              turn_specs: Optional[Sequence[Dict[str, Any]]] = None, documents: str = "") -> List[Dict[str, Any]]:
     """Bedrock messages: earlier turns (redacted, roles alternating, starting with the user), then the question.
-    The newest turns go whole, up to the history budget; older ones as a summary before them (history.py)."""
+    The newest turns go whole, up to the history budget; older ones as a summary before them (history.py).
+    `documents`: the block about attached files, put before the question (not redacted: the user's own files)."""
     summary, kept = thread_history.select(history or [], turn_specs)
     out: List[Dict[str, Any]] = []
     if summary:
@@ -93,7 +94,7 @@ def _messages(history: Optional[Sequence[Dict[str, Any]]], question: str,
             out.append({"role": role, "content": [{"text": text}]})
     if out and out[-1]["role"] == "user":
         out.append({"role": "assistant", "content": [{"text": "(no answer)"}]})
-    out.append({"role": "user", "content": [{"text": question}]})
+    out.append({"role": "user", "content": [{"text": f"{documents}\n\n{question}" if documents else question}]})
     return out
 
 
@@ -171,21 +172,22 @@ def _identifier_digits(payload: Any, out: List[str], depth: int = 0) -> None:
             _identifier_digits(v, out, depth + 1)
 
 
-def _evidence(results: Sequence[Dict[str, Any]], earlier: Optional[Sequence[float]] = None) -> List[Any]:
+def _evidence(results: Sequence[Dict[str, Any]], earlier: Optional[Sequence[float]] = None,
+              documents: Optional[Sequence[Any]] = None) -> List[Any]:
     """What the verifier may match figures against: the results, figures earlier turns of the thread fetched
     (an answer may reuse them), their magnitudes (the verifier reads "-143,160" in prose as 143160), and numbers
-    quoted inside text results."""
-    evidence: List[Any] = list(results)
+    quoted inside text results. `documents`: what attached files state (their fields), as results are."""
+    evidence: List[Any] = list(results) + list(documents or [])
     values: List[float] = []
     if earlier:
         evidence.append([float(v) for v in earlier])
         values.extend(float(v) for v in earlier)
-    _numbers(list(results), values)
+    _numbers(list(results) + list(documents or []), values)
     evidence.append([abs(v) for v in values if v < 0])
     # Digits inside identifiers ("INV-BULK-26-20241216180347-114231", "JE-24-2026-00000773") are part of the
     # document number the answer quotes, not figures; let the verifier match them.
     identifiers: List[str] = []
-    _identifier_digits(list(results), identifiers)
+    _identifier_digits(list(results) + list(documents or []), identifiers)
     evidence.append(identifiers)
     for r in results:
         for key in ("sources_and_rules", "guide"):
@@ -210,15 +212,23 @@ def run_agent(
     progress: Optional[Callable[[str, Any], None]] = None,
     brief: bool = False,
     attachment: Optional[str] = None,
+    documents: str = "",
+    document_ids: Sequence[str] = (),
+    document_evidence: Optional[Sequence[Any]] = None,
+    user_id: Optional[int] = None,
+    session_id: Optional[str] = None,
 ) -> AgentResult:
     """Answer one question. Never raises. `progress(tool_name, tool_input)` is called before each tool runs.
     `history`: the thread's earlier messages; `turn_specs`: what its turns queried (history.add_spec);
-    `earlier_figures`: numbers earlier turns fetched, which an answer may reuse (checked by the verifier)."""
+    `earlier_figures`: numbers earlier turns fetched, which an answer may reuse (checked by the verifier).
+    `documents`: the prompt block about files attached to this question and earlier in the chat; `document_ids`:
+    the files read_document may serve; `document_evidence`: their fields, as evidence for the verifier."""
     started = time.monotonic()
     deadline = started + (deadline_seconds or settings.agent_deadline_seconds)
     budget = max_tool_calls or settings.agent_max_tool_calls
     orgs = [int(o) for o in organization_ids]
-    ctx = tools.ToolContext(organization_ids=orgs, subject=subject, deadline=deadline)
+    ctx = tools.ToolContext(organization_ids=orgs, subject=subject, deadline=deadline, user_id=user_id,
+                            session_id=session_id, document_ids=tuple(document_ids))
     planner_id = model_id or settings.agent_model_id or SONNET5_ID
     writer_id = answer_model_id or settings.agent_answer_model_id or planner_id
     planner = BedrockAdapter(planner_id, label="agent")
@@ -229,8 +239,9 @@ def run_agent(
     answer, status = "", "ok"
 
     try:
-        messages = _messages(history, redact_pii(question)[0], turn_specs)
-        law_answer = law.answer(question, [dict(m) for m in messages], brief=brief)
+        messages = _messages(history, redact_pii(question)[0], turn_specs, documents)
+        # With files in the chat the law shortcut is skipped: it answers from the question alone.
+        law_answer = None if documents or document_ids else law.answer(question, [dict(m) for m in messages], brief=brief)
         if law_answer is not None:
             return AgentResult(answer=law_answer.answer, status="ok", usage=law_answer.usage, route="law",
                                elapsed_ms=int((time.monotonic() - started) * 1000),
@@ -238,7 +249,8 @@ def run_agent(
                                verification=_law_verification(law_answer))
 
         today = periods.today_in(settings.report_timezone)
-        system = system_prompt(org_meta, orgs, today, settings.report_timezone, brief=brief, attachment=attachment)
+        system = system_prompt(org_meta, orgs, today, settings.report_timezone, brief=brief, attachment=attachment,
+                               documents=bool(documents or document_ids))
         specs = tools.specs(ctx)
         used, asked_shorter, asked_fetch, adapter = 0, False, False, planner
         while True:
@@ -287,8 +299,9 @@ def run_agent(
         logger.warning("agent failed: %s", e, exc_info=True)
         status, answer = "error", answer or ""
 
-    report = (verify_answer(answer, _evidence(ok_results, earlier_figures), enforce=False)
+    report = (verify_answer(answer, _evidence(ok_results, earlier_figures, document_evidence), enforce=False)
               if answer and status == "ok" else None)
+    fta = tools.fta_block(ctx, answer) if status == "ok" else None
     return AgentResult(
         answer=answer,
         status=status,
@@ -297,6 +310,7 @@ def run_agent(
         usage=_usage(planner, writer),
         elapsed_ms=int((time.monotonic() - started) * 1000),
         data=data,
+        blocks=[fta] if fta else [],
     )
 
 

@@ -8,7 +8,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Generator, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
@@ -42,6 +42,8 @@ from gemini_brain.api.models import (
     ChatSessionListResponse,
     ChatMessageSchema,
     ChatMessageListResponse,
+    UploadConfig,
+    UploadInfo,
 )
 from gemini_brain.config.settings import settings
 from gemini_brain.health.model_health_checker import check_all_models_and_services
@@ -271,7 +273,25 @@ def _agent_scope(current_user: CurrentUser, orgs: list[int]) -> list[int]:
     return scope
 
 
-def _agent_events(payload: QueryRequest, current_user: CurrentUser, orgs: list[int]) -> Generator[str, None, None]:
+def _attachments(payload: QueryRequest, current_user: CurrentUser) -> list:
+    """The files a question carries, checked (owner, thread, read) before anything runs. [] when it has none."""
+    if not payload.attachments:
+        return []
+    from gemini_brain.uploads import context as upload_context
+    from gemini_brain.uploads import enabled_for
+    from gemini_brain.agent.preview import usable_session_id
+
+    if not enabled_for(current_user.user_id, current_user.email):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="File upload is not available for this account.")
+    try:
+        return upload_context.resolve(payload.attachments, user_id=current_user.user_id,
+                                      session_id=usable_session_id(payload.session_id))
+    except upload_context.AttachmentError as e:
+        raise HTTPException(status_code=e.status, detail=e.message)
+
+
+def _agent_events(payload: QueryRequest, current_user: CurrentUser, orgs: list[int],
+                  documents: Optional[list] = None) -> Generator[str, None, None]:
     """SSE for an agent answer: a status line per tool call, then the final result."""
     import queue
     import threading
@@ -284,7 +304,8 @@ def _agent_events(payload: QueryRequest, current_user: CurrentUser, orgs: list[i
             box["result"] = agent_preview.answer(
                 payload.query, orgs, _agent_org_meta(orgs, current_user),
                 session_id=payload.session_id, user_id=current_user.user_id, db_name=payload.db_name,
-                progress=events.put, brief=bool(payload.brief), **_model_choice(payload, current_user),
+                progress=events.put, brief=bool(payload.brief), documents=documents,
+                **_model_choice(payload, current_user),
             )
         except Exception as e:  # noqa: BLE001 - answer() never raises; this is belt and braces
             logger.warning("agent answer failed: %s", e, exc_info=True)
@@ -490,6 +511,12 @@ def delete_chat_session(
         authorize_org_scope(session_scope(rec), current_user, action="sessions.delete")
     if not delete_session(session_id, current_user.user_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
+    try:  # the thread is gone; its attached files go with it
+        from gemini_brain.uploads.store import delete_for_session
+
+        delete_for_session(session_id)
+    except Exception as e:
+        logger.warning("Thread %s deleted but its uploads were not: %s", session_id, e)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -577,6 +604,174 @@ def regenerate_artifact(
     return JSONResponse(block)
 
 
+# ── Uploads (files attached in chat) ──────────────────────────────────────────
+
+def _upload_info(rec: Any) -> UploadInfo:
+    from gemini_brain.uploads.store import problems_of as upload_problems
+
+    return UploadInfo(id=rec.id, name=rec.filename, size=rec.size_bytes, kind=rec.kind, pages=rec.pages,
+                      status=rec.status, failure_reason=rec.failure_reason, summary=rec.summary,
+                      document_type=rec.document_type,
+                      checks_failed=rec.checks_failed, problems=upload_problems(rec),
+                      attached=rec.attached_at is not None)
+
+
+def _require_uploads(current_user: CurrentUser) -> None:
+    from gemini_brain.uploads import enabled_for
+
+    if not enabled_for(current_user.user_id, current_user.email):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="File upload is not available for this account.")
+
+
+@router.get(
+    "/uploads/config",
+    response_model=UploadConfig,
+    tags=["Uploads"],
+    summary="Whether this user can attach files, and the limits",
+)
+def upload_config(current_user: CurrentUser = Depends(get_current_user)) -> UploadConfig:
+    from gemini_brain.uploads import enabled_for
+    from gemini_brain.uploads.store import pages_used_today
+    from gemini_brain.uploads.validate import accepted_types
+
+    if not enabled_for(current_user.user_id, current_user.email):
+        return UploadConfig(enabled=False)
+    return UploadConfig(
+        enabled=True,
+        max_bytes=settings.upload_max_bytes,
+        max_pages=settings.upload_max_pages,
+        max_files=settings.upload_max_files,
+        daily_pages=settings.upload_daily_pages,
+        pages_used_today=pages_used_today(current_user.user_id),
+        accept=sorted(accepted_types()),
+    )
+
+
+@router.post(
+    "/uploads",
+    response_model=UploadInfo,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Uploads"],
+    summary="Attach a file to a chat thread",
+)
+def create_upload(
+    request: Request,
+    file: UploadFile = File(...),
+    session_id: str = Form(...),
+    organization_ids: str = Form(default=""),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> UploadInfo:
+    """Checks the file on its bytes (type, size, pages, macros, bombs), stores it for the thread and returns
+    its id. The question that uses it sends `attachments: [id]`.
+
+    A plain (not async) endpoint on purpose: it asks the database about the thread and reads the whole file, and a call
+    that waits must not run on the event loop, where it would hold up every other request."""
+    from gemini_brain.memory.session_memory import is_valid_uuid, verify_session_ownership
+    from gemini_brain.uploads import store as upload_store
+    from gemini_brain.uploads.validate import UploadRejected, inspect
+
+    _require_uploads(current_user)
+    limit = settings.upload_max_bytes
+    too_large = f"This file is too large. The limit is {limit // 1_048_576} MB."
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > limit + 64 * 1024:  # the body carries form overhead
+        raise HTTPException(status_code=413, detail=too_large)
+    if not is_valid_uuid(session_id):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="session_id must be a UUID.")
+    if not verify_session_ownership(session_id, current_user.user_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This thread does not belong to this user.")
+    try:
+        orgs = [int(o) for o in organization_ids.split(",") if o.strip()]
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="organization_ids must be numbers.")
+    if orgs:
+        orgs = authorize_org_scope(orgs, current_user, action="uploads.create")
+
+    chunks, total = [], 0
+    while True:  # read in pieces and stop at the limit instead of holding an oversized body
+        chunk = file.file.read(1_048_576)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > limit:
+            raise HTTPException(status_code=413, detail=too_large)
+        chunks.append(chunk)
+    content = b"".join(chunks)
+
+    try:
+        inspected = inspect(content, file.filename or "")
+        rec = upload_store.put(content, filename=file.filename or "", inspected=inspected,
+                               user_id=current_user.user_id, session_id=session_id, organization_ids=orgs)
+    except UploadRejected as e:
+        upload_store.record_event("-", "rejected", user_id=current_user.user_id,
+                                  detail={"code": e.code, "size_bytes": len(content), "session_id": session_id})
+        raise HTTPException(status_code=e.http_status, detail={"code": e.code, "message": e.message})
+    except upload_store.DailyLimitReached as e:
+        upload_store.record_event("-", "rejected", user_id=current_user.user_id,
+                                  detail={"code": "daily_limit", "session_id": session_id})
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"code": "daily_limit",
+                    "message": f"You have uploaded {e.used} of {e.limit} pages today. Try again tomorrow."})
+    from gemini_brain.uploads import reader
+
+    return _upload_info(reader.start(rec))  # reading continues in the background; the chip shows its status
+
+
+def _owned_upload(upload_id: str, current_user: CurrentUser, *, action: str) -> Any:
+    from gemini_brain.uploads.store import get_for_user
+
+    rec = get_for_user(upload_id, current_user.user_id, action=action)
+    if rec is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found.")
+    return rec
+
+
+@router.get("/uploads/{upload_id}", response_model=UploadInfo, tags=["Uploads"], summary="One attached file's state")
+def get_upload(upload_id: str, current_user: CurrentUser = Depends(get_current_user)) -> UploadInfo:
+    from gemini_brain.uploads.store import fail_if_stale
+
+    _require_uploads(current_user)
+    return _upload_info(fail_if_stale(_owned_upload(upload_id, current_user, action="read")))
+
+
+@router.get("/uploads/{upload_id}/file", tags=["Uploads"], summary="The attached file itself, for its owner")
+def download_upload(upload_id: str, current_user: CurrentUser = Depends(get_current_user)) -> FileResponse:
+    from gemini_brain.uploads.store import record_event
+    from gemini_brain.uploads.validate import INLINE_KINDS
+
+    _require_uploads(current_user)
+    rec = _owned_upload(upload_id, current_user, action="download")
+    record_event(rec.id, "downloaded", user_id=current_user.user_id)
+    return FileResponse(
+        rec.path,
+        media_type=rec.mime,  # from the checked content, never from what the browser claimed
+        filename=rec.filename,
+        content_disposition_type="inline" if rec.kind in INLINE_KINDS else "attachment",
+        headers={"X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox",
+                 "Cache-Control": "private, no-store"},
+    )
+
+
+@router.delete(
+    "/uploads/{upload_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["Uploads"],
+    summary="Remove a file before it is sent with a question",
+)
+def delete_upload(upload_id: str, current_user: CurrentUser = Depends(get_current_user)) -> Response:
+    from gemini_brain.uploads.store import delete
+
+    _require_uploads(current_user)
+    rec = _owned_upload(upload_id, current_user, action="delete")
+    if rec.attached_at is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail="This file was sent with a question. It is removed when the thread is deleted.")
+    delete(rec.id, user_id=current_user.user_id, refund_pages=True, reason="removed_by_user")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 # ── Health & Diagnostic Endpoints ─────────────────────────────────────────────
 
 @router.get("/health", response_model=HealthResponse, tags=["Health"])
@@ -633,11 +828,12 @@ async def run_query(
     """Answer one question with the agent, with the model the user picked (`model`). effort and use_api are ignored."""
     import asyncio
     orgs = _agent_scope(current_user, _query_orgs(payload, current_user, action="query"))
+    documents = _attachments(payload, current_user)
     try:
         result = await asyncio.to_thread(
             agent_preview.answer, payload.query, orgs, _agent_org_meta(orgs, current_user),
             session_id=payload.session_id, user_id=current_user.user_id, db_name=payload.db_name,
-            brief=bool(payload.brief), **_model_choice(payload, current_user),
+            brief=bool(payload.brief), documents=documents, **_model_choice(payload, current_user),
         )
         return QueryResponse(**normalize_envelope(result))
     except Exception as e:
@@ -669,8 +865,9 @@ def stream_query(
     # Checked before the stream opens, so a refused org is a plain 403 and no
     # event is ever emitted for it.
     orgs = _agent_scope(current_user, _query_orgs(payload, current_user, action="query.stream"))
+    documents = _attachments(payload, current_user)  # a refused attachment is a plain error before the stream opens
     return StreamingResponse(
-        _agent_events(payload, current_user, orgs),
+        _agent_events(payload, current_user, orgs, documents),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
     )

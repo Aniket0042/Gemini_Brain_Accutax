@@ -43,6 +43,28 @@ _client_lock = threading.Lock()
 _bedrock_client: Optional[Any] = None
 
 
+_long_client: Optional[Any] = None
+
+
+def get_long_read_client(region: str = "") -> Any:
+    """A Bedrock client that waits UPLOAD_READ_TIMEOUT_SECONDS for an answer, for reading uploaded
+    documents: a 20-page file takes longer than the shared client's 45 s."""
+    global _long_client
+    if _long_client is None:
+        with _client_lock:
+            if _long_client is None:
+                _long_client = boto3.client(
+                    "bedrock-runtime",
+                    region_name=region or settings.bedrock_region,
+                    config=Config(
+                        connect_timeout=settings.bedrock_connect_timeout_seconds,
+                        read_timeout=settings.upload_read_timeout_seconds,
+                        retries={"max_attempts": settings.bedrock_max_attempts, "mode": "standard"},
+                    ),
+                )
+    return _long_client
+
+
 def get_bedrock_client(region: str = "") -> Any:
     """Return lazy singleton boto3 bedrock-runtime client."""
     global _bedrock_client
@@ -155,9 +177,11 @@ class BedrockAdapter:
     #: Model ids that refused a cache point in this process: caching stays on for every other model.
     _no_cache_models: set = set()
 
-    def __init__(self, model_id: str, label: str = ""):
+    def __init__(self, model_id: str, label: str = "", client_factory: Optional[Any] = None):
         self.model_id = model_id
         self.label = label or model_id
+        #: Returns the boto3 client for converse_with_tools; None = the shared client.
+        self._client_factory = client_factory
         self._input_tokens = 0
         self._output_tokens = 0
         self._calls = 0
@@ -325,17 +349,19 @@ class BedrockAdapter:
         temperature: float = 0.0,
         max_tokens: int = settings.bedrock_max_tokens,
         purpose: str = "",
+        tool_choice: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Tool-calling Converse call. Returns Bedrock-native response dict.
 
-        See `converse()` above for what `purpose` does.
+        `tool_choice` names a tool the model must call (its input is then always valid JSON for that
+        tool's schema). See `converse()` above for what `purpose` does.
         """
         system = self._build_system_array(system_prompt)
         tools = list(tools or [])
         call_usage: Dict[str, Any] = {}
 
         def _call():
-            client = get_bedrock_client()
+            client = (self._client_factory or get_bedrock_client)()
             kwargs: Dict[str, Any] = dict(
                 modelId=self.model_id,
                 system=system,
@@ -344,6 +370,8 @@ class BedrockAdapter:
             )
             if tools:
                 kwargs["toolConfig"] = {"tools": tools}
+                if tool_choice:
+                    kwargs["toolConfig"]["toolChoice"] = {"tool": {"name": tool_choice}}
             resp = client.converse(**kwargs)
             usage = resp.get("usage", {})
             call_usage.update(usage)

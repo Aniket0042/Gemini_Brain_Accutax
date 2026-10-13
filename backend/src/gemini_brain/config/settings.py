@@ -220,6 +220,50 @@ class GeminiBrainSettings(BaseSettings):
         ),
     )
 
+    # ── Document upload in chat (docs/DOCUMENT_UPLOAD_PLAN.md) ──
+    uploads_enabled: bool = Field(
+        default=False,
+        description="Turns file upload in chat on. Off by default: the paperclip is hidden and /uploads refuses.",
+    )
+    upload_users: str = Field(
+        default="",
+        description="Comma-separated emails or user ids who may upload while UPLOADS_ENABLED is on. Empty = everyone.",
+    )
+    upload_dir: str = Field(
+        default="",
+        description="Directory for uploaded files, their metadata and the audit log. Empty = <system temp>/accutax-uploads.",
+    )
+    upload_max_bytes: int = Field(default=10 * 1024 * 1024, ge=1024, description="Largest file accepted.")
+    upload_max_pages: int = Field(default=20, ge=1, description="Most pages in one PDF.")
+    upload_max_files: int = Field(default=3, ge=1, description="Most files attached to one question.")
+    upload_daily_pages: int = Field(
+        default=100,
+        ge=1,
+        description="Pages of PDF and image files one user may upload per day (UTC). Text files do not count.",
+    )
+    upload_extractor: str = Field(
+        default="claude",
+        description=(
+            "Who reads scanned pages, photos and bills: 'claude' (Bedrock) or 'none' (only text files are read). "
+            "The existing OCR service becomes a third value in phase 7."
+        ),
+    )
+    upload_extract_model: str = Field(
+        default="in.anthropic.claude-sonnet-5",
+        description="Bedrock model that reads documents. India-region profile. Haiku 4.5 misread tax IDs in phase 0.",
+    )
+    upload_read_timeout_seconds: float = Field(
+        default=180.0, gt=0, description="Longest wait for the model to read one document.")
+    upload_read_workers: int = Field(default=4, ge=1, le=32, description="Documents read at the same time.")
+    upload_read_max_tokens: int = Field(default=12000, ge=1000, le=32000, description="Longest record of one model call.")
+    upload_chunk_pages: int = Field(
+        default=5, ge=1, le=20,
+        description=(
+            "A PDF the model reads is cut into parts of this many pages, read at the same time and put back together: "
+            "a 20-page statement does not fit one answer (phase 5: 240 lines gave no lines at all)."
+        ),
+    )
+
     # ── UAE VAT knowledge base (docs/product/VAT_KNOWLEDGE_BASE_PLAN.md) ──
     vat_kb_enabled: bool = Field(
         default=False,

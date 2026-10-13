@@ -91,6 +91,14 @@ class QueryRequest(BaseModel):
         default=False,
         description="When true, narration stays to a few short bullets instead of a full write-up.",
     )
+    attachments: List[str] = Field(
+        default_factory=list,
+        max_length=10,
+        description=(
+            "Ids from POST /uploads of the files this question is about. They must be this user's, in this thread, "
+            "and read (status ready). At most UPLOAD_MAX_FILES."
+        ),
+    )
 
     @model_validator(mode="after")
     def _org_fields_agree(self) -> "QueryRequest":
@@ -413,5 +421,29 @@ class ChatMessageListResponse(BaseModel):
     context_window: Optional[Dict[str, Any]] = None
 
 
+class UploadInfo(BaseModel):
+    """One attached file, as the chat shows it."""
+    id: str
+    name: str
+    size: int = Field(description="Bytes.")
+    kind: str = Field(description="pdf, png, jpeg, webp, docx, xlsx or csv.")
+    pages: int
+    status: str = Field(description="uploaded, reading, ready or failed.")
+    failure_reason: str = Field(default="", description="Why reading failed, or a note when it only partly worked.")
+    summary: str = Field(default="", description="One line about what the file is, once read.")
+    document_type: str = Field(default="", description="tax_invoice, simplified_tax_invoice, receipt, statement, contract or other; empty until read.")
+    checks_failed: int = Field(default=0, description="How many code checks on the read failed (totals, VAT, TRN).")
+    problems: List[str] = Field(default_factory=list, description="Each failed check as one plain sentence.")
+    attached: bool = Field(default=False, description="True once a question was sent with this file.")
 
+
+class UploadConfig(BaseModel):
+    """What the composer needs to show or hide the paperclip and check files before sending."""
+    enabled: bool
+    max_bytes: int = 0
+    max_pages: int = 0
+    max_files: int = 0
+    daily_pages: int = 0
+    pages_used_today: int = 0
+    accept: List[str] = Field(default_factory=list, description="File extensions the picker offers.")
 
