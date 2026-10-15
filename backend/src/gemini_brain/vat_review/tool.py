@@ -36,16 +36,16 @@ RULE_TEXT = {
 }
 
 
-#: A self-contained law question for the rules that rest on UAE VAT law. The agent searches the FTA documents with it,
+#: A law question for the rules that rest on UAE VAT law. The agent searches the FTA documents with it,
 #: so each kind of finding is cited from its own source, not from one general guide. The other rules are not law.
 LAW_QUESTIONS = {
-    "vat_rate_not_standard": "What VAT rates apply to purchases in the UAE: the standard rate, zero-rated and exempt supplies?",
-    "vat_zero": "Which supplies are zero-rated or exempt from VAT in the UAE, and can input VAT be recovered on them?",
+    "vat_rate_not_standard": "Federal Decree-Law No. 8 of 2017 standard rate of tax and zero-rated supplies",
+    "vat_zero": "Is input tax recoverable on exempt supplies and on zero-rated supplies under the VAT law?",
     "missing_supplier": "What details must a UAE tax invoice show, including the supplier's name, tax registration number and invoice number?",
     "missing_number": "What details must a UAE tax invoice show, including the supplier's name, tax registration number and invoice number?",
-    "same_number": "What evidence is needed to recover input tax in the UAE, and can input tax be recovered twice on one tax invoice?",
-    "same_total_near_date": "What evidence is needed to recover input tax in the UAE, and can input tax be recovered twice on one tax invoice?",
-    "similar_vendor_same_day": "What evidence is needed to recover input tax in the UAE, and can input tax be recovered twice on one tax invoice?",
+    "same_number": "Federal Decree-Law No. 8 of 2017 recovery of input tax conditions tax invoice",
+    "same_total_near_date": "Federal Decree-Law No. 8 of 2017 recovery of input tax conditions tax invoice",
+    "similar_vendor_same_day": "Federal Decree-Law No. 8 of 2017 recovery of input tax conditions tax invoice",
     "vat_wrong_sign": "How is a tax credit note recorded and what must it show in the UAE?",
     "vat_without_amount": "How is a tax credit note recorded and what must it show in the UAE?",
     "future_date": "When is the date of supply and when must a tax invoice be issued in the UAE?",

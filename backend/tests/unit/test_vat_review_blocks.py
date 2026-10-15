@@ -82,8 +82,8 @@ def test_law_questions_follow_the_rules_that_fired(monkeypatch):
     out = review(monkeypatch, BILLS)
     questions = [q["question"] for q in out["law_questions"]]
     assert len(questions) == len(set(questions)) and 1 <= len(questions) <= tool.MAX_LAW_QUESTIONS
-    assert "VAT rates" in questions[0]  # the high-severity finding comes first
-    assert any("recover input tax" in q for q in questions)  # the duplicate
+    assert "standard rate of tax" in questions[0]  # the high-severity finding comes first
+    assert any("recovery of input tax" in q for q in questions)  # the duplicate
 
 
 def test_rules_that_are_not_law_add_no_question(monkeypatch):
