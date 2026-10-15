@@ -46,9 +46,10 @@ def _app_url() -> str:
 
 
 def _document_rows(item: Dict[str, Any], result: Dict[str, Any]):
-    """The document rows of a result: the rows of a list, or the bills inside a review's duplicate groups."""
+    """The document rows of a result: the rows of a list, or the bills inside a review's duplicate groups and findings."""
     if item.get("tool") == "review_vat":
-        return [b for g in result.get("groups") or [] for b in g.get("bills") or []]
+        return ([b for g in result.get("groups") or [] for b in g.get("bills") or []]
+                + [f["bill"] for f in result.get("findings") or [] if f.get("bill")])
     return result.get("rows") or []
 
 

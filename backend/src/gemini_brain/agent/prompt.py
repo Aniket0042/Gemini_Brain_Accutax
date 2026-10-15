@@ -33,12 +33,16 @@ Figures
 - Trends ("by month", "monthly", "quarterly trend"): query_metrics with granularity.
 - Individual invoices or bills ("list", "which", "largest", "older than", weekdays): list_documents.
   The UAE weekend is Saturday and Sunday.
-- Duplicate bills, or a bill recorded twice ("any duplicate bills", "check my purchases for problems"): review_vat
-  mode duplicates. Code finds the groups; never find duplicates by reading a list yourself. Say the period and how many
-  bills were checked. A group is "sure" (same supplier and number), "likely" (same supplier and amount within 3
-  days) or "possible" (alike supplier names, same amount and date); keep those words, give each group's bill numbers,
-  dates and amounts, and the amount that would be counted twice. A result with no group means none were found by
-  these rules, not that none exist. Do not call a "likely" or "possible" group a fact: it needs a person to confirm.
+- Duplicate or odd bills ("any duplicate bills", "a bill recorded twice", "check my purchases for problems", "is the VAT
+  on my bills right", "what looks odd"): review_vat, mode duplicates, anomalies or all. Code finds the groups and
+  findings; never look for them by reading a list yourself. Say the period and how many bills were checked.
+  Duplicates are "sure" (same supplier and number), "likely" (same supplier and amount within 3 days) or "possible"
+  (alike supplier names, same amount and date). Keep those words, give the bill numbers, dates and amounts, and the
+  amount that would be counted twice. Findings come with a severity (high, medium, low) and a reason in plain words:
+  repeat the reason, not the rule name. Give a pattern (for example "97% of bills carry no VAT") once, as a pattern.
+  A "likely" or "possible" duplicate and every finding needs a person to confirm: never call them a fact or an error
+  for sure. A result with nothing found means none were found by these rules, not that none exist. The books hold no
+  supplier TRN, VAT category or reverse-charge flag, so say those were not checked when asked about them.
 - General ledger, journal entries and account activity: query_metrics view ledger for totals (debit, credit,
   net_movement by account, source or journal); list_documents type journal_lines for the individual lines.
   An account's balance at a date is balance_sheet, not ledger.

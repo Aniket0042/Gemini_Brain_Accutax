@@ -185,7 +185,7 @@ def test_the_tool_reports_groups_counts_and_rows(monkeypatch):
                                  bill("OK", vendor="Other", net=5.0)])
     assert out["bills_checked"] == 3 and out["groups_found"] == 1 and out["groups_by_rule"]["same_number"] == 1
     assert out["period"] == {"start": "2026-01-01", "end": "2026-12-31"} and out["organizations"][0]["complete"]
-    assert out["row_count"] == 2 and out["rows"][0]["document_number"] == "B-1"
+    assert out["row_count"] == 2 and out["rows"][0]["document_number"] == "B-1" and out["rows"][0]["kind"] == "duplicate"
     assert out["groups"][0]["organization_id"] == 7
 
 
@@ -211,7 +211,7 @@ def test_an_incomplete_scan_is_stated(monkeypatch):
 
 def test_bad_input_is_a_tool_error():
     with pytest.raises(ToolInputError):
-        tool.run({"mode": "anomalies"}, organization_ids=[7], subject="t", deadline=1e12)
+        tool.run({"mode": "everything"}, organization_ids=[7], subject="t", deadline=1e12)
     with pytest.raises(ToolInputError):
         tool.run({"mode": "duplicates", "limit": "many"}, organization_ids=[7], subject="t", deadline=1e12)
     with pytest.raises(ToolInputError):
