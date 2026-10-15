@@ -1,6 +1,6 @@
 # VAT review (duplicates and anomalies in the books): plan and phase 0 findings
 
-Status: phases 0, 1 and 2 done on 2026-10-15 and deployed to the VM. Phases 3 and 4 not started.
+Status: phases 0 to 3 done on 2026-10-15 and deployed to the VM. Phase 4 (planted-problem tests, evaluation set, rollout) not started.
 
 ## Goal
 
@@ -102,3 +102,11 @@ The agent answered all three questions with the one tool, in plain words, said t
 **Fixed while testing.** "Large for supplier" flagged 135 bills in org 27 because a supplier billed one larger amount many times; an amount the supplier bills at least three times is no longer flagged. One answer wrote a rule name (vat_rate_not_standard); the prompt now forbids that.
 
 **Not done.** Rules that need the supplier TRN, VAT category or reverse-charge flag (not in the books). The thresholds are starting values and need finance sign-off. No planted-problem test on live data yet (phase 4).
+
+## Phase 3 result: findings card, Excel export, sources per finding (built and deployed 2026-10-15)
+
+- **Card under the answer.** `vat_review/blocks.py` builds a `vat_review` block from the review result and `frontend/src/components/blocks/VatReviewBlock.jsx` draws it: totals, a pattern note, then each duplicate group or odd bill with a plain title, the reason, and its bills (number linked to the record in the app, date, supplier, amount). Rule names never appear on it. It was checked in a browser at desktop and phone width. The prompt now tells the model not to repeat the list or write a table.
+- **Excel, PDF and CSV.** The review rows (one uniform set of columns for duplicates and findings) go through the existing export path. "Export the findings to Excel" returned `.xlsx`, `.pdf` and `.csv` files on the VM.
+- **Sources per finding.** The review result carries a law question for each kind of finding (`LAW_QUESTIONS` in `vat_review/tool.py`), and the agent searches the FTA documents with the first one or two. Questions are worded as the documents are, because the search matches that best: "Federal Decree-Law No. 8 of 2017 standard rate of tax and zero-rated supplies" returns the Decree-Law itself, where a plain question returned the Financial Services guide. Answers now cite the Decree-Law for the VAT rate and a different document for other findings, not one guide every time.
+- **Still weak.** The search sometimes returns a poor match for a sentence (an answer about recovering input tax cited the E-Commerce guide). That is the ranking of the FTA search, not of the review.
+- **Tests.** `tests/unit/test_vat_review_blocks.py` (10 tests); the full suite passed (1,829 passed, 10 skipped). One earlier full run showed a single failure that did not repeat; the cause was not found.
