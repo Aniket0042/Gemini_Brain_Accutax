@@ -58,3 +58,22 @@ Without these the agent cannot check supplier TRNs, split zero-rated from exempt
 ## Progress
 
 - 2026-10-15: package 1, code guard on claims about the books. An answer about an attached bill that says it is, or is not, in the books must follow a look at the books (`list_documents` or `review_vat`). Without one the agent is sent back once to check; if it still has not, the answer ends with a line saying the claim is not confirmed. Seven unit tests.
+
+## What the database holds (checked 2026-10-15 with `semantic/dba/vat_fields_discovery.sql` and `vat_fields_values.sql`, read-only, run by the owner on the VM)
+
+The fields the plan asked the DBA for mostly exist, but several are empty or unusable in this data. This changes the plan.
+
+| Fact | Where | What the data shows | Effect on the plan |
+|---|---|---|---|
+| Supplier and customer TRN | `contacts.trn_number` (the Cube role can already read it) | 2,004,392 of 2,004,401 contacts have one, but only 8 have 15 digits | A "not a 15-digit TRN" rule would flag almost every bill in this data. Build it, and report it as a pattern when most bills share it (as for "no VAT"). Part 3 of the scripts checks the shape for the test organizations. |
+| VAT rate and category of a line | `expense_items.tax_rate_id` and `income_items.tax_rate_id`, then `tax_rates` (`tax_code`, `tax_rate`, `rate_type`, `tax_type`) | **Sales:** 27,660,715 of 27,660,716 lines have a rate. **Purchases:** 8,995 of 21,343,831 lines (0.04%). `tax_rates` has about 90 rows, many of them sample or seed rows (rate 100, "string", Indian slab rates). | Sales can be split by category from the data. Purchases cannot: for bills the category has to be inferred from `tax_amount` (0 or 5%), as the review does today. The Cube role cannot read `tax_rates` yet. |
+| Reverse charge | `vat_configs.reverse_charge` (settings) | Filled in one row and holds no keys. No tax rate, entry or rule mentions reverse charge. | Reverse-charge amounts are **not recorded anywhere**. The agent cannot report them. This needs a change in the application, not only a grant. The agent should say so when asked. |
+| VAT returns | `vat_returns` | **0 rows**, 0 organizations | The return cannot be read from the database. The "VAT return view" is computed from the ledger (the existing `vat` view); "reconcile the return with the ledger" cannot be built until returns are stored. |
+| Filing frequency, penalty settings | `vat_configs` | 129 configs: 128 monthly, 1 quarterly; penalties configured on 1 | Due dates can follow the organization's frequency. The Cube role cannot read the table yet. |
+| The organization's own VAT number | `organizations` (readable) | 10,035 of 10,054 have one | The match between "which party is this organization" can use the TRN as well as the name. |
+
+**Revised DBA request.** The only grant needed now is read access to `tax_rates` and `vat_configs` (`semantic/dba/cube_reader_grants_vat.sql`, not yet run). `vat_returns` is left out because it is empty. No new column is needed for TRN or VAT category. The reverse-charge flag does not exist and is a product question.
+
+**Revised package 5 and 6.**
+- Package 5 stays: output vs input VAT by period from the `vat` view, a penalty calculator, due dates from the filing frequency, reminders.
+- Package 6 shrinks to: supplier TRN rule, VAT category for sales, a note in answers that purchase categories are inferred. "Reconcile the return" and "reverse-charge figures" move to a later package that depends on the application storing returns and flagging reverse charge.
