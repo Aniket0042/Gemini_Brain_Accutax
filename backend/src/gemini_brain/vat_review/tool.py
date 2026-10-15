@@ -125,6 +125,12 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
     except ValueError as e:
         raise ToolInputError(str(e)) from e
     want_dup, want_odd = mode in ("all", "duplicates"), mode in ("all", "anomalies")
+    only = params.get("rules") or []
+    if not isinstance(only, list) or any(r not in RULE_TEXT for r in only):
+        raise ToolInputError(f"rules must be a list of: {', '.join(RULE_TEXT)}")
+    if only:  # a question about one kind of problem: look for that kind only
+        want_dup = want_dup and any(r in duplicates.RULES for r in only)
+        want_odd = want_odd and any(r in anomalies.RULES for r in only)
     with_trn = want_odd and _has_trn(organization_ids, subject, deadline)
 
     groups: List[Dict[str, Any]] = []
@@ -141,8 +147,13 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
         tag = {"organization_id": org, "organization_name": name, "currency": currency}
         found_groups = duplicates.find_duplicates(bills) if want_dup else []
         found_odd, found_patterns = anomalies.find_anomalies(bills, today) if want_odd else ([], [])
+        if only:
+            found_groups = [g for g in found_groups if g["rule"] in only]
+            found_patterns = [p for p in found_patterns if p["rule"] in only]
         if want_odd:
             found_odd += _future_dated(org, end, today, subject, deadline, with_trn)
+        if only:
+            found_odd = [f for f in found_odd if f["rule"] in only]
         for item in found_groups + found_odd + found_patterns:
             item.update(tag)
         checked += len(bills)
@@ -157,8 +168,10 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
             notes.append(f"{name}: the scan stopped early ({scan.why_incomplete}); the result may miss problems.")
     if left_out:
         notes.append(f"{left_out} voided, cancelled or draft bills were left out.")
-    if want_odd and not with_trn:
+    if want_odd and not with_trn and (not only or "supplier_trn_invalid" in only):
         notes.append("Supplier TRNs were not checked: this book does not provide them.")
+    if only:
+        notes.append("Only these kinds of problem were looked for: " + "; ".join(RULE_TEXT[r] for r in only) + ".")
 
     out: Dict[str, Any] = {"mode": mode, "period": {"start": start.isoformat(), "end": end.isoformat()},
                            "bills_checked": checked, "organizations": per_org, "notes": notes}
@@ -218,6 +231,9 @@ def tool_spec() -> Dict[str, Any]:
                 "period": {"type": "object", "description": "same shape as query_metrics; omit for year to date",
                            "properties": {"preset": {"type": "string"}, "start": {"type": "string"},
                                           "end": {"type": "string"}}},
+                "rules": {"type": "array", "items": {"type": "string", "enum": list(RULE_TEXT)},
+                          "description": "Look for these kinds of problem only. Use it when the question is about one kind (TRN, "
+                                         "no VAT, future dates, missing details, a duplicate type). Omit for a general review."},
                 "limit": {"type": "integer",
                           "description": f"Most groups and most findings returned (default {DEFAULT_LIMIT}, max {MAX_LIMIT})"},
             },

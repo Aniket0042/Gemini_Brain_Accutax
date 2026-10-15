@@ -252,3 +252,38 @@ def test_when_almost_every_trn_is_wrong_it_is_one_pattern():
 def test_the_tool_says_when_trns_were_not_checked(monkeypatch):
     out = run_tool(monkeypatch, clean(), mode="anomalies")
     assert any("Supplier TRNs were not checked" in n for n in out["notes"])
+
+
+# --- asking for one kind of problem --------------------------------------------------------------------------------
+
+def test_the_rules_filter_keeps_only_those_kinds(monkeypatch):
+    bills = clean() + [bill("X", net=7186.0, vat=1293.48), bill("", net=100.0, vat=5.0), bill("D-1", id_="1"),
+                       bill("D-1", id_="2", date="2026-04-01")]
+    out = run_tool(monkeypatch, bills, rules=["missing_number"])
+    assert out["findings_found"] == 1 and set(out["findings_by_rule"]) == {"missing_number"}
+    assert "groups" not in out  # no duplicate rule was asked for
+    assert any("Only these kinds of problem" in n and "no document number" in n for n in out["notes"])
+
+
+def test_a_duplicate_rule_filter_returns_only_that_kind(monkeypatch):
+    bills = clean() + [bill("X", net=7186.0, vat=1293.48), bill("D-1", id_="1"), bill("D-1", id_="2", date="2026-04-01"),
+                       bill("L-1", vendor="Likely", id_="3", net=500.0, date="2026-05-01"),
+                       bill("L-2", vendor="Likely", id_="4", net=500.0, date="2026-05-02")]
+    out = run_tool(monkeypatch, bills, rules=["same_total_near_date"], mode="all")
+    assert out["groups_found"] == 1 and out["groups"][0]["rule"] == "same_total_near_date" and "findings" not in out
+
+
+def test_a_pattern_for_another_rule_is_left_out(monkeypatch):
+    zero = [bill(f"Z{i}", vendor=f"S{i}", net=1000.0 + 7 * i, vat=0.0) for i in range(20)]
+    assert run_tool(monkeypatch, zero, rules=["future_date"])["patterns"] == []
+    assert len(run_tool(monkeypatch, zero, rules=["vat_zero"])["patterns"]) == 1
+
+
+def test_an_unknown_rule_is_a_tool_error(monkeypatch):
+    with pytest.raises(an_tool_error()):
+        run_tool(monkeypatch, clean(), rules=["no_such_rule"])
+
+
+def an_tool_error():
+    from gemini_brain.semantic.catalog import ToolInputError
+    return ToolInputError

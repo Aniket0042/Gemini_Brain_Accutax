@@ -131,7 +131,7 @@ def case(cid: str, question: str, **kw: Any) -> Dict[str, Any]:
     any_of (the answer holds at least one), must (all), must_not, blocks (types that must come back), review (an
     answer about duplicates or odd bills: hedge, no rule names, no table)."""
     return {"id": cid, "question": question, "org": ORG, "planted": True, "tools_any": [], "tools_none": [], "card_has": [],
-            "any_of": [], "must": [], "must_not": [], "blocks": [], "review": False, **kw}
+            "any_of": [], "must": [], "must_not": [], "blocks": [], "review": False, "hedge": True, **kw}
 
 
 CASES: List[Dict[str, Any]] = [
@@ -150,8 +150,9 @@ CASES: List[Dict[str, Any]] = [
     # "Which bills have no VAT recorded?" is also a plain list question; list_documents answers it from the real books.
     case("vat_none", "Review my purchase bills for any with VAT left off", tools_any=["review_vat"], review=True,
          card_has=["PLANT-Z-1"]),
+    # missing fields are facts, not suspicions: the answer need not ask for confirmation
     case("missing", "Are there any bills with no supplier name or no document number?", tools_any=["review_vat"], review=True,
-         card_has=["PLANT-M-1", "Planted No Number"]),
+         hedge=False, card_has=["PLANT-M-1", "Planted No Number"]),
     case("future", "Are there any bills dated in the future?", tools_any=["review_vat"], review=True, card_has=["PLANT-F-1"]),
     case("large", "Which bills look unusually large for their supplier?", tools_any=["review_vat"], review=True,
          card_has=["PLANT-R-9"]),
@@ -211,7 +212,8 @@ def judge(case_: Dict[str, Any], answer: str, tools: List[str], blocks: List[Dic
     for t in case_["blocks"]:
         checks[f"returns a {t} block"] = any(b.get("type") == t for b in blocks or [])
     if case_["review"]:
-        checks["says a person must confirm"] = any(h in text for h in HEDGES)
+        if case_.get("hedge", True):
+            checks["says a person must confirm"] = any(h in text for h in HEDGES)
         checks["no rule name in the answer"] = not any(r in text for r in RULE_NAMES)
         checks["no table in the answer"] = not re.search(r"^\s*\|?\s*-{3,}\s*\|", answer or "", re.M)
     return {"ok": all(checks.values()), "checks": checks}

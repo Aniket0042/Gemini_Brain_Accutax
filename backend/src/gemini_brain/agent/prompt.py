@@ -40,7 +40,9 @@ Figures
 - Duplicate or odd bills ("any duplicate bills", "a bill recorded twice", "check my purchases for problems", "is the VAT
   on my bills right", "what looks odd", "any bills with negative VAT or no amount", "bills with no supplier name or
   number", "bills dated in the future", "unusually large bills", "bills with VAT missing"): review_vat, mode duplicates,
-  anomalies or all. These ask about the bills in the books, not about the law: call the tool first. Code finds the groups and
+  anomalies or all. These ask about the bills in the books, not about the law: call the tool first. When the question is
+  about one kind of problem (TRN, no VAT, future dates, missing details, one kind of duplicate), pass rules for it, so
+  every such bill is listed; omit rules for a general review. Code finds the groups and
   findings; never look for them by reading a list yourself. Say the period and how many bills were checked.
   Duplicates are "sure" (same supplier and number), "likely" (same supplier and amount within 3 days) or "possible"
   (alike supplier names, same amount and date). Keep those words, give the bill numbers, dates and amounts, and the
