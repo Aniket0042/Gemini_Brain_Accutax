@@ -68,3 +68,21 @@ def review_blocks(data: Sequence[Dict[str, Any]], urls: Dict[str, str] | None = 
             "items": items, "notes": [n for n in result.get("notes") or [] if n],
         })
     return out
+
+
+def without_tables(answer: str) -> str:
+    """The answer without its Markdown tables. The review card lists every group and bill, so a table in the answer only
+    repeats it; the prompt says so, and this makes it so when the model writes one anyway."""
+    lines, out, in_table = (answer or "").split("\n"), [], False
+    for line in lines:
+        if line.lstrip().startswith("|"):
+            in_table = True
+            continue
+        if in_table and not line.strip():
+            in_table = False
+            if out and not out[-1].strip():
+                continue  # the blank line before the table already separates the paragraphs
+        else:
+            in_table = False
+        out.append(line)
+    return "\n".join(out).strip()

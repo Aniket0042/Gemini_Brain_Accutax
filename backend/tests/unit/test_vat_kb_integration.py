@@ -87,6 +87,14 @@ NOT_VAT_LAW = [
     "How much penalty did we pay last quarter?",
     "What was in our VAT return last quarter?",
     "Show our voluntary disclosures from last year",
+    # checking the bills in the books (the review_vat tool), not asking for the law
+    "Any bills with negative VAT, or VAT but no amount?",
+    "Review my purchase bills for any with VAT left off",
+    "Is the supplier TRN valid on my bills?",
+    "Are there any duplicate bills this year?",
+    "Is the VAT on my purchase bills right this year?",
+    "Did we record any bill twice with the same bill number?",
+    "Are there any bills dated in the future?",
 ]
 
 

@@ -82,7 +82,10 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
     answer_text = result.answer or "I could not produce an answer for that request. Please try again."
     answer_text = links.link_documents(answer_text, links.document_links(data))
     cards = _document_cards(docs)
-    blocks = (cards + tiles.kpi_tiles(data) + _review_cards(data) + list(getattr(result, "blocks", None) or [])
+    review_cards = _review_cards(data)
+    if review_cards:
+        answer_text = _without_tables(answer_text)
+    blocks = (cards + tiles.kpi_tiles(data) + review_cards + list(getattr(result, "blocks", None) or [])
               + links.guide_buttons(data))
     blocks += _files(question, result, orgs, meta, user_id=user_id, session_id=session_id, answer_text=answer_text,
                      delivery=delivery, documents=docs)
@@ -216,6 +219,15 @@ def _review_cards(data: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
     except Exception as e:  # noqa: BLE001
         logger.warning("agent preview: review card not built: %s", e, exc_info=True)
         return []
+
+
+def _without_tables(text: str) -> str:
+    try:
+        from gemini_brain.vat_review.blocks import without_tables
+        return without_tables(text) or text
+    except Exception as e:  # noqa: BLE001
+        logger.warning("agent preview: tables not removed: %s", e)
+        return text
 
 
 def attachment(question: str, delivery: Any = None) -> Optional[str]:

@@ -181,7 +181,7 @@ def card_numbers(blocks: List[Dict[str, Any]]) -> List[str]:
 
 
 def judge(case_: Dict[str, Any], answer: str, tools: List[str], blocks: List[Dict[str, Any]]) -> Dict[str, Any]:
-    text = (answer or "").lower()
+    text = (answer or "").lower().replace(" ", " ").replace(" ", " ")  # the model writes "5 %" with a non-breaking space
     checks: Dict[str, bool] = {}
     for t in case_["tools_any"]:
         checks[f"called {t}"] = t in tools

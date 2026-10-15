@@ -116,3 +116,16 @@ def test_bill_links_cover_findings_too(monkeypatch):
     result = review(monkeypatch, BILLS)
     found = links.document_links([{"tool": "review_vat", "result": result}])
     assert "X-1" in found and found["X-1"].startswith("https://app.example/")
+
+
+# --- the answer without a table -----------------------------------------------------------------------------------
+
+def test_tables_are_taken_out_of_a_review_answer():
+    text = "Three groups.\n\n| Group | Amount |\n|---|---|\n| 1 | 3,300.00 |\n| 2 | 1,850.00 |\n\n- Group 1 is sure.\n\nNext step: check."
+    assert vb.without_tables(text) == "Three groups.\n\n- Group 1 is sure.\n\nNext step: check."
+
+
+def test_text_without_a_table_is_unchanged_and_never_empty():
+    assert vb.without_tables("Found 3.\n\n- one\n- two") == "Found 3.\n\n- one\n- two"
+    assert vb.without_tables("") == ""
+    assert preview._without_tables("| a |\n|---|") == "| a |\n|---|"  # nothing left: keep the answer rather than blank it

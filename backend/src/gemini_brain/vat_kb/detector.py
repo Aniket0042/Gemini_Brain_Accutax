@@ -37,7 +37,13 @@ _OWN_DATA = re.compile(
     r"|\b(vat|tax)\s+(payable|liability|collected|paid)\b.{0,30}\b(this|last|current|previous)\s+(month|quarter|year|period)\b"
     r"|\bwhich (customers|suppliers|vendors|invoices|bills)\b|\btop \d+\b"
     r"|\b(INV|BILL|PO|CN|DN)[-\s]?\d+|\b(invoice|bill|order|receipt)\s*(no\.?|number|#)\s*\d+|#\d{2,}"
-    r"|\b(balance sheet|trial balance|profit and loss|p&l|cash flow statement|dashboard)\b", re.I)
+    r"|\b(balance sheet|trial balance|profit and loss|p&l|cash flow statement|dashboard)\b"
+    # Checking the bills in the books for duplicates and odd entries (the review_vat tool), however it mentions VAT or a TRN.
+    r"|\b(duplicate|duplicated|double[- ]entered|odd|unusual|suspicious)\s+(bills?|invoices?|purchases?|entries)\b"
+    r"|\b(bills?|invoices?|purchases?)\b.{0,30}\b(recorded|entered|posted|booked)\s+twice\b"
+    r"|\b(my|our)\s+(purchase\s+|supplier\s+|vendor\s+)?(bills?|purchases?)\b"
+    r"|\b(any|are there)\b.{0,15}\b(bills?|purchases?)\b.{0,40}\b(with|without|dated|missing|that)\b"
+    r"|\breview\b.{0,20}\b(bills?|purchases?)\b", re.I)
 
 # A period on its own ("last quarter") usually means the user's figures, but law questions name one
 # too: "We found an error in last quarter's return ... voluntary disclosure, or correct it in the next
