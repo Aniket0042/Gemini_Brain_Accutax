@@ -6,6 +6,7 @@ the card is the books' own and the answer need not repeat them. Block type "vat_
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Sequence
 
 #: A short plain title for each rule: what the person sees, never the rule's name.
@@ -86,3 +87,20 @@ def without_tables(answer: str) -> str:
             in_table = False
         out.append(line)
     return "\n".join(out).strip()
+
+
+#: What each rule is called in a sentence.
+PLAIN = {
+    "same_number": "same bill number twice", "same_total_near_date": "same supplier and amount a few days apart",
+    "similar_vendor_same_day": "alike supplier names with the same amount and day", "vat_rate_not_standard": "VAT not 5% or 0%",
+    "vat_wrong_sign": "VAT and amount with opposite signs", "vat_without_amount": "VAT with no amount",
+    "missing_supplier": "no supplier name", "missing_number": "no document number", "future_date": "dated in the future",
+    "large_for_supplier": "far above the supplier's usual bill", "vat_zero": "no VAT recorded", "round_amount": "round amount",
+    "large_one_off_supplier": "large bill from a one-time supplier",
+}
+_RULE_NAME = re.compile(r"[\"'“‘`]?\b(" + "|".join(sorted(PLAIN, key=len, reverse=True)) + r")\b[\"'”’`]?")
+
+
+def plain_rule_names(answer: str) -> str:
+    """The answer with any rule name (future_date, vat_zero) put into words. The prompt forbids them; this makes it so."""
+    return _RULE_NAME.sub(lambda m: PLAIN[m.group(1)], answer or "")

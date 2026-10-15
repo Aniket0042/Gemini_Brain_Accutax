@@ -223,8 +223,8 @@ def _review_cards(data: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 def _without_tables(text: str) -> str:
     try:
-        from gemini_brain.vat_review.blocks import without_tables
-        return without_tables(text) or text
+        from gemini_brain.vat_review.blocks import plain_rule_names, without_tables
+        return plain_rule_names(without_tables(text)) or text
     except Exception as e:  # noqa: BLE001
         logger.warning("agent preview: tables not removed: %s", e)
         return text

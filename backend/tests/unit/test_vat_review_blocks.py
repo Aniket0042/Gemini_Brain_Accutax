@@ -129,3 +129,11 @@ def test_text_without_a_table_is_unchanged_and_never_empty():
     assert vb.without_tables("Found 3.\n\n- one\n- two") == "Found 3.\n\n- one\n- two"
     assert vb.without_tables("") == ""
     assert preview._without_tables("| a |\n|---|") == "| a |\n|---|"  # nothing left: keep the answer rather than blank it
+
+
+def test_rule_names_are_put_into_words():
+    text = 'Found 50 findings, all "future_date" (medium). Also vat_zero and `large_for_supplier` ones, not vat_zero_x.'
+    out = vb.plain_rule_names(text)
+    assert out == "Found 50 findings, all dated in the future (medium). Also no VAT recorded and far above the supplier's usual bill ones, not vat_zero_x."
+    assert vb.plain_rule_names("") == "" and vb.plain_rule_names("Nothing to change.") == "Nothing to change."
+    assert set(vb.PLAIN) == set(vb.TITLES) - set()  # every rule has a plain phrase
