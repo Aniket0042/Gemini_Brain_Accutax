@@ -1,6 +1,6 @@
 # VAT review (duplicates and anomalies in the books): plan and phase 0 findings
 
-Status: phases 0 and 1 done on 2026-10-15 (phase 1 deployed to the VM). Phases 2 to 4 not started.
+Status: phases 0, 1 and 2 done on 2026-10-15 and deployed to the VM. Phases 3 and 4 not started.
 
 ## Goal
 
@@ -70,3 +70,35 @@ The agent answered all three questions with only the `review_vat` tool, said the
 **Two fixes made while testing.** Groups first chained day after day into one group of 38 bills; a group is now limited to 3 days from its first bill. Cube returns ids as Decimal, which broke the call to the model; scan rows now go through the same text conversion as `list_documents`.
 
 **Not yet proven.** The "sure" rule has no real example, because no test organization has two bills with the same supplier and number; it is covered by unit tests only. Test by planting known duplicates (phase 4). On organization 25 one answer was marked "not grounded" by the verifier (shadow mode); the cause is not yet looked at.
+
+## Phase 2 result: anomaly rules (built and deployed 2026-10-15)
+
+Code: `vat_review/anomalies.py` (the rules), `vat_review/thresholds.py` (every number the rules use, for finance to review), and the `anomalies` and `all` modes of `review_vat`. Tests: `tests/unit/test_vat_anomalies.py` (28 tests); the full suite passes.
+
+| Rule | Severity | Flags |
+|---|---|---|
+| vat_rate_not_standard | high | VAT is neither 0 nor 5% of the net amount (within rounding) |
+| vat_wrong_sign | high | VAT and amount have opposite signs |
+| vat_without_amount | high | VAT on a bill with no amount |
+| missing_supplier, missing_number, future_date | medium | no supplier name, no number, dated after today |
+| large_for_supplier | medium | far above the supplier's usual bill (supplier needs 6 bills; an amount billed often is not flagged) |
+| vat_zero | low | no VAT on a bill with an amount |
+| round_amount | low | round amount, only when round amounts are rare |
+| large_one_off_supplier | low | the supplier's only bill in the period and a large one (needs 50 bills) |
+
+When 80% or more of an organization's bills share one trait (no VAT), it is reported once as a pattern. The tool shows the most serious findings but lets each rule appear, so one rule cannot fill the list.
+
+**On real data (VM):**
+
+| Organization | Result |
+|---|---|
+| 25 (year to date, 329 bills) | 293 findings: 252 VAT not 5% or 0% (the seed uses 10%, 12% and 18% slabs), 38 no VAT, 3 large for supplier |
+| 25 (2025, 740 bills) | 677 findings: 560, 107 and 10 in the same three rules |
+| 27 (464 bills) | No findings; one pattern: all bills carry no VAT |
+| 26, 33 | Pattern only (all bills carry no VAT); org 33 had 15 "large for supplier" findings before the repeated-amount fix |
+
+The agent answered all three questions with the one tool, in plain words, said the findings need a person to confirm, and offered the full list. Cost $0.017 to $0.055 per answer.
+
+**Fixed while testing.** "Large for supplier" flagged 135 bills in org 27 because a supplier billed one larger amount many times; an amount the supplier bills at least three times is no longer flagged. One answer wrote a rule name (vat_rate_not_standard); the prompt now forbids that.
+
+**Not done.** Rules that need the supplier TRN, VAT category or reverse-charge flag (not in the books). The thresholds are starting values and need finance sign-off. No planted-problem test on live data yet (phase 4).

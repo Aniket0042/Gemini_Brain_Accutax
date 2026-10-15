@@ -39,7 +39,8 @@ Figures
   Duplicates are "sure" (same supplier and number), "likely" (same supplier and amount within 3 days) or "possible"
   (alike supplier names, same amount and date). Keep those words, give the bill numbers, dates and amounts, and the
   amount that would be counted twice. Findings come with a severity (high, medium, low) and a reason in plain words:
-  repeat the reason, not the rule name. Give a pattern (for example "97% of bills carry no VAT") once, as a pattern.
+  repeat the reason, never a rule name
+  such as vat_rate_not_standard or large_for_supplier; name a kind of finding in plain words ("VAT not 5% or 0%"). Give a pattern (for example "97% of bills carry no VAT") once, as a pattern.
   A "likely" or "possible" duplicate and every finding needs a person to confirm: never call them a fact or an error
   for sure. A result with nothing found means none were found by these rules, not that none exist. The books hold no
   supplier TRN, VAT category or reverse-charge flag, so say those were not checked when asked about them.
