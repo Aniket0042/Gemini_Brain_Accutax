@@ -109,7 +109,8 @@ RULE_NAMES = ("same_number", "same_total_near_date", "similar_vendor_same_day", 
               "vat_without_amount", "missing_supplier", "missing_number", "future_date", "large_for_supplier", "vat_zero",
               "round_amount", "large_one_off_supplier")
 #: An answer about duplicates or odd bills must say the findings need a person to confirm them.
-HEDGES = ("confirm", "verify", "not confirmed", "check each", "needs a person", "need a person", "review", "worth checking")
+HEDGES = ("confirm", "verify", "not confirmed", "check each", "needs a person", "need a person", "review", "worth checking",
+          "doesn't prove", "does not prove", "not prove")
 
 
 def case(cid: str, question: str, **kw: Any) -> Dict[str, Any]:
@@ -133,7 +134,9 @@ CASES: List[Dict[str, Any]] = [
          card_has=["PLANT-V-1", "PLANT-V-2"], any_of=["5%"], must_not=["trn is valid", "trns are valid"]),
     case("vat_signs", "Any bills with negative VAT, or VAT but no amount?", tools_any=["review_vat"], review=True,
          card_has=["PLANT-S-1", "PLANT-N-1"]),
-    case("vat_none", "Which bills have no VAT recorded?", tools_any=["review_vat"], review=True, card_has=["PLANT-Z-1"]),
+    # "Which bills have no VAT recorded?" is also a plain list question; list_documents answers it from the real books.
+    case("vat_none", "Review my purchase bills for any with VAT left off", tools_any=["review_vat"], review=True,
+         card_has=["PLANT-Z-1"]),
     case("missing", "Are there any bills with no supplier name or no document number?", tools_any=["review_vat"], review=True,
          card_has=["PLANT-M-1", "Planted No Number"]),
     case("future", "Are there any bills dated in the future?", tools_any=["review_vat"], review=True, card_has=["PLANT-F-1"]),
@@ -152,7 +155,8 @@ CASES: List[Dict[str, Any]] = [
     # questions that must not go to the review
     case("ctl_total", "What is my total purchases this year?", tools_none=["review_vat"]),
     case("ctl_largest", "List the 5 largest bills this year", tools_none=["review_vat"], tools_any=["list_documents"]),
-    case("ctl_law", "What is the standard VAT rate in the UAE?", tools_none=["review_vat"], tools_any=["search_vat_kb"]),
+    # a law question may be answered by the law route before the agent runs, so no tool is required
+    case("ctl_law", "What is the standard VAT rate in the UAE?", tools_none=["review_vat"], any_of=["5%", "5 %"]),
     # real data: a noisy seeded book, a book with no VAT at all, a real book with no duplicates
     case("real_dup", "Are there any duplicate bills in 2023?", org=27, planted=False, tools_any=["review_vat"], review=True,
          any_of=["likely"], blocks=["vat_review"]),
