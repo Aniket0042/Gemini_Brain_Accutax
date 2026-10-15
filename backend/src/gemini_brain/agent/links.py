@@ -45,6 +45,13 @@ def _app_url() -> str:
     return (settings.accutax_app_url or "").rstrip("/")
 
 
+def _document_rows(item: Dict[str, Any], result: Dict[str, Any]):
+    """The document rows of a result: the rows of a list, or the bills inside a review's duplicate groups."""
+    if item.get("tool") == "review_vat":
+        return [b for g in result.get("groups") or [] for b in g.get("bills") or []]
+    return result.get("rows") or []
+
+
 def document_links(data: Sequence[Dict[str, Any]]) -> Dict[str, str]:
     """{document or journal number: app URL}. A number that maps to two different records
     (the same number in two organizations) gets no link."""
@@ -54,11 +61,12 @@ def document_links(data: Sequence[Dict[str, Any]]) -> Dict[str, str]:
     links: Dict[str, str] = {}
     clashes = set()
     for item in data or []:
-        if item.get("tool") != "list_documents":
+        if item.get("tool") not in ("list_documents", "review_vat"):
             continue
         result = item.get("result") or {}
-        for number_key, id_key, route in DOCUMENT_ROUTES.get(result.get("type"), []):
-            for row in result.get("rows") or []:
+        kind = "bills" if item.get("tool") == "review_vat" else result.get("type")
+        for number_key, id_key, route in DOCUMENT_ROUTES.get(kind, []):
+            for row in _document_rows(item, result):
                 number, record_id = str(row.get(number_key) or "").strip(), row.get(id_key)
                 if len(number) < 3 or record_id in (None, ""):
                     continue

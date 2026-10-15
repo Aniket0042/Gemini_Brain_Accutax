@@ -21,6 +21,7 @@ from gemini_brain.config.settings import settings
 from gemini_brain.semantic import cash_forecast, list_documents, query_metrics
 from gemini_brain.semantic.catalog import ToolInputError, get_catalog
 from gemini_brain.semantic.cube_client import CubeError
+from gemini_brain.vat_review import tool as review_vat
 
 logger = logging.getLogger("gemini_brain.agent.tools")
 
@@ -33,7 +34,8 @@ FIGURES_UNAVAILABLE = "Figures are temporarily unavailable. Tell the user so; ne
 _pool = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="agent-tool")
 
 #: Tools that read figures from Cube, on the organizations in scope.
-DATA_TOOLS = {"query_metrics": query_metrics, "list_documents": list_documents, "cash_forecast": cash_forecast}
+DATA_TOOLS = {"query_metrics": query_metrics, "list_documents": list_documents, "cash_forecast": cash_forecast,
+              "review_vat": review_vat}
 
 _SCOPE_PROPERTY = {
     "type": "array", "items": {"type": "integer"},
@@ -134,6 +136,8 @@ def specs(ctx: ToolContext) -> List[Dict[str, Any]]:
         out += [_with_scope(query_metrics.tool_spec(catalog)), _with_scope(list_documents.tool_spec(catalog))]
         if cash_forecast.available(list(catalog.views)):
             out.append(_with_scope(cash_forecast.tool_spec()))
+        if "purchases" in catalog.views:
+            out.append(_with_scope(review_vat.tool_spec()))
     except Exception as e:  # noqa: BLE001 - the agent still answers law and how-to questions
         logger.warning("agent: Cube catalog unavailable, figure tools left out: %s", e)
     out += [VAT_KB_SPEC, APP_GUIDE_SPEC]

@@ -31,8 +31,14 @@ Figures
 - Growth and comparisons between periods: one query_metrics call per period, with explicit dates.
   "This year" is year to date. "Quarter on quarter" compares the last complete quarter with the one before it.
 - Trends ("by month", "monthly", "quarterly trend"): query_metrics with granularity.
-- Individual invoices or bills ("list", "which", "largest", "older than", weekdays, duplicates): list_documents.
+- Individual invoices or bills ("list", "which", "largest", "older than", weekdays): list_documents.
   The UAE weekend is Saturday and Sunday.
+- Duplicate bills, or a bill recorded twice ("any duplicate bills", "check my purchases for problems"): review_vat
+  mode duplicates. Code finds the groups; never find duplicates by reading a list yourself. Say the period and how many
+  bills were checked. A group is "sure" (same supplier and number), "likely" (same supplier and amount within 3
+  days) or "possible" (alike supplier names, same amount and date); keep those words, give each group's bill numbers,
+  dates and amounts, and the amount that would be counted twice. A result with no group means none were found by
+  these rules, not that none exist. Do not call a "likely" or "possible" group a fact: it needs a person to confirm.
 - General ledger, journal entries and account activity: query_metrics view ledger for totals (debit, credit,
   net_movement by account, source or journal); list_documents type journal_lines for the individual lines.
   An account's balance at a date is balance_sheet, not ledger.
