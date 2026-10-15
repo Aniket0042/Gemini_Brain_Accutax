@@ -18,6 +18,8 @@ MODES = ("all", "duplicates", "anomalies")
 DEFAULT_LIMIT, MAX_LIMIT = 10, 50
 #: Time for one organization's scan, so a large book cannot use the whole request.
 SCAN_SECONDS = 18.0
+#: How far past the period a check for bills dated in the future looks.
+FUTURE_DAYS = 800
 
 RULE_TEXT = {
     "same_number": "same supplier and same document number",
@@ -61,6 +63,16 @@ def _law_questions(seen_rules: List[str]) -> List[Dict[str, str]]:
         if question and all(q["question"] != question for q in out) and len(out) < MAX_LAW_QUESTIONS:
             out.append({"for": RULE_TEXT.get(rule, rule), "question": question})
     return out
+
+
+def _future_dated(org: int, end: Any, today: Any, subject: str, deadline: float) -> List[Dict[str, Any]]:
+    """Bills dated after the period's end and after today, which a scan "up to today" never reaches."""
+    import datetime as dt
+    first = max(today, end) + dt.timedelta(days=1)
+    scan = scan_bills(org, first, first + dt.timedelta(days=FUTURE_DAYS), subject=subject,
+                      deadline=min(deadline, time.monotonic() + SCAN_SECONDS))
+    bills, _ = duplicates.usable(scan.bills)
+    return anomalies.find_future(bills, today)
 
 
 def _spread(findings: List[Dict[str, Any]], limit: int) -> List[Dict[str, Any]]:
@@ -114,6 +126,8 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
         tag = {"organization_id": org, "organization_name": name, "currency": currency}
         found_groups = duplicates.find_duplicates(bills) if want_dup else []
         found_odd, found_patterns = anomalies.find_anomalies(bills, today) if want_odd else ([], [])
+        if want_odd:
+            found_odd += _future_dated(org, end, today, subject, deadline)
         for item in found_groups + found_odd + found_patterns:
             item.update(tag)
         checked += len(bills)

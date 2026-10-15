@@ -50,6 +50,21 @@ def _finding(rule: str, bill: Dict[str, Any], why: str, **details: Any) -> Dict[
                                               "vendor_name", "net_purchases", "input_vat")}}
 
 
+def find_future(bills: Sequence[Dict[str, Any]], today: dt.date) -> List[Dict[str, Any]]:
+    """future_date findings for bills dated after today. A review of "this year so far" scans up to today, so the tool
+    looks at the bills dated later separately and passes them here."""
+    out: List[Dict[str, Any]] = []
+    for b in bills:
+        try:
+            day = dt.date.fromisoformat(str(b.get("document_date") or "")[:10])
+        except ValueError:
+            continue
+        if day > today:
+            out.append(_finding("future_date", b, f"The bill is dated {day.isoformat()}, which is after today.",
+                                days_ahead=(day - today).days))
+    return out
+
+
 def find_anomalies(bills: Sequence[Dict[str, Any]], today: dt.date) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """(findings, patterns) for the usable bills of ONE organization. Findings: most serious first, then largest."""
     findings: List[Dict[str, Any]] = []
