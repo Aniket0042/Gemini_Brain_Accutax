@@ -106,6 +106,12 @@ def test_a_bill_far_above_the_suppliers_usual_is_flagged():
     assert findings[0]["details"]["times_usual"] >= 8 and "usual bill" in findings[0]["why"]
 
 
+def test_an_amount_the_supplier_bills_often_is_not_out_of_line():
+    bills = usual() + [bill(f"S{i}", net=3500.0 + i, vat=round((3500.0 + i) * 0.05, 2), date=f"2026-02-{i + 1:02d}")
+                       for i in range(3)]
+    assert an.find_anomalies(bills, TODAY) == ([], [])
+
+
 def test_a_supplier_with_few_bills_is_not_judged():
     assert an.find_anomalies(usual(n=3) + [bill("BIG", net=9001.0, vat=450.05)], TODAY) == ([], [])
 

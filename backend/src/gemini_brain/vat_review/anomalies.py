@@ -119,7 +119,8 @@ def find_anomalies(bills: Sequence[Dict[str, Any]], today: dt.date) -> Tuple[Lis
             med = statistics.median(others)
             spread = statistics.median(abs(x - med) for x in others)
             limit = max(t.SUPPLIER_MULTIPLE * med, med + t.SUPPLIER_SPREAD * max(spread, 0.05 * med))
-            if n > limit:
+            repeats = sum(1 for x in others if abs(x - n) <= t.SAME_AMOUNT_TOLERANCE * n)
+            if n > limit and repeats < t.SAME_AMOUNT_REPEATS:  # an amount the supplier bills often is not out of line
                 findings.append(_finding(
                     "large_for_supplier", b,
                     f"The amount {_money(n)} is {n / med:.1f} times this supplier's usual bill (about {_money(med)}).",
