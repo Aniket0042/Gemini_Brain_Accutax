@@ -11,6 +11,7 @@ import { ActionButtonBlock } from './ActionButtonBlock';
 import { CollapsibleGroupBlock } from './CollapsibleGroupBlock';
 import { FtaSourcesBlock } from './FtaSourcesBlock';
 import { DocumentCardsBlock } from './DocumentCardsBlock';
+import { VatReviewBlock } from './VatReviewBlock';
 
 /**
  * BLOCK_REGISTRY — the one place a new block type gets wired up.
@@ -28,6 +29,7 @@ const BLOCK_REGISTRY = {
   collapsible_group: CollapsibleGroupBlock,
   fta_sources: FtaSourcesBlock,
   documents: DocumentCardsBlock,
+  vat_review: VatReviewBlock,
 };
 
 /**

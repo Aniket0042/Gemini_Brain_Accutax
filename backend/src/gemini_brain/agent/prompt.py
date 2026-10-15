@@ -41,6 +41,10 @@ Figures
   amount that would be counted twice. Findings come with a severity (high, medium, low) and a reason in plain words:
   repeat the reason, never a rule name
   such as vat_rate_not_standard or large_for_supplier; name a kind of finding in plain words ("VAT not 5% or 0%"). Give a pattern (for example "97% of bills carry no VAT") once, as a pattern.
+  A card under your answer lists each group and finding with its bills: do not repeat that list or make a table of it.
+  Give the totals, any pattern, the few things that matter most and the next step. When the result has law_questions,
+  call search_vat_kb with the first one or two, together in one round, and cite [1], [2] after the reason they
+  support; findings with no law question (an unusual amount, for example) need no citation.
   A "likely" or "possible" duplicate and every finding needs a person to confirm: never call them a fact or an error
   for sure. A result with nothing found means none were found by these rules, not that none exist. The books hold no
   supplier TRN, VAT category or reverse-charge flag, so say those were not checked when asked about them.

@@ -82,7 +82,8 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
     answer_text = result.answer or "I could not produce an answer for that request. Please try again."
     answer_text = links.link_documents(answer_text, links.document_links(data))
     cards = _document_cards(docs)
-    blocks = cards + tiles.kpi_tiles(data) + list(getattr(result, "blocks", None) or []) + links.guide_buttons(data)
+    blocks = (cards + tiles.kpi_tiles(data) + _review_cards(data) + list(getattr(result, "blocks", None) or [])
+              + links.guide_buttons(data))
     blocks += _files(question, result, orgs, meta, user_id=user_id, session_id=session_id, answer_text=answer_text,
                      delivery=delivery, documents=docs)
     if session_id:
@@ -205,6 +206,16 @@ def _collect_traces(rid: str) -> Dict[str, List[Dict[str, Any]]]:
     except Exception as e:  # noqa: BLE001
         logger.debug("agent preview: traces not collected: %s", e)
     return out
+
+
+def _review_cards(data: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The card of what a VAT review found. Never raises: the answer reaches the user without it."""
+    try:
+        from gemini_brain.vat_review.blocks import review_blocks
+        return review_blocks(data, links.document_links(data))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("agent preview: review card not built: %s", e, exc_info=True)
+        return []
 
 
 def attachment(question: str, delivery: Any = None) -> Optional[str]:

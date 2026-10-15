@@ -2763,3 +2763,90 @@ body.is-canvas-resizing .live-chart {
   .attach-tile.has-warning:focus-within .attach-pop { animation: attach-pop-in 120ms var(--ease); }
 }
 @keyframes attach-pop-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* ── The card under an answer that reviewed the books: duplicates and odd bills ─────────────── */
+.vr-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: 12px 14px;
+  margin: 4px 0;
+  font-size: var(--text-sm);
+}
+.vr-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.vr-title { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: var(--text-ui); font-weight: 600; color: var(--ink); }
+.vr-sub { color: var(--ink-faint); font-size: var(--text-xs); }
+.vr-summary { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.vr-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--ink-soft);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.vr-chip.vr-level-high { background: var(--danger-soft, #fde8e8); color: var(--danger-ink, #b42318); }
+.vr-chip.vr-level-medium { background: var(--warning-soft); color: var(--warning-ink); }
+.vr-chip.vr-level-low { background: var(--surface-2); color: var(--ink-soft); }
+.vr-chip.vr-level-good { background: var(--success-soft); color: var(--success-ink); }
+.vr-pattern {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--ink);
+  line-height: 1.45;
+}
+.vr-pattern svg { flex-shrink: 0; margin-top: 2px; color: var(--ink-soft); }
+.vr-items { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.vr-item {
+  border: 1px solid var(--border-soft);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+.vr-item.vr-level-high { border-left-color: var(--danger-ink, #b42318); }
+.vr-item.vr-level-medium { border-left-color: var(--warning); }
+.vr-item.vr-level-low, .vr-item.vr-level-none { border-left-color: var(--border); }
+.vr-item-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.vr-item-title { margin: 0; font-size: var(--text-sm); font-weight: 600; color: var(--ink); }
+.vr-item-org { margin-left: auto; color: var(--ink-faint); font-size: var(--text-xs); }
+.vr-item-why { margin: 6px 0 0; color: var(--ink-soft); line-height: 1.45; }
+.vr-bills { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.vr-bill {
+  display: grid;
+  grid-template-columns: minmax(0, 2.4fr) auto minmax(0, 1.2fr) auto;
+  gap: 4px 12px;
+  align-items: baseline;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.vr-bill-number {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-weight: 500;
+}
+a.vr-bill-number { color: var(--link); }
+a.vr-bill-number:hover { text-decoration: underline; }
+.vr-bill-date, .vr-bill-amount { white-space: nowrap; }
+.vr-bill-supplier { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vr-bill-amount { text-align: right; color: var(--ink); }
+.vr-more, .vr-extra { margin: 6px 0 0; color: var(--ink-faint); font-size: var(--text-xs); }
+.vr-extra { color: var(--ink-soft); }
+.vr-note { margin: 8px 0 0; color: var(--ink-faint); font-size: var(--text-xs); }
+@media (max-width: 640px) {
+  .vr-bill { grid-template-columns: auto minmax(0, 1fr) auto; row-gap: 1px; margin-bottom: 4px; }
+  .vr-bill-number { grid-column: 1 / -1; white-space: normal; overflow-wrap: anywhere; }
+}

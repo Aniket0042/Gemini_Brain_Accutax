@@ -36,6 +36,33 @@ RULE_TEXT = {
 }
 
 
+#: A self-contained law question for the rules that rest on UAE VAT law. The agent searches the FTA documents with it,
+#: so each kind of finding is cited from its own source, not from one general guide. The other rules are not law.
+LAW_QUESTIONS = {
+    "vat_rate_not_standard": "What VAT rates apply to purchases in the UAE: the standard rate, zero-rated and exempt supplies?",
+    "vat_zero": "Which supplies are zero-rated or exempt from VAT in the UAE, and can input VAT be recovered on them?",
+    "missing_supplier": "What details must a UAE tax invoice show, including the supplier's name, tax registration number and invoice number?",
+    "missing_number": "What details must a UAE tax invoice show, including the supplier's name, tax registration number and invoice number?",
+    "same_number": "What evidence is needed to recover input tax in the UAE, and can input tax be recovered twice on one tax invoice?",
+    "same_total_near_date": "What evidence is needed to recover input tax in the UAE, and can input tax be recovered twice on one tax invoice?",
+    "similar_vendor_same_day": "What evidence is needed to recover input tax in the UAE, and can input tax be recovered twice on one tax invoice?",
+    "vat_wrong_sign": "How is a tax credit note recorded and what must it show in the UAE?",
+    "vat_without_amount": "How is a tax credit note recorded and what must it show in the UAE?",
+    "future_date": "When is the date of supply and when must a tax invoice be issued in the UAE?",
+}
+MAX_LAW_QUESTIONS = 3
+
+
+def _law_questions(seen_rules: List[str]) -> List[Dict[str, str]]:
+    """The law questions for the rules that fired, most serious first, each question once."""
+    out: List[Dict[str, str]] = []
+    for rule in seen_rules:
+        question = LAW_QUESTIONS.get(rule)
+        if question and all(q["question"] != question for q in out) and len(out) < MAX_LAW_QUESTIONS:
+            out.append({"for": RULE_TEXT.get(rule, rule), "question": question})
+    return out
+
+
 def _spread(findings: List[Dict[str, Any]], limit: int) -> List[Dict[str, Any]]:
     """The findings to show: most serious first, but one rule never fills the list while others are waiting."""
     queues: Dict[str, List[Dict[str, Any]]] = {}
@@ -133,7 +160,10 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
         if not findings and not patterns:
             notes.append("No odd bills were found by these rules. Rules that need the supplier's TRN, the VAT category or "
                          "a reverse-charge flag are not applied, because the books do not hold those fields.")
-    out.update({"rows": rows, "row_count": len(rows), "rules": rules})
+    fired = [f["rule"] for f in sorted(findings, key=lambda f: anomalies._RANK[f["severity"]])] if want_odd else []
+    fired += [g["rule"] for g in groups] if want_dup else []
+    seen_rules = list(dict.fromkeys(fired))
+    out.update({"rows": rows, "row_count": len(rows), "rules": rules, "law_questions": _law_questions(seen_rules)})
     return out
 
 
