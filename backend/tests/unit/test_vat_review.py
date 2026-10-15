@@ -142,6 +142,24 @@ def test_a_scan_cuts_the_period_until_nothing_is_lost(monkeypatch):
     assert result.complete and len(result.bills) == 1700 and len(calls) > 1
 
 
+def test_cube_decimals_never_reach_the_result(monkeypatch):
+    """Cube sends ids and amounts as Decimal; the result goes to the model as JSON, which cannot hold them."""
+    import json
+    from decimal import Decimal
+
+    def load(query, *, organization_ids, subject, deadline):
+        return SimpleNamespace(rows=[{"purchases.document_number": "B-1", "purchases.document_id": Decimal("6853"),
+                                      "purchases.document_date": "2026-03-01T00:00:00.000", "purchases.status": "PAID",
+                                      "purchases.vendor_name": "Acme", "purchases.net_purchases": Decimal("1000.50"),
+                                      "purchases.input_vat": Decimal("0")}] * 2)
+
+    monkeypatch.setattr(scan_mod.cube_client, "load", load)
+    out = tool.run({"mode": "duplicates", "period": {"start": "2026-03-01", "end": "2026-03-01"}},
+                   organization_ids=[7], subject="t", deadline=1e12)
+    assert out["groups_found"] == 1 and out["groups"][0]["bills"][0]["document_date"] == "2026-03-01"
+    json.dumps(out)
+
+
 def test_one_day_with_too_many_bills_makes_the_scan_incomplete(monkeypatch):
     fake_cube(monkeypatch, [bill(f"X{i}", date="2026-03-01", net=float(i + 1)) for i in range(600)])
     result = scan_mod.scan_bills(1, dt.date(2026, 3, 1), dt.date(2026, 3, 1), subject="t", deadline=1e12)

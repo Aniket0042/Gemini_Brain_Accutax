@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from gemini_brain.semantic import cube_client
+from gemini_brain.semantic.query_metrics import cell_text
 
 CUBE_ROW_LIMIT = 500
 COLUMNS = ("document_number", "document_id", "document_date", "document_type", "status", "vendor_name")
@@ -37,7 +38,7 @@ def _query(start: dt.date, end: dt.date) -> Dict[str, Any]:
 
 
 def _row(raw: Dict[str, Any]) -> Dict[str, Any]:
-    out = {k.split(".", 1)[1]: v for k, v in raw.items()}
+    out = {k.split(".", 1)[1]: cell_text(v) for k, v in raw.items()}  # Decimals become text: results go to the model as JSON
     for key in MEASURES:
         try:
             out[key] = float(out[key]) if out.get(key) not in (None, "") else None
