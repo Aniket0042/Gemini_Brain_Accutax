@@ -31,7 +31,14 @@ Total about 46 working days if packages run one after another. Packages 1 to 4 c
 5. Package 6 when the fields exist.
 6. Package 7. The pilot can start on packages 1 to 4 before package 6 is ready.
 
-## Request for the DBA (to send once approved)
+## Decisions (2026-10-15)
+
+1. **DBA request approved.** The text to send is `docs/DBA_REQUEST_VAT_FIELDS.md`. It first asks where the TRN, VAT rate or code, VAT category and reverse-charge flag are already stored, and for read access to them, because the Cube views already read `contacts` and `expense_items` and the fields may exist. It has not been sent: the assistant has no way to reach the DBA, so the owner sends it.
+2. **Finance sign-off of the thresholds: Alex Morgan.** To review `backend/src/gemini_brain/vat_review/thresholds.py` before the pilot ends.
+3. **Sales too, after purchases** (package 4).
+4. **Exchange rate: the Central Bank of the UAE rate, saved with the date used** (package 2).
+
+## Request for the DBA (first draft; the sent version is the file above)
 
 The Cube views read from the shared database through the read-only user. Three additions are needed, each for purchases first and sales second:
 
