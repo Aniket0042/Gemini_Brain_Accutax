@@ -1,6 +1,6 @@
 # VAT review (duplicates and anomalies in the books): plan and phase 0 findings
 
-Status: phases 0 to 3 done on 2026-10-15 and deployed to the VM. Phase 4 (planted-problem tests, evaluation set, rollout) not started.
+Status: phases 0 to 4 done on 2026-10-15 and deployed to the VM. Open: finance sign-off of the thresholds, the three DBA fields, and a pilot with real users.
 
 ## Goal
 
@@ -110,3 +110,37 @@ The agent answered all three questions with the one tool, in plain words, said t
 - **Sources per finding.** The review result carries a law question for each kind of finding (`LAW_QUESTIONS` in `vat_review/tool.py`), and the agent searches the FTA documents with the first one or two. Questions are worded as the documents are, because the search matches that best: "Federal Decree-Law No. 8 of 2017 standard rate of tax and zero-rated supplies" returns the Decree-Law itself, where a plain question returned the Financial Services guide. Answers now cite the Decree-Law for the VAT rate and a different document for other findings, not one guide every time.
 - **Still weak.** The search sometimes returns a poor match for a sentence (an answer about recovering input tax cited the E-Commerce guide). That is the ranking of the FTA search, not of the review.
 - **Tests.** `tests/unit/test_vat_review_blocks.py` (10 tests); the full suite passed (1,829 passed, 10 skipped). One earlier full run showed a single failure that did not repeat; the cause was not found.
+
+
+## Phase 4 result: planted problems, 21 questions, rollout (2026-10-15)
+
+**Harness.** `backend/scripts/eval/vat_review_cases.py` holds a planted book of 41 bills (20 clean, 8 regular bills from one supplier, and every problem the rules look for) and 21 questions with what the card and the answer must hold. `vat_review_eval.py rules` runs the rules on the planted book for free; `vat_review_eval.py agent` asks the questions through the same function the API uses, with the review's scan of organization 25 replaced by the planted book for the planted cases (the test books are read-only, so problems cannot be planted in them). The other tools and the other organizations are real.
+
+**Rules on the planted book.** All 11 planted problem kinds were found, no clean bill was flagged, and no rule fired without a planted bill. This also runs as a unit test.
+
+**Questions (one paid run, then the fixes below):**
+
+| Run | Result | Cost |
+|---|---|---|
+| First full run | 15 of 21 | $0.92 |
+| After fixes, the 6 failed cases | 1 of 6 (three case expectations were wrong; the prompt change alone did not fix the rest) | $0.17 |
+| After the detector change, full run | 20 of 21 | $0.87 |
+| The one failure and two cases rerun | 3 of 3 | $0.18 |
+
+Total spend about $2.14. Median answer time about 11 s, slowest 25 s (the Excel exports); each answer cost $0.004 to $0.11.
+
+**What the evaluation found, and what was done.**
+1. **The law shortcut took questions about the books.** "Any bills with negative VAT, or VAT but no amount?", "Review my purchase bills for any with VAT left off" and "Is the supplier TRN valid on my bills?" mention VAT or a TRN, so the detector sent them to the FTA documents and the agent never looked at the books. `vat_kb/detector.py` now treats questions about "my bills", duplicate or odd bills, and "any bills with..." as questions about the books (tests added). This is the largest finding: it applies to any VAT question that is really about the user's own bills.
+2. **TRN questions.** The books hold no supplier TRN. The prompt now says so, and the answer offers to check a bill the user attaches.
+3. **Tables and rule names in answers.** The prompt asked for neither, and the model still wrote them. Code now removes tables from a review answer (the card lists everything) and replaces rule names such as `future_date` with words.
+4. **Future-dated bills were never seen.** A scan "up to today" cannot reach them. The review now scans the next 800 days for them. On organization 26 this found 50 bills dated after today, a real finding in the seed data.
+5. **Case expectations corrected.** "Which bills have no VAT recorded?" is also a plain list question that `list_documents` answers; a law question may be answered by the law route before the agent runs; "does not prove there are none" counts as the hedge on a no-result answer.
+
+**Rollout.** The tool is part of the agent, which is behind the pilot allowlist on the VM (`AGENT_PREVIEW_USERS`); no separate switch was added. Widening the agent widens the review.
+
+**Not done.**
+- Finance has not signed off the thresholds in `vat_review/thresholds.py`.
+- The "sure" duplicate rule has no real-data example (no test organization has the same supplier and number twice); it is proven only on the planted book.
+- Rules that need the supplier TRN, VAT category or reverse-charge flag wait for those Cube fields (DBA go-ahead).
+- Purchases only; sales invoices are not reviewed.
+- No pilot with real users yet. The verifier marked a few review answers "not grounded"; it runs in shadow mode and the cause was not investigated.
