@@ -63,9 +63,14 @@ def test_a_monthly_recurring_bill_is_not_flagged():
     assert dup.find_duplicates([bill(f"R{m}", date=f"2026-{m:02d}-01") for m in range(1, 7)]) == []
 
 
-def test_a_chain_of_close_dates_is_one_group():
+def test_a_group_stays_within_three_days_of_its_first_bill():
     groups = dup.find_duplicates([bill("A", date="2026-03-01"), bill("B", date="2026-03-03"), bill("C", date="2026-03-05")])
-    assert len(groups) == 1 and groups[0]["count"] == 3 and groups[0]["extra_amount"] == 2000.0
+    assert len(groups) == 1 and [x["document_number"] for x in groups[0]["bills"]] == ["A", "B"]
+
+
+def test_a_daily_run_of_the_same_amount_does_not_become_one_huge_group():
+    groups = dup.find_duplicates([bill(f"D{i}", date=f"2026-03-{i:02d}") for i in range(1, 21)])
+    assert groups and max(g["count"] for g in groups) <= 4
 
 
 def test_a_same_number_pair_is_not_reported_twice():

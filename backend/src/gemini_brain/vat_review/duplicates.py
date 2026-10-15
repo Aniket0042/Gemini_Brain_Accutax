@@ -105,7 +105,7 @@ def find_duplicates(bills: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
         members.sort(key=_day)
         cluster = [members[0]]
         for b in members[1:] + [None]:
-            if b is not None and (_day(b) - _day(cluster[-1])).days <= DAYS_APART:
+            if b is not None and (_day(b) - _day(cluster[0])).days <= DAYS_APART:  # near the first bill, so a daily run does not chain
                 cluster.append(b)
                 continue
             # A cluster that is exactly one same_number group was reported by rule 1 already.
