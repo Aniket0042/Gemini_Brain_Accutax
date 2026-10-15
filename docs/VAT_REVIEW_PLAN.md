@@ -1,6 +1,6 @@
 # VAT review (duplicates and anomalies in the books): plan and phase 0 findings
 
-Status: phase 0 done on 2026-10-15. Phases 1 to 4 not started.
+Status: phases 0 and 1 done on 2026-10-15 (phase 1 deployed to the VM). Phases 2 to 4 not started.
 
 ## Goal
 
@@ -50,3 +50,23 @@ Let the agent scan an organization's bills and say which look like duplicates or
 - Phase 2, anomaly rules (3 days).
 - Phase 3, the answer and the findings table, with Excel export (2 days); search the FTA sources by finding to vary the sources.
 - Phase 4, tests on seeded problems, an evaluation set of about 20 questions, one paid run, rollout behind the allowlist (2 days).
+
+## Phase 1 result: duplicate detection (built and deployed 2026-10-15)
+
+Code: `backend/src/gemini_brain/vat_review/` (`scan.py`, `duplicates.py`, `tool.py`) and the `review_vat` agent tool (`agent/tools.py`), with a prompt rule and document links in `agent/prompt.py` and `agent/links.py`. Tests: `backend/tests/unit/test_vat_review.py` (30 tests; the full suite passes).
+
+**Rules.** Sure: same supplier and same document number. Likely: same supplier and same amount, dated within 3 days of the group's first bill. Possible: alike supplier names, same amount, same date. Voided, cancelled, rejected and draft bills are left out. A bill with no amount is only checked by its number.
+
+**On real data (VM, read-only):**
+
+| Organization | Bills scanned | Time | Groups found | Note |
+|---|---|---|---|---|
+| 25 (real-looking) | 3,669 | 2.9 s | 0 | Correct: no duplicates were found, and the answer says that does not prove there are none |
+| 26 | 1,016 | 0.5 s | 237 likely | Seed data: the same amount on consecutive days |
+| 27 | 4,126 | 3.3 s | 117 likely over all years; 168 for 2023 alone after the clustering fix | Seed data, as above |
+
+The agent answered all three questions with only the `review_vat` tool, said the period and the number of bills checked, called the groups "likely" and asked for a person to confirm them. Cost was $0.003 to $0.043 per answer.
+
+**Two fixes made while testing.** Groups first chained day after day into one group of 38 bills; a group is now limited to 3 days from its first bill. Cube returns ids as Decimal, which broke the call to the model; scan rows now go through the same text conversion as `list_documents`.
+
+**Not yet proven.** The "sure" rule has no real example, because no test organization has two bills with the same supplier and number; it is covered by unit tests only. Test by planting known duplicates (phase 4). On organization 25 one answer was marked "not grounded" by the verifier (shadow mode); the cause is not yet looked at.
