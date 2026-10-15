@@ -11,6 +11,11 @@ from gemini_brain.vat_review import scan as scan_mod
 from gemini_brain.vat_review import tool
 
 
+@pytest.fixture(autouse=True)
+def _no_cube_catalog(monkeypatch):
+    monkeypatch.setattr(tool, "_has_trn", lambda *a, **k: False)  # no Cube in unit tests
+
+
 def bill(number, vendor="Acme Trading LLC", date="2026-03-01", net=1000.0, vat=50.0, status="ACCEPTED", id_=None):
     return {"document_number": number, "document_id": id_ or number, "document_date": date, "document_type": "BILL",
             "status": status, "vendor_name": vendor, "net_purchases": net, "input_vat": vat, "organization_name": "Org A",

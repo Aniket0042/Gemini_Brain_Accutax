@@ -30,6 +30,7 @@ RULE_TEXT = {
     "vat_without_amount": "VAT on a bill with no amount",
     "missing_supplier": "no supplier name",
     "missing_number": "no document number",
+    "supplier_trn_invalid": "VAT on the bill, but the supplier's TRN is missing or not 15 digits",
     "future_date": "dated after today",
     "large_for_supplier": "far above the supplier's usual bill",
     "vat_zero": "no VAT on a bill with an amount",
@@ -45,6 +46,7 @@ LAW_QUESTIONS = {
     "vat_zero": "Is input tax recoverable on exempt supplies and on zero-rated supplies under the VAT law?",
     "missing_supplier": "What details must a UAE tax invoice show, including the supplier's name, tax registration number and invoice number?",
     "missing_number": "What details must a UAE tax invoice show, including the supplier's name, tax registration number and invoice number?",
+    "supplier_trn_invalid": "What details must a UAE tax invoice show, including the supplier's name, tax registration number and invoice number?",
     "same_number": "Federal Decree-Law No. 8 of 2017 recovery of input tax conditions tax invoice",
     "same_total_near_date": "Federal Decree-Law No. 8 of 2017 recovery of input tax conditions tax invoice",
     "similar_vendor_same_day": "Federal Decree-Law No. 8 of 2017 recovery of input tax conditions tax invoice",
@@ -65,12 +67,23 @@ def _law_questions(seen_rules: List[str]) -> List[Dict[str, str]]:
     return out
 
 
-def _future_dated(org: int, end: Any, today: Any, subject: str, deadline: float) -> List[Dict[str, Any]]:
+def _has_trn(organization_ids: Sequence[int], subject: str, deadline: float) -> bool:
+    """Whether the bills view of this Cube gives the supplier's TRN. A Cube started before the field was added does not;
+    the review then skips the TRN check and says so, instead of failing."""
+    try:
+        from gemini_brain.semantic.catalog import get_catalog
+        return "purchases.vendor_trn" in get_catalog(list(organization_ids), subject, deadline).view("purchases").dimensions
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _future_dated(org: int, end: Any, today: Any, subject: str, deadline: float,
+                  with_trn: bool = False) -> List[Dict[str, Any]]:
     """Bills dated after the period's end and after today, which a scan "up to today" never reaches."""
     import datetime as dt
     first = max(today, end) + dt.timedelta(days=1)
     scan = scan_bills(org, first, first + dt.timedelta(days=FUTURE_DAYS), subject=subject,
-                      deadline=min(deadline, time.monotonic() + SCAN_SECONDS))
+                      deadline=min(deadline, time.monotonic() + SCAN_SECONDS), with_trn=with_trn)
     bills, _ = duplicates.usable(scan.bills)
     return anomalies.find_future(bills, today)
 
@@ -112,6 +125,7 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
     except ValueError as e:
         raise ToolInputError(str(e)) from e
     want_dup, want_odd = mode in ("all", "duplicates"), mode in ("all", "anomalies")
+    with_trn = want_odd and _has_trn(organization_ids, subject, deadline)
 
     groups: List[Dict[str, Any]] = []
     findings: List[Dict[str, Any]] = []
@@ -119,7 +133,8 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
     checked, left_out, notes = 0, 0, []
     per_org: List[Dict[str, Any]] = []
     for org in organization_ids:
-        scan = scan_bills(org, start, end, subject=subject, deadline=min(deadline, time.monotonic() + SCAN_SECONDS))
+        scan = scan_bills(org, start, end, subject=subject, deadline=min(deadline, time.monotonic() + SCAN_SECONDS),
+                          with_trn=with_trn)
         bills, skipped = duplicates.usable(scan.bills)
         name = next((b.get("organization_name") for b in scan.bills if b.get("organization_name")), None) or f"Organization {org}"
         currency = next((b.get("currency") for b in scan.bills if b.get("currency")), None)
@@ -127,7 +142,7 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
         found_groups = duplicates.find_duplicates(bills) if want_dup else []
         found_odd, found_patterns = anomalies.find_anomalies(bills, today) if want_odd else ([], [])
         if want_odd:
-            found_odd += _future_dated(org, end, today, subject, deadline)
+            found_odd += _future_dated(org, end, today, subject, deadline, with_trn)
         for item in found_groups + found_odd + found_patterns:
             item.update(tag)
         checked += len(bills)
@@ -142,6 +157,8 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
             notes.append(f"{name}: the scan stopped early ({scan.why_incomplete}); the result may miss problems.")
     if left_out:
         notes.append(f"{left_out} voided, cancelled or draft bills were left out.")
+    if want_odd and not with_trn:
+        notes.append("Supplier TRNs were not checked: this book does not provide them.")
 
     out: Dict[str, Any] = {"mode": mode, "period": {"start": start.isoformat(), "end": end.isoformat()},
                            "bills_checked": checked, "organizations": per_org, "notes": notes}

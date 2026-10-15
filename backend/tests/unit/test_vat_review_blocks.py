@@ -3,10 +3,17 @@ import json
 import zlib
 from types import SimpleNamespace
 
+import pytest
+
 from gemini_brain.agent import links, preview
 from gemini_brain.vat_review import blocks as vb
 from gemini_brain.vat_review import scan as scan_mod
 from gemini_brain.vat_review import tool
+
+
+@pytest.fixture(autouse=True)
+def _no_cube_catalog(monkeypatch):
+    monkeypatch.setattr(tool, "_has_trn", lambda *a, **k: False)  # no Cube in unit tests
 
 
 def bill(number, vendor="Acme", date="2026-03-01", net=1000.0, vat=50.0, id_=None):

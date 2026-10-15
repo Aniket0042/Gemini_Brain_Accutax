@@ -23,6 +23,7 @@ cubes:
                CAST(e.created_date AS DATE))                AS document_date,
              e.contact_id                                  AS vendor_id,
              COALESCE(NULLIF(c.name, ''), NULLIF(c.organization_name, ''), 'Unknown') AS vendor_name,
+             NULLIF(TRIM(c.trn_number), '')                AS vendor_trn,
              COALESCE(ect.value, 'Uncategorised')          AS expense_category,
              COALESCE(p.project_name, 'No project')        AS project_name,
              COALESCE(cc.costcenter_name, 'Unallocated')   AS cost_center_name,
@@ -84,6 +85,12 @@ cubes:
         type: string
       - name: vendor_name
         sql: vendor_name
+        type: string
+      - name: vendor_trn
+        description: >-
+          The supplier's tax registration number as stored on the contact (null when blank). Used to check
+          that a bill with VAT shows a 15-digit UAE TRN; a number is not proof that the FTA registered it.
+        sql: vendor_trn
         type: string
       - name: expense_category
         sql: expense_category

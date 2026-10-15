@@ -28,9 +28,10 @@ class Scan:
     why_incomplete: Optional[str] = None
 
 
-def _query(start: dt.date, end: dt.date) -> Dict[str, Any]:
+def _query(start: dt.date, end: dt.date, with_trn: bool = False) -> Dict[str, Any]:
     return {
-        "dimensions": [f"purchases.{c}" for c in COLUMNS] + ["purchases.currency", "purchases.organization_name"],
+        "dimensions": [f"purchases.{c}" for c in COLUMNS + (("vendor_trn",) if with_trn else ())]
+        + ["purchases.currency", "purchases.organization_name"],
         "measures": [f"purchases.{m}" for m in MEASURES],
         "limit": CUBE_ROW_LIMIT,
         "timeDimensions": [{"dimension": "purchases.document_date", "dateRange": [start.isoformat(), end.isoformat()]}],
@@ -48,7 +49,8 @@ def _row(raw: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def scan_bills(organization_id: int, start: dt.date, end: dt.date, *, subject: str, deadline: float) -> Scan:
+def scan_bills(organization_id: int, start: dt.date, end: dt.date, *, subject: str, deadline: float,
+               with_trn: bool = False) -> Scan:
     scan = Scan()
 
     def part(a: dt.date, b: dt.date) -> None:
@@ -57,7 +59,7 @@ def scan_bills(organization_id: int, start: dt.date, end: dt.date, *, subject: s
         if time.monotonic() >= deadline:
             scan.complete, scan.why_incomplete = False, "time ran out"
             return
-        result = cube_client.load(_query(a, b), organization_ids=[organization_id], subject=subject, deadline=deadline)
+        result = cube_client.load(_query(a, b, with_trn), organization_ids=[organization_id], subject=subject, deadline=deadline)
         scan.queries += 1
         if len(result.rows) < CUBE_ROW_LIMIT or a >= b:
             scan.bills.extend(_row(r) for r in result.rows)

@@ -20,6 +20,7 @@ views:
           - document_weekday
           - status
           - vendor_name
+          - vendor_trn
           - expense_category
           - project_name
           - cost_center_name

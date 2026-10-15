@@ -21,6 +21,7 @@ TITLES = {
     "missing_number": "No document number",
     "future_date": "Dated in the future",
     "large_for_supplier": "Far above this supplier's usual bill",
+    "supplier_trn_invalid": "Supplier TRN missing or not 15 digits",
     "vat_zero": "No VAT recorded",
     "round_amount": "Round amount",
     "large_one_off_supplier": "Large bill from a one-time supplier",
@@ -95,7 +96,8 @@ PLAIN = {
     "similar_vendor_same_day": "alike supplier names with the same amount and day", "vat_rate_not_standard": "VAT not 5% or 0%",
     "vat_wrong_sign": "VAT and amount with opposite signs", "vat_without_amount": "VAT with no amount",
     "missing_supplier": "no supplier name", "missing_number": "no document number", "future_date": "dated in the future",
-    "large_for_supplier": "far above the supplier's usual bill", "vat_zero": "no VAT recorded", "round_amount": "round amount",
+    "large_for_supplier": "far above the supplier's usual bill", "supplier_trn_invalid": "supplier TRN missing or not 15 digits",
+    "vat_zero": "no VAT recorded", "round_amount": "round amount",
     "large_one_off_supplier": "large bill from a one-time supplier",
 }
 _RULE_NAME = re.compile(r"[\"'“‘`]?\b(" + "|".join(sorted(PLAIN, key=len, reverse=True)) + r")\b[\"'”’`]?")

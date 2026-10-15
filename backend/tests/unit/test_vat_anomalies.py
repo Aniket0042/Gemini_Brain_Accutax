@@ -11,6 +11,11 @@ from gemini_brain.vat_review import tool
 TODAY = dt.date(2026, 10, 15)
 
 
+@pytest.fixture(autouse=True)
+def _no_cube_catalog(monkeypatch):
+    monkeypatch.setattr(tool, "_has_trn", lambda *a, **k: False)  # no Cube in unit tests
+
+
 def bill(number="B-1", vendor="Acme", date="2026-03-01", net=1000.0, vat=50.0, status="ACCEPTED", id_=None):
     return {"document_number": number, "document_id": id_ or number, "document_date": date, "document_type": "BILL",
             "status": status, "vendor_name": vendor, "net_purchases": net, "input_vat": vat, "organization_name": "Org A",
@@ -198,3 +203,52 @@ def test_nothing_found_says_which_rules_are_not_applied(monkeypatch):
 def test_the_result_is_json(monkeypatch):
     import json
     json.dumps(run_tool(monkeypatch, clean() + [bill("X", net=7186.0, vat=1293.48)]))
+
+
+# --- the supplier's TRN -------------------------------------------------------------------------------------------
+
+def with_trn(trn, **kw):
+    return {**bill(**kw), "vendor_trn": trn}
+
+
+GOOD = "100123456700003"
+
+
+def test_a_bill_with_vat_and_a_15_digit_trn_is_fine_even_with_spaces_or_dashes():
+    bills = [with_trn(GOOD, number="A1"), with_trn("100-1234-5670-0003", number="A2"), with_trn("1001 2345 6700 003", number="A3")]
+    assert an.find_anomalies(clean() + bills, TODAY)[0] == []
+
+
+def test_a_bill_with_vat_and_a_short_or_missing_trn_is_flagged_without_the_number():
+    bills = clean() + [with_trn("123456789", number="S1"), with_trn(None, number="S2"), with_trn("", number="S3")]
+    findings, patterns = an.find_anomalies([{**b, "vendor_trn": GOOD} if b["document_number"].startswith("C") else b for b in bills],
+                                           TODAY)
+    assert rules(findings) == ["supplier_trn_invalid"] * 3 and patterns == []
+    by_number = {f["bill"]["document_number"]: f for f in findings}
+    assert "9 digits" in by_number["S1"]["why"] and "no TRN recorded" in by_number["S2"]["why"]
+    assert all("123456789" not in f["why"] for f in findings)
+    assert by_number["S1"]["severity"] == "medium"
+
+
+def test_a_bill_without_vat_needs_no_trn():
+    bills = [{**b, "vendor_trn": GOOD} for b in clean()] + [with_trn("12", number="Z", vat=0.0)]
+    findings, _ = an.find_anomalies(bills, TODAY)
+    assert rules(findings) == ["vat_zero"]  # no VAT is its own finding; the short TRN is not one
+
+
+def test_when_the_books_give_no_trn_nothing_is_said_about_it():
+    findings, patterns = an.find_anomalies(clean(), TODAY)  # these bills carry no vendor_trn key at all
+    assert findings == [] and patterns == []
+
+
+def test_when_almost_every_trn_is_wrong_it_is_one_pattern():
+    bills = [with_trn("ABC1234567", number=f"P{i}", vendor=f"S{i}", net=1000.0 + 7 * i, vat=round((1000.0 + 7 * i) * 0.05, 2),
+                      date="2026-03-01") for i in range(20)]
+    findings, patterns = an.find_anomalies(bills, TODAY)
+    assert findings == [] and patterns[0]["rule"] == "supplier_trn_invalid" and "20 of 20 bills with VAT" in patterns[0]["text"]
+    assert "15 digits" in patterns[0]["text"]
+
+
+def test_the_tool_says_when_trns_were_not_checked(monkeypatch):
+    out = run_tool(monkeypatch, clean(), mode="anomalies")
+    assert any("Supplier TRNs were not checked" in n for n in out["notes"])

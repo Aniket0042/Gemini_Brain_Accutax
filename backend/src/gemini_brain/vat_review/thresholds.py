@@ -22,6 +22,10 @@ SUPPLIER_SPREAD = 6.0
 #: ...unless the supplier has at least SAME_AMOUNT_REPEATS other bills within SAME_AMOUNT_TOLERANCE of that amount.
 SAME_AMOUNT_REPEATS = 2
 SAME_AMOUNT_TOLERANCE = 0.02
+#: A UAE tax registration number has this many digits. When this share of the bills that carry VAT show a TRN that
+#: is missing or has another length, say it once as a pattern instead of listing every bill.
+TRN_DIGITS = 15
+TRN_SYSTEMIC_SHARE = 0.80
 #: A round amount (a multiple of ROUND_STEP, at least ROUND_MIN) is only odd when round amounts are rare.
 ROUND_STEP = 1000.0
 ROUND_MIN = 5000.0

@@ -10,6 +10,7 @@ need the supplier's TRN, the VAT category or a reverse-charge flag wait for thos
   missing_number          medium  no document number
   future_date             medium  dated after today
   large_for_supplier      medium  far above this supplier's usual bill
+  supplier_trn_invalid    medium  VAT on the bill, but the supplier's TRN is missing or does not have 15 digits
   vat_zero                low     no VAT on a bill with an amount (zero-rated, exempt, out of scope, or VAT left off)
   round_amount            low     a round amount, when round amounts are rare
   large_one_off_supplier  low     the supplier's only bill in the period, and a large one
@@ -20,6 +21,7 @@ a pattern, not as one finding per bill. Pure functions on bill dicts; no I/O.
 from __future__ import annotations
 
 import datetime as dt
+import re
 import statistics
 from collections import defaultdict
 from typing import Any, Dict, List, Sequence, Tuple
@@ -30,7 +32,7 @@ from gemini_brain.vat_review.duplicates import vendor_key
 SEVERITY = {
     "vat_rate_not_standard": "high", "vat_wrong_sign": "high", "vat_without_amount": "high",
     "missing_supplier": "medium", "missing_number": "medium", "future_date": "medium", "large_for_supplier": "medium",
-    "vat_zero": "low", "round_amount": "low", "large_one_off_supplier": "low",
+    "supplier_trn_invalid": "medium", "vat_zero": "low", "round_amount": "low", "large_one_off_supplier": "low",
 }
 RULES = tuple(SEVERITY)
 _RANK = {"high": 0, "medium": 1, "low": 2}
@@ -104,6 +106,25 @@ def find_anomalies(bills: Sequence[Dict[str, Any]], today: dt.date) -> Tuple[Lis
                                  "is not being recorded."})
     else:
         findings += zero_vat
+
+    # --- the supplier's TRN, for bills that carry VAT (only when the books give the TRN at all) ----------------------
+    with_vat = [b for b in bills if "vendor_trn" in b and (_num(b.get("input_vat")) or 0) > 0.005]
+    bad_trn = []
+    for b in with_vat:
+        digits = re.sub(r"\D", "", str(b.get("vendor_trn") or ""))
+        if len(digits) != t.TRN_DIGITS:
+            bad_trn.append((b, len(digits)))
+    if bad_trn and len(bad_trn) / len(with_vat) >= t.TRN_SYSTEMIC_SHARE:
+        patterns.append({"rule": "supplier_trn_invalid", "bills": len(bad_trn), "of": len(with_vat),
+                         "share_percent": round(len(bad_trn) / len(with_vat) * 100),
+                         "text": f"{len(bad_trn):,} of {len(with_vat):,} bills with VAT ({len(bad_trn) / len(with_vat) * 100:.0f}%) "
+                                 f"show a supplier TRN that is missing or does not have {t.TRN_DIGITS} digits. The TRNs may be "
+                                 "entered in another format, or may not be real numbers: check how they are recorded."})
+    else:
+        for b, n in bad_trn:
+            why = (f"VAT of {_money(_num(b.get('input_vat')) or 0)} is claimed, but the supplier has no TRN recorded."
+                   if n == 0 else f"VAT is claimed, but the supplier's TRN has {n} digits; a UAE TRN has {t.TRN_DIGITS}.")
+            findings.append(_finding("supplier_trn_invalid", b, why, trn_digits=n))
 
     # --- missing details and dates ---------------------------------------------------------------------------------
     for b in bills:

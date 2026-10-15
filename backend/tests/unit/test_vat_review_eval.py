@@ -36,7 +36,7 @@ def test_the_tool_finds_the_planted_problems_through_the_scan(monkeypatch):
     assert out["bills_checked"] == len(vc.planted_book()) - 1  # the future bill is looked at separately
     by_rule = {**out["groups_by_rule"], **out["findings_by_rule"]}
     assert by_rule == {"same_number": 1, "same_total_near_date": 1, "similar_vendor_same_day": 1, "vat_rate_not_standard": 2,
-                       "vat_wrong_sign": 1, "vat_without_amount": 1, "vat_zero": 1, "missing_supplier": 1,
+                       "vat_wrong_sign": 1, "vat_without_amount": 1, "vat_zero": 2, "supplier_trn_invalid": 2, "missing_supplier": 1,
                        "missing_number": 1, "future_date": 1, "large_for_supplier": 1}
 
 

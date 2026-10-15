@@ -22,11 +22,15 @@ ORG_NAME = "Planted Trading LLC"
 FUTURE_BILL_DATE = "2026-12-24"
 
 
-def _bill(number: str, vendor: str, date: str, net: float, vat: Optional[float] = None) -> Dict[str, Any]:
+VALID_TRN = "100123456700003"
+
+
+def _bill(number: str, vendor: str, date: str, net: float, vat: Optional[float] = None,
+          trn: Optional[str] = VALID_TRN) -> Dict[str, Any]:
     vat = round(net * 0.05, 2) if vat is None else vat
     return {"document_number": number, "document_id": str(900000 + zlib.crc32((number + vendor + date).encode()) % 99999),
             "document_date": date, "document_type": "BILL", "status": "ACCEPTED", "vendor_name": vendor,
-            "net_purchases": net, "input_vat": vat, "currency": "AED", "organization_name": ORG_NAME}
+            "net_purchases": net, "input_vat": vat, "currency": "AED", "organization_name": ORG_NAME, "vendor_trn": trn}
 
 
 def planted_book() -> List[Dict[str, Any]]:
@@ -49,6 +53,10 @@ def planted_book() -> List[Dict[str, Any]]:
               _bill("PLANT-S-1", "Planted Sign Test", "2026-03-23", 1010.0, -50.5),
               _bill("PLANT-N-1", "Planted No Amount", "2026-03-24", 0.0, 25.0),
               _bill("PLANT-Z-1", "Planted Zero Rated", "2026-03-25", 1510.0, 0.0)]
+    # the supplier's TRN: 9 digits and none on bills with VAT; an odd TRN on a bill with no VAT is not flagged
+    bills += [_bill("PLANT-T-1", "Planted Short Trn", "2026-04-10", 2020.0, trn="123456789"),
+              _bill("PLANT-T-2", "Planted No Trn", "2026-04-11", 2030.0, trn=None),
+              _bill("PLANT-T-3", "Planted Zero Vat Trn", "2026-04-12", 2040.0, vat=0.0, trn="12345")]
     # missing details and a future date
     bills += [_bill("PLANT-M-1", "", "2026-04-02", 777.0), _bill("", "Planted No Number", "2026-04-03", 888.0),
               _bill("PLANT-F-1", "Planted Future", FUTURE_BILL_DATE, 1234.0)]
@@ -66,7 +74,8 @@ EXPECTED = {
     "vat_rate_not_standard": ["PLANT-V-1", "PLANT-V-2"],
     "vat_wrong_sign": ["PLANT-S-1"],
     "vat_without_amount": ["PLANT-N-1"],
-    "vat_zero": ["PLANT-Z-1"],
+    "supplier_trn_invalid": ["PLANT-T-1", "PLANT-T-2"],
+    "vat_zero": ["PLANT-Z-1", "PLANT-T-3"],
     "missing_supplier": ["PLANT-M-1"],
     "missing_number": ["Planted No Number"],
     "future_date": ["PLANT-F-1"],
@@ -84,9 +93,11 @@ def planted_cube(organization_id: int = ORG, bills: Optional[List[Dict[str, Any]
     """For the length of the block, the review's scan of `organization_id` sees only the planted bills. Every other
     Cube call, and every other organization, goes to the real Cube."""
     from gemini_brain.semantic import cube_client
+    from gemini_brain.vat_review import tool as review_tool
 
     book = bills if bills is not None else planted_book()
     real = cube_client.load
+    real_has_trn = review_tool._has_trn
 
     def load(query, *, organization_ids, subject, deadline):
         dims = query.get("dimensions") or []
@@ -97,17 +108,19 @@ def planted_cube(organization_id: int = ORG, bills: Optional[List[Dict[str, Any]
         return real(query, organization_ids=organization_ids, subject=subject, deadline=deadline)
 
     cube_client.load = load
+    review_tool._has_trn = lambda *a, **k: True  # the planted bills carry a supplier TRN
     try:
         yield
     finally:
         cube_client.load = real
+        review_tool._has_trn = real_has_trn
 
 
 # ── the questions ─────────────────────────────────────────────────────────────────────────────────
 
 RULE_NAMES = ("same_number", "same_total_near_date", "similar_vendor_same_day", "vat_rate_not_standard", "vat_wrong_sign",
               "vat_without_amount", "missing_supplier", "missing_number", "future_date", "large_for_supplier", "vat_zero",
-              "round_amount", "large_one_off_supplier")
+              "round_amount", "large_one_off_supplier", "supplier_trn_invalid")
 #: An answer about duplicates or odd bills must say the findings need a person to confirm them.
 HEDGES = ("confirm", "verify", "not confirmed", "check each", "needs a person", "need a person", "review", "worth checking",
           "doesn't prove", "does not prove", "not prove")
@@ -146,10 +159,9 @@ CASES: List[Dict[str, Any]] = [
          card_has=["PLANT-V-1", "PLANT-S-1", "PLANT-N-1"], blocks=["vat_review"]),
     case("problems", "Check my purchases for problems", tools_any=["review_vat"], review=True,
          card_has=["PLANT-D-1", "PLANT-V-1"], blocks=["vat_review"]),
-    case("trn", "Is the supplier TRN valid on my bills?", review=False,
-         any_of=["not recorded", "not held", "don't hold", "do not hold", "isn't recorded", "not checked", "aren't recorded",
-                 "not available", "can't check", "cannot check", "not stored"],
-         must_not=["trn is valid", "trns are valid", "all trns"]),
+    case("trn", "Is the supplier TRN valid on my bills?", tools_any=["review_vat"], review=True,
+         card_has=["PLANT-T-1", "PLANT-T-2"], any_of=["15 digits", "15-digit"],
+         must_not=["trns are valid", "all trns are valid", "registered with the fta"]),
     case("export_dup", "Export the duplicate bills to Excel", tools_any=["review_vat"], blocks=["vat_review", "artifact"]),
     case("export_odd", "Export all odd bills to Excel", tools_any=["review_vat"], blocks=["artifact"]),
     # questions that must not go to the review
