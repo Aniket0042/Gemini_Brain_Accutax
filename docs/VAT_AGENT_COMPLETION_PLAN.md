@@ -77,3 +77,10 @@ The fields the plan asked the DBA for mostly exist, but several are empty or unu
 **Revised package 5 and 6.**
 - Package 5 stays: output vs input VAT by period from the `vat` view, a penalty calculator, due dates from the filing frequency, reminders.
 - Package 6 shrinks to: supplier TRN rule, VAT category for sales, a note in answers that purchase categories are inferred. "Reconcile the return" and "reverse-charge figures" move to a later package that depends on the application storing returns and flagging reverse charge.
+
+## Progress (continued)
+
+- 2026-10-15: **supplier TRN check** (package 6, part). Cube now gives `purchases.vendor_trn` (from `contacts.trn_number`); the Cube model was reloaded on the VM with `semantic/deploy/install_rootless.sh --start` by the owner. A bill with VAT whose supplier TRN is missing or not 15 digits is a finding; when 80% or more share it, it is one pattern (org 25: 291 of 291 bills with VAT, because the seed TRNs are 10 or 13 letters and digits). The check is of the format only, and the answer says so. The review asks Cube for the field only when this Cube has it.
+- 2026-10-15: **the review tool takes a `rules` filter**, so a question about one kind of problem lists every bill of that kind (the general list shows one of each kind first and had hidden the second TRN bill).
+- Evaluation: 21 of 21 questions pass on the VM (cost $0.91 for the run), including the TRN question on the planted book.
+- Still waiting on the owner: run `semantic/dba/cube_reader_grants_vat.sql` (read access to `tax_rates` and `vat_configs`).
