@@ -352,3 +352,53 @@ def test_context_size_is_the_largest_single_call():
             return self.usage
     total = loop._usage(Fixed({"context_tokens": 9000, "input_tokens": 10}), Fixed({"context_tokens": 13000, "input_tokens": 5}))
     assert total == {"context_tokens": 13000, "input_tokens": 15}
+
+
+# --- a claim about the books needs a look at the books -------------------------------------------------------
+
+@pytest.mark.parametrize("text,expected", [
+    ("This bill is already recorded in our books.", True),
+    ("It is not recorded under that number.", True),
+    ("The bill was not found in the books.", True),
+    ("The statement matches the books.", True),
+    ("The bill isn't recorded.", True),
+    ("I could not check the books just now.", False),
+    ("The supplier is Acme and the total is AED 105.", False),
+    ("The invoice records a total of AED 105.", False),
+])
+def test_what_counts_as_a_claim_about_the_books(text, expected):
+    assert loop.claims_books_unchecked(text, []) is expected
+
+
+def test_a_claim_is_fine_after_the_books_were_looked_at():
+    assert not loop.claims_books_unchecked("It is already recorded.", [{"tool": "list_documents"}])
+    assert not loop.claims_books_unchecked("It is already recorded.", [{"tool": "review_vat"}])
+    assert loop.claims_books_unchecked("It is already recorded.", [{"tool": "query_metrics"}])
+
+
+def test_an_unchecked_claim_about_an_attached_file_is_sent_back_once_to_check(agent):
+    FakeAdapter.script = [final("This bill is already recorded in our books."), tool_use("query_metrics", {}),
+                          final("Checked: it is already recorded in our books.")]
+    result = loop.run_agent("Is this bill recorded?", ORGS, META, documents="<file>", document_ids=("a",))
+    assert "did not check the books" in (FakeAdapter.log[1]["last"] or "")
+    assert result.answer.endswith(loop.UNCHECKED_BOOKS)  # query_metrics is not a look at the bills
+
+
+def test_a_checked_claim_is_left_alone(agent, monkeypatch):
+    monkeypatch.setattr(loop.tools, "execute", lambda name, params, ctx: ({"rows": [], "row_count": 0, "type": "bills"}, True))
+    monkeypatch.setattr(loop.tools, "DATA_TOOLS", {**loop.tools.DATA_TOOLS, "list_documents": object()})
+    FakeAdapter.script = [tool_use("list_documents", {"type": "bills"}), final("It is not recorded in our books.")]
+    result = loop.run_agent("Is this bill recorded?", ORGS, META, documents="<file>", document_ids=("a",))
+    assert result.answer == "It is not recorded in our books." and result.usage["llm_calls"] == 2
+
+
+def test_the_guard_never_runs_without_attached_files(agent):
+    FakeAdapter.script = [final("Invoices are already recorded in the books by the system.")]
+    result = loop.run_agent("How are invoices handled?", ORGS, META)
+    assert result.usage["llm_calls"] == 1 and not result.answer.endswith(loop.UNCHECKED_BOOKS)
+
+
+def test_when_it_is_still_unchecked_after_one_nudge_the_answer_says_it_is_unconfirmed(agent):
+    FakeAdapter.script = [final("The statement matches the books."), final("The statement matches the books.")]
+    result = loop.run_agent("Does it match?", ORGS, META, documents="<file>", document_ids=("a",))
+    assert result.answer.endswith(loop.UNCHECKED_BOOKS) and result.usage["llm_calls"] == 2

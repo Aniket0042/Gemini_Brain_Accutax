@@ -50,6 +50,17 @@ SHORTER = ("Your answer was cut off or empty. Answer again in under 250 words fr
 FETCH_FOR_ATTACHMENT = ("The {what} is built only from tool results fetched in this turn, and you fetched none. "
                         "Call the data tools now for the figures the {what} should show (for a follow-up, the same "
                         "query as the earlier turn), then answer briefly.")
+#: An answer about an attached file that says whether it is in the books. It may only say so after looking at the books.
+_BOOKS_CLAIM = re.compile(
+    r"\b(already\s+(been\s+)?recorded|(is|are|was|were)\s+(not\s+)?(yet\s+)?recorded|not\s+(yet\s+)?recorded|isn.t\s+recorded|"
+    r"(is|are|was|were)\s+(not\s+)?(found\s+)?in\s+(our|the|your)\s+books|not\s+(found\s+)?in\s+(our|the|your)\s+books|"
+    r"(match|matches|matching)\s+(our|the|your)\s+books|recorded\s+in\s+(our|the|your)\s+books)\b", re.I)
+#: The tools that look at the books for a bill. A claim about the books needs one of them to have run this turn.
+_BOOKS_TOOLS = ("list_documents", "review_vat")
+CHECK_THE_BOOKS = ("You said whether this file's bill is in the books, but you did not check the books in this turn. Call "
+                   "list_documents now (type bills: by document number, then by supplier and total), then answer again.")
+UNCHECKED_BOOKS = ("\n\nI could not check the books for this just now, so please treat what is said above about whether it "
+                   "is in the books as not confirmed.")
 _NUMBER_IN_TEXT = re.compile(r"\d[\d,]*(?:\.\d+)?")
 _DIGITS = re.compile(r"\d+")
 _IDENTIFIER = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)[\w./#-]+$")
@@ -252,7 +263,8 @@ def run_agent(
         system = system_prompt(org_meta, orgs, today, settings.report_timezone, brief=brief, attachment=attachment,
                                documents=bool(documents or document_ids))
         specs = tools.specs(ctx)
-        used, asked_shorter, asked_fetch, adapter = 0, False, False, planner
+        used, asked_shorter, asked_fetch, asked_books, adapter = 0, False, False, False, planner
+        has_files = bool(documents or document_ids)
         while True:
             if deadline - time.monotonic() < MIN_SECONDS_FOR_MODEL_CALL:
                 status, answer = "deadline", OUT_OF_TIME
@@ -274,6 +286,12 @@ def run_agent(
                     asked_fetch = True
                     messages.append({"role": "user", "content": [{"text": FETCH_FOR_ATTACHMENT.format(what=attachment)}]})
                     continue
+                if has_files and claims_books_unchecked(answer, data):
+                    if not asked_books and used < budget:
+                        asked_books = True
+                        messages.append({"role": "user", "content": [{"text": CHECK_THE_BOOKS}]})
+                        continue
+                    answer += UNCHECKED_BOOKS
                 break
             allowed = uses[:max(0, budget - used)]
             used += len(allowed)
@@ -312,6 +330,11 @@ def run_agent(
         data=data,
         blocks=[fta] if fta else [],
     )
+
+
+def claims_books_unchecked(answer: str, data: Sequence[Dict[str, Any]]) -> bool:
+    """True when the answer says whether a bill is in the books and no tool looked at the books this turn."""
+    return bool(_BOOKS_CLAIM.search(answer or "")) and not any(d.get("tool") in _BOOKS_TOOLS for d in data or [])
 
 
 def _law_verification(law_answer: Any) -> Dict[str, Any]:
