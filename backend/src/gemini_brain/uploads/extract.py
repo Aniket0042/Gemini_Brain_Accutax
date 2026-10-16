@@ -234,7 +234,11 @@ RECORD_TOOL = {
                 "text": _STR,
                 "unreadable_fields": {"type": "array", "items": {"type": "string"}},
             },
-            "required": ["document_type", "vendor_name", "document_number", "date", "grand_total", "items"],
+            # Every one may be null. Listing a field here makes the model answer it (a receipt photo's subtotal was left
+            # out five times in six when the field was optional, and once in six when it was listed).
+            "required": ["document_type", "vendor_name", "document_number", "date", "grand_total", "items",
+                         "subtotal", "tax_total", "tax_rate_percent", "currency", "document_title", "vendor_address",
+                         "buyer_name", "buyer_address"],
         }},
     }
 }
