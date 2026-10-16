@@ -114,11 +114,22 @@ def _party(name: Optional[str], tax_id: Optional[str]) -> str:
     return f"{name or 'name not shown'}" + (f" (tax ID {tax_id})" if tax_id else "")
 
 
+def injection_flags(doc: AttachedDocument) -> List[str]:
+    """Ids of the order-like phrases found in the file's name or in what was read from it (policy/injection.py)."""
+    from gemini_brain.policy import injection
+    found = injection.scan(doc.rec.filename) + injection.scan_value(doc.payload.get("extract"))
+    return [n for n in injection.PATTERNS if n in found]
+
+
 def render(doc: AttachedDocument, names: Sequence[str] = (), tax_ids: Sequence[str] = ()) -> str:
     ex, rec, payload = doc.extract, doc.rec, doc.payload
     head = (f'<document id="{rec.id}" name="{_esc(rec.filename)}" file_type="{rec.kind}" pages="{rec.pages}" '
             f'document_type="{ex.document_type}" read_by="{payload.get("source")}">')
     lines = [head]
+    flags = injection_flags(doc)
+    if flags:
+        from gemini_brain.policy import injection
+        lines.append("SECURITY WARNING: " + injection.WARNING.format(found=", ".join(flags)))
     if payload.get("note"):
         lines.append(f"Reader note: {_esc(payload['note'])}")
     if ex.is_bill:

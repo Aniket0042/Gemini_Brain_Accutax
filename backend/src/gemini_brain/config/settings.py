@@ -338,6 +338,14 @@ class GeminiBrainSettings(BaseSettings):
     )
     agent_max_tool_calls: int = Field(default=6, ge=1, le=12)
     agent_deadline_seconds: float = Field(default=45.0, ge=5.0, le=120.0)
+    agent_audit_log: str = Field(
+        default="logs/agent_audit.jsonl",
+        description=(
+            "JSON-lines file of what the assistant flagged and what its guards did (VAT reviews, order-like text found in "
+            "files or in the books, claims about the books that were not checked, a leaked prompt marker), relative to "
+            "backend/. Ids, counts and document numbers only. Empty turns it off."
+        ),
+    )
     agent_answer_log: str = Field(
         default="",
         description=(

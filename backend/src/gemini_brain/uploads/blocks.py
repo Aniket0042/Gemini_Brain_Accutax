@@ -53,6 +53,11 @@ def _rows(ex: DocumentExtract) -> List[Dict[str, str]]:
     return rows
 
 
+def _flags(doc: Any) -> List[str]:
+    from gemini_brain.uploads.context import injection_flags
+    return injection_flags(doc)
+
+
 def documents_block(docs: Sequence[Any]) -> Optional[Dict[str, Any]]:
     """One card per attached file (an AttachedDocument: .rec and .payload). None when there are none."""
     if not docs:
@@ -67,6 +72,9 @@ def documents_block(docs: Sequence[Any]) -> Optional[Dict[str, Any]]:
             "type": TYPE_LABELS.get(ex.document_type, "Document"), "rows": _rows(ex), "checks": checks,
             "problems": sum(1 for c in checks if c["status"] == "fail"),
             "note": doc.payload.get("note") or "",
+            # Text in the file that tries to instruct the assistant: the card says so, plainly.
+            "warning": ("This file has text that tries to give instructions to the assistant. It was ignored."
+                        if _flags(doc) else ""),
         })
     return {"type": "documents", "items": items}
 

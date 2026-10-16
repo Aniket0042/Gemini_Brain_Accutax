@@ -76,6 +76,9 @@ function Card({ item, onPreviewFile }) {
           </ul>
         </details>
       )}
+      {item.warning && (
+        <p className="doc-card-warning"><AlertTriangle size={13} aria-hidden="true" />{item.warning}</p>
+      )}
       {item.note && <p className="doc-card-note">{item.note}</p>}
     </article>
   );

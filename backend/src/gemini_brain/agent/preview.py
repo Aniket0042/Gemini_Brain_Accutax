@@ -83,6 +83,7 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
     answer_text = links.link_documents(answer_text, links.document_links(data))
     cards = _document_cards(docs)
     review_cards = _review_cards(data)
+    _audit(data, docs, user_id=user_id, session_id=session_id, orgs=orgs)
     if review_cards:
         answer_text = _without_tables(answer_text)
     blocks = (cards + tiles.kpi_tiles(data) + review_cards + list(getattr(result, "blocks", None) or [])
@@ -209,6 +210,24 @@ def _collect_traces(rid: str) -> Dict[str, List[Dict[str, Any]]]:
     except Exception as e:  # noqa: BLE001
         logger.debug("agent preview: traces not collected: %s", e)
     return out
+
+
+def _audit(data: Sequence[Dict[str, Any]], docs: Sequence[Any], *, user_id: int, session_id: Optional[str],
+           orgs: Sequence[int]) -> None:
+    """The audit lines of this turn: each VAT review that ran, and each attached file with order-like text. Never raises."""
+    try:
+        from gemini_brain.agent import audit
+        from gemini_brain.uploads.context import injection_flags
+        for item in data or []:
+            if item.get("tool") == "review_vat":
+                audit.review_event(item, user_id=user_id, session_id=session_id, organization_ids=orgs)
+        for d in docs or []:
+            flags = injection_flags(d)
+            if flags:
+                audit.event("injection_in_file", user_id=user_id, session_id=session_id, organization_ids=list(orgs),
+                            file_id=d.rec.id, file_kind=d.rec.kind, patterns=flags)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("agent preview: audit not written: %s", e)
 
 
 def _review_cards(data: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:

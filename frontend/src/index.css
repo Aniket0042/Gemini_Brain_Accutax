@@ -2706,6 +2706,8 @@ body.is-canvas-resizing .live-chart {
 .doc-card-more li.is-fine svg { color: var(--success-ink); }
 .doc-card-more li.is-na { color: var(--ink-faint); }
 .doc-card-note { margin: 8px 0 0; color: var(--ink-faint); font-size: var(--text-xs); }
+.doc-card-warning { display: flex; gap: 6px; align-items: flex-start; margin: 8px 0 0; color: var(--warning-ink); font-size: var(--text-xs); line-height: 1.4; }
+.doc-card-warning svg { flex-shrink: 0; margin-top: 1px; }
 
 /* the card over a tile with a problem: a rounded pill with the count, then each cause in words */
 .attach-pop {
