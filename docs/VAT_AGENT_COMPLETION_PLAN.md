@@ -84,3 +84,5 @@ The fields the plan asked the DBA for mostly exist, but several are empty or unu
 - 2026-10-15: **the review tool takes a `rules` filter**, so a question about one kind of problem lists every bill of that kind (the general list shows one of each kind first and had hidden the second TRN bill).
 - Evaluation: 21 of 21 questions pass on the VM (cost $0.91 for the run), including the TRN question on the planted book.
 - Still waiting on the owner: run `semantic/dba/cube_reader_grants_vat.sql` (read access to `tax_rates` and `vat_configs`).
+
+- 2026-10-16: **grant run by the owner** on `accutax_bk_1_5`: `GRANT SELECT ON public.tax_rates, public.vat_configs TO cube_reader`. Checked: `cube_reader` can SELECT both tables and cannot UPDATE. The Cube model can now join `tax_rates` (VAT type of a line) and read `vat_configs` (filing frequency). Not yet used in the model.
