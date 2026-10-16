@@ -6,7 +6,7 @@
 #
 # No curly braces in SQL literals: Cube's YAML reads {...} as a member reference.
 cubes:
-  - name: vat_settings
+  - name: vat_config_rows
     public: false
     sql: >
       SELECT DISTINCT ON (vc.organization_id)

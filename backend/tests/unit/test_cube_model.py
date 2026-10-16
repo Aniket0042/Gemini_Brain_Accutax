@@ -160,3 +160,8 @@ def test_pending_views_follow_the_same_rules(name):
 
 def test_payment_views_are_queryable():
     assert {"payments", "payment_settlements"} <= set(VIEWS) & _queryable_views_in_cube_js()
+
+
+def test_no_cube_and_view_share_a_name():
+    """Cube refuses the whole model when a cube and a view have the same name (every query then fails)."""
+    assert not set(CUBES) & set(VIEWS)

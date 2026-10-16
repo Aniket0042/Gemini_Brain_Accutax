@@ -5,12 +5,12 @@ views:
       # A lookup for the vat_return tool, not figures: the agent's catalog (semantic/catalog.py) skips this kind.
       kind: lookup
     cubes:
-      - join_path: vat_settings
+      - join_path: vat_config_rows
         includes:
           - filing_frequency
           - scheme_type
           - effective_date
-      - join_path: vat_settings.organizations
+      - join_path: vat_config_rows.organizations
         includes:
           - name: id
             alias: organization_id
