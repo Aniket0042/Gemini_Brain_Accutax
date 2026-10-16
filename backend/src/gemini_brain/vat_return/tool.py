@@ -23,7 +23,7 @@ from gemini_brain.semantic.query_metrics import cell_text
 from gemini_brain.vat_return import penalty
 from gemini_brain.vat_return import periods as tax_periods
 
-WHICH = ("last", "current", "period")
+WHICH = ("last", "current", "next_due", "period")
 NOT_A_RETURN = ("These figures are the VAT on the documents in the books for the period, not a filed return: the books "
                 "hold no filed returns, so whether this return was filed or paid is not known.")
 
@@ -96,6 +96,8 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
                 raise ToolInputError("period start is after its end")
         elif which == "current":
             start, end = tax_periods.period_containing(today, frequency, quarter_group)
+        elif which == "next_due":
+            start, end = tax_periods.next_due_period(today, frequency, quarter_group)
         else:
             start, end = tax_periods.last_complete_period(today, frequency, quarter_group)
         figures = _figures(org, start, end, subject, deadline)
@@ -137,7 +139,8 @@ def tool_spec() -> Dict[str, Any]:
             "properties": {
                 "which": {"type": "string", "enum": list(WHICH),
                           "description": "last: the latest ended tax period (default); current: the one running now; "
-                                         "period: the dates given in period"},
+                                         "next_due: the period whose return is due next (for 'next VAT deadline'; the "
+                                         "last period while its due date has not passed); period: the dates given"},
                 "period": {"type": "object", "properties": {"start": {"type": "string"}, "end": {"type": "string"}}},
                 "frequency": {"type": "string", "enum": list(tax_periods.FREQUENCIES),
                               "description": "Only when the user says how often they file."},

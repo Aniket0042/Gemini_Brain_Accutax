@@ -54,3 +54,13 @@ def last_complete_period(today: dt.date, frequency: str = "quarterly",
 def due_date(period_end: dt.date) -> dt.date:
     """The day by which the return is filed and the tax paid: the 28th day after the end of the tax period."""
     return period_end + dt.timedelta(days=DUE_DAYS)
+
+
+def next_due_period(today: dt.date, frequency: str = "quarterly",
+                    quarter_group: int = DEFAULT_QUARTER_GROUP) -> Tuple[dt.date, dt.date]:
+    """The tax period whose return is due next: the last ended period while its due date is today or later, else the
+    period running now."""
+    start, end = last_complete_period(today, frequency, quarter_group)
+    if due_date(end) >= today:
+        return start, end
+    return period_containing(today, frequency, quarter_group)

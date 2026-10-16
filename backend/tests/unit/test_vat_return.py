@@ -186,3 +186,9 @@ def test_the_agent_runs_vat_return_on_the_chats_organizations_only(monkeypatch):
     assert ok and result["organizations"][0]["organization_id"] == 25
     result, ok = tools.execute("vat_return", {"organization_ids": [99]}, ctx)
     assert not ok and "not selected" in result["error"]
+
+
+def test_the_next_due_period_is_the_last_one_until_its_due_date_passes():
+    assert p.next_due_period(D(2026, 10, 16)) == (D(2026, 7, 1), D(2026, 9, 30))     # due 28 October: still ahead
+    assert p.next_due_period(D(2026, 10, 28)) == (D(2026, 7, 1), D(2026, 9, 30))
+    assert p.next_due_period(D(2026, 10, 29)) == (D(2026, 10, 1), D(2026, 12, 31))   # due 28 January
