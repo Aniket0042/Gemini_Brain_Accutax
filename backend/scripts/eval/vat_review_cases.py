@@ -161,8 +161,8 @@ CASES: List[Dict[str, Any]] = [
     case("problems", "Check my purchases for problems", tools_any=["review_vat"], review=True,
          card_has=["PLANT-D-1", "PLANT-V-1"], blocks=["vat_review"]),
     case("trn", "Is the supplier TRN valid on my bills?", tools_any=["review_vat"], review=True,
-         card_has=["PLANT-T-1", "PLANT-T-2"], any_of=["15 digits", "15-digit"],
-         must_not=["trns are valid", "all trns are valid", "registered with the fta"]),
+         card_has=["PLANT-T-1", "PLANT-T-2"], any_of=["15 digit", "15-digit", "has 15", "have 15", "15)"],
+         must_not=["trns are valid", "all trns are valid", "is registered with the fta", "are registered with the fta"]),
     case("export_dup", "Export the duplicate bills to Excel", tools_any=["review_vat"], blocks=["vat_review", "artifact"]),
     case("export_odd", "Export all odd bills to Excel", tools_any=["review_vat"], blocks=["artifact"]),
     # questions that must not go to the review
