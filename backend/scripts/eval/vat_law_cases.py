@@ -11,8 +11,10 @@ import re
 from typing import Any, Dict, List
 
 
-def case(cid: str, question: str, facts: List[str], arabic: bool = False) -> Dict[str, Any]:
-    return {"id": cid, "question": question, "facts": facts, "arabic": arabic}
+def case(cid: str, question: str, facts: List[str], arabic: bool = False, tools_any: List[str] = (),
+         cite: bool = True) -> Dict[str, Any]:
+    """`tools_any`: tools the answer must have used; `cite`: the answer must cite an FTA source."""
+    return {"id": cid, "question": question, "facts": facts, "arabic": arabic, "tools_any": list(tools_any), "cite": cite}
 
 
 NOT_RECOVERABLE = ["not recoverable", "non-recoverable", "cannot recover", "can't recover", "cannot be recovered", "blocked",
@@ -56,6 +58,14 @@ CASES: List[Dict[str, Any]] = [
     case("einvoicing_asp", "What is an Accredited Service Provider in UAE e-invoicing?", ["accredited service provider"]),
     case("mixed_supplies", "How does a business that makes both taxable and exempt supplies recover input VAT?",
          ["apportion"]),
+    # the VAT return position and penalties (package 5): the tools do the dates and the arithmetic
+    case("return_last_quarter", "How much VAT do we owe for the last quarter, and when is it due?",
+         ["28 october 2026", "2026-10-28", "october 28", "28 oct"], tools_any=["vat_return"], cite=False),
+    case("return_next_deadline", "When is our next VAT return deadline?",
+         ["28 october 2026", "2026-10-28", "october 28", "28 oct"], tools_any=["vat_return"], cite=False),
+    case("penalty_late_payment", "We paid AED 12,000 of VAT due on 28 July 2026 on 16 October 2026. What is the late payment penalty?",
+         ["420"], tools_any=["vat_penalty"]),
+    case("penalty_late_return", "What is the penalty for filing a VAT return late for the first time?", ["1,000"]),
     case("ar_rate", "ما هي نسبة ضريبة القيمة المضافة في الإمارات؟", ["5%", "5 %", "٥"], arabic=True),
     case("ar_register", "ما هو حد التسجيل الإلزامي لضريبة القيمة المضافة؟", ["375,000", "٣٧٥"], arabic=True),
     case("ar_return", "متى يجب تقديم الإقرار الضريبي ودفع الضريبة؟", ["28", "٢٨"], arabic=True),
@@ -88,10 +98,13 @@ def mostly_arabic(answer: str) -> bool:
 def judge(case_: Dict[str, Any], answer: str, tools: List[str], blocks: List[Dict[str, Any]]) -> Dict[str, Any]:
     checks = {
         "states the rule": states_a_fact(answer, case_["facts"]),
-        "cites a source": bool(_CITE.search(answer or "")),
-        "lists the cited sources": any(b.get("type") == "fta_sources" and b.get("sources") for b in blocks or []),
         "did not review the books": "review_vat" not in tools,
     }
+    if case_.get("cite", True):
+        checks["cites a source"] = bool(_CITE.search(answer or ""))
+        checks["lists the cited sources"] = any(b.get("type") == "fta_sources" and b.get("sources") for b in blocks or [])
+    for t in case_.get("tools_any") or []:
+        checks[f"used {t}"] = t in tools
     if case_["arabic"]:
         checks["answers in Arabic"] = mostly_arabic(answer)
     return {"ok": all(checks.values()), "checks": checks}

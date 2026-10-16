@@ -1,0 +1,40 @@
+# VAT settings of an organization: how often it files VAT returns, from public.vat_configs.
+#
+# One row per organization: the active main configuration, else the most recently updated active one. Read by the
+# vat_return tool (backend/src/gemini_brain/vat_return) to find the tax period and the return's due date; most
+# organizations have no row, and the tool then says it assumed quarterly periods.
+#
+# No curly braces in SQL literals: Cube's YAML reads {...} as a member reference.
+cubes:
+  - name: vat_settings
+    public: false
+    sql: >
+      SELECT DISTINCT ON (vc.organization_id)
+             vc.organization_id                         AS organization_id,
+             LOWER(COALESCE(vc.filing_frequency, ''))    AS filing_frequency,
+             COALESCE(vc.scheme_type, '')                AS scheme_type,
+             vc.effective_date                           AS effective_date
+      FROM   public.vat_configs vc
+      WHERE  COALESCE(vc.is_active, true)
+      ORDER  BY vc.organization_id, COALESCE(vc.is_main_vat_config, false) DESC, vc.updated_date DESC NULLS LAST
+
+    joins:
+      - name: organizations
+        relationship: many_to_one
+        sql: "{CUBE.organization_id} = {organizations.id}"
+
+    dimensions:
+      - name: organization_id
+        sql: organization_id
+        type: number
+        primary_key: true
+      - name: filing_frequency
+        description: monthly or quarterly, as set in the organization's VAT settings.
+        sql: filing_frequency
+        type: string
+      - name: scheme_type
+        sql: scheme_type
+        type: string
+      - name: effective_date
+        sql: effective_date
+        type: time

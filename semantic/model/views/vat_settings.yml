@@ -1,0 +1,19 @@
+views:
+  - name: vat_settings
+    description: How often each organization files VAT returns (monthly or quarterly), from its VAT settings.
+    meta:
+      # A lookup for the vat_return tool, not figures: the agent's catalog (semantic/catalog.py) skips this kind.
+      kind: lookup
+    cubes:
+      - join_path: vat_settings
+        includes:
+          - filing_frequency
+          - scheme_type
+          - effective_date
+      - join_path: vat_settings.organizations
+        includes:
+          - name: id
+            alias: organization_id
+          - name: name
+            alias: organization_name
+          - currency

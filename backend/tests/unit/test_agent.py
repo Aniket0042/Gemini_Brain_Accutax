@@ -74,7 +74,7 @@ def test_specs_without_cube_keep_law_and_guide(monkeypatch):
         raise CubeError("down")
     monkeypatch.setattr(tools, "get_catalog", no_cube)
     names = [s["toolSpec"]["name"] for s in tools.specs(_ctx())]
-    assert names == ["search_vat_kb", "app_guide"]
+    assert names == ["search_vat_kb", "app_guide", "vat_penalty"]
 
 
 # ── The loop ─────────────────────────────────────────────────────────────────

@@ -193,6 +193,12 @@ def test_an_arabic_case_needs_an_arabic_answer():
     assert not lc.judge(case, "The rate is 5% [1].", [], blocks)["ok"]
 
 
-def test_there_are_forty_cases_six_in_arabic():
-    assert len(lc.CASES) == 40 and sum(c["arabic"] for c in lc.CASES) == 6
-    assert len({c["id"] for c in lc.CASES}) == 40 and all(c["facts"] for c in lc.CASES)
+def test_there_are_forty_four_cases_six_in_arabic():
+    assert len(lc.CASES) == 44 and sum(c["arabic"] for c in lc.CASES) == 6
+    assert len({c["id"] for c in lc.CASES}) == 44 and all(c["facts"] for c in lc.CASES)
+
+
+def test_a_return_case_needs_the_tool_but_no_citation():
+    case = [c for c in lc.CASES if c["id"] == "return_last_quarter"][0]
+    assert lc.judge(case, "You owe AED 8,000; the return is due by 28 October 2026.", ["vat_return"], [])["ok"]
+    assert not lc.judge(case, "You owe AED 8,000; the return is due by 28 October 2026.", [], [])["ok"]
