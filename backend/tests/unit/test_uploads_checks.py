@@ -12,8 +12,10 @@ TODAY = date(2026, 10, 12)
 def _bill(**kw):
     base = {"document_type": "tax_invoice", "vendor_name": "Alex Adams Trading LLC", "vendor_tax_id": "100123456700003",
             "document_number": "152643", "date": "2026-09-01", "currency": "AED", "subtotal": 500, "tax_total": 25,
-            "grand_total": 525, "items": [{"description": "a", "amount": 150}, {"description": "b", "amount": 240},
-                                           {"description": "c", "amount": 110}]}
+            "vendor_address": "Dubai, UAE", "document_title": "Tax Invoice", "buyer_address": "Sharjah, UAE", "buyer_name": "Northwind LLC", "tax_rate_percent": 5,
+            "grand_total": 525, "items": [{"description": "a", "quantity": 1, "rate": 150, "amount": 150},
+                                           {"description": "b", "quantity": 1, "rate": 240, "amount": 240},
+                                           {"description": "c", "quantity": 1, "rate": 110, "amount": 110}]}
     base.update(kw)
     return DocumentExtract.from_dict(base)
 

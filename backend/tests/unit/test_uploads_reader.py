@@ -11,7 +11,7 @@ from gemini_brain.uploads import reader, store
 from gemini_brain.uploads.validate import inspect
 from tests.unit import upload_files as f
 
-BILL = {"document_type": "tax_invoice", "vendor_name": "Alex Adams Trading LLC", "vendor_tax_id": "100123456700003",
+BILL = {"document_type": "tax_invoice", "vendor_name": "Alex Adams Trading LLC", "vendor_tax_id": "100123456700003", "vendor_address": "Dubai, UAE", "document_title": "Tax Invoice", "buyer_address": "Sharjah, UAE", "tax_rate_percent": 5,
         "buyer_name": "Company A", "document_number": "152643", "date": "2018-07-21", "currency": "AED",
         "subtotal": 500, "tax_total": 25, "grand_total": 525,
         "items": [{"description": "Transistor", "quantity": 2, "rate": 75, "amount": 150},
@@ -115,7 +115,8 @@ def test_the_read_is_stored_with_checks_cost_and_a_chip_summary():
     assert rec.document_type == "tax_invoice"
     assert payload["version"] == reader.EXTRACT_VERSION and payload["model"] == settings.upload_extract_model
     assert payload["usage"]["cost_usd"] == 0.012 and payload["extract"]["document_number"] == "152643"
-    assert {c["name"] for c in payload["checks"]} == {"items_add_up", "total_adds_up", "vat_rate", "tax_id", "date_valid", "currency"}
+    assert {c["name"] for c in payload["checks"]} == {"items_add_up", "total_adds_up", "vat_rate", "tax_id", "date_valid", "currency",
+                                                       "required_items"}
     assert rec.checks_failed == 0
 
 

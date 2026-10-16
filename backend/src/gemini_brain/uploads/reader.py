@@ -34,7 +34,7 @@ from gemini_brain.uploads.extract import DocumentExtract
 logger = logging.getLogger("gemini_brain.uploads.reader")
 
 #: Bump when the prompt, the schema or the checks change: a cached read of an older version is then ignored.
-EXTRACT_VERSION = "3"
+EXTRACT_VERSION = "4"
 _executor: Optional[ThreadPoolExecutor] = None
 _executor_lock = threading.Lock()
 
@@ -188,6 +188,10 @@ def merge_reads(reads: Sequence[claude_reader.ClaudeRead], *, shared_usage: bool
         vendor_name=first("vendor_name"), vendor_address=first("vendor_address"), vendor_tax_id=first("vendor_tax_id"),
         buyer_name=first("buyer_name"), buyer_tax_id=first("buyer_tax_id"), document_number=first("document_number"),
         date=first("date"), currency=first("currency"), tax_rate_percent=first("tax_rate_percent"),
+        document_title=first("document_title"), buyer_address=first("buyer_address"), supply_date=first("supply_date"),
+        discount_total=last("discount_total"), exchange_rate=first("exchange_rate"), total_aed=last("total_aed"),
+        tax_aed=last("tax_aed"), reverse_charge_statement=first("reverse_charge_statement"),
+        original_invoice_reference=first("original_invoice_reference"), credit_reason=first("credit_reason"),
         subtotal=last("subtotal"), tax_total=last("tax_total"), grand_total=last("grand_total"),
         opening_balance=first("opening_balance"), closing_balance=last("closing_balance"),
         items=[i for e in exs for i in e.items], statement_lines=[ln for e in exs for ln in e.statement_lines],

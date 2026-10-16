@@ -150,9 +150,15 @@ def _bill_lines(ex: DocumentExtract, payload: Dict[str, Any], names: Sequence[st
         f"Which party is this organization: {parties['direction']}. {parties['basis']}",
         f"Document number: {_esc(ex.document_number or 'not shown')}; date: {ex.date or 'not shown'}; "
         f"currency: {ex.currency or 'not shown'}",
+        f"Title printed: {_esc(ex.document_title or 'not shown')}; recipient address: {_esc(ex.buyer_address or 'not shown')}",
         f"Subtotal: {_money(ex.subtotal)}; tax: {_money(ex.tax_total)}"
         + (f" ({ex.tax_rate_percent:g}%)" if ex.tax_rate_percent is not None else "") + f"; total: {_money(ex.grand_total)}",
     ]
+    if (ex.currency or "AED") != "AED":
+        from gemini_brain.uploads import fx
+        printed = f"printed on the bill: {_money(ex.total_aed)}" if ex.total_aed is not None else "not printed on the bill"
+        worth = fx.sentence(fx.to_aed(ex.grand_total, ex.currency)) or "no Central Bank rate is on file for this currency"
+        lines.append(f"Total in AED: {printed}; worth at the Central Bank of the UAE rate: {worth}")
     if ex.items:
         lines.append(f"Lines ({len(ex.items)}), description | quantity | rate | amount:")
         for item in ex.items[:ITEMS_IN_PROMPT]:

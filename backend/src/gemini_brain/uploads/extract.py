@@ -59,6 +59,18 @@ class DocumentExtract:
     tax_total: Optional[float] = None
     tax_rate_percent: Optional[float] = None
     grand_total: Optional[float] = None
+    # What a UAE tax invoice must show (Executive Regulation, Articles 59 and 60). All optional: a reader that cannot give
+    # them leaves them empty and the checks say so.
+    document_title: Optional[str] = None            # the title as printed: "Tax Invoice", "Tax Credit Note", "Receipt"
+    buyer_address: Optional[str] = None
+    supply_date: Optional[str] = None               # YYYY-MM-DD, only when a date of supply is printed apart from the date
+    discount_total: Optional[float] = None
+    exchange_rate: Optional[float] = None           # the rate to AED printed on a bill in another currency
+    total_aed: Optional[float] = None               # the total, when the bill also prints it in AED
+    tax_aed: Optional[float] = None                 # the tax, when the bill also prints it in AED
+    reverse_charge_statement: Optional[bool] = None  # true when the bill says the recipient accounts for the VAT
+    original_invoice_reference: Optional[str] = None  # on a credit note: the invoice it corrects
+    credit_reason: Optional[str] = None             # on a credit note: the reason printed
     items: List[ExtractItem] = field(default_factory=list)
     opening_balance: Optional[float] = None
     closing_balance: Optional[float] = None
@@ -79,11 +91,15 @@ class DocumentExtract:
         raw = raw or {}
         out = cls()
         out.document_type = raw.get("document_type") if raw.get("document_type") in DOCUMENT_TYPES else "other"
-        for key in ("vendor_name", "vendor_address", "vendor_tax_id", "buyer_name", "buyer_tax_id", "document_number"):
+        for key in ("vendor_name", "vendor_address", "vendor_tax_id", "buyer_name", "buyer_tax_id", "document_number",
+                    "document_title", "buyer_address", "original_invoice_reference", "credit_reason"):
             setattr(out, key, _text(raw.get(key)))
         out.date = _date(raw.get("date"))
+        out.supply_date = _date(raw.get("supply_date"))
+        out.reverse_charge_statement = raw.get("reverse_charge_statement") if isinstance(raw.get("reverse_charge_statement"), bool) else None
         out.currency = normalize_currency(raw.get("currency"))
-        for key in ("subtotal", "tax_total", "tax_rate_percent", "grand_total", "opening_balance", "closing_balance"):
+        for key in ("subtotal", "tax_total", "tax_rate_percent", "grand_total", "opening_balance", "closing_balance",
+                    "discount_total", "exchange_rate", "total_aed", "tax_aed"):
             setattr(out, key, _number(raw.get(key)))
         out.items = [
             ExtractItem(_text(i.get("description")), _number(i.get("quantity")), _number(i.get("rate")),
@@ -181,6 +197,12 @@ EXTRACT_SYSTEM = (
     "A bill, tax invoice or receipt: fill the fields and the items, and leave text null. "
     "A statement of account: fill statement_lines, opening_balance and closing_balance. "
     "Any other document (contract, letter, quote, report): put its full text in reading order in text. "
+    "document_title is the title printed at the top, exactly as written (Tax Invoice, Invoice, Tax Credit Note, Receipt); "
+    "null when none is printed. buyer_address is the address of the party billed. supply_date only when a date of supply "
+    "is printed apart from the invoice date. discount_total is the total discount printed. When a bill in another currency "
+    "also prints amounts in AED, record them in total_aed and tax_aed and the printed rate in exchange_rate. "
+    "reverse_charge_statement is true only when the document says the recipient must account for the VAT; otherwise null. "
+    "On a credit note record original_invoice_reference and credit_reason as printed. "
     "If part of the document cannot be read, record what you can and name the field in unreadable_fields."
 )
 
@@ -199,6 +221,10 @@ RECORD_TOOL = {
                 "buyer_name": _STR, "buyer_tax_id": _STR,
                 "document_number": _STR, "date": _STR, "currency": _STR,
                 "subtotal": _MONEY, "tax_total": _MONEY, "tax_rate_percent": _MONEY, "grand_total": _MONEY,
+                "document_title": _STR, "buyer_address": _STR, "supply_date": _STR, "discount_total": _MONEY,
+                "exchange_rate": _MONEY, "total_aed": _MONEY, "tax_aed": _MONEY,
+                "reverse_charge_statement": {"type": ["boolean", "null"]},
+                "original_invoice_reference": _STR, "credit_reason": _STR,
                 "items": {"type": "array", "items": {"type": "object", "properties": {
                     "description": _STR, "quantity": _MONEY, "rate": _MONEY, "amount": _MONEY}}},
                 "opening_balance": _MONEY, "closing_balance": _MONEY,

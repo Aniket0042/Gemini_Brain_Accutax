@@ -18,7 +18,7 @@ from tests.unit import upload_files as f
 
 SESSION = "5f0c8a43-1111-4222-8333-944455556666"
 USER = CurrentUser(user_id=501, email="a@test.com", allowed_org_ids=[24, 25])
-BILL = {"document_type": "tax_invoice", "vendor_name": "Alex Adams Trading LLC", "vendor_tax_id": "100123456700003",
+BILL = {"document_type": "tax_invoice", "vendor_name": "Alex Adams Trading LLC", "vendor_tax_id": "100123456700003", "vendor_address": "Dubai, UAE", "document_title": "Tax Invoice", "buyer_address": "Sharjah, UAE", 
         "buyer_name": "Org One", "buyer_tax_id": None, "document_number": "BILL-152643", "date": "2026-09-01",
         "currency": "AED", "subtotal": 500, "tax_total": 25, "tax_rate_percent": 5, "grand_total": 525,
         "items": [{"description": "Transistor", "quantity": 2, "rate": 75, "amount": 150},
@@ -511,7 +511,8 @@ def test_the_prompt_has_the_file_rules_only_when_asked():
 # ── plain words, and the cards under the answer ──
 
 def test_no_code_name_of_a_check_reaches_the_model():
-    names = ("items_add_up", "total_adds_up", "vat_rate", "tax_id", "date_valid")   # "currency" is an ordinary word
+    names = ("items_add_up", "total_adds_up", "vat_rate", "tax_id", "date_valid", "required_items", "simplified_limit",
+             "claim_hint")   # "currency" is an ordinary word
     for record in (BILL, {**BILL, "tax_total": 52.4, "grand_total": 552.4, "vendor_tax_id": None}, {**BILL, "currency": "MYR"}):
         text = context.render(_doc(record=record))
         assert not [n for n in names if n in text], text
@@ -520,7 +521,8 @@ def test_no_code_name_of_a_check_reaches_the_model():
 def test_the_labels_are_plain_for_every_check():
     from gemini_brain.uploads.checks import LABELS, check_label
 
-    assert set(LABELS) == {"items_add_up", "total_adds_up", "vat_rate", "tax_id", "date_valid", "currency"}
+    assert set(LABELS) == {"items_add_up", "total_adds_up", "vat_rate", "tax_id", "date_valid", "currency", "required_items",
+                           "simplified_limit", "claim_hint"}
     assert all("_" not in v for v in LABELS.values()) and check_label("something_new") == "Something new"
 
 

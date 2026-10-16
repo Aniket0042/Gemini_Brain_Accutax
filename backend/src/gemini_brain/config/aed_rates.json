@@ -1,0 +1,7 @@
+{
+  "source": "Central Bank of the UAE",
+  "note": "Rates to the UAE dirham (AED per one unit). The Central Bank publishes the rate each day after 6 pm; a tax invoice may use the rate of the day before. USD is the official fixed rate. Finance adds other currencies here, each with the Central Bank rate and the date of that rate, and the assistant shows that date next to every converted amount.",
+  "rates": {
+    "USD": {"rate": 3.6725, "as_of": "fixed rate"}
+  }
+}

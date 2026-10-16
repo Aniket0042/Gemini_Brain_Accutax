@@ -30,6 +30,7 @@ def _rows(ex: DocumentExtract) -> List[Dict[str, str]]:
     if ex.is_bill:
         add("Supplier", ex.vendor_name)
         add("Supplier TRN", ex.vendor_tax_id)
+        add("Title", ex.document_title)
         add("Buyer", ex.buyer_name)
         add("Number", ex.document_number)
         add("Date", ex.date)
@@ -39,6 +40,13 @@ def _rows(ex: DocumentExtract) -> List[Dict[str, str]]:
             add("Tax", _money(ex.tax_total, ex.currency) + (f" ({ex.tax_rate_percent:g}%)" if ex.tax_rate_percent is not None else ""))
         if ex.grand_total is not None:
             add("Total", _money(ex.grand_total, ex.currency))
+        if (ex.currency or "AED") != "AED":
+            # In AED: what the bill prints, else the worth at the Central Bank rate (never when the rate is not known)
+            if ex.total_aed is not None:
+                add("Total in AED", _money(ex.total_aed, "AED") + " (printed on the bill)")
+            else:
+                from gemini_brain.uploads import fx
+                add("Total in AED", fx.sentence(fx.to_aed(ex.grand_total, ex.currency)))
         if ex.items:
             add("Lines", len(ex.items))
     elif ex.document_type == "statement" or ex.statement_lines:

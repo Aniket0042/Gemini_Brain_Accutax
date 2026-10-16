@@ -86,7 +86,10 @@ def test_the_expected_checks_are_what_the_checks_code_gives_for_a_perfect_read()
         extract = DocumentExtract.from_dict({
             "document_type": "tax_invoice", "vendor_name": t["vendor"][0], "vendor_tax_id": t["trn"], "document_number": t["number"],
             "date": t["date"], "currency": t["currency"][0], "subtotal": t["subtotal"], "tax_total": t["tax"], "grand_total": t["total"],
-            "items": [{"amount": a} for a in t["items"]]})
+            # what the synthetic bills print: the title, both addresses and a rate on every line
+            "document_title": "TAX INVOICE", "vendor_address": "Dubai, UAE", "buyer_name": "Northwind Trading LLC",
+            "buyer_address": "Dubai, United Arab Emirates", "tax_rate_percent": 5,
+            "items": [{"description": "Item", "quantity": 1, "rate": a, "amount": a} for a in t["items"]]})
         got = {x.name: x.status for x in run_checks(extract)}
         assert got == c.expect["checks"], c.id
 

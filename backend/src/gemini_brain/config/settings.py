@@ -338,6 +338,13 @@ class GeminiBrainSettings(BaseSettings):
     )
     agent_max_tool_calls: int = Field(default=6, ge=1, le=12)
     agent_deadline_seconds: float = Field(default=45.0, ge=5.0, le=120.0)
+    aed_rates_file: str = Field(
+        default="",
+        description=(
+            "JSON file of rates to AED kept by finance (see config/aed_rates.json). Empty uses the file that ships with the "
+            "code, which holds only the official fixed USD rate."
+        ),
+    )
     agent_audit_log: str = Field(
         default="logs/agent_audit.jsonl",
         description=(

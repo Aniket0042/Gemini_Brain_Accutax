@@ -370,7 +370,8 @@ class Case:
         return {k: v for k, v in self.__dict__.items()}
 
 
-ALL_PASS = {"items_add_up": "pass", "total_adds_up": "pass", "vat_rate": "pass", "tax_id": "pass", "date_valid": "pass", "currency": "pass"}
+ALL_PASS = {"items_add_up": "pass", "total_adds_up": "pass", "vat_rate": "pass", "tax_id": "pass", "date_valid": "pass", "currency": "pass",
+            "required_items": "pass"}
 
 
 def synthetic_cases() -> List[Case]:

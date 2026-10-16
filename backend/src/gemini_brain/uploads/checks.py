@@ -27,6 +27,9 @@ LABELS = {
     "tax_id": "Supplier's TRN",
     "date_valid": "Date",
     "currency": "Currency",
+    "required_items": "Items a tax invoice must show",
+    "simplified_limit": "Simplified invoice allowed",
+    "claim_hint": "Input VAT recovery",
 }
 
 
@@ -52,6 +55,7 @@ def run_checks(ex: DocumentExtract, *, today: Optional[date_type] = None) -> Lis
     """The checks for a bill, tax invoice or receipt; none for other documents."""
     if not ex.is_bill:
         return []
+    from gemini_brain.uploads import invoice_rules  # after this module is loaded: it imports Check from here
     return [
         _items_add_up(ex),
         _total_adds_up(ex),
@@ -59,6 +63,8 @@ def run_checks(ex: DocumentExtract, *, today: Optional[date_type] = None) -> Lis
         _tax_id(ex),
         _date_valid(ex, today or date_type.today()),
         _currency(ex),
+        invoice_rules.required_items(ex),
+        *[c for c in (invoice_rules.simplified_limit(ex), invoice_rules.claim_hint(ex)) if c is not None],
     ]
 
 
