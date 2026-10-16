@@ -1,0 +1,11 @@
+# Runs vat-kb-refresh.service at 02:30 on the first day of each month; a missed run starts at the next boot.
+[Unit]
+Description=Accutax AI: monthly VAT knowledge base refresh
+
+[Timer]
+OnCalendar=*-*-01 02:30:00
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

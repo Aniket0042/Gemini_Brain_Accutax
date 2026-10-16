@@ -1,0 +1,15 @@
+# Monthly refresh of the VAT knowledge base (backend/scripts/vat_kb_refresh.py). Started by vat-kb-refresh.timer.
+# Install: copy both files to /etc/systemd/system/, then: systemctl daemon-reload && systemctl enable --now vat-kb-refresh.timer
+# A failed refresh keeps the build in use; see <VAT_KB_DIR>/refresh_log.jsonl and logs/agent_audit.jsonl.
+[Unit]
+Description=Accutax AI: refresh the VAT knowledge base from the FTA site
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=geminibrain
+WorkingDirectory=/opt/accutax-ai/backend
+ExecStart=/opt/accutax-ai/venv/bin/python scripts/vat_kb_refresh.py
+TimeoutStartSec=3h
+Nice=10

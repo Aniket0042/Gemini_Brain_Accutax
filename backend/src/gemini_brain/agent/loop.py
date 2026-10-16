@@ -337,6 +337,13 @@ def run_agent(
         answer = LEAKED
     report = (verify_answer(answer, _evidence(ok_results, earlier_figures, document_evidence), enforce=False)
               if answer and status == "ok" else None)
+    if answer and status == "ok" and ctx.fta_numbers:
+        # The FTA sources this turn numbered: a citation that names none of them is taken out; none at all is logged.
+        from gemini_brain.vat_kb.citations import enforce
+        answer, cites = enforce(answer, ctx.fta_numbers.values())
+        if cites["uncited"] or cites["removed"]:
+            audit.event("law_answer_citations", route="tools", user_id=user_id, session_id=session_id,
+                        uncited=cites["uncited"], removed=cites["removed"], sources=len(ctx.fta_numbers))
     fta = tools.fta_block(ctx, answer) if status == "ok" else None
     return AgentResult(
         answer=answer,

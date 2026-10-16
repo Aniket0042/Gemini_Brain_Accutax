@@ -19,6 +19,9 @@ logger = logging.getLogger("gemini_brain.agent.law")
 
 #: vat_kb.augment answers law questions for these question types; 6 is the knowledge answer.
 KNOWLEDGE_TYPE = 6
+#: Arabic letters. The FTA documents are searched in English, so an Arabic question goes to the tool loop, where the
+#: model searches with an English question and answers in Arabic.
+_ARABIC = re.compile(r"[\u0600-\u06FF]")
 
 # Words that ask for the selected organizations' figures. "Company" and "our" stay out:
 # law questions use them too ("A company leaves our VAT tax group").
@@ -46,10 +49,25 @@ BRIEF_LAW = ("\n\nBRIEF MODE: the user asked for a brief answer. Give the rule i
              "for steps.")
 
 
+def _checked_citations(text: str, blocks: Any) -> tuple:
+    """The answer with citation numbers that name no given source taken out; uncited answers are logged."""
+    from gemini_brain.vat_kb.citations import enforce
+    available = [s.get("n") for b in blocks or [] if isinstance(b, dict) and b.get("type") == "fta_sources"
+                 for s in b.get("sources") or [] if s.get("n") is not None]
+    if not available:
+        return text, None
+    text, report = enforce(text, available)
+    if report["uncited"] or report["removed"]:
+        from gemini_brain.agent import audit
+        audit.event("law_answer_citations", route="law", uncited=report["uncited"], removed=report["removed"],
+                    sources=len(available))
+    return text, report
+
+
 def answer(question: str, messages: List[Dict[str, Any]], brief: bool = False) -> Optional[LawAnswer]:
     """The knowledge-base answer, or None when this is not a law question the knowledge base
     answers confidently (the tool loop then handles it). Never raises."""
-    if about_the_organizations(question):
+    if about_the_organizations(question) or _ARABIC.search(question or ""):
         return None
     try:
         from gemini_brain.vat_kb.prompts import DIRECT_ANSWER_SYSTEM_PROMPT
@@ -63,7 +81,8 @@ def answer(question: str, messages: List[Dict[str, Any]], brief: bool = False) -
         system = vat.system + BRIEF_LAW if brief and isinstance(vat.system, str) else vat.system
         adapter = BedrockAdapter(vat.model_id, label="agent-law")
         text = adapter.converse(system, messages, max_tokens=vat.max_tokens, purpose="agent_law")
-        return LawAnswer(answer=tidy_answer(text or ""), usage=adapter.get_token_usage(), blocks=vat.blocks)
+        answer_text, report = _checked_citations(tidy_answer(text or ""), vat.blocks)
+        return LawAnswer(answer=answer_text, usage=adapter.get_token_usage(), blocks=vat.blocks)
     except Exception as e:  # noqa: BLE001 - the tool loop still answers
         logger.warning("agent law route failed, using the tool loop: %s", e)
         return None
