@@ -26,6 +26,10 @@ LEGAL_TERMS: list[tuple[str, str]] = [
     (r"\be-?invoic\w*\b", "Electronic Invoicing System"),
     (r"\b(director'?s?\s+fees?|board member)\b", "Director Board of Directors natural person"),
     (r"\bTRN\b", "Tax Registration Number"),
+    # Buying services or goods from abroad: the recipient accounts for the VAT (Article 48, reverse charge).
+    (r"\b(outside the (uae|state|country)|abroad|overseas|foreign|non-?resident)\b.{0,40}\b(supplier|services?|goods)\b"
+     r"|\b(supplier|services?|goods)\b.{0,40}\b(outside the (uae|state|country)|abroad|overseas|foreign|non-?resident)\b",
+     "import of services; reverse charge mechanism; the recipient shall be responsible for calculating and paying the Tax"),
     (r"\b(wrong|incorrect|exempt|zero-rated|standard-rated)\s+box\b|\b(mistake|error|errors|misreport\w*)\b.{0,40}\breturn\b",
      "error or omission in the Tax Return correction voluntary disclosure"),
     (r"\b(vat|tax)\s+group\b", "Tax Group"),
