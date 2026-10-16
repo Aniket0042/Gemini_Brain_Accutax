@@ -44,6 +44,11 @@ _OWN_DATA = re.compile(
     r"|\b(my|our)\s+(purchase\s+|supplier\s+|vendor\s+)?(bills?|purchases?)\b"
     r"|\b(any|are there)\b.{0,15}\b(bills?|purchases?)\b.{0,40}\b(with|without|dated|missing|that)\b"
     r"|\breview\b.{0,20}\b(bills?|purchases?|invoices?|sales)\b"
+    # The user's own VAT return, deadline or amount owed (the vat_return tool), and a penalty on given figures (the
+    # vat_penalty calculator): the law answer would explain the rule instead of working it out.
+    r"|\b(our|my)\s+(next\s+)?(vat\s+)?(return|deadline|due date|filing)\b|\bnext\s+(vat\s+)?(return\s+)?deadline\b"
+    r"|\bhow much (vat|tax) do (we|i) (owe|pay|have to pay)\b"
+    r"|\bpenalt\w*\b.{0,80}\b(aed|dhs?|dirhams?)\s?\d|\b(aed|dhs?|dirhams?)\s?\d[\d,.]*\b.{0,120}\bpenalt"
     r"|\b(my|our)\s+(sales\s+)?invoices\b|\b(on|in)\s+(my|our)\s+sales\b", re.I)
 
 # A period on its own ("last quarter") usually means the user's figures, but law questions name one

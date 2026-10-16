@@ -95,6 +95,10 @@ NOT_VAT_LAW = [
     "Is the VAT on my purchase bills right this year?",
     "Did we record any bill twice with the same bill number?",
     "Are there any bills dated in the future?",
+    # the user's own return and a penalty on given figures: tools, not the law answer
+    "When is our next VAT return deadline?",
+    "How much VAT do we owe for the last quarter?",
+    "We paid AED 12,000 of VAT due on 28 July 2026 on 16 October 2026. What is the late payment penalty?",
 ]
 
 
