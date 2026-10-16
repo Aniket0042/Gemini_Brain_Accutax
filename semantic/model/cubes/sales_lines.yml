@@ -21,6 +21,7 @@ cubes:
                   THEN CAST(LEFT(CAST(inc.invoice_date AS TEXT), 10) AS DATE) END AS document_date,
              inc.contact_id                                AS customer_id,
              COALESCE(NULLIF(c.name, ''), NULLIF(c.organization_name, ''), 'Unknown') AS customer_name,
+             NULLIF(TRIM(c.trn_number), '')                AS customer_trn,
              COALESCE(p.project_name, 'No project')        AS project_name,
              COALESCE(cc.costcenter_name, 'Unallocated')   AS cost_center_name,
              COALESCE(NULLIF(it.name, ''), 'No item')      AS item_name,
@@ -77,6 +78,12 @@ cubes:
       - name: document_weekday
         description: Day of the week of the document date (Monday to Sunday).
         sql: "TRIM(TO_CHAR({CUBE}.document_date, 'FMDay'))"
+        type: string
+      - name: customer_trn
+        description: >-
+          The customer's tax registration number as stored on the contact (null when blank). A tax invoice to a
+          VAT-registered customer shows it; a number is not proof that the FTA registered it.
+        sql: customer_trn
         type: string
       - name: customer_name
         sql: customer_name

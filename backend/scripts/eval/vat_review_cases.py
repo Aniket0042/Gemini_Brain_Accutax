@@ -84,6 +84,31 @@ EXPECTED = {
 CLEAN = [f"PLANT-C-{i:02d}" for i in range(1, 21)] + [f"PLANT-R-{i}" for i in range(1, 9)]
 
 
+def planted_sales_book() -> List[Dict[str, Any]]:
+    """Sales invoices of the same organization, by the names the rules use (vendor_name holds the customer)."""
+    invoices = [_bill(f"SINV-C-{i:02d}", f"Clean Customer {i:02d}", f"2026-{(i % 9) + 1:02d}-{(i * 2) % 27 + 1:02d}",
+                      round(1300 + 151.13 * i, 2)) for i in range(1, 16)]
+    invoices += [_bill("SINV-77", "Planted First Customer", "2026-03-02", 1200.0),
+                 _bill("SINV-77", "Planted Second Customer", "2026-03-19", 2600.0),       # one number on two invoices
+                 _bill("SINV-L-1", "Planted Likely Customer", "2026-03-10", 1950.0),
+                 _bill("SINV-L-2", "Planted Likely Customer", "2026-03-12", 1950.0),      # same amount, two days apart
+                 _bill("SINV-V-1", "Planted Rate Customer", "2026-03-21", 2000.0, 400.0),  # 20%
+                 _bill("SINV-T-1", "Planted Short Trn Customer", "2026-03-22", 2100.0, trn="123456789"),
+                 _bill("SINV-T-2", "Planted Unregistered Customer", "2026-03-23", 2200.0, trn=None)]  # no TRN: allowed
+    return invoices
+
+
+#: What the rules must find in the sales book. SINV-T-2 has no TRN, which is allowed for a customer who is not registered.
+SALES_EXPECTED = {
+    "same_number": ["SINV-77"],
+    "same_total_near_date": ["SINV-L-1", "SINV-L-2"],
+    "vat_rate_not_standard": ["SINV-V-1"],
+    "supplier_trn_invalid": ["SINV-T-1"],
+}
+SALES_CLEAN = [f"SINV-C-{i:02d}" for i in range(1, 16)] + ["SINV-T-2"]
+_SALES_KEYS = {"vendor_name": "customer_name", "net_purchases": "net_sales", "input_vat": "output_vat", "vendor_trn": "customer_trn"}
+
+
 def key_of(bill: Dict[str, Any]) -> str:
     return bill.get("document_number") or bill.get("vendor_name") or ""
 
@@ -96,6 +121,7 @@ def planted_cube(organization_id: int = ORG, bills: Optional[List[Dict[str, Any]
     from gemini_brain.vat_review import tool as review_tool
 
     book = bills if bills is not None else planted_book()
+    sales_book = planted_sales_book()
     real = cube_client.load
     real_has_trn = review_tool._has_trn
 
@@ -104,6 +130,11 @@ def planted_cube(organization_id: int = ORG, bills: Optional[List[Dict[str, Any]
         if list(organization_ids) == [organization_id] and query.get("limit") == 500 and "purchases.document_id" in dims:
             a, b = query["timeDimensions"][0]["dateRange"]
             rows = [{f"purchases.{k}": v for k, v in x.items()} for x in book if a <= x["document_date"] <= b][:500]
+            return SimpleNamespace(rows=rows, query=query, elapsed_ms=0, last_refresh_time=None, used_pre_aggregations=[])
+        if list(organization_ids) == [organization_id] and query.get("limit") == 500 and "sales.document_id" in dims:
+            a, b = query["timeDimensions"][0]["dateRange"]
+            rows = [{f"sales.{_SALES_KEYS.get(k, k)}": v for k, v in x.items()} for x in sales_book
+                    if a <= x["document_date"] <= b][:500]
             return SimpleNamespace(rows=rows, query=query, elapsed_ms=0, last_refresh_time=None, used_pre_aggregations=[])
         return real(query, organization_ids=organization_ids, subject=subject, deadline=deadline)
 
@@ -131,6 +162,7 @@ def case(cid: str, question: str, **kw: Any) -> Dict[str, Any]:
     any_of (the answer holds at least one), must (all), must_not, blocks (types that must come back), review (an
     answer about duplicates or odd bills: hedge, no rule names, no table)."""
     return {"id": cid, "question": question, "org": ORG, "planted": True, "tools_any": [], "tools_none": [], "card_has": [],
+            "card_lacks": [],
             "any_of": [], "must": [], "must_not": [], "blocks": [], "review": False, "hedge": True, **kw}
 
 
@@ -165,6 +197,16 @@ CASES: List[Dict[str, Any]] = [
          must_not=["trns are valid", "all trns are valid", "is registered with the fta", "are registered with the fta"]),
     case("export_dup", "Export the duplicate bills to Excel", tools_any=["review_vat"], blocks=["vat_review", "artifact"]),
     case("export_odd", "Export all odd bills to Excel", tools_any=["review_vat"], blocks=["artifact"]),
+    # sales invoices (side sales)
+    case("sales_dup", "Are there any duplicate sales invoices this year?", tools_any=["review_vat"], review=True,
+         card_has=["SINV-77", "SINV-L-1", "SINV-L-2"], must_not=["supplier", " bill "]),
+    case("sales_vat", "Is the VAT on my sales invoices right this year?", tools_any=["review_vat"], review=True,
+         card_has=["SINV-V-1"], any_of=["5%", "5 %"], must_not=["supplier", "input vat"]),
+    case("sales_trn", "Do my sales invoices show valid customer TRNs?", tools_any=["review_vat"], review=True,
+         card_has=["SINV-T-1"], card_lacks=["SINV-T-2"], any_of=["15 digit", "15-digit", "has 15", "have 15"],
+         must_not=["supplier"]),
+    case("sales_problems", "Check my sales invoices for problems", tools_any=["review_vat"], review=True,
+         card_has=["SINV-77", "SINV-V-1"], must_not=["supplier"], blocks=["vat_review"]),
     # questions that must not go to the review
     case("ctl_total", "What is my total purchases this year?", tools_none=["review_vat"]),
     case("ctl_largest", "List the 5 largest bills this year", tools_none=["review_vat"], tools_any=["list_documents"]),
@@ -203,6 +245,8 @@ def judge(case_: Dict[str, Any], answer: str, tools: List[str], blocks: List[Dic
     held = card_numbers(blocks)
     for number in case_["card_has"]:
         checks[f"card holds {number}"] = number in held
+    for number in case_.get("card_lacks") or []:
+        checks[f"card does not hold {number}"] = number not in held
     if case_["any_of"]:
         checks["says one of: " + " / ".join(case_["any_of"][:3])] = any(p.lower() in text for p in case_["any_of"])
     for p in case_["must"]:

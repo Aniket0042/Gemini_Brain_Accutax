@@ -65,7 +65,8 @@ def document_links(data: Sequence[Dict[str, Any]]) -> Dict[str, str]:
         if item.get("tool") not in ("list_documents", "review_vat"):
             continue
         result = item.get("result") or {}
-        kind = "bills" if item.get("tool") == "review_vat" else result.get("type")
+        kind = ((("sales_invoices" if result.get("side") == "sales" else "bills")) if item.get("tool") == "review_vat"
+                else result.get("type"))
         for number_key, id_key, route in DOCUMENT_ROUTES.get(kind, []):
             for row in _document_rows(item, result):
                 number, record_id = str(row.get(number_key) or "").strip(), row.get(id_key)

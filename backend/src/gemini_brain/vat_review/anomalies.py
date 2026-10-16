@@ -67,8 +67,11 @@ def find_future(bills: Sequence[Dict[str, Any]], today: dt.date) -> List[Dict[st
     return out
 
 
-def find_anomalies(bills: Sequence[Dict[str, Any]], today: dt.date) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """(findings, patterns) for the usable bills of ONE organization. Findings: most serious first, then largest."""
+def find_anomalies(bills: Sequence[Dict[str, Any]], today: dt.date,
+                   side: str = "purchases") -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """(findings, patterns) for the usable bills of ONE organization. Findings: most serious first, then largest.
+    On sales a customer with no TRN is not a finding (a customer who is not registered has none); a TRN that is not 15
+    digits is. The sentences are written for purchases; the tool words them for sales (wording.py)."""
     findings: List[Dict[str, Any]] = []
     patterns: List[Dict[str, Any]] = []
     total = len(bills)
@@ -112,7 +115,7 @@ def find_anomalies(bills: Sequence[Dict[str, Any]], today: dt.date) -> Tuple[Lis
     bad_trn = []
     for b in with_vat:
         digits = re.sub(r"\D", "", str(b.get("vendor_trn") or ""))
-        if len(digits) != t.TRN_DIGITS:
+        if len(digits) != t.TRN_DIGITS and not (side == "sales" and len(digits) == 0):
             bad_trn.append((b, len(digits)))
     if bad_trn and len(bad_trn) / len(with_vat) >= t.TRN_SYSTEMIC_SHARE:
         patterns.append({"rule": "supplier_trn_invalid", "bills": len(bad_trn), "of": len(with_vat),

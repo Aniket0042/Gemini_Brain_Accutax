@@ -76,24 +76,26 @@ def _group(rule: str, members: List[Dict[str, Any]], why: str) -> Dict[str, Any]
             "extra_amount": round(sum(nets) - nets[0], 2) if len(nets) > 1 else 0.0}
 
 
-def find_duplicates(bills: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Duplicate groups, most sure and largest first. `bills` are the usable bills of ONE organization."""
+def find_duplicates(bills: Sequence[Dict[str, Any]], side: str = "purchases") -> List[Dict[str, Any]]:
+    """Duplicate groups, most sure and largest first. `bills` are the usable bills of ONE organization.
+    On sales the invoice number is the organization's own, so the same number twice is sure whoever the customer is."""
     groups: List[Dict[str, Any]] = []
 
     # 1. same supplier, same number
     by_number: Dict[Tuple[str, str], List[Dict[str, Any]]] = defaultdict(list)
     for b in bills:
         v, n = vendor_key(b.get("vendor_name")), number_key(b.get("document_number"))
-        if v and n:
-            by_number[(v, n)].append(b)
+        if n and (v or side == "sales"):
+            by_number[("" if side == "sales" else v, n)].append(b)
     in_exact: Dict[int, int] = {}
     for members in by_number.values():
         if len(members) > 1:
             for b in members:
                 in_exact[id(b)] = len(groups)
-            groups.append(_group("same_number", members,
-                                 f"The same supplier has {len(members)} bills with the document number "
-                                 f"{members[0].get('document_number')}."))
+            why = (f"{len(members)} invoices carry the same number {members[0].get('document_number')}." if side == "sales"
+                   else f"The same supplier has {len(members)} bills with the document number "
+                        f"{members[0].get('document_number')}.")
+            groups.append(_group("same_number", members, why))
 
     # 2. same supplier, same amount, dates close together
     by_total: Dict[Tuple[str, float], List[Dict[str, Any]]] = defaultdict(list)

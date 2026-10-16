@@ -9,6 +9,8 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Sequence
 
+from gemini_brain.vat_review.wording import for_side
+
 #: A short plain title for each rule: what the person sees, never the rule's name.
 TITLES = {
     "same_number": "Same bill number twice",
@@ -47,22 +49,23 @@ def review_blocks(data: Sequence[Dict[str, Any]], urls: Dict[str, str] | None = 
         if item.get("tool") != "review_vat":
             continue
         result = item.get("result") or {}
+        side = result.get("side") or "purchases"
         items: List[Dict[str, Any]] = []
         for g in result.get("groups") or []:
             bills = g.get("bills") or []
             items.append({"kind": "duplicate", "level": g.get("confidence"), "level_word": CONFIDENCE_WORDS.get(g.get("confidence"), ""),
-                          "title": TITLES.get(g.get("rule"), "Possible duplicate"), "why": g.get("why"),
+                          "title": for_side(TITLES.get(g.get("rule"), "Possible duplicate"), side), "why": g.get("why"),
                           "organization": g.get("organization_name"), "extra_amount": g.get("extra_amount"),
                           "currency": g.get("currency"), "count": len(bills),
                           "bills": [_bill(b, urls) for b in bills[:BILLS_PER_ITEM]], "more": max(0, len(bills) - BILLS_PER_ITEM)})
         for f in result.get("findings") or []:
             items.append({"kind": "finding", "level": f.get("severity"), "level_word": str(f.get("severity") or "").capitalize(),
-                          "title": TITLES.get(f.get("rule"), "Odd bill"), "why": f.get("why"),
+                          "title": for_side(TITLES.get(f.get("rule"), "Odd bill"), side), "why": f.get("why"),
                           "organization": f.get("organization_name"), "currency": f.get("currency"), "count": 1,
                           "bills": [_bill(f.get("bill") or {}, urls)], "more": 0})
         by_severity = result.get("findings_by_severity") or {}
         out.append({
-            "type": "vat_review", "mode": result.get("mode"), "period": result.get("period"),
+            "type": "vat_review", "side": side, "mode": result.get("mode"), "period": result.get("period"),
             "bills_checked": result.get("bills_checked"),
             "summary": {"duplicate_groups": result.get("groups_found"), "findings": result.get("findings_found"),
                         "high": by_severity.get("high"), "medium": by_severity.get("medium"), "low": by_severity.get("low")},

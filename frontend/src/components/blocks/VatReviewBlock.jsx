@@ -72,8 +72,8 @@ export function VatReviewBlock({ block }) {
   return (
     <section className="vr-card" aria-label="VAT review">
       <header className="vr-head">
-        <h3 className="vr-title"><AlertTriangle size={15} aria-hidden="true" />VAT review</h3>
-        <span className="vr-sub">{period}{period && block.bills_checked != null ? ' · ' : ''}{block.bills_checked != null ? `${block.bills_checked.toLocaleString('en-US')} bills checked` : ''}</span>
+        <h3 className="vr-title"><AlertTriangle size={15} aria-hidden="true" />VAT review{block.side === 'sales' ? ' of sales invoices' : ''}</h3>
+        <span className="vr-sub">{period}{period && block.bills_checked != null ? ' · ' : ''}{block.bills_checked != null ? `${block.bills_checked.toLocaleString('en-US')} ${block.side === 'sales' ? 'invoices' : 'bills'} checked` : ''}</span>
         <div className="vr-summary"><Summary block={block} /></div>
       </header>
       {(block.patterns || []).map((text, i) => (

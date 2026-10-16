@@ -62,7 +62,7 @@ def review_event(item: dict, *, user_id: Any, session_id: Optional[str], organiz
     shown = [str(b.get("document_number") or "") for g in result.get("groups") or [] for b in g.get("bills") or []]
     shown += [str((f.get("bill") or {}).get("document_number") or "") for f in result.get("findings") or []]
     event("vat_review", user_id=user_id, session_id=session_id, organization_ids=[int(o) for o in organization_ids or []],
-          mode=result.get("mode"), period=result.get("period"), rules_asked=params.get("rules") or None,
+          mode=result.get("mode"), side=result.get("side"), period=result.get("period"), rules_asked=params.get("rules") or None,
           bills_checked=result.get("bills_checked"), duplicate_groups=result.get("groups_found"),
           duplicates_by_rule=result.get("groups_by_rule"), findings=result.get("findings_found"),
           findings_by_rule=result.get("findings_by_rule"), findings_by_severity=result.get("findings_by_severity"),

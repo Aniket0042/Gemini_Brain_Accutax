@@ -43,7 +43,8 @@ _OWN_DATA = re.compile(
     r"|\b(bills?|invoices?|purchases?)\b.{0,30}\b(recorded|entered|posted|booked)\s+twice\b"
     r"|\b(my|our)\s+(purchase\s+|supplier\s+|vendor\s+)?(bills?|purchases?)\b"
     r"|\b(any|are there)\b.{0,15}\b(bills?|purchases?)\b.{0,40}\b(with|without|dated|missing|that)\b"
-    r"|\breview\b.{0,20}\b(bills?|purchases?)\b", re.I)
+    r"|\breview\b.{0,20}\b(bills?|purchases?|invoices?|sales)\b"
+    r"|\b(my|our)\s+(sales\s+)?invoices\b|\b(on|in)\s+(my|our)\s+sales\b", re.I)
 
 # A period on its own ("last quarter") usually means the user's figures, but law questions name one
 # too: "We found an error in last quarter's return ... voluntary disclosure, or correct it in the next

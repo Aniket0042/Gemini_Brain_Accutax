@@ -12,6 +12,8 @@ from gemini_brain.config.settings import settings
 from gemini_brain.semantic import periods
 from gemini_brain.semantic.catalog import ToolInputError
 from gemini_brain.vat_review import anomalies, duplicates
+from gemini_brain.vat_review import scan as scan_mod
+from gemini_brain.vat_review.wording import SIDES, for_side
 from gemini_brain.vat_review.scan import scan_bills
 
 MODES = ("all", "duplicates", "anomalies")
@@ -67,23 +69,24 @@ def _law_questions(seen_rules: List[str]) -> List[Dict[str, str]]:
     return out
 
 
-def _has_trn(organization_ids: Sequence[int], subject: str, deadline: float) -> bool:
-    """Whether the bills view of this Cube gives the supplier's TRN. A Cube started before the field was added does not;
-    the review then skips the TRN check and says so, instead of failing."""
+def _has_trn(organization_ids: Sequence[int], subject: str, deadline: float, side: str = "purchases") -> bool:
+    """Whether this Cube gives the other party's TRN (the supplier's on bills, the customer's on sales). A Cube started
+    before the field was added does not; the review then skips the TRN check and says so, instead of failing."""
     try:
         from gemini_brain.semantic.catalog import get_catalog
-        return "purchases.vendor_trn" in get_catalog(list(organization_ids), subject, deadline).view("purchases").dimensions
+        view = scan_mod.SIDES[side]["view"]
+        return scan_mod.member(side, "vendor_trn") in get_catalog(list(organization_ids), subject, deadline).view(view).dimensions
     except Exception:  # noqa: BLE001
         return False
 
 
 def _future_dated(org: int, end: Any, today: Any, subject: str, deadline: float,
-                  with_trn: bool = False) -> List[Dict[str, Any]]:
+                  with_trn: bool = False, side: str = "purchases") -> List[Dict[str, Any]]:
     """Bills dated after the period's end and after today, which a scan "up to today" never reaches."""
     import datetime as dt
     first = max(today, end) + dt.timedelta(days=1)
     scan = scan_bills(org, first, first + dt.timedelta(days=FUTURE_DAYS), subject=subject,
-                      deadline=min(deadline, time.monotonic() + SCAN_SECONDS), with_trn=with_trn)
+                      deadline=min(deadline, time.monotonic() + SCAN_SECONDS), with_trn=with_trn, side=side)
     bills, _ = duplicates.usable(scan.bills)
     return anomalies.find_future(bills, today)
 
@@ -102,11 +105,13 @@ def _spread(findings: List[Dict[str, Any]], limit: int) -> List[Dict[str, Any]]:
     return sorted(shown, key=lambda f: (anomalies._RANK[f["severity"]], order.index(f["rule"])))
 
 
-def _row(kind: str, group: Any, org: str, rule: str, level: str, bill: Dict[str, Any], why: str) -> Dict[str, Any]:
+def _row(kind: str, group: Any, org: str, rule: str, level: str, bill: Dict[str, Any], why: str,
+         side: str = "purchases") -> Dict[str, Any]:
+    sales = side == "sales"
     return {"kind": kind, "group": group, "organization": org, "rule": rule, "level": level,
-            "supplier": bill.get("vendor_name"), "document_number": bill.get("document_number"),
-            "date": bill.get("document_date"), "amount": bill.get("net_purchases"), "input_vat": bill.get("input_vat"),
-            "status": bill.get("status"), "why": why}
+            ("customer" if sales else "supplier"): bill.get("vendor_name"), "document_number": bill.get("document_number"),
+            "date": bill.get("document_date"), "amount": bill.get("net_purchases"),
+            ("output_vat" if sales else "input_vat"): bill.get("input_vat"), "status": bill.get("status"), "why": why}
 
 
 def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str, deadline: float) -> Dict[str, Any]:
@@ -115,6 +120,9 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
     mode = params.get("mode", "all")
     if mode not in MODES:
         raise ToolInputError(f"mode must be one of {list(MODES)}")
+    side = params.get("side") or "purchases"
+    if side not in SIDES:
+        raise ToolInputError(f"side must be one of {list(SIDES)}")
     try:
         limit = max(1, min(int(params.get("limit") or DEFAULT_LIMIT), MAX_LIMIT))
     except (TypeError, ValueError):
@@ -131,7 +139,7 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
     if only:  # a question about one kind of problem: look for that kind only
         want_dup = want_dup and any(r in duplicates.RULES for r in only)
         want_odd = want_odd and any(r in anomalies.RULES for r in only)
-    with_trn = want_odd and _has_trn(organization_ids, subject, deadline)
+    with_trn = want_odd and _has_trn(organization_ids, subject, deadline, side)
 
     groups: List[Dict[str, Any]] = []
     findings: List[Dict[str, Any]] = []
@@ -140,22 +148,26 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
     per_org: List[Dict[str, Any]] = []
     for org in organization_ids:
         scan = scan_bills(org, start, end, subject=subject, deadline=min(deadline, time.monotonic() + SCAN_SECONDS),
-                          with_trn=with_trn)
+                          with_trn=with_trn, side=side)
         bills, skipped = duplicates.usable(scan.bills)
         name = next((b.get("organization_name") for b in scan.bills if b.get("organization_name")), None) or f"Organization {org}"
         currency = next((b.get("currency") for b in scan.bills if b.get("currency")), None)
         tag = {"organization_id": org, "organization_name": name, "currency": currency}
-        found_groups = duplicates.find_duplicates(bills) if want_dup else []
-        found_odd, found_patterns = anomalies.find_anomalies(bills, today) if want_odd else ([], [])
+        found_groups = duplicates.find_duplicates(bills, side) if want_dup else []
+        found_odd, found_patterns = anomalies.find_anomalies(bills, today, side) if want_odd else ([], [])
         if only:
             found_groups = [g for g in found_groups if g["rule"] in only]
             found_patterns = [p for p in found_patterns if p["rule"] in only]
         if want_odd:
-            found_odd += _future_dated(org, end, today, subject, deadline, with_trn)
+            found_odd += _future_dated(org, end, today, subject, deadline, with_trn, side)
         if only:
             found_odd = [f for f in found_odd if f["rule"] in only]
         for item in found_groups + found_odd + found_patterns:
             item.update(tag)
+        for item in found_groups + found_odd:  # the sentences are written for bills; a sales review words them for invoices
+            item["why"] = for_side(item["why"], side)
+        for item in found_patterns:
+            item["text"] = for_side(item["text"], side)
         checked += len(bills)
         left_out += skipped
         groups += found_groups
@@ -173,7 +185,7 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
     if only:
         notes.append("Only these kinds of problem were looked for: " + "; ".join(RULE_TEXT[r] for r in only) + ".")
 
-    out: Dict[str, Any] = {"mode": mode, "period": {"start": start.isoformat(), "end": end.isoformat()},
+    out: Dict[str, Any] = {"mode": mode, "side": side, "period": {"start": start.isoformat(), "end": end.isoformat()},
                            "bills_checked": checked, "organizations": per_org, "notes": notes}
     rows: List[Dict[str, Any]] = []
     rules: Dict[str, str] = {}
@@ -183,7 +195,7 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
         shown = groups[:limit]
         out.update({"groups_found": len(groups), "groups": shown,
                     "groups_by_rule": {r: sum(1 for g in groups if g["rule"] == r) for r in duplicates.RULES}})
-        rows += [_row("duplicate", g["group"], g["organization_name"], g["rule"], g["confidence"], b, g["why"])
+        rows += [_row("duplicate", g["group"], g["organization_name"], g["rule"], g["confidence"], b, g["why"], side)
                  for g in shown for b in g["bills"]]
         rules.update({r: RULE_TEXT[r] for r in duplicates.RULES})
         if len(groups) > len(shown):
@@ -197,7 +209,8 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
                     "findings_by_rule": {r: sum(1 for f in findings if f["rule"] == r) for r in anomalies.RULES
                                          if any(f["rule"] == r for f in findings)},
                     "findings_by_severity": {s: sum(1 for f in findings if f["severity"] == s) for s in ("high", "medium", "low")}})
-        rows += [_row("finding", None, f["organization_name"], f["rule"], f["severity"], f["bill"], f["why"]) for f in shown_f]
+        rows += [_row("finding", None, f["organization_name"], f["rule"], f["severity"], f["bill"], f["why"], side)
+                 for f in shown_f]
         rules.update({r: RULE_TEXT[r] for r in anomalies.RULES})
         if len(findings) > len(shown_f):
             notes.append(f"Showing {len(shown_f)} of {len(findings)} findings: the most serious, with each rule represented.")
@@ -207,7 +220,9 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
     fired = [f["rule"] for f in sorted(findings, key=lambda f: anomalies._RANK[f["severity"]])] if want_odd else []
     fired += [g["rule"] for g in groups] if want_dup else []
     seen_rules = list(dict.fromkeys(fired))
-    out.update({"rows": rows, "row_count": len(rows), "rules": rules, "law_questions": _law_questions(seen_rules)})
+    out.update({"rows": rows, "row_count": len(rows), "rules": {k: for_side(v, side) for k, v in rules.items()},
+                "law_questions": [{**q, "for": for_side(q["for"], side)} for q in _law_questions(seen_rules)]})
+    out["notes"] = [for_side(n, side) for n in notes]
     return out
 
 
@@ -215,8 +230,8 @@ def tool_spec() -> Dict[str, Any]:
     return {"toolSpec": {
         "name": "review_vat",
         "description": (
-            "Reviews the posted purchase bills of the organizations selected in this chat for problems, checking every "
-            "bill in the period, not a sample. Mode duplicates: bills that look recorded twice (same supplier and "
+            "Reviews the posted purchase bills (side purchases) or sales invoices (side sales) of the organizations "
+            "selected in this chat for problems, checking every one in the period, not a sample. Mode duplicates: bills that look recorded twice (same supplier and "
             "number is sure; same supplier and amount within 3 days is likely; alike supplier names with the same amount "
             "and date is possible). Mode anomalies: VAT that is neither 0 nor 5% of the amount, wrong signs, missing "
             "supplier or number, future dates, an amount far above the supplier's usual bill, round or one-off large "
@@ -228,6 +243,8 @@ def tool_spec() -> Dict[str, Any]:
             "type": "object",
             "properties": {
                 "mode": {"type": "string", "enum": list(MODES), "description": "Default all."},
+                "side": {"type": "string", "enum": list(SIDES),
+                         "description": "purchases (bills, input VAT; the default) or sales (sales invoices, output VAT)."},
                 "period": {"type": "object", "description": "same shape as query_metrics; omit for year to date",
                            "properties": {"preset": {"type": "string"}, "start": {"type": "string"},
                                           "end": {"type": "string"}}},

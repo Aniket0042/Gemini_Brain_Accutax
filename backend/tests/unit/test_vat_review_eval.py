@@ -103,8 +103,24 @@ def test_a_review_answer_needs_a_hedge_no_rule_names_and_no_table():
 def test_cases_are_well_formed():
     ids = [c["id"] for c in vc.CASES]
     assert len(ids) == len(set(ids)) >= 20
-    known = {n for names in vc.EXPECTED.values() for n in names}
+    known = {n for names in list(vc.EXPECTED.values()) + list(vc.SALES_EXPECTED.values()) for n in names}
     for c in vc.CASES:
         assert c["question"].strip() and c["org"]
         for n in c["card_has"]:
             assert n in known, f"{c['id']}: {n} is not a planted bill"
+
+
+def test_the_sales_book_gives_what_is_expected_and_leaves_the_clean_invoices(monkeypatch):
+    from gemini_brain.semantic import periods
+    monkeypatch.setattr(periods, "today_in", lambda tz: __import__("datetime").date(2026, 10, 15))
+    with vc.planted_cube(7):
+        out = tool.run({"side": "sales", "limit": 50}, organization_ids=[7], subject="t", deadline=1e12)
+    found = {}
+    for g in out["groups"]:
+        found.setdefault(g["rule"], set()).update(vc.key_of(b) for b in g["bills"])
+    for f in out["findings"]:
+        found.setdefault(f["rule"], set()).add(vc.key_of(f["bill"]))
+    for rule, expected in vc.SALES_EXPECTED.items():
+        assert set(expected) <= found.get(rule, set()), rule
+    flagged = {k for keys in found.values() for k in keys}
+    assert not flagged & set(vc.SALES_CLEAN)
