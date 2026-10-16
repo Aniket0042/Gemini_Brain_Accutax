@@ -117,7 +117,7 @@ def find_duplicates(bills: Sequence[Dict[str, Any]], side: str = "purchases") ->
                 span = (_day(cluster[-1]) - _day(cluster[0])).days
                 groups.append(_group("same_total_near_date", cluster,
                                      f"The same supplier has {len(cluster)} bills for {net:,.2f}, "
-                                     f"{'on the same day' if span == 0 else f'dated within {span} days'}."))
+                                     f"{'on the same day' if span == 0 else f'dated within {span} day' + ('s' if span > 1 else '')}."))
             cluster = [b] if b is not None else []
 
     # 3. suppliers with alike names, same amount, same date

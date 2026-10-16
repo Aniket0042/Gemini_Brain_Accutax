@@ -237,7 +237,10 @@ def tool_spec() -> Dict[str, Any]:
             "supplier or number, future dates, an amount far above the supplier's usual bill, round or one-off large "
             "amounts, and patterns such as almost every bill carrying no VAT. Mode all does both. Use for 'any "
             "duplicate bills', 'check my purchases for problems', 'is the VAT on my bills right', 'what looks odd in my "
-            "bills'. It does not check one uploaded file: for that use the file's own checks and list_documents."
+            "bills'. The rule names say supplier and bill, but on side sales the same rules check sales invoices and the "
+            "customer: supplier_trn_invalid then checks the customer's TRN (a customer with no TRN is allowed; one that "
+            "is not 15 digits is not), and missing_supplier is a missing customer name. It does not check one uploaded "
+            "file: for that use the file's own checks and list_documents."
         ),
         "inputSchema": {"json": {
             "type": "object",

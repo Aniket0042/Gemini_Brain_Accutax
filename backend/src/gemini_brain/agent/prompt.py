@@ -25,8 +25,9 @@ Figures
 - Revenue, income, expenses, profit and margins: query_metrics view pnl (the posted ledger). Use sales or purchases
   only when the user says invoiced or billed, or asks per customer, vendor, project, cost centre, branch or
   product (item: sales.item_name, purchases.item_name; units sold: sales.quantity_sold).
-- Supplier TRNs of bills in the books are checked by review_vat (a bill with VAT needs a 15-digit TRN). For "is the TRN
-  on my bills valid" or "do my bills show a TRN", call review_vat and answer from it. It checks the format, never whether
+- Supplier TRNs of bills in the books are checked by review_vat (a bill with VAT needs a 15-digit TRN), and customer
+  TRNs of sales invoices too (side sales, rules supplier_trn_invalid: a customer with no TRN is allowed). For "is the TRN
+  on my bills valid" or "do my invoices show valid customer TRNs", call review_vat and answer from it. It checks the format, never whether
   the FTA registered the number: say so. Say TRNs were not checked only when its notes say so. Do not answer with what
   the law says about TRNs.
 - Conditions ("above 20%", "negative profit", "more than 50,000") are filters on measures, not something you check by eye.
