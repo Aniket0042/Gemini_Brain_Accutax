@@ -105,6 +105,19 @@ def _spread(findings: List[Dict[str, Any]], limit: int) -> List[Dict[str, Any]]:
     return sorted(shown, key=lambda f: (anomalies._RANK[f["severity"]], order.index(f["rule"])))
 
 
+def _totals(groups: List[Dict[str, Any]]) -> Dict[str, float]:
+    """The amount that would be counted twice, per currency: the sum of the groups' extra amounts."""
+    out: Dict[str, float] = {}
+    for g in groups:
+        cur = g.get("currency") or "AED"
+        out[cur] = round(out.get(cur, 0.0) + float(g.get("extra_amount") or 0.0), 2)
+    return out
+
+
+def _money_words(totals: Dict[str, float]) -> str:
+    return " and ".join(f"{cur} {amount:,.2f}" for cur, amount in totals.items()) or "nothing"
+
+
 def _row(kind: str, group: Any, org: str, rule: str, level: str, bill: Dict[str, Any], why: str,
          side: str = "purchases") -> Dict[str, Any]:
     sales = side == "sales"
@@ -194,12 +207,18 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
         groups.sort(key=lambda g: (order[g["rule"]], -g["extra_amount"], -g["count"]))
         shown = groups[:limit]
         out.update({"groups_found": len(groups), "groups": shown,
+                    # Added up by code, per currency, so the answer never sums the groups itself.
+                    "amount_counted_twice": {"all_groups": _totals(groups), "shown_groups": _totals(shown)},
                     "groups_by_rule": {r: sum(1 for g in groups if g["rule"] == r) for r in duplicates.RULES}})
         rows += [_row("duplicate", g["group"], g["organization_name"], g["rule"], g["confidence"], b, g["why"], side)
                  for g in shown for b in g["bills"]]
         rules.update({r: RULE_TEXT[r] for r in duplicates.RULES})
         if len(groups) > len(shown):
             notes.append(f"Showing the first {len(shown)} of {len(groups)} duplicate groups, most certain first.")
+        if groups:
+            notes.append("If every group is a duplicate, " + _money_words(_totals(groups)) + " would be counted twice"
+                         + (f" across all {len(groups)} groups; the {len(shown)} shown add up to "
+                            + _money_words(_totals(shown)) + "." if len(groups) > len(shown) else "."))
         if not groups:
             notes.append("No duplicate bills were found by these rules. It does not prove there are none: a bill "
                          "entered with a different supplier name, amount or date is not matched.")

@@ -24,6 +24,27 @@ _NUMBER = re.compile(
 
 _SCALE = {"k": 1_000, "m": 1_000_000, "b": 1_000_000_000, "bn": 1_000_000_000}
 
+#: Text that holds digits but no figure: dates ("30 Sep 2026", "Dec 31", "13–16 Jul", "2026-10-28", "28/07/2026",
+#: "the 28th day") and the length of a number ("a 15-digit TRN"). Blanked out before the figures are read, so a day of
+#: the month is never checked as an amount.
+_MONTH = (r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|"
+          r"oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)")
+_NOT_FIGURES = re.compile(
+    r"\b\d{4}-\d{2}-\d{2}\b"
+    r"|\b\d{1,2}[/.]\d{1,2}[/.]\d{2,4}\b"
+    rf"|\b\d{{1,2}}(?:st|nd|rd|th)?(?:\s*[–-]\s*\d{{1,2}}(?:st|nd|rd|th)?)?\s+{_MONTH}\b\.?(?:,?\s+\d{{4}})?"
+    rf"|\b{_MONTH}\.?\s+\d{{1,2}}(?:st|nd|rd|th)?\b(?:\s*[–-]\s*\d{{1,2}}\b)?(?:,?\s+\d{{4}})?"
+    r"|\b\d{1,2}(?:st|nd|rd|th)\s+(?:calendar\s+)?day\b"
+    r"|\b\d+[- ]digits?\b",
+    re.IGNORECASE,
+)
+
+
+def _figure_text(text: str) -> str:
+    """`text` with dates and number lengths blanked out: what is left holds only figures."""
+    return _NOT_FIGURES.sub(" ", text or "")
+
+
 #: Figures that are almost never data claims — years, small ordinals, list counts.
 _IGNORED = {0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0}
 
@@ -76,7 +97,9 @@ def _collect_numbers(payload: Any, out: Set[float], depth: int = 0) -> None:
         try:
             out.add(float(payload.replace(",", "")))
         except ValueError:
-            pass
+            # A short reference with letters and digits ("CS 67832", "INV-2026-0451"): its number may be quoted alone.
+            if len(payload) <= 40 and re.search(r"[A-Za-z]", payload):
+                out.update(float(d) for d in re.findall(r"\d{3,}", payload))
         return
     if isinstance(payload, dict):
         for v in payload.values():
@@ -149,7 +172,7 @@ def verify_answer(
     if allow_derived and known:
         known |= _derived(known)
 
-    for raw, suffix in _NUMBER.findall(answer):
+    for raw, suffix in _NUMBER.findall(_figure_text(answer)):
         try:
             value = float(raw.replace(",", ""))
         except ValueError:
@@ -188,7 +211,7 @@ def strictness_note(report: VerificationReport) -> str:
 def _numbers_in(text: str) -> List[tuple]:
     """(label, value) for every figure in `text` that carries a data claim."""
     found = []
-    for raw, suffix in _NUMBER.findall(text):
+    for raw, suffix in _NUMBER.findall(_figure_text(text)):
         try:
             value = float(raw.replace(",", ""))
         except ValueError:
