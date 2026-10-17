@@ -363,6 +363,20 @@ class GeminiBrainSettings(BaseSettings):
         ),
     )
 
+    # ── Privacy (PII plan) ─────────────────────────────────────
+    pii_sentinel: str = Field(
+        default="off",
+        description=(
+            "off | report. report: scan every Bedrock call just before it is sent and log the personal data it "
+            "carries (kinds, counts, where; masked previews only) to PII_SENTINEL_LOG. It never blocks or changes "
+            "a call. Summarise with scripts/pii_leak_report.py."
+        ),
+    )
+    pii_sentinel_log: str = Field(
+        default="logs/pii_sentinel.jsonl",
+        description="JSON-lines file for PII_SENTINEL, relative to backend/. Rotates at 50 MB, keeping 5 files.",
+    )
+
     model_config = {
         # Anchored to the repository root rather than the process working
         # directory. A relative ".env" silently falls back to the defaults

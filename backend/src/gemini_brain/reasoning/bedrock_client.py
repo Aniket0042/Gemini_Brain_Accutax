@@ -168,6 +168,15 @@ def _without_cache_points(blocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return [b for b in blocks or [] if not (isinstance(b, dict) and "cachePoint" in b)]
 
 
+def _inspect_outbound(model_id: str, label: str, purpose: str, system: Any, messages: List[Dict[str, Any]]) -> None:
+    """PII sentinel (PII_SENTINEL=report): log the personal data this call carries. Never blocks or raises."""
+    try:
+        from gemini_brain.privacy import sentinel
+        sentinel.inspect(model_id=model_id, label=label, purpose=purpose, system=system, messages=messages)
+    except Exception as e:  # noqa: BLE001 - report only
+        logger.warning("PII sentinel failed for %s: %s", model_id, e)
+
+
 class BedrockAdapter:
     """LLM adapter for any AWS Bedrock Claude model.
 
@@ -246,6 +255,7 @@ class BedrockAdapter:
         """
         system = self._build_system_array(system_prompt)
         call_usage: Dict[str, Any] = {}
+        _inspect_outbound(self.model_id, self.label, purpose, system, messages)
 
         def _call():
             client = get_bedrock_client()
@@ -303,6 +313,7 @@ class BedrockAdapter:
     ) -> Generator[str, None, None]:
         """Stream text tokens using Bedrock converse_stream API."""
         system = self._build_system_array(system_prompt)
+        _inspect_outbound(self.model_id, self.label, purpose, system, messages)
         client = get_bedrock_client()
         kwargs: Dict[str, Any] = dict(
             modelId=self.model_id,
@@ -359,6 +370,7 @@ class BedrockAdapter:
         system = self._build_system_array(system_prompt)
         tools = list(tools or [])
         call_usage: Dict[str, Any] = {}
+        _inspect_outbound(self.model_id, self.label, purpose, system, messages)
 
         def _call():
             client = (self._client_factory or get_bedrock_client)()
@@ -510,6 +522,7 @@ def converse(
     """Simple text-in / text-out Converse call used by leaf agents."""
     _model = model_id or MODEL_ID
     call_usage: Dict[str, Any] = {}
+    _inspect_outbound(_model, _model, purpose, system_prompt, messages)
 
     def _call():
         client = get_bedrock_client()
@@ -547,6 +560,7 @@ def converse_tools(
     """Module-level tool-calling Converse (agents / coordinator)."""
     _model = model_id or MODEL_ID
     call_usage: Dict[str, Any] = {}
+    _inspect_outbound(_model, _model, purpose, system_prompt, messages)
 
     def _call():
         client = get_bedrock_client()

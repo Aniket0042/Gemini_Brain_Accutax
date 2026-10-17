@@ -29,6 +29,7 @@ from gemini_brain.config.constants import SONNET5_ID
 from gemini_brain.config.settings import settings
 from gemini_brain.pii.redactor import redact_pii
 from gemini_brain.policy.verifier import verify_answer
+from gemini_brain.privacy import sentinel
 from gemini_brain.reasoning.bedrock_client import BedrockAdapter
 from gemini_brain.semantic import periods
 
@@ -245,6 +246,8 @@ def run_agent(
     deadline = started + (deadline_seconds or settings.agent_deadline_seconds)
     budget = max_tool_calls or settings.agent_max_tool_calls
     orgs = [int(o) for o in organization_ids]
+    sentinel.note_request(session_id=session_id, organization_ids=orgs,
+                          org_names=[(org_meta.get(o) or {}).get("name") for o in orgs])
     ctx = tools.ToolContext(organization_ids=orgs, subject=subject, deadline=deadline, user_id=user_id,
                             session_id=session_id, document_ids=tuple(document_ids))
     planner_id = model_id or settings.agent_model_id or SONNET5_ID
