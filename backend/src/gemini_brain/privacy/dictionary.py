@@ -37,6 +37,9 @@ logger = logging.getLogger("gemini_brain.privacy.dictionary")
 CACHE_SECONDS = 600.0
 LOAD_TIMEOUT_SECONDS = 8.0
 MAX_NAMES_PER_SOURCE = 20000
+#: Cube refuses a query whose limit is above this ("The query limit has been exceeded"), so a request for many
+#: organizations at once is capped here, never above it.
+CUBE_MAX_ROWS = 50000
 #: Normalized names shorter than this are not searched for: too many false matches.
 MIN_NAME_CHARS = 4
 #: A word of a name found on its own (partial=True) must be at least this long and belong to one name only.
@@ -225,9 +228,13 @@ def load_many(org_ids: Sequence[int], *, subject: str) -> Dict[int, List[Entry]]
     def one(source: Tuple[str, str, str]) -> List[Tuple[int, Entry]]:
         view, dimension, kind = source
         member, org_key = f"{view}.{dimension}", f"{view}.organization_id"
-        result = cube_client.load({"dimensions": [member], "limit": MAX_NAMES_PER_SOURCE * len(orgs)},
+        limit = min(MAX_NAMES_PER_SOURCE * len(orgs), CUBE_MAX_ROWS)
+        result = cube_client.load({"dimensions": [member], "limit": limit},
                                   organization_ids=orgs, subject=subject,
                                   deadline=time.monotonic() + LOAD_TIMEOUT_SECONDS)
+        if len(result.rows) >= limit:
+            logger.warning("privacy dictionary: %s hit the %d-row limit for orgs %s; some names are not known",
+                           member, limit, orgs)
         found = []
         for row in result.rows:
             name = str(row.get(member) or "").strip()

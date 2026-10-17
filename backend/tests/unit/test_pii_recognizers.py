@@ -165,3 +165,24 @@ def test_one_query_per_source_for_all_orgs_and_a_failing_source_is_skipped(monke
     assert len(seen) == len(dictionary.SOURCES) and all(orgs == [24, 25] for _, orgs in seen)
     assert {e.key for e in loaded[24]} == {"delta traders"} and {e.key for e in loaded[25]} == {"echo supplies"}
     assert len(loaded[24]) == len(dictionary.SOURCES) - 1
+
+
+def test_many_organizations_never_ask_cube_for_more_rows_than_it_allows(monkeypatch):
+    # Cube refuses a limit above 50,000 ("The query limit has been exceeded"): with 10 organizations the
+    # dictionary once asked for 200,000 and got no names at all.
+    from gemini_brain.semantic import cube_client
+
+    class Result:
+        rows = []
+
+    limits = []
+
+    def fake(query, **kw):
+        limits.append(query["limit"])
+        if query["limit"] > dictionary.CUBE_MAX_ROWS:
+            raise cube_client.CubeError("Cube refused the query (HTTP 500): Error: The query limit has been exceeded.")
+        return Result()
+
+    monkeypatch.setattr(cube_client, "load", fake)
+    dictionary.load_many(list(range(24, 34)), subject="t")
+    assert limits and max(limits) == dictionary.CUBE_MAX_ROWS
