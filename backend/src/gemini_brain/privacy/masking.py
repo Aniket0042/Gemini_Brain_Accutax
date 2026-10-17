@@ -51,6 +51,8 @@ class Masking:
         self.scrubber = scrubber
         self.ms = 0.0
         self._memo: Dict[int, tuple] = {}
+        #: The before/after snapshot of this request (snapshots.begin), or None.
+        self.capture: Any = None
 
     @classmethod
     def start(cls, mode: str, organization_ids: Sequence[int], org_meta: Dict[int, Dict[str, Any]], *,
@@ -105,8 +107,11 @@ class Masking:
         return self.vault.rehydrate_json(value)
 
     def stats(self) -> Dict[str, Any]:
-        return {"mode": self.mode, "hidden": self.vault.counts(), "unresolved": self.vault.unresolved,
-                "names_known": len(self.scrubber.names), "ms": round(self.ms, 1)}
+        out = {"mode": self.mode, "hidden": self.vault.counts(), "unresolved": self.vault.unresolved,
+               "names_known": len(self.scrubber.names), "ms": round(self.ms, 1)}
+        if self.capture is not None:
+            out["snapshot"] = self.capture.id
+        return out
 
 
 _current: contextvars.ContextVar[Optional[Masking]] = contextvars.ContextVar("pii_masking", default=None)

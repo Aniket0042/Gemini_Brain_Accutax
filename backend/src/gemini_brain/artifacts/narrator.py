@@ -498,35 +498,65 @@ def write_narrative(doc: ReportDocument, query: str = "") -> ReportDocument:
 _EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="report-narrator")
 
 
-def _masked(system: str, user: str) -> Tuple[str, str, Any]:
-    """The prompt as the model should see it under PII_MODE, and the masking to put real values back with.
-    "on": customer, supplier and organization names and identifiers in the facts and the request become the
-    request's placeholders. "shadow": the masked prompt goes to the sentinel only. Raises only when masking fails
-    under "on", so the caller sends nothing."""
+@dataclass
+class _Prompt:
+    """What the narrator sends, and the masking around it (PII_MODE shadow or on)."""
+    system: str
+    user: str
+    masking: Any = None                 # the request's masking, in shadow and on
+    masked_system: str = ""             # the masked prompt: sent under "on", reported under "shadow"
+    masked_user: str = ""
+
+    @property
+    def sends_masked(self) -> bool:
+        return self.masking is not None and self.masking.sends_masked
+
+
+def _masked(system: str, user: str) -> _Prompt:
+    """The prompt as the model should see it under PII_MODE. "on": customer, supplier and organization names and
+    identifiers in the facts and the request become the request's placeholders. "shadow": the masked prompt goes to
+    the sentinel only. Raises only when masking fails under "on", so the caller sends nothing."""
     from gemini_brain.config.settings import settings
     try:
         from gemini_brain.privacy import masking, sentinel
         m = masking.current(settings.pii_mode, subject="report-narrator")
         if m is None:
-            return system, user, None
-        masked_system, masked_user = system + masking.PLACEHOLDER_RULES, m.text(user)
-        if m.sends_masked:
-            return masked_system, masked_user, m
-        sentinel.inspect(model_id=settings.report_narrative_model_id or settings.bedrock_model_id,
-                         label="report narrator", purpose="report_narration:masked", system=masked_system,
-                         messages=[{"role": "user", "content": [{"text": masked_user}]}])
+            return _Prompt(system, user)
+        prompt = _Prompt(system, user, m, system + masking.PLACEHOLDER_RULES, m.text(user))
+        if prompt.sends_masked:
+            prompt.system, prompt.user = prompt.masked_system, prompt.masked_user
+        else:
+            sentinel.inspect(model_id=settings.report_narrative_model_id or settings.bedrock_model_id,
+                             label="report narrator", purpose="report_narration:masked", system=prompt.masked_system,
+                             messages=[{"role": "user", "content": [{"text": prompt.masked_user}]}])
+        return prompt
     except Exception as e:  # noqa: BLE001 - masking failure is logged; "on" then uses the template, never raw names
         logger.warning("Report narration: privacy masking failed: %s", e)
         if (settings.pii_mode or "").strip().lower() == "on":
             raise
-    return system, user, None
+    return _Prompt(system, user)
+
+
+def _snapshot(prompt: _Prompt, raw_system: str, raw_user: str, reply_model: str, reply_user: str) -> None:
+    """Add the narrator's call to the request's privacy snapshot (PII_SNAPSHOTS), and write it again."""
+    capture = getattr(prompt.masking, "capture", None)
+    if capture is None:
+        return
+    from gemini_brain.privacy import snapshots
+    capture.add(purpose="report_narration", raw_system=raw_system,
+                raw_messages=[{"role": "user", "content": [{"text": raw_user}]}], sent_system=prompt.masked_system,
+                sent_messages=[{"role": "user", "content": [{"text": prompt.masked_user}]}],
+                reply_model=reply_model, reply_user=reply_user)
+    snapshots.save(prompt.masking)
 
 
 def _narrate_with_model(brief: Brief, query: str, timeout: float) -> Optional[NarrativeSection]:
+    raw_system, raw_user = _SYSTEM, _user_message(brief, query)
     try:
-        system, user, masking = _masked(_SYSTEM, _user_message(brief, query))
+        prompt = _masked(raw_system, raw_user)
     except Exception:  # noqa: BLE001 - with PII_MODE=on and no masking, nothing goes to the model
         return None
+    system, user, masking = prompt.system, prompt.user, (prompt.masking if prompt.sends_masked else None)
     # copy_context keeps the per-request LLM trace and token accounting attached.
     ctx = contextvars.copy_context()
     future = _EXECUTOR.submit(ctx.run, _model_call, system, user)
@@ -538,8 +568,13 @@ def _narrate_with_model(brief: Brief, query: str, timeout: float) -> Optional[Na
     except Exception as e:
         logger.warning("Report narration failed (%s); using the template", e)
         return None
+    reply_model = raw or ""
     if masking is not None:
         raw = masking.vault.rehydrate(raw or "", json_string=True)  # real names back, before the JSON is read
+    try:
+        _snapshot(prompt, raw_system, raw_user, reply_model, raw or "")
+    except Exception as e:  # noqa: BLE001 - a snapshot never costs the report its narrative
+        logger.warning("Report narration: privacy snapshot failed: %s", e)
     section = parse_narrative(raw, brief)
     if section is None:
         logger.warning("Report narration returned no usable JSON (%s); using the template", why_unusable(raw))

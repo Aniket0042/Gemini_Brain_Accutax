@@ -9,7 +9,8 @@ import { Header } from './components/Header';
 import { IntroSuggestions } from './components/IntroSuggestions';
 import { ModelHealthModal } from './components/ModelHealthModal';
 import { AnswerCanvas } from './components/canvas/AnswerCanvas';
-import { fetchQueryResponse, streamQueryResponse, fetchTenants, fetchModelCatalog, fetchSessionMessages, createChatSession, deleteChatSession, fetchUploadConfig } from './services/api';
+import { fetchQueryResponse, streamQueryResponse, fetchTenants, fetchModelCatalog, fetchSessionMessages, createChatSession, deleteChatSession, fetchUploadConfig, fetchPrivacyAccess } from './services/api';
+import { PrivacySnapshotsModal } from './components/PrivacySnapshotsModal';
 import { chipsFromBlocks, kindGroup } from './services/attachments';
 import { clearUploadBlobs } from './services/uploadBlobs';
 import { FilePreviewPanel, ImageLightbox } from './components/FilePreview';
@@ -264,6 +265,8 @@ export default function App() {
   // UI Modals State
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showHealthModal, setShowHealthModal] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
+  const [privacyAccess, setPrivacyAccess] = useState({ admin: false });
 
   // Execution & Streaming State
   const [isLoading, setIsLoading] = useState(false);
@@ -1119,6 +1122,22 @@ export default function App() {
     };
   }, [currentUser?.access_token]);
 
+  // The privacy page (PII masking snapshots) is shown only to PII_SNAPSHOT_ADMINS.
+  useEffect(() => {
+    const token = currentUser?.access_token;
+    if (!token) {
+      setPrivacyAccess({ admin: false });
+      return undefined;
+    }
+    let cancelled = false;
+    fetchPrivacyAccess(token).then((access) => {
+      if (!cancelled) setPrivacyAccess(access || { admin: false });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.access_token]);
+
   // A different chat: its files are not this chat's. Close any preview and forget the files fetched for it.
   useEffect(() => {
     setPreviewFile(null);
@@ -1564,6 +1583,7 @@ export default function App() {
           multiOrgEnabled={multiOrg.enabled}
           maxOrgs={multiOrg.max}
           onOpenHealthModal={() => setShowHealthModal(true)}
+          onOpenPrivacy={privacyAccess.admin ? () => setShowPrivacy(true) : undefined}
         />
         <div className="main-stage">
         <div ref={chatScrollAreaRef} style={styles.chatScrollArea}>
@@ -1668,6 +1688,14 @@ export default function App() {
         <ModelHealthModal
           token={currentUser?.access_token || ''}
           onClose={() => setShowHealthModal(false)}
+        />
+      )}
+
+      {showPrivacy && privacyAccess.admin && (
+        <PrivacySnapshotsModal
+          token={currentUser?.access_token || ''}
+          access={privacyAccess}
+          onClose={() => setShowPrivacy(false)}
         />
       )}
 

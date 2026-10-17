@@ -1,5 +1,5 @@
 import React from 'react';
-import { PanelLeft, Plus, Sun, Moon, MonitorSmartphone, Activity } from 'lucide-react';
+import { PanelLeft, Plus, Sun, Moon, MonitorSmartphone, Activity, ShieldCheck } from 'lucide-react';
 import { TenantSwitcher } from './TenantSwitcher';
 
 // Icon and label per theme state — cycling System → Light → Dark → System,
@@ -24,6 +24,7 @@ export const Header = ({
   multiOrgEnabled = false,
   maxOrgs = 1,
   onOpenHealthModal,
+  onOpenPrivacy,
 }) => {
   const { icon: ThemeIcon, label: themeLabel } = THEME_META[theme] || THEME_META.system;
 
@@ -51,6 +52,17 @@ export const Header = ({
       </div>
 
       <div style={styles.headerRight}>
+        {onOpenPrivacy && (
+          <button
+            className="icon-btn"
+            style={styles.iconBtn}
+            onClick={onOpenPrivacy}
+            title="Privacy snapshots: what the AI model was sent"
+            aria-label="Privacy snapshots"
+          >
+            <ShieldCheck size={16} color="var(--ink-soft)" />
+          </button>
+        )}
         {onOpenHealthModal && (
           <button
             className="icon-btn"

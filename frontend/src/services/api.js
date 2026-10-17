@@ -329,3 +329,45 @@ export const deleteUpload = async (uploadId, token = '') => {
     await fetch(`/api/v1/uploads/${encodeURIComponent(uploadId)}`, { method: 'DELETE', headers: authHeaders(token) });
   } catch { /* ignore */ }
 };
+
+// ── Privacy snapshots (PII masking proof; admins in PII_SNAPSHOT_ADMINS only) ──
+export const fetchPrivacyAccess = async (token = '') => {
+  try {
+    const response = await fetch('/api/v1/privacy/access', { headers: { Accept: 'application/json', ...authHeaders(token) } });
+    return response.ok ? await response.json() : { admin: false };
+  } catch {
+    return { admin: false };
+  }
+};
+
+export const fetchPrivacySnapshots = async (token = '', limit = 100) => {
+  const response = await fetch(`/api/v1/privacy/snapshots?limit=${limit}`, {
+    headers: { Accept: 'application/json', ...authHeaders(token) },
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw failure(response.status, body);
+  return body?.snapshots || [];
+};
+
+export const fetchPrivacySnapshot = async (id, token = '') => {
+  const response = await fetch(`/api/v1/privacy/snapshots/${encodeURIComponent(id)}`, {
+    headers: { Accept: 'application/json', ...authHeaders(token) },
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw failure(response.status, body);
+  return body;
+};
+
+// The snapshot as a self-contained HTML page, saved as a file (open it and print to PDF to share).
+export const downloadPrivacySnapshot = async (id, token = '') => {
+  const response = await fetch(`/api/v1/privacy/snapshots/${encodeURIComponent(id)}/export`, { headers: authHeaders(token) });
+  if (!response.ok) throw failure(response.status, await response.json().catch(() => null));
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `privacy-snapshot-${id}.html`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+};

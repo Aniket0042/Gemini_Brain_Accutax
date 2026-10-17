@@ -381,6 +381,28 @@ class GeminiBrainSettings(BaseSettings):
             "a call. Summarise with scripts/pii_leak_report.py."
         ),
     )
+    pii_snapshots: str = Field(
+        default="off",
+        description=(
+            "off | on. on: keep a before/after snapshot of every masked request (PII_MODE shadow or on) for the "
+            "privacy page: what was sent to the model (plain) and what the request held (encrypted with "
+            "PII_SNAPSHOT_KEY). See privacy/snapshots.py."
+        ),
+    )
+    pii_snapshot_users: str = Field(
+        default="", description="Comma-separated user ids: keep snapshots only of their requests. Empty: everyone.")
+    pii_snapshot_sample_pct: int = Field(default=100, ge=0, le=100,
+                                         description="Share of selected requests that get a snapshot, in percent.")
+    pii_snapshot_admins: str = Field(
+        default="", description="Comma-separated emails or user ids that may open the privacy page. Empty: nobody.")
+    pii_snapshot_key: str = Field(
+        default="",
+        description="Fernet key (cryptography.fernet.Fernet.generate_key()) for the raw side. Empty: raw not kept.",
+    )
+    pii_snapshot_dir: str = Field(default="logs/pii_snapshots",
+                                  description="Directory for snapshots, relative to backend/.")
+    pii_snapshot_raw_days: int = Field(default=7, ge=0, description="Days the encrypted raw side is kept.")
+    pii_snapshot_days: int = Field(default=30, ge=0, description="Days the sent side is kept.")
     pii_sentinel_log: str = Field(
         default="logs/pii_sentinel.jsonl",
         description="JSON-lines file for PII_SENTINEL, relative to backend/. Rotates at 50 MB, keeping 5 files.",
