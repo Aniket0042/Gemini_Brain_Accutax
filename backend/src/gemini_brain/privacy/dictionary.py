@@ -41,7 +41,10 @@ MAX_NAMES_PER_SOURCE = 20000
 #: organizations at once is capped here, never above it.
 CUBE_MAX_ROWS = 50000
 #: Normalized names shorter than this are not searched for: too many false matches.
-MIN_NAME_CHARS = 4
+MIN_NAME_CHARS = 3
+#: Names shorter than this ("Sai", "ABC") count only where the text writes them with a capital, so a short name that
+#: is also a word ("sai", "abc" in prose) is left alone.
+MIN_LOWERCASE_CHARS = 4
 #: A word of a name found on its own (partial=True) must be at least this long and belong to one name only.
 MIN_PARTIAL_CHARS = 5
 
@@ -164,6 +167,8 @@ class Dictionary:
         for size in range(len(words), 0, -1):
             entry = self.entries.get(" ".join(words[:size]))
             if entry is not None and _joined(text, tokens, i, size):
+                if len(entry.key) < MIN_LOWERCASE_CHARS and not text[tokens[i][0]].isupper():
+                    continue
                 return entry, size
         return None
 

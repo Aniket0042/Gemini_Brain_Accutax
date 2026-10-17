@@ -45,7 +45,7 @@ BACKUPS = 5
 MAX_SAMPLES = 25
 MAX_FINGERPRINTS = 500
 #: Shorter field values ("AB", "-") are not searched for elsewhere in the call: too many false matches.
-MIN_NAME_CHARS = 4
+MIN_NAME_CHARS = 3  # as the dictionary's: a 3-letter name counts where it is capitalized
 _BACKEND_ROOT = Path(__file__).resolve().parents[3]
 _lock = threading.Lock()
 #: Fingerprints count distinct values within one process; they cannot be matched across processes.

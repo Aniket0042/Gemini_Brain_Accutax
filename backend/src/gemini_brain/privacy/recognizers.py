@@ -156,7 +156,9 @@ RULES: Sequence[Rule] = (
     Rule("PHONE", _rx(r"(?<![\w+.,-])(?:0)?[6-9]\d{4}[\s-]?\d{5}(?!\w|[.,]\d)"), 0.4,
          context=("mob", "mobile", "ph", "phone", "call", "whatsapp", "tel", "contact"), needs_context=True),
     # ── UAE ──
-    Rule("TRN", _rx(r"(?<![\w-])100\d{12}(?![\w-])"), 0.8, context=("trn", "tax registration", "vat no", "vat number",
+    # Written whole or in groups ("100 2345 6780 0003", "100-2345-6780-0003").
+    Rule("TRN", _rx(r"(?<![\w-])(?<!\d\s)100(?:[\s-]?\d){12}(?![\w-]|\s\d)"), 0.8,
+         context=("trn", "tax registration", "vat no", "vat number",
                                                                     "vat reg", "tax id", "trn no")),
     Rule("EMIRATES_ID", _rx(r"(?<![\w-])784-?\d{4}-?\d{7}-?\d(?![\w-])"), 0.95,
          check=lambda v: luhn(re.sub(r"\D", "", v)), failed_score=0.75, context=("eid", "emirates id", "id no")),

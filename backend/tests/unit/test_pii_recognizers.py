@@ -186,3 +186,11 @@ def test_many_organizations_never_ask_cube_for_more_rows_than_it_allows(monkeypa
     monkeypatch.setattr(cube_client, "load", fake)
     dictionary.load_many(list(range(24, 34)), subject="t")
     assert limits and max(limits) == dictionary.CUBE_MAX_ROWS
+
+
+def test_short_names_count_only_when_capitalized():
+    # The red-team found "Sai", a 3-letter customer, sent as written in a report's facts.
+    d = dictionary.Dictionary([dictionary.Entry("Sai", "CUSTOMER", "sai"), dictionary.Entry("Al", "CUSTOMER", "al")])
+    assert [s.text for s in d.find("Sai bought AED 105,288; SAI again")] == ["Sai", "SAI"]
+    assert d.find("the sai festival") == []
+    assert "al" not in d.entries                                             # two letters: never a name on its own
