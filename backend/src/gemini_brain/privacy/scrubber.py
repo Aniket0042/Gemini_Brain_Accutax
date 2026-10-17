@@ -32,6 +32,8 @@ class Scrubber:
         for s in self.names.find(text, partial=partial):
             out.append((s.start, s.end, s.kind, self.names.entries[s.key].name))
         for s in recognizers.find(text):
+            if policy.public_contact(s.kind, s.text):
+                continue  # a government address (the FTA's): published, and the answer may need to quote it
             if not any(a < s.end and s.start < b for a, b, _, _ in out):
                 out.append((s.start, s.end, s.kind, s.text))
         return sorted(out)
@@ -70,6 +72,8 @@ class Scrubber:
             if text.lower() in _EMPTY:
                 return value
             if rule.kind in ("SUPPLIER", "CUSTOMER", "PARTY", "PERSON", "ORG") and policy.public_entity(text):
+                return value
+            if policy.public_contact(rule.kind or "", text):
                 return value
             return self.vault.token(rule.kind or "PARTY", text)
         return self.text(value) if isinstance(value, str) else value

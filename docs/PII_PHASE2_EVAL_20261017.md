@@ -41,3 +41,16 @@ Real organization names appear correctly in every answer. This is the same run-t
 - Uploads keep the current reader (decision D3) and were not exercised. The report narrator is phase 3.
 
 Raw outputs on the VM: `/tmp/pii_eval/out` (masking off) and `/tmp/pii_eval2/out` (masking on).
+
+## Phase 3 check: report narrator and law passages
+
+I ran three report questions (top customers PDF, top suppliers PDF, revenue-by-organization Excel) through the agent and the file builder with `PII_MODE=on`. None of the 9 model calls carried personal or customer data: 6 agent calls and 3 narrator calls. Before phase 3, every narrator call sent customer and organization names. No placeholder was left in any file, and real names appear in the answers and narratives.
+
+Government email addresses, such as the FTA's in the law passages, are now visible on purpose (`policy.public_contact`). Private addresses are still masked.
+
+The same three questions with masking off showed two problems that already existed and are unrelated to masking:
+
+- The top-suppliers and top-customers reports use the organization name as the chart category instead of the supplier or customer name. So the headline reads "Construction & Real Estate_User1_Org2 has the highest Gross Purchases".
+- The narrator sometimes returns JSON that cannot be used. It happened 2 of 3 times with masking off and 1 of 3 with it on, and the template narrative was used instead.
+
+Raw outputs: `/tmp/pii_eval3` on the VM.

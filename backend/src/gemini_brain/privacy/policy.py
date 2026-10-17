@@ -156,3 +156,16 @@ for _hint, _names in {
 def public_entity(name: Any) -> Optional[str]:
     """What a public body, bank or utility is ("bank", "utility" ...), or None for any other name."""
     return _PUBLIC.get(normalize_name(name))
+
+
+#: Email domains of governments and tax authorities. Their addresses are published (the FTA's appear in the law
+#: passages the VAT answers quote) and identify no private person.
+PUBLIC_EMAIL_DOMAINS = ("gov.ae", "gov.in", "gov", "nic.in", "gov.uk", "ae.gov")
+
+
+def public_contact(kind: str, value: Any) -> bool:
+    """True for a published contact of a public body, which stays visible: an email at a government domain."""
+    if kind == "EMAIL":
+        domain = str(value).rsplit("@", 1)[-1].strip().lower().rstrip(".")
+        return any(domain == d or domain.endswith("." + d) for d in PUBLIC_EMAIL_DOMAINS)
+    return False

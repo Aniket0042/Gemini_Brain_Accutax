@@ -15,6 +15,7 @@ resolve, which should stay 0.
 """
 from __future__ import annotations
 
+import json
 import re
 import threading
 from collections import Counter
@@ -80,8 +81,9 @@ class Vault:
         """How many distinct values of each kind were hidden."""
         return dict(self._counts)
 
-    def rehydrate(self, text: str) -> str:
-        """The text with every placeholder replaced by its real value. Unknown placeholders stay and are counted."""
+    def rehydrate(self, text: str, json_string: bool = False) -> str:
+        """The text with every placeholder replaced by its real value. Unknown placeholders stay and are counted.
+        `json_string`: the text is raw JSON whose strings hold the placeholders, so values are escaped for it."""
         if not text or not self._value_of:
             return text
 
@@ -93,7 +95,7 @@ class Vault:
             if real is None:
                 self.unresolved += 1
                 return m.group(0)
-            return real
+            return json.dumps(real, ensure_ascii=False)[1:-1] if json_string else real
 
         return TOKEN_RX.sub(put, text)
 

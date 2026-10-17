@@ -10,9 +10,13 @@ PII_MODE decides what happens:
 
 The agent keeps its own messages with real values (tool results, the question). Each model call masks them again,
 memoized per message, so one vault gives the whole request consistent placeholders.
+
+The request's masking is also `current()`: later model calls of the same request (the report narrator) mask with
+the same vault and contact names, so a supplier is [SUPPLIER_3] in the answer and in the report alike.
 """
 from __future__ import annotations
 
+import contextvars
 import logging
 import time
 from typing import Any, Dict, List, Optional, Sequence
@@ -55,6 +59,7 @@ class Masking:
         (cached for 10 minutes). When they cannot be loaded it masks without them: name and contact fields, the
         organizations' own names and identifier patterns are still hidden. It never fails open."""
         mode = (mode or "off").strip().lower()
+        _current.set(None)  # a request never inherits the masking of an earlier one
         if mode not in ("shadow", "on"):
             return None
         t0 = time.perf_counter()
@@ -66,6 +71,7 @@ class Masking:
             names = dictionary.Dictionary(dictionary.Entry(n, "ORG", normalize_name(n)) for n in org_names if n)
         masking = cls(mode, Scrubber(Vault(), names))
         masking.ms += (time.perf_counter() - t0) * 1000
+        _current.set(masking)
         return masking
 
     @property
@@ -101,3 +107,22 @@ class Masking:
     def stats(self) -> Dict[str, Any]:
         return {"mode": self.mode, "hidden": self.vault.counts(), "unresolved": self.vault.unresolved,
                 "names_known": len(self.scrubber.names), "ms": round(self.ms, 1)}
+
+
+_current: contextvars.ContextVar[Optional[Masking]] = contextvars.ContextVar("pii_masking", default=None)
+
+
+def current(mode: str, *, subject: str = "") -> Optional[Masking]:
+    """The masking of this request: the agent's, or a new one when no agent ran in this request (names of the
+    organizations the request noted, if any). None when PII_MODE is off."""
+    mode = (mode or "off").strip().lower()
+    if mode not in ("shadow", "on"):
+        return None
+    found = _current.get()
+    if found is not None:
+        return found
+    from gemini_brain.privacy import sentinel
+    request = sentinel.request_scope()
+    orgs = request.get("organization_ids") or []
+    names = request.get("org_names") or []
+    return Masking.start(mode, orgs, {o: {"name": n} for o, n in zip(orgs, names)}, subject=subject or "privacy")

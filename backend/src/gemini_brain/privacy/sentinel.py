@@ -84,6 +84,11 @@ def note_request(*, session_id: Optional[str] = None, organization_ids: Sequence
         logger.debug("pii sentinel: request not noted: %s", e)
 
 
+def request_scope() -> Dict[str, Any]:
+    """The session, organizations and organization names this request noted ({} when none)."""
+    return dict(_request.get() or {})
+
+
 # ── Scan ────────────────────────────────────────────────────────────────────
 
 def enabled() -> bool:
@@ -187,7 +192,8 @@ class _Scan:
     def patterns(self) -> None:
         for location, text in self.texts:
             for span in recognizers.find(text):
-                self.hit(span.kind, location, span.text)
+                if not policy.public_contact(span.kind, span.text):
+                    self.hit(span.kind, location, span.text)
 
     def known_names(self, known: dictionary.Dictionary) -> None:
         """Known names in the texts: the contact dictionary first, then names this call carries in its fields."""
