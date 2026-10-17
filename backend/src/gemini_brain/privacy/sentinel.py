@@ -1,5 +1,5 @@
 """
-sentinel.py — Reports the personal data each model call sends (PII plan, phase 0).
+sentinel.py — Reports the personal data each model call sends (PII plan, phases 0-1).
 
 Report only: it never blocks or changes a call. With PII_SENTINEL=report every Bedrock call is scanned just
 before it is sent, and one JSON line per call goes to PII_SENTINEL_LOG: the call site, how many values of each
@@ -7,16 +7,17 @@ kind were found and where in the payload. The log never holds the values themsel
 preview ("A•• N••• T••••••") and a fingerprint, so the report can count distinct values without storing them.
 
 What it looks for:
-  - patterns, checked where a check digit exists: email, UAE mobile, Emirates ID, UAE IBAN (mod-97),
-    UAE TRN (15 digits starting 100), card numbers (Luhn);
-  - fields whose key names a person, business or contact detail, in tool results and tool inputs:
-    vendor_name, customer_name, organization_name, *_trn, *_tax_id, *_address, email, phone ...;
-  - those names again anywhere else in the call (earlier answers, the question, the system prompt), and the
-    organization names the request registered with `note_request`;
-  - free-text fields (descriptions, references), counted as needing review: they can hold names;
+  - identifiers by pattern (recognizers.py): UAE and India, with their check digits and context words;
+  - fields the policy marks as names or contact details (policy.py), in tool results and tool inputs:
+    vendor_name, customer_name, organization_name, *_trn, *_address, email, phone ...;
+  - known names anywhere else in the call (the question, earlier answers, the system prompt, free-text fields):
+    the organizations' contact dictionary (dictionary.py, when cached), the organization names the request
+    noted, and the names this call carries in its own fields;
+  - free-text fields (descriptions, references), counted: they can hold names;
   - attached files and images, which cannot be scanned: counted with their size.
 
-Scanning never raises: a failure is logged and the call goes on.
+Figure, date and document-number fields are never scanned (policy "keep"). Scanning never raises: a failure is
+logged and the call goes on.
 """
 from __future__ import annotations
 
@@ -34,6 +35,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from gemini_brain.config.settings import settings
+from gemini_brain.privacy import dictionary, policy, recognizers
 
 logger = logging.getLogger("gemini_brain.privacy.sentinel")
 
@@ -47,79 +49,16 @@ _BACKEND_ROOT = Path(__file__).resolve().parents[3]
 _lock = threading.Lock()
 #: Fingerprints count distinct values within one process; they cannot be matched across processes.
 _SALT = secrets.token_bytes(16)
-
-# ── Patterns ────────────────────────────────────────────────────────────────
-
-_EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
-_UAE_MOBILE = re.compile(r"(?<![\w+])(?:\+971|00971|0)[\s-]?5\d(?:[\s-]?\d){7}(?!\d)")
-_EMIRATES_ID = re.compile(r"(?<!\d)784-?\d{4}-?\d{7}-?\d(?!\d)")
-_UAE_IBAN = re.compile(r"\bAE\d{2}(?:\s?\d){19}\b")
-_TRN = re.compile(r"(?<!\d)100\d{12}(?!\d)")
-_CARD = re.compile(r"(?<![\w.-])(?:\d[ -]?){12,18}\d(?![\w.])")
-
-
-def _luhn(digits: str) -> bool:
-    total = 0
-    for i, ch in enumerate(reversed(digits)):
-        n = int(ch)
-        if i % 2:
-            n = n * 2 - 9 if n > 4 else n * 2
-        total += n
-    return total % 10 == 0
-
-
-def _iban_ok(value: str) -> bool:
-    s = re.sub(r"\s", "", value).upper()
-    moved = s[4:] + s[:4]
-    return int("".join(str(int(c, 36)) for c in moved)) % 97 == 1
-
-
-def _card_ok(value: str) -> bool:
-    digits = re.sub(r"\D", "", value)
-    return 13 <= len(digits) <= 19 and digits[0] in "3456" and len(set(digits)) > 1 and _luhn(digits)
-
-
-#: kind -> (pattern, validator or None)
-PATTERNS: Dict[str, Tuple[re.Pattern, Any]] = {
-    "EMAIL": (_EMAIL, None),
-    "PHONE": (_UAE_MOBILE, None),
-    "EMIRATES_ID": (_EMIRATES_ID, None),
-    "IBAN": (_UAE_IBAN, _iban_ok),
-    "TRN": (_TRN, None),
-    "CARD": (_CARD, _card_ok),
-}
-
-# ── Field keys ──────────────────────────────────────────────────────────────
-
-PARTY_KEYS = {
-    "vendor_name", "customer_name", "contact_name", "contactname", "supplier_name", "buyer_name", "party_name",
-    "payee", "payer", "payee_name", "payer_name", "employee_name", "beneficiary", "beneficiary_name",
-    "account_holder", "counterparty", "customer", "vendor", "supplier", "seller_name",
-}
-ORG_KEYS = {"organization_name", "organisation_name", "org_name", "company_name", "entity"}
-FREE_TEXT_KEYS = {"description", "line_description", "journal_description", "memo", "narration", "notes", "reference",
-                  "credit_reason"}
 _EMPTY = {"", "-", "—", "unknown", "null", "none", "n/a"}
 
 
 def key_kind(key: Any) -> Optional[str]:
-    """What a JSON field holds, from its key ("purchases.vendor_trn" -> "TRN"). None for anything else."""
-    k = str(key).rsplit(".", 1)[-1].lower()
-    if k in PARTY_KEYS:
-        return "PARTY_NAME"
-    if k in ORG_KEYS:
-        return "ORG_NAME"
-    if k in ("trn", "tax_id", "vat_number") or k.endswith("_trn") or k.endswith("_tax_id"):
-        return "TRN"
-    if "email" in k:
-        return "EMAIL"
-    if "phone" in k or "mobile" in k:
-        return "PHONE"
-    if "iban" in k:
-        return "IBAN"
-    if k == "address" or k.endswith("_address"):
-        return "ADDRESS"
-    if k in FREE_TEXT_KEYS:
+    """What a JSON field holds, as the report counts it ("purchases.vendor_trn" -> "TRN"); "FREE_TEXT" for
+    descriptions; None for figures, dates, document numbers and any other field."""
+    rule = policy.field_rule(key)
+    if rule.cls == policy.TOKEN:
+        return policy.report_kind(rule.kind or "")
+    if rule.cls == policy.FREE_TEXT:
         return "FREE_TEXT"
     return None
 
@@ -131,11 +70,15 @@ _request: contextvars.ContextVar[Optional[Dict[str, Any]]] = contextvars.Context
 
 
 def note_request(*, session_id: Optional[str] = None, organization_ids: Sequence[int] = (),
-                 org_names: Iterable[str] = ()) -> None:
-    """Tell the sentinel which chat this is and which organization names to look for. Each request sets it anew."""
+                 org_names: Iterable[str] = (), subject: str = "") -> None:
+    """Tell the sentinel which chat this is and which organizations it covers. Each request sets it anew. When the
+    sentinel is on, the organizations' contact names start loading in the background."""
     try:
-        _request.set({"session_id": session_id, "organization_ids": [int(o) for o in organization_ids or ()],
+        orgs = [int(o) for o in organization_ids or ()]
+        _request.set({"session_id": session_id, "organization_ids": orgs,
                       "org_names": [str(n) for n in org_names or () if n]})
+        if enabled() and orgs:
+            dictionary.warm(orgs, subject=subject or "pii-sentinel")
     except Exception as e:  # noqa: BLE001 - the sentinel must never break a request
         logger.debug("pii sentinel: request not noted: %s", e)
 
@@ -153,7 +96,9 @@ def _mask(value: str) -> str:
 
 
 def _fingerprint(value: str) -> str:
-    return hashlib.sha256(_SALT + value.strip().lower().encode("utf-8")).hexdigest()[:12]
+    """The same value in any spelling gets one fingerprint: names normalized, numbers without separators."""
+    base = policy.normalize_name(value) if re.search(r"[^\W\d_]", value) else re.sub(r"\W", "", value)
+    return hashlib.sha256(_SALT + base.encode("utf-8")).hexdigest()[:12]
 
 
 class _Scan:
@@ -163,7 +108,7 @@ class _Scan:
         self.distinct: Dict[str, set] = {}
         self.samples: List[Dict[str, Any]] = []
         self.texts: List[Tuple[str, str]] = []          # (location, text) for the pattern and name passes
-        self.names: Dict[str, str] = {}                  # lower-cased field value -> kind
+        self.names: Dict[str, str] = {}                  # normalized field value -> report kind
         self.free_text_fields = 0
         self.files = 0
         self.file_bytes = 0
@@ -188,7 +133,7 @@ class _Scan:
             self.chars += len(value)
 
     def walk(self, value: Any, location: str, key: Optional[str] = None, depth: int = 0) -> None:
-        """A JSON value from a tool result or tool input: fields by their key, every string for patterns."""
+        """A JSON value from a tool result or tool input, field by field as the policy classes its key."""
         if depth > 12:
             return
         if isinstance(value, dict):
@@ -199,20 +144,25 @@ class _Scan:
             for v in value:
                 self.walk(v, location, key, depth + 1)
             return
-        kind = key_kind(key) if key else None
-        if kind and not isinstance(value, bool) and isinstance(value, (str, int)):
-            text = str(value).strip()
-            if text.lower() in _EMPTY:
-                return
-            if kind == "FREE_TEXT":
-                self.free_text_fields += 1
-                self.text(location, text)  # free text is still scanned for patterns and names
-                return
-            self.hit(kind, location, text, key)
-            if kind in ("PARTY_NAME", "ORG_NAME") and len(text) >= MIN_NAME_CHARS:
-                self.names.setdefault(text.lower(), kind)
+        if isinstance(value, bool) or not isinstance(value, (str, int)):
             return
-        self.text(location, value)
+        rule = policy.field_rule(key) if key else policy.FieldRule(policy.SCAN)
+        text = str(value).strip()
+        if rule.cls == policy.KEEP or text.lower() in _EMPTY:
+            return
+        if rule.cls == policy.TOKEN:
+            kind = policy.report_kind(rule.kind or "")
+            if kind in ("PARTY_NAME", "ORG_NAME") and policy.public_entity(text):
+                return  # a bank, utility or public body: visible on purpose
+            self.hit(kind, location, text, key)
+            normalized = policy.normalize_name(text)
+            if kind in ("PARTY_NAME", "ORG_NAME") and len(normalized) >= MIN_NAME_CHARS:
+                self.names.setdefault(normalized, kind)
+            return
+        if isinstance(value, str):
+            if rule.cls == policy.FREE_TEXT:
+                self.free_text_fields += 1
+            self.text(location, value)
 
     def block(self, block: Any, role: str) -> None:
         if not isinstance(block, dict):
@@ -235,23 +185,21 @@ class _Scan:
 
     def patterns(self) -> None:
         for location, text in self.texts:
-            for kind, (pattern, valid) in PATTERNS.items():
-                for m in pattern.finditer(text):
-                    if valid is None or valid(m.group(0)):
-                        self.hit(kind, location, m.group(0))
+            for span in recognizers.find(text):
+                self.hit(span.kind, location, span.text)
 
-    def known_names(self, extra: Dict[str, str]) -> None:
-        """Field values (and the request's organization names) found again outside the tool results."""
-        names = {**self.names, **extra}
-        if not names:
-            return
-        pattern = re.compile(r"(?<!\w)(" + "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True))
-                             + r")(?!\w)", re.IGNORECASE)
+    def known_names(self, known: dictionary.Dictionary) -> None:
+        """Known names in the texts: the contact dictionary first, then names this call carries in its fields."""
+        own = dictionary.Dictionary(dictionary.Entry(n, "ORG" if kind == "ORG_NAME" else "PARTY", n)
+                                    for n, kind in self.names.items() if n not in known.entries)
         for location, text in self.texts:
-            if location in ("tool_result", "tool_input"):
-                continue  # already counted by their keys
-            for m in pattern.finditer(text):
-                self.hit(names.get(m.group(0).lower(), "PARTY_NAME"), location, m.group(0))
+            taken: List[Tuple[int, int]] = []
+            for span in known.find(text):
+                taken.append((span.start, span.end))
+                self.hit(policy.report_kind(span.kind), location, span.text)
+            for span in own.find(text):
+                if not any(s < span.end and span.start < e for s, e in taken):
+                    self.hit(policy.report_kind(span.kind), location, span.text)
 
 
 def _system_texts(system: Any) -> List[str]:
@@ -260,8 +208,10 @@ def _system_texts(system: Any) -> List[str]:
     return [b["text"] for b in system or [] if isinstance(b, dict) and isinstance(b.get("text"), str)]
 
 
-def scan(system: Any, messages: Sequence[Dict[str, Any]], org_names: Iterable[str] = ()) -> Dict[str, Any]:
-    """What one call's payload holds. Pure: writes nothing."""
+def scan(system: Any, messages: Sequence[Dict[str, Any]], org_names: Iterable[str] = (),
+         known: Optional[dictionary.Dictionary] = None) -> Dict[str, Any]:
+    """What one call's payload holds. Pure: writes nothing. `known`: the contact dictionary to search with
+    (default: the organization names alone)."""
     s = _Scan()
     for text in _system_texts(system):
         s.text("system", text)
@@ -270,7 +220,9 @@ def scan(system: Any, messages: Sequence[Dict[str, Any]], org_names: Iterable[st
         for block in (m.get("content") or []) if isinstance(m, dict) else []:
             s.block(block, role)
     s.patterns()
-    s.known_names({str(n).lower(): "ORG_NAME" for n in org_names if n and len(str(n)) >= MIN_NAME_CHARS})
+    if known is None:
+        known = dictionary.Dictionary(dictionary.Entry(n, "ORG", policy.normalize_name(n)) for n in org_names if n)
+    s.known_names(known)
     return {
         "found": s.found,
         "distinct": {k: len(v) for k, v in s.distinct.items()},
@@ -281,6 +233,7 @@ def scan(system: Any, messages: Sequence[Dict[str, Any]], org_names: Iterable[st
         "files": s.files,
         "file_bytes": s.file_bytes,
         "chars": s.chars,
+        "dictionary_names": len(known),
         "samples": s.samples,
     }
 
@@ -293,7 +246,8 @@ def inspect(*, model_id: str, label: str, purpose: str, system: Any,
     try:
         t0 = time.perf_counter()
         request = _request.get() or {}
-        result = scan(system, messages, request.get("org_names") or ())
+        known = dictionary.for_orgs(request.get("organization_ids") or (), org_names=request.get("org_names") or ())
+        result = scan(system, messages, known=known)
         entry = {
             "ts": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
             "purpose": purpose or "",

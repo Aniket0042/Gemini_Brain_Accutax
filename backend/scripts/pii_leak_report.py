@@ -20,7 +20,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 #: Kinds that are personal or customer data. FREE_TEXT is counted apart: it may hold names, not always.
-KIND_ORDER = ["PARTY_NAME", "ORG_NAME", "TRN", "EMAIL", "PHONE", "EMIRATES_ID", "IBAN", "CARD", "ADDRESS"]
+KIND_ORDER = ["PARTY_NAME", "ORG_NAME", "TRN", "EMAIL", "PHONE", "EMIRATES_ID", "IBAN", "CARD", "ADDRESS",
+              "PASSPORT", "GSTIN", "PAN", "AADHAAR", "TAN", "CIN", "LLPIN", "IFSC", "UPI_ID", "UTR", "EWAY_BILL", "IRN"]
 WHERE_ORDER = ["system", "user_text", "assistant_text", "tool_result", "tool_input"]
 WHERE_LABEL = {
     "system": "System prompt",

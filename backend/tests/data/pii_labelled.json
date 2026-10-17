@@ -1,0 +1,3079 @@
+{
+ "description": "build_pii_labelled.py — Writes tests/data/pii_labelled.json, the labelled strings the recognizers are scored on.",
+ "cases": [
+  {
+   "group": "positive",
+   "text": "Is the TRN 100788888592786 valid?",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100788888592786"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Their tax registration number is 100245792052081.",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100245792052081"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Is the TRN 100762345565645 valid?",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100762345565645"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier TRN 100566044424671 on bill BILL-2929",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100566044424671"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "TRN: 100752116251720",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100752116251720"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "TRN: 100618127681139",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100618127681139"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Is the TRN 100131091877438 valid?",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100131091877438"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Is the TRN 100775694108732 valid?",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100775694108732"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "TRN: 100409009870476",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100409009870476"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier TRN 100573937815856 on bill BILL-2068",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100573937815856"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "vat no 100797792858878 for this vendor",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100797792858878"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier TRN 100098754557869 on bill BILL-7841",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100098754557869"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "vat no 100348118665374 for this vendor",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100348118665374"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier TRN 100876669746263 on bill BILL-7989",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100876669746263"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Emirates ID 784198783364262",
+   "entities": [
+    {
+     "kind": "EMIRATES_ID",
+     "text": "784198783364262"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "id no 784-1658-5659174-1 on the visa copy",
+   "entities": [
+    {
+     "kind": "EMIRATES_ID",
+     "text": "784-1658-5659174-1"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "id no 784-1378-0706067-0 on the visa copy",
+   "entities": [
+    {
+     "kind": "EMIRATES_ID",
+     "text": "784-1378-0706067-0"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Staff ID card shows 784-1386-6168123-9",
+   "entities": [
+    {
+     "kind": "EMIRATES_ID",
+     "text": "784-1386-6168123-9"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "id no 784-2128-6571473-0 on the visa copy",
+   "entities": [
+    {
+     "kind": "EMIRATES_ID",
+     "text": "784-2128-6571473-0"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "id no 784-2780-8097563-8 on the visa copy",
+   "entities": [
+    {
+     "kind": "EMIRATES_ID",
+     "text": "784-2780-8097563-8"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Emirates ID 784115612655595",
+   "entities": [
+    {
+     "kind": "EMIRATES_ID",
+     "text": "784115612655595"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "EID: 784-1941-8116133-5",
+   "entities": [
+    {
+     "kind": "EMIRATES_ID",
+     "text": "784-1941-8116133-5"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "EID: 784-2658-2610201-5",
+   "entities": [
+    {
+     "kind": "EMIRATES_ID",
+     "text": "784-2658-2610201-5"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Emirates ID 784-2457-2958356-0",
+   "entities": [
+    {
+     "kind": "EMIRATES_ID",
+     "text": "784-2457-2958356-0"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Bank details AE55 2671 6541 9280 1167 033, swift EBILAEAD",
+   "entities": [
+    {
+     "kind": "IBAN",
+     "text": "AE55 2671 6541 9280 1167 033"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Bank details AE432551207849055523476, swift EBILAEAD",
+   "entities": [
+    {
+     "kind": "IBAN",
+     "text": "AE432551207849055523476"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Account AE56 8200 3851 9591 8002 313",
+   "entities": [
+    {
+     "kind": "IBAN",
+     "text": "AE56 8200 3851 9591 8002 313"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "IBAN: AE794019357837467792699 (Emirates NBD)",
+   "entities": [
+    {
+     "kind": "IBAN",
+     "text": "AE794019357837467792699"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Account AE406760624388270287739",
+   "entities": [
+    {
+     "kind": "IBAN",
+     "text": "AE406760624388270287739"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Account AE509020334487433394740",
+   "entities": [
+    {
+     "kind": "IBAN",
+     "text": "AE509020334487433394740"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Pay to IBAN AE25 4880 5279 2462 4026 861",
+   "entities": [
+    {
+     "kind": "IBAN",
+     "text": "AE25 4880 5279 2462 4026 861"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Account AE306361388513259954697",
+   "entities": [
+    {
+     "kind": "IBAN",
+     "text": "AE306361388513259954697"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Account AE25 8296 5420 0575 4659 831",
+   "entities": [
+    {
+     "kind": "IBAN",
+     "text": "AE25 8296 5420 0575 4659 831"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Pay to IBAN AE469705157571446959099",
+   "entities": [
+    {
+     "kind": "IBAN",
+     "text": "AE469705157571446959099"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Pay to IBAN AE683580838023605999665",
+   "entities": [
+    {
+     "kind": "IBAN",
+     "text": "AE683580838023605999665"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "IBAN: AE42 3412 6671 8488 8160 101 (Emirates NBD)",
+   "entities": [
+    {
+     "kind": "IBAN",
+     "text": "AE42 3412 6671 8488 8160 101"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Driver: 00971504585313",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "00971504585313"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Contact Ahmed at +97150-796-4836 for the delivery",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "+97150-796-4836"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "whatsapp +971 58 548 5202",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "+971 58 548 5202"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "whatsapp 050 633 6904",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "050 633 6904"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Contact Ahmed at 0502158996 for the delivery",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "0502158996"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Mobile 0550096031",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "0550096031"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Contact Ahmed at 0501587939 for the delivery",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "0501587939"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Call me on 058 682 6379.",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "058 682 6379"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Contact Ahmed at 058 961 9860 for the delivery",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "058 961 9860"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Driver: +97152-433-9900",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "+97152-433-9900"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Driver: +97158-504-9426",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "+97158-504-9426"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Driver: 056 582 7890",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "056 582 7890"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "whatsapp 0520182129",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "0520182129"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "whatsapp +97150-376-5146",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "+97150-376-5146"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "contact: ahmed.k79@outlook.com",
+   "entities": [
+    {
+     "kind": "EMAIL",
+     "text": "ahmed.k79@outlook.com"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Send it to ahmed.k33@mail.example.co.in.",
+   "entities": [
+    {
+     "kind": "EMAIL",
+     "text": "ahmed.k33@mail.example.co.in"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Ask priya53@gmail.com about bill 2041",
+   "entities": [
+    {
+     "kind": "EMAIL",
+     "text": "priya53@gmail.com"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Ask priya82@gmail.com about bill 2041",
+   "entities": [
+    {
+     "kind": "EMAIL",
+     "text": "priya82@gmail.com"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Ask finance.team84@alnoor.ae about bill 2041",
+   "entities": [
+    {
+     "kind": "EMAIL",
+     "text": "finance.team84@alnoor.ae"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Ask priya97@gmail.com about bill 2041",
+   "entities": [
+    {
+     "kind": "EMAIL",
+     "text": "priya97@gmail.com"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Send it to rahul_m6@alnoor.ae.",
+   "entities": [
+    {
+     "kind": "EMAIL",
+     "text": "rahul_m6@alnoor.ae"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Ask ahmed.k96@outlook.com about bill 2041",
+   "entities": [
+    {
+     "kind": "EMAIL",
+     "text": "ahmed.k96@outlook.com"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Email sara+bills76@zenith-foods.com the statement",
+   "entities": [
+    {
+     "kind": "EMAIL",
+     "text": "sara+bills76@zenith-foods.com"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Email rahul_m82@alnoor.ae the statement",
+   "entities": [
+    {
+     "kind": "EMAIL",
+     "text": "rahul_m82@alnoor.ae"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "contact: j.smith2@gmail.com",
+   "entities": [
+    {
+     "kind": "EMAIL",
+     "text": "j.smith2@gmail.com"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Send it to accounts30@mail.example.co.in.",
+   "entities": [
+    {
+     "kind": "EMAIL",
+     "text": "accounts30@mail.example.co.in"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Send it to priya66@zenith-foods.com.",
+   "entities": [
+    {
+     "kind": "EMAIL",
+     "text": "priya66@zenith-foods.com"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Send it to sara+bills49@outlook.com.",
+   "entities": [
+    {
+     "kind": "EMAIL",
+     "text": "sara+bills49@outlook.com"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Card 5062-3177-9922-9929 was charged",
+   "entities": [
+    {
+     "kind": "CARD",
+     "text": "5062-3177-9922-9929"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Card 5669888896099057 was charged",
+   "entities": [
+    {
+     "kind": "CARD",
+     "text": "5669888896099057"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Paid with visa 5751 7422 4855 1662",
+   "entities": [
+    {
+     "kind": "CARD",
+     "text": "5751 7422 4855 1662"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Paid with visa 5278-4005-7494-9943",
+   "entities": [
+    {
+     "kind": "CARD",
+     "text": "5278-4005-7494-9943"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Paid with visa 5590-5469-6099-9453",
+   "entities": [
+    {
+     "kind": "CARD",
+     "text": "5590-5469-6099-9453"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "card no 5855-0401-4155-5632",
+   "entities": [
+    {
+     "kind": "CARD",
+     "text": "5855-0401-4155-5632"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "card no 4702-7612-8149-2983",
+   "entities": [
+    {
+     "kind": "CARD",
+     "text": "4702-7612-8149-2983"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Card 5911791776551039 was charged",
+   "entities": [
+    {
+     "kind": "CARD",
+     "text": "5911791776551039"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Refund to 5086 8781 5191 6892",
+   "entities": [
+    {
+     "kind": "CARD",
+     "text": "5086 8781 5191 6892"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Refund to 5527 9086 6020 1051",
+   "entities": [
+    {
+     "kind": "CARD",
+     "text": "5527 9086 6020 1051"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "PAN HHOAM3223O",
+   "entities": [
+    {
+     "kind": "PAN",
+     "text": "HHOAM3223O"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "PAN LIBCP9892I",
+   "entities": [
+    {
+     "kind": "PAN",
+     "text": "LIBCP9892I"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Vendor PAN: OQFGO8659R",
+   "entities": [
+    {
+     "kind": "PAN",
+     "text": "OQFGO8659R"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Vendor PAN: TPHAB8390H",
+   "entities": [
+    {
+     "kind": "PAN",
+     "text": "TPHAB8390H"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Vendor PAN: JNJGH4310G",
+   "entities": [
+    {
+     "kind": "PAN",
+     "text": "JNJGH4310G"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Vendor PAN: XNNCL6943V",
+   "entities": [
+    {
+     "kind": "PAN",
+     "text": "XNNCL6943V"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Their PAN is QJGGE9690N.",
+   "entities": [
+    {
+     "kind": "PAN",
+     "text": "QJGGE9690N"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Their PAN is TOTGY9534N.",
+   "entities": [
+    {
+     "kind": "PAN",
+     "text": "TOTGY9534N"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Vendor PAN: PATGA4239J",
+   "entities": [
+    {
+     "kind": "PAN",
+     "text": "PATGA4239J"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Their PAN is HRHTJ5373N.",
+   "entities": [
+    {
+     "kind": "PAN",
+     "text": "HRHTJ5373N"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "GST no: 29XDFLF3301S9ZP",
+   "entities": [
+    {
+     "kind": "GSTIN",
+     "text": "29XDFLF3301S9ZP"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier GSTIN 23CBOCE8157D6ZB on invoice",
+   "entities": [
+    {
+     "kind": "GSTIN",
+     "text": "23CBOCE8157D6ZB"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "GST no: 37LAYFT5382Z4ZW",
+   "entities": [
+    {
+     "kind": "GSTIN",
+     "text": "37LAYFT5382Z4ZW"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "33DLWBM4131T1Z0 is their GST number",
+   "entities": [
+    {
+     "kind": "GSTIN",
+     "text": "33DLWBM4131T1Z0"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "35EPACP9282O1ZS is their GST number",
+   "entities": [
+    {
+     "kind": "GSTIN",
+     "text": "35EPACP9282O1ZS"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier GSTIN 30GIPJW4626E6Z7 on invoice",
+   "entities": [
+    {
+     "kind": "GSTIN",
+     "text": "30GIPJW4626E6Z7"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier GSTIN 34EOWTQ9245P6Z8 on invoice",
+   "entities": [
+    {
+     "kind": "GSTIN",
+     "text": "34EOWTQ9245P6Z8"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "GST no: 18FCRLQ8955A5Z0",
+   "entities": [
+    {
+     "kind": "GSTIN",
+     "text": "18FCRLQ8955A5Z0"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "GSTIN 08HVMHT8532M1ZX",
+   "entities": [
+    {
+     "kind": "GSTIN",
+     "text": "08HVMHT8532M1ZX"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "GSTIN 23WLBCK7881L7ZQ",
+   "entities": [
+    {
+     "kind": "GSTIN",
+     "text": "23WLBCK7881L7ZQ"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "35STNPH2275F1Z6 is their GST number",
+   "entities": [
+    {
+     "kind": "GSTIN",
+     "text": "35STNPH2275F1Z6"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "26DMPLO5582K3ZC is their GST number",
+   "entities": [
+    {
+     "kind": "GSTIN",
+     "text": "26DMPLO5582K3ZC"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "KYC: 642833527686",
+   "entities": [
+    {
+     "kind": "AADHAAR",
+     "text": "642833527686"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "aadhar no 985326021559",
+   "entities": [
+    {
+     "kind": "AADHAAR",
+     "text": "985326021559"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Aadhaar 3879 6750 8068",
+   "entities": [
+    {
+     "kind": "AADHAAR",
+     "text": "3879 6750 8068"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "KYC: 6214 3828 6020",
+   "entities": [
+    {
+     "kind": "AADHAAR",
+     "text": "6214 3828 6020"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "aadhar no 442384336474",
+   "entities": [
+    {
+     "kind": "AADHAAR",
+     "text": "442384336474"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "KYC: 4456 0059 8730",
+   "entities": [
+    {
+     "kind": "AADHAAR",
+     "text": "4456 0059 8730"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "KYC: 7991 6084 4849",
+   "entities": [
+    {
+     "kind": "AADHAAR",
+     "text": "7991 6084 4849"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "aadhar no 3040 8440 1224",
+   "entities": [
+    {
+     "kind": "AADHAAR",
+     "text": "3040 8440 1224"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "UID 373232194219 for the director",
+   "entities": [
+    {
+     "kind": "AADHAAR",
+     "text": "373232194219"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Aadhaar 3946 3451 2911",
+   "entities": [
+    {
+     "kind": "AADHAAR",
+     "text": "3946 3451 2911"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Aadhaar 689355074911",
+   "entities": [
+    {
+     "kind": "AADHAAR",
+     "text": "689355074911"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "UID 8067 4598 4240 for the director",
+   "entities": [
+    {
+     "kind": "AADHAAR",
+     "text": "8067 4598 4240"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "TAN IXKF10085K",
+   "entities": [
+    {
+     "kind": "TAN",
+     "text": "IXKF10085K"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "TAN JNEU56476Q",
+   "entities": [
+    {
+     "kind": "TAN",
+     "text": "JNEU56476Q"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "TAN YOZR88942S",
+   "entities": [
+    {
+     "kind": "TAN",
+     "text": "YOZR88942S"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Deductor TAN: QMQZ24873I",
+   "entities": [
+    {
+     "kind": "TAN",
+     "text": "QMQZ24873I"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "TAN ZBXP33650D",
+   "entities": [
+    {
+     "kind": "TAN",
+     "text": "ZBXP33650D"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Deductor TAN: KWZC64473A",
+   "entities": [
+    {
+     "kind": "TAN",
+     "text": "KWZC64473A"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "registered as U45860MH2012OPC079861",
+   "entities": [
+    {
+     "kind": "CIN",
+     "text": "U45860MH2012OPC079861"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "CIN U90416MH1993OPC079214",
+   "entities": [
+    {
+     "kind": "CIN",
+     "text": "U90416MH1993OPC079214"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "registered as L10733TN1991OPC580872",
+   "entities": [
+    {
+     "kind": "CIN",
+     "text": "L10733TN1991OPC580872"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "CIN L81080TN2001OPC625390",
+   "entities": [
+    {
+     "kind": "CIN",
+     "text": "L81080TN2001OPC625390"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "CIN L64860TN1991PLC093525",
+   "entities": [
+    {
+     "kind": "CIN",
+     "text": "L64860TN1991PLC093525"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "CIN L24644MH2011PTC388271",
+   "entities": [
+    {
+     "kind": "CIN",
+     "text": "L24644MH2011PTC388271"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "LLPIN UZI-4436",
+   "entities": [
+    {
+     "kind": "LLPIN",
+     "text": "UZI-4436"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "LLPIN UFC-5230",
+   "entities": [
+    {
+     "kind": "LLPIN",
+     "text": "UFC-5230"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "LLPIN RCU-4897",
+   "entities": [
+    {
+     "kind": "LLPIN",
+     "text": "RCU-4897"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "LLPIN PBJ-3156",
+   "entities": [
+    {
+     "kind": "LLPIN",
+     "text": "PBJ-3156"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "branch code UTIB0974104",
+   "entities": [
+    {
+     "kind": "IFSC",
+     "text": "UTIB0974104"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "branch code KKBK0737558",
+   "entities": [
+    {
+     "kind": "IFSC",
+     "text": "KKBK0737558"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Bank IFSC: UTIB0592923",
+   "entities": [
+    {
+     "kind": "IFSC",
+     "text": "UTIB0592923"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Bank IFSC: ICIC0085681",
+   "entities": [
+    {
+     "kind": "IFSC",
+     "text": "ICIC0085681"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "branch code UTIB0423125",
+   "entities": [
+    {
+     "kind": "IFSC",
+     "text": "UTIB0423125"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "transfer via SBIN0973130",
+   "entities": [
+    {
+     "kind": "IFSC",
+     "text": "SBIN0973130"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "branch code ICIC0873912",
+   "entities": [
+    {
+     "kind": "IFSC",
+     "text": "ICIC0873912"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Bank IFSC: SBIN0249540",
+   "entities": [
+    {
+     "kind": "IFSC",
+     "text": "SBIN0249540"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "UPI ravi.k@paytm",
+   "entities": [
+    {
+     "kind": "UPI_ID",
+     "text": "ravi.k@paytm"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "UPI priya@okaxis",
+   "entities": [
+    {
+     "kind": "UPI_ID",
+     "text": "priya@okaxis"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "UPI priya@oksbi",
+   "entities": [
+    {
+     "kind": "UPI_ID",
+     "text": "priya@oksbi"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "pay ravi.k@paytm",
+   "entities": [
+    {
+     "kind": "UPI_ID",
+     "text": "ravi.k@paytm"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "UPI shop.kumar@okaxis",
+   "entities": [
+    {
+     "kind": "UPI_ID",
+     "text": "shop.kumar@okaxis"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "pay shop.kumar@okaxis",
+   "entities": [
+    {
+     "kind": "UPI_ID",
+     "text": "shop.kumar@okaxis"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "pay priya@oksbi",
+   "entities": [
+    {
+     "kind": "UPI_ID",
+     "text": "priya@oksbi"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "pay shop.kumar@okaxis",
+   "entities": [
+    {
+     "kind": "UPI_ID",
+     "text": "shop.kumar@okaxis"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "+91-9853518673 is the accountant's number",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "+91-9853518673"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "mobile: +91 71981 87469",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "+91 71981 87469"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Call +91-8535814596",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "+91-8535814596"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "+91 94710 12832 is the accountant's number",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "+91 94710 12832"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "+91 98014 02711 is the accountant's number",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "+91 98014 02711"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Call +916073097242",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "+916073097242"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "mobile: +919860689020",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "+919860689020"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Call +91-7736859265",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "+91-7736859265"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Call +917294628503",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "+917294628503"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "+91-6942300198 is the accountant's number",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "+91-6942300198"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "mob 6898893311",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "6898893311"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "call me on 6914144116",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "6914144116"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "call me on 9162835318",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "9162835318"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "mob 7524590989",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "7524590989"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "mob 9381322846",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "9381322846"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "call me on 8359453601",
+   "entities": [
+    {
+     "kind": "PHONE",
+     "text": "8359453601"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "NEFT ref no PICV660180167708",
+   "entities": [
+    {
+     "kind": "UTR",
+     "text": "PICV660180167708"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "RRN 100887579194",
+   "entities": [
+    {
+     "kind": "UTR",
+     "text": "100887579194"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "UTR 330800152813",
+   "entities": [
+    {
+     "kind": "UTR",
+     "text": "330800152813"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "NEFT ref no NOFR389733801236",
+   "entities": [
+    {
+     "kind": "UTR",
+     "text": "NOFR389733801236"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "RRN 700064661651",
+   "entities": [
+    {
+     "kind": "UTR",
+     "text": "700064661651"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "NEFT ref no NSUY959922859922",
+   "entities": [
+    {
+     "kind": "UTR",
+     "text": "NSUY959922859922"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "EWB 392862074303",
+   "entities": [
+    {
+     "kind": "EWAY_BILL",
+     "text": "392862074303"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "EWB 832630465930",
+   "entities": [
+    {
+     "kind": "EWAY_BILL",
+     "text": "832630465930"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "e-way bill 779684807513",
+   "entities": [
+    {
+     "kind": "EWAY_BILL",
+     "text": "779684807513"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "e-way bill 251191807693",
+   "entities": [
+    {
+     "kind": "EWAY_BILL",
+     "text": "251191807693"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "IRN 4af7a6fe05940748312de7896a49c795a3d2584900c0854788e310e9ecc26f4f",
+   "entities": [
+    {
+     "kind": "IRN",
+     "text": "4af7a6fe05940748312de7896a49c795a3d2584900c0854788e310e9ecc26f4f"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "IRN e711b044f641f5056d1a2c040fe823e7911930f6f608caad6b10e95b46fa2a9e",
+   "entities": [
+    {
+     "kind": "IRN",
+     "text": "e711b044f641f5056d1a2c040fe823e7911930f6f608caad6b10e95b46fa2a9e"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "IRN 80fa00699dc5b9cc2566935d89f96b59004f4536fae57dd1ccd71e7c8ce171e9",
+   "entities": [
+    {
+     "kind": "IRN",
+     "text": "80fa00699dc5b9cc2566935d89f96b59004f4536fae57dd1ccd71e7c8ce171e9"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "IRN b2cb84c12ae5171b73268b5fa2126cbc620eb904c387e3e9d793fca27bce5bae",
+   "entities": [
+    {
+     "kind": "IRN",
+     "text": "b2cb84c12ae5171b73268b5fa2126cbc620eb904c387e3e9d793fca27bce5bae"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Passport I3684540",
+   "entities": [
+    {
+     "kind": "PASSPORT",
+     "text": "I3684540"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "passport no: Y4610031",
+   "entities": [
+    {
+     "kind": "PASSPORT",
+     "text": "Y4610031"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Passport H9552670",
+   "entities": [
+    {
+     "kind": "PASSPORT",
+     "text": "H9552670"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Passport Z1983956",
+   "entities": [
+    {
+     "kind": "PASSPORT",
+     "text": "Z1983956"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "passport no: D7567411",
+   "entities": [
+    {
+     "kind": "PASSPORT",
+     "text": "D7567411"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "ppt T0587443",
+   "entities": [
+    {
+     "kind": "PASSPORT",
+     "text": "T0587443"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "passport no: H1596530",
+   "entities": [
+    {
+     "kind": "PASSPORT",
+     "text": "H1596530"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Passport K6288635",
+   "entities": [
+    {
+     "kind": "PASSPORT",
+     "text": "K6288635"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier TRN 100797964989566, email finance.team26@gmail.com, mobile 00971501610152.",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100797964989566"
+    },
+    {
+     "kind": "EMAIL",
+     "text": "finance.team26@gmail.com"
+    },
+    {
+     "kind": "PHONE",
+     "text": "00971501610152"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier TRN 100661991535799, email ahmed.k14@outlook.com, mobile 055 525 7699.",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100661991535799"
+    },
+    {
+     "kind": "EMAIL",
+     "text": "ahmed.k14@outlook.com"
+    },
+    {
+     "kind": "PHONE",
+     "text": "055 525 7699"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier TRN 100335276068356, email rahul_m52@outlook.com, mobile 050 435 2515.",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100335276068356"
+    },
+    {
+     "kind": "EMAIL",
+     "text": "rahul_m52@outlook.com"
+    },
+    {
+     "kind": "PHONE",
+     "text": "050 435 2515"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier TRN 100837215386471, email accounts12@outlook.com, mobile 0520560752.",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100837215386471"
+    },
+    {
+     "kind": "EMAIL",
+     "text": "accounts12@outlook.com"
+    },
+    {
+     "kind": "PHONE",
+     "text": "0520560752"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier TRN 100464863474055, email rahul_m50@mail.example.co.in, mobile +971 56 051 0701.",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100464863474055"
+    },
+    {
+     "kind": "EMAIL",
+     "text": "rahul_m50@mail.example.co.in"
+    },
+    {
+     "kind": "PHONE",
+     "text": "+971 56 051 0701"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier TRN 100287879381006, email finance.team31@gmail.com, mobile +97150-075-7502.",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100287879381006"
+    },
+    {
+     "kind": "EMAIL",
+     "text": "finance.team31@gmail.com"
+    },
+    {
+     "kind": "PHONE",
+     "text": "+97150-075-7502"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier TRN 100241679715991, email sara+bills64@mail.example.co.in, mobile 00971520211593.",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100241679715991"
+    },
+    {
+     "kind": "EMAIL",
+     "text": "sara+bills64@mail.example.co.in"
+    },
+    {
+     "kind": "PHONE",
+     "text": "00971520211593"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier TRN 100742978446860, email accounts32@gmail.com, mobile +97156-458-9893.",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100742978446860"
+    },
+    {
+     "kind": "EMAIL",
+     "text": "accounts32@gmail.com"
+    },
+    {
+     "kind": "PHONE",
+     "text": "+97156-458-9893"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier TRN 100241134315009, email rahul_m88@mail.example.co.in, mobile 00971585118804.",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100241134315009"
+    },
+    {
+     "kind": "EMAIL",
+     "text": "rahul_m88@mail.example.co.in"
+    },
+    {
+     "kind": "PHONE",
+     "text": "00971585118804"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier TRN 100831366840152, email rahul_m18@alnoor.ae, mobile 058 712 0981.",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100831366840152"
+    },
+    {
+     "kind": "EMAIL",
+     "text": "rahul_m18@alnoor.ae"
+    },
+    {
+     "kind": "PHONE",
+     "text": "058 712 0981"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier TRN 100739168308913, email finance.team49@zenith-foods.com, mobile 00971587378561.",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100739168308913"
+    },
+    {
+     "kind": "EMAIL",
+     "text": "finance.team49@zenith-foods.com"
+    },
+    {
+     "kind": "PHONE",
+     "text": "00971587378561"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier TRN 100865148911730, email j.smith14@outlook.com, mobile 0505382345.",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100865148911730"
+    },
+    {
+     "kind": "EMAIL",
+     "text": "j.smith14@outlook.com"
+    },
+    {
+     "kind": "PHONE",
+     "text": "0505382345"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier TRN 100626626004194, email ahmed.k61@outlook.com, mobile 00971552154847.",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100626626004194"
+    },
+    {
+     "kind": "EMAIL",
+     "text": "ahmed.k61@outlook.com"
+    },
+    {
+     "kind": "PHONE",
+     "text": "00971552154847"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier TRN 100809775598339, email priya33@alnoor.ae, mobile +971 54 130 5101.",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100809775598339"
+    },
+    {
+     "kind": "EMAIL",
+     "text": "priya33@alnoor.ae"
+    },
+    {
+     "kind": "PHONE",
+     "text": "+971 54 130 5101"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier TRN 100390959277158, email sara+bills96@gmail.com, mobile 0579559893.",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100390959277158"
+    },
+    {
+     "kind": "EMAIL",
+     "text": "sara+bills96@gmail.com"
+    },
+    {
+     "kind": "PHONE",
+     "text": "0579559893"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Supplier TRN 100377379482114, email accounts89@mail.example.co.in, mobile 054 820 5158.",
+   "entities": [
+    {
+     "kind": "TRN",
+     "text": "100377379482114"
+    },
+    {
+     "kind": "EMAIL",
+     "text": "accounts89@mail.example.co.in"
+    },
+    {
+     "kind": "PHONE",
+     "text": "054 820 5158"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "GSTIN 10NNOLC5463O7ZI and PAN ZZSPS4031J on file; IFSC SBIN0653064",
+   "entities": [
+    {
+     "kind": "GSTIN",
+     "text": "10NNOLC5463O7ZI"
+    },
+    {
+     "kind": "PAN",
+     "text": "ZZSPS4031J"
+    },
+    {
+     "kind": "IFSC",
+     "text": "SBIN0653064"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "GSTIN 22SWFHX2671K2Z4 and PAN PDYTQ3338O on file; IFSC ICIC0145872",
+   "entities": [
+    {
+     "kind": "GSTIN",
+     "text": "22SWFHX2671K2Z4"
+    },
+    {
+     "kind": "PAN",
+     "text": "PDYTQ3338O"
+    },
+    {
+     "kind": "IFSC",
+     "text": "ICIC0145872"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "GSTIN 29XJYCI5133L3ZJ and PAN PQWAP1242C on file; IFSC HDFC0072604",
+   "entities": [
+    {
+     "kind": "GSTIN",
+     "text": "29XJYCI5133L3ZJ"
+    },
+    {
+     "kind": "PAN",
+     "text": "PQWAP1242C"
+    },
+    {
+     "kind": "IFSC",
+     "text": "HDFC0072604"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "GSTIN 13ZFEJT8594Q6ZX and PAN EPYGV4605M on file; IFSC HDFC0093567",
+   "entities": [
+    {
+     "kind": "GSTIN",
+     "text": "13ZFEJT8594Q6ZX"
+    },
+    {
+     "kind": "PAN",
+     "text": "EPYGV4605M"
+    },
+    {
+     "kind": "IFSC",
+     "text": "HDFC0093567"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "GSTIN 22AQDHR9297E7ZU and PAN PTIAH7581E on file; IFSC KKBK0824288",
+   "entities": [
+    {
+     "kind": "GSTIN",
+     "text": "22AQDHR9297E7ZU"
+    },
+    {
+     "kind": "PAN",
+     "text": "PTIAH7581E"
+    },
+    {
+     "kind": "IFSC",
+     "text": "KKBK0824288"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "GSTIN 12PCYLC2617G8ZF and PAN XATBT5179L on file; IFSC HDFC0354090",
+   "entities": [
+    {
+     "kind": "GSTIN",
+     "text": "12PCYLC2617G8ZF"
+    },
+    {
+     "kind": "PAN",
+     "text": "XATBT5179L"
+    },
+    {
+     "kind": "IFSC",
+     "text": "HDFC0354090"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "GSTIN 21IJAHG9317P9Z6 and PAN WMLCF1081N on file; IFSC SBIN0160648",
+   "entities": [
+    {
+     "kind": "GSTIN",
+     "text": "21IJAHG9317P9Z6"
+    },
+    {
+     "kind": "PAN",
+     "text": "WMLCF1081N"
+    },
+    {
+     "kind": "IFSC",
+     "text": "SBIN0160648"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "GSTIN 10EUFBJ3077R6ZX and PAN FNNGZ6811M on file; IFSC SBIN0234143",
+   "entities": [
+    {
+     "kind": "GSTIN",
+     "text": "10EUFBJ3077R6ZX"
+    },
+    {
+     "kind": "PAN",
+     "text": "FNNGZ6811M"
+    },
+    {
+     "kind": "IFSC",
+     "text": "SBIN0234143"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Refund AED 1,250.00 to IBAN AE813315347656782423531 for card 4140-7690-2317-4298",
+   "entities": [
+    {
+     "kind": "IBAN",
+     "text": "AE813315347656782423531"
+    },
+    {
+     "kind": "CARD",
+     "text": "4140-7690-2317-4298"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Refund AED 1,250.00 to IBAN AE496291207185509116387 for card 4751-8574-8980-4373",
+   "entities": [
+    {
+     "kind": "IBAN",
+     "text": "AE496291207185509116387"
+    },
+    {
+     "kind": "CARD",
+     "text": "4751-8574-8980-4373"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Refund AED 1,250.00 to IBAN AE948323262700629526474 for card 5636-4271-0593-3283",
+   "entities": [
+    {
+     "kind": "IBAN",
+     "text": "AE948323262700629526474"
+    },
+    {
+     "kind": "CARD",
+     "text": "5636-4271-0593-3283"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Refund AED 1,250.00 to IBAN AE053774602664781265246 for card 4710698045280272",
+   "entities": [
+    {
+     "kind": "IBAN",
+     "text": "AE053774602664781265246"
+    },
+    {
+     "kind": "CARD",
+     "text": "4710698045280272"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Refund AED 1,250.00 to IBAN AE844621194629856677021 for card 5354549171523035",
+   "entities": [
+    {
+     "kind": "IBAN",
+     "text": "AE844621194629856677021"
+    },
+    {
+     "kind": "CARD",
+     "text": "5354549171523035"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Refund AED 1,250.00 to IBAN AE858099448116204330312 for card 4916-9006-2153-6727",
+   "entities": [
+    {
+     "kind": "IBAN",
+     "text": "AE858099448116204330312"
+    },
+    {
+     "kind": "CARD",
+     "text": "4916-9006-2153-6727"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Refund AED 1,250.00 to IBAN AE755348175674295429630 for card 4430-7979-9804-1761",
+   "entities": [
+    {
+     "kind": "IBAN",
+     "text": "AE755348175674295429630"
+    },
+    {
+     "kind": "CARD",
+     "text": "4430-7979-9804-1761"
+    }
+   ]
+  },
+  {
+   "group": "positive",
+   "text": "Refund AED 1,250.00 to IBAN AE528178359208864270113 for card 5381775577275873",
+   "entities": [
+    {
+     "kind": "IBAN",
+     "text": "AE528178359208864270113"
+    },
+    {
+     "kind": "CARD",
+     "text": "5381775577275873"
+    }
+   ]
+  },
+  {
+   "group": "negative",
+   "text": "Net AED 18,450.00 plus VAT AED 922.50",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Total 1,234,567.89 AED for Q3 2026",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Revenue 100234567800.50",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Amount 1002345678000.50",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "bill INV-BULK-26-20241216180347-114231",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "journal JE-24-2026-00000773",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "document BILL0000123 dated 2026-09-12",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "PO-2026-000123 is pending",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Account 1100-200 Cash on Hand",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "VAT rate 5% on 2026-10-01",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Period 2026-07-01 to 2026-09-30",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Invoice INV-2026-000451 for 3,150.75",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Order 9876543210 shipped",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Batch 2345 6789 0123 4567",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "SKU AB12CD34 out of stock",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "ref 4f9a2c7e",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Hash 3b5d5c3712955042212316173ccd37a0",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Quantity 784 units at 19.99",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "784-units sold in 2026",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Score 5012345678 points",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Q3 margin 34.2%",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Outstanding 150000.00 over 90 days",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "TRN missing on 12 bills",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Supplier TRN check: 15 digits required",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Open payables 2,045,330.10",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Week 42 of 2026",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Expense category Utilities 12,400",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Item code ABCDE-1234-F",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Bank charges 52.50 on 2026-09-30",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Credit note CN-26-0007 for 1,000.00",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "VAT return period Jul 2026",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Opening balance 0.00",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Journal JE-31-2026-00012045 posted",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Bills dated 2025-12-31 and 2026-01-01",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Total 99,999,999.99",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "1,000,000 AED target",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Reference INV/2026/000123",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Due in 30 days",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Code GST5 applied",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "ABCD0123456 is a shelf code",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ledger account 4000 Sales",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Invoice number 100234",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Phone bill 450.00 for September",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Card fees 3.5%",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Aging bucket 61-90 days",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 4,705,347.81 on 2024-09-08",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 554,881.56 on 2025-01-12",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 828,383.82 on 2026-08-25",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 5,048,304.42 on 2024-02-09",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 8,051,136.57 on 2024-12-23",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 3,352,699.69 on 2024-10-05",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 6,320,720.12 on 2024-04-01",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 2,078,269.23 on 2025-06-14",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 7,901,726.82 on 2024-01-06",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 4,221,482.78 on 2026-07-10",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 8,458,340.76 on 2026-02-22",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 2,805,795.22 on 2024-12-04",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 9,144,188.43 on 2024-10-15",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 4,809,438.11 on 2025-05-20",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 9,017,216.12 on 2025-10-03",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 7,051,528.45 on 2025-05-07",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 8,930,511.73 on 2026-03-04",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 2,091,233.89 on 2024-07-23",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 3,722,944.71 on 2024-06-12",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 1,437,610.71 on 2026-09-04",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 4,701,161.07 on 2024-07-27",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 3,494,001.44 on 2025-06-26",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 2,522,745.74 on 2025-05-04",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 2,129,230.20 on 2024-03-02",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Paid AED 3,775,861.97 on 2025-10-02",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "bill INV-BULK-25-50519871106584-772131",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "bill INV-BULK-25-64753906406988-466913",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "bill INV-BULK-33-02389285291151-998536",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "bill INV-BULK-31-92144126813419-448101",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "bill INV-BULK-26-24815799049995-950710",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "bill INV-BULK-29-23062075027477-624624",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "bill INV-BULK-24-89778861341101-519064",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "bill INV-BULK-24-91450143711299-718415",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "bill INV-BULK-30-96044550358086-624441",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "bill INV-BULK-28-32688454062515-047761",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "bill INV-BULK-31-78900238007777-229058",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "bill INV-BULK-25-18907650579504-121843",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "bill INV-BULK-33-33018881135433-243565",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "bill INV-BULK-33-30122711295320-324878",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "bill INV-BULK-33-24505991113820-106983",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "bill INV-BULK-31-10277087705726-992817",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "bill INV-BULK-25-98013627823254-826760",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "bill INV-BULK-27-10978648415902-850940",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "bill INV-BULK-26-79467197290963-564111",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "bill INV-BULK-33-14846068405334-093224",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Batch 769640558157 closed",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Batch 445082749791 closed",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Batch 796097255450 closed",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Batch 524827405461 closed",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Batch 935690419631 closed",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Batch 981409586025 closed",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Batch 405782981960 closed",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Batch 343197610793 closed",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Batch 445898997263 closed",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Batch 592732540991 closed",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Batch 342271374313 closed",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Batch 541016973692 closed",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Batch 415704224072 closed",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Batch 586733705496 closed",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Batch 434091454208 closed",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 4427143265447184 resolved",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 5990884252470716 resolved",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 4679548654993167 resolved",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 4643580890753742 resolved",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 4577539118876951 resolved",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 5649040209238450 resolved",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 4683427375170334 resolved",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 5775880735564779 resolved",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 5329440128455352 resolved",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 4542821083248533 resolved",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 5297321526712804 resolved",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 5014321250453637 resolved",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 4257583303728893 resolved",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 5105212359923074 resolved",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 5206855352460774 resolved",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Draft AE840764821196401889911 (check digits wrong)",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Draft AE357682940221474622607 (check digits wrong)",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Draft AE559378734703320587453 (check digits wrong)",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Draft AE463019415533584540142 (check digits wrong)",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Draft AE290451015258545652752 (check digits wrong)",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Draft AE065189323354757217300 (check digits wrong)",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Draft AE553549439332436919289 (check digits wrong)",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Draft AE388750393712590618780 (check digits wrong)",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Draft AE580166482659702242913 (check digits wrong)",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Draft AE068888513692060231032 (check digits wrong)",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 989631962519436 raised",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 802739061524550 raised",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 916750618828550 raised",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 848002956532313 raised",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 839970290158148 raised",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 928448681688137 raised",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 767684946255056 raised",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 214980540401046 raised",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 939995052446223 raised",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Ticket 900788230983036 raised",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Doc LUIMP3244D archived",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Doc DZYQO0194S archived",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Doc YGQKC0377W archived",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Doc TBRYZ0278C archived",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Doc UZIMY0732Z archived",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Doc XIANH0571M archived",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Doc BHKUK5370K archived",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Doc BHWXH4893T archived",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Doc KOBUE6561E archived",
+   "entities": []
+  },
+  {
+   "group": "negative",
+   "text": "Doc KIBMN8933N archived",
+   "entities": []
+  }
+ ]
+}
