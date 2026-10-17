@@ -320,10 +320,12 @@ def _numeric_columns(rows: Sequence[Dict]) -> List[str]:
 
 
 def _label_column(rows: Sequence[Dict], numeric: Sequence[str]) -> Optional[str]:
-    for k in rows[0] if rows else []:
-        if k not in numeric and not (k == "id" or str(k).endswith("_id")):
-            return k
-    return None
+    # The same pick as the chart's category, so a supplier table's subjects are
+    # suppliers, not the organization_name every row also carries.
+    from gemini_brain.artifacts.report_spec import _pick_label_key
+
+    keys = [k for k in (rows[0] if rows else []) if isinstance(k, str) and k not in numeric and not (k == "id" or str(k).endswith("_id"))]
+    return _pick_label_key(keys) if keys else None
 
 
 def build_factsheet(doc: ReportDocument) -> FactSheet:

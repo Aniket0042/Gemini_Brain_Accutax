@@ -237,6 +237,10 @@ def _user_message(brief: Brief, query: str) -> str:
     )
 
 
+#: A full analysis is ~400-700 tokens; the headroom keeps a wordy answer from being cut mid-JSON.
+_MAX_OUTPUT_TOKENS = 2000
+
+
 def _default_model_call(system: str, user: str) -> str:
     from gemini_brain.config.settings import settings
     from gemini_brain.reasoning.bedrock_client import BedrockAdapter
@@ -247,9 +251,10 @@ def _default_model_call(system: str, user: str) -> str:
         system_prompt=system,
         messages=[{"role": "user", "content": [{"text": user}]}],
         temperature=0.0,
-        max_tokens=1200,
+        max_tokens=_MAX_OUTPUT_TOKENS,
         purpose="report_narration",
     )
+
 
 
 #: Swappable for tests; production calls Bedrock.
@@ -257,12 +262,13 @@ ModelCall = Callable[[str, str], str]
 _model_call: ModelCall = _default_model_call
 
 
-_CITATION = re.compile(r"\s*\[(F\d+(?:\s*,\s*F\d+)*)\]")
+_CITATION = re.compile(r"\s*\[(F\d+(?:\s*[,;]?\s*F\d+)*)\]")
 
 
 def _clean(sentence: str, known: set, *, require_citation: bool) -> Optional[str]:
     """Strip citations; None when a citation is unknown or a required one is missing."""
-    cited = [fid.strip() for group in _CITATION.findall(sentence) for fid in group.split(",")]
+    # "[F3, F7]", "[F3; F7]" and "[F3 F7]" all cite F3 and F7.
+    cited = [fid for group in _CITATION.findall(sentence) for fid in re.findall(r"F\d+", group)]
     if any(fid not in known for fid in cited):
         return None
     if require_citation and not cited:
@@ -274,11 +280,83 @@ def _clean(sentence: str, known: set, *, require_citation: bool) -> Optional[str
     return text or None
 
 
+def _salvage_truncated(raw: str) -> Optional[dict]:
+    """The JSON object of an answer cut off mid-way (max tokens), up to its last complete string.
+
+    The unfinished sentence is dropped and the open lists and object closed, so
+    the sections already written still reach the report.
+    """
+    import json
+
+    start = raw.find("{")
+    if start < 0:
+        return None
+    text = raw[start:]
+    stack: List[str] = []
+    in_string = escaped = False
+    cut = None  # end of the last complete string value
+    for i, ch in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+                cut = (i + 1, list(stack))
+        elif ch == '"':
+            in_string = True
+        elif ch in "{[":
+            stack.append("}" if ch == "{" else "]")
+        elif ch in "}]":
+            if not stack:
+                return None
+            stack.pop()
+            if not stack:
+                return None  # a complete object: not truncated, just invalid
+            cut = (i + 1, list(stack))
+    if cut is None:
+        return None
+    end, open_ = cut
+    body = text[:end]
+    if open_[-1] == "}":  # the last string is a key whose value never came: drop it
+        body = re.sub(r'[,{]\s*"(?:[^"\\]|\\.)*"$', lambda m: m.group(0)[0] if m.group(0)[0] == "{" else "", body)
+    try:
+        data = json.loads(body + "".join(reversed(open_)))
+    except ValueError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def why_unusable(raw: str) -> str:
+    """Why `raw` gave no narrative, without quoting it (the text carries real names)."""
+    import json
+
+    text = (raw or "").strip()
+    if not text:
+        return "empty response"
+    start, end = text.find("{"), text.rfind("}")
+    shape = f"{len(text)} chars, starts {text[:1]!r}, ends {text[-1:]!r}"
+    if start < 0:
+        return f"no JSON object ({shape})"
+    try:
+        data = json.loads(text[start:end + 1]) if end > start else None
+    except ValueError as e:
+        return f"invalid JSON: {e.msg} at char {e.pos} of {end + 1 - start} ({shape})"
+    if data is None:
+        return f"JSON object never closed - truncated? ({shape})"
+    if not isinstance(data, dict):
+        return f"JSON is a {type(data).__name__}, not an object ({shape})"
+    return f"no cited sentence survived; keys {sorted(data)[:8]} ({shape})"
+
+
 def parse_narrative(raw: str, brief: Brief) -> Optional[NarrativeSection]:
     """Model JSON to a NarrativeSection, keeping only properly cited sentences."""
     from gemini_brain.utils.json_parser import extract_json
 
     data = extract_json(raw or "")
+    if not isinstance(data, dict):
+        data = _salvage_truncated(raw or "")
     if not isinstance(data, dict):
         return None
     known = brief.ids
@@ -289,6 +367,8 @@ def parse_narrative(raw: str, brief: Brief) -> Optional[NarrativeSection]:
             items = [items]
         out = []
         for item in items[:limit]:
+            if isinstance(item, dict):  # {"text": "...", ...} instead of a plain sentence
+                item = item.get("text") or item.get("sentence")
             if isinstance(item, str):
                 cleaned = _clean(item, known, require_citation=True)
                 if cleaned:
@@ -462,7 +542,8 @@ def _narrate_with_model(brief: Brief, query: str, timeout: float) -> Optional[Na
         raw = masking.vault.rehydrate(raw or "", json_string=True)  # real names back, before the JSON is read
     section = parse_narrative(raw, brief)
     if section is None:
-        logger.warning("Report narration returned no usable JSON; using the template")
+        logger.warning("Report narration returned no usable JSON (%s); using the template", why_unusable(raw))
+        logger.debug("Report narration raw output: %s", raw)
     return section
 
 

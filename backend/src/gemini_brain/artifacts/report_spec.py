@@ -41,6 +41,11 @@ _LABEL_KEY_HINTS = (
     "name", "contact_name", "customer", "vendor", "category", "account",
     "label", "month", "date", "invoice_number", "bill_number",
 )
+#: Columns every semantic row carries (the org it came from, its currency).
+#: They label a chart only when nothing else can: a supplier report whose
+#: rows also hold organization_name is by supplier, not by org.
+_ORG_LABEL_KEYS = frozenset({"organization_name", "organisation_name", "org_name", "organization",
+                             "organisation", "company_name", "entity", "currency"})
 _AMOUNT_KEY_HINTS = (
     "amount", "total", "balance", "income", "expense", "revenue",
     "value", "count", "cashflow", "tax", "sales", "spend",
@@ -133,7 +138,7 @@ def _looks_date_label(key: str, samples: Sequence[str]) -> bool:
     return dateish >= max(1, min(3, len(samples[:8]) // 2))
 
 
-def _pick_label_key(columns: List[str]) -> Optional[str]:
+def _hinted_label_key(columns: List[str]) -> Optional[str]:
     lower = {c.lower(): c for c in columns}
     for hint in _LABEL_KEY_HINTS:
         if hint in lower and not _is_display_noise_key(lower[hint]):
@@ -142,11 +147,24 @@ def _pick_label_key(columns: List[str]) -> Optional[str]:
         for lk, orig in lower.items():
             if hint in lk and not lk.endswith("_id") and lk != "id" and not _is_display_noise_key(orig):
                 return orig
+    return None
+
+
+def _first_plain_key(columns: List[str]) -> Optional[str]:
     for c in columns:
         cl = c.lower()
         if not cl.endswith("_id") and cl != "id" and not _is_display_noise_key(c):
             return c
-    return columns[0] if columns else None
+    return None
+
+
+def _pick_label_key(columns: List[str]) -> Optional[str]:
+    # "organization_name" holds "name", and semantic rows list it first, so
+    # it used to beat "vendor_name": every bar of a supplier chart read as the org.
+    party = [c for c in columns if c.lower() not in _ORG_LABEL_KEYS]
+    return (_hinted_label_key(party) or _hinted_label_key(columns)
+            or _first_plain_key(party) or _first_plain_key(columns)
+            or (columns[0] if columns else None))
 
 
 def _is_id_column(col: str) -> bool:
