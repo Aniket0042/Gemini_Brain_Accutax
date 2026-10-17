@@ -116,23 +116,23 @@ def test_for_orgs_caches_per_organization(monkeypatch):
     dictionary.clear()
     calls = []
 
-    def fake_load(org_id, *, subject):
-        calls.append(org_id)
-        return [dictionary.Entry(f"Vendor Number {org_id}", "SUPPLIER", f"vendor number {org_id}")]
+    def fake_load(org_ids, *, subject):
+        calls.append(sorted(org_ids))
+        return {o: [dictionary.Entry(f"Vendor Number {o}", "SUPPLIER", f"vendor number {o}")] for o in org_ids}
 
-    monkeypatch.setattr(dictionary, "load_names", fake_load)
+    monkeypatch.setattr(dictionary, "load_many", fake_load)
     assert len(dictionary.for_orgs([24, 25], org_names=["Acme Holdings"])) == 1   # nothing cached: org names only
     d = dictionary.for_orgs([24, 25], subject="t", fetch=True)
-    assert sorted(calls) == [24, 25] and len(d) == 2
+    assert calls == [[24, 25]] and len(d) == 2                                # one load for both organizations
     dictionary.for_orgs([25, 24], fetch=True)
-    assert sorted(calls) == [24, 25]                                          # cached
+    assert calls == [[24, 25]]                                                # cached
     dictionary.clear()
 
 
 def test_warm_loads_in_the_background(monkeypatch):
     dictionary.clear()
-    monkeypatch.setattr(dictionary, "load_names",
-                        lambda org_id, *, subject: [dictionary.Entry("Gamma Supplies", "SUPPLIER", "gamma supplies")])
+    monkeypatch.setattr(dictionary, "load_many", lambda org_ids, *, subject: {
+        o: [dictionary.Entry("Gamma Supplies", "SUPPLIER", "gamma supplies")] for o in org_ids})
     dictionary.warm([30], subject="t")
     for _ in range(100):
         if len(dictionary.for_orgs([30])):
@@ -142,20 +142,26 @@ def test_warm_loads_in_the_background(monkeypatch):
     dictionary.clear()
 
 
-def test_a_failing_source_is_skipped(monkeypatch):
+def test_one_query_per_source_for_all_orgs_and_a_failing_source_is_skipped(monkeypatch):
     from gemini_brain.semantic import cube_client
 
     class Result:
         def __init__(self, rows):
             self.rows = rows
 
-    def fake(query, **kw):
+    seen = []
+
+    def fake(query, *, organization_ids, **kw):
         member = query["dimensions"][0]
+        seen.append((member, list(organization_ids)))
         if member.startswith("bank."):
             raise cube_client.CubeError("view missing")
-        return Result([{member: "Delta Traders"}, {member: ""}])
+        org_key = member.split(".")[0] + ".organization_id"
+        return Result([{org_key: 24, member: "Delta Traders"}, {org_key: "25", member: "Echo Supplies"},
+                       {org_key: 24, member: ""}, {org_key: 99, member: "Not Asked For"}])
 
     monkeypatch.setattr(cube_client, "load", fake)
-    entries = dictionary.load_names(24, subject="t")
-    assert {e.key for e in entries} == {"delta traders"}
-    assert len(entries) == len(dictionary.SOURCES) - 1
+    loaded = dictionary.load_many([24, 25], subject="t")
+    assert len(seen) == len(dictionary.SOURCES) and all(orgs == [24, 25] for _, orgs in seen)
+    assert {e.key for e in loaded[24]} == {"delta traders"} and {e.key for e in loaded[25]} == {"echo supplies"}
+    assert len(loaded[24]) == len(dictionary.SOURCES) - 1

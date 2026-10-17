@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import contextvars
+import dataclasses
 import logging
 import re
 import secrets
@@ -30,6 +31,7 @@ from gemini_brain.config.settings import settings
 from gemini_brain.pii.redactor import redact_pii
 from gemini_brain.policy.verifier import verify_answer
 from gemini_brain.privacy import sentinel
+from gemini_brain.privacy.masking import PLACEHOLDER_RULES, Masking
 from gemini_brain.reasoning.bedrock_client import BedrockAdapter
 from gemini_brain.semantic import periods
 
@@ -92,20 +94,25 @@ class AgentResult:
     data: List[Dict[str, Any]] = field(default_factory=list)
     #: Blocks shown with the answer; the law route's FTA sources (citation chips and source list).
     blocks: List[Dict[str, Any]] = field(default_factory=list)
+    #: PII masking of this request (PII_MODE shadow or on): mode, values hidden per kind, unresolved placeholders, ms.
+    privacy: Dict[str, Any] = field(default_factory=dict)
 
 
 def _messages(history: Optional[Sequence[Dict[str, Any]]], question: str,
-              turn_specs: Optional[Sequence[Dict[str, Any]]] = None, documents: str = "") -> List[Dict[str, Any]]:
+              turn_specs: Optional[Sequence[Dict[str, Any]]] = None, documents: str = "",
+              redact: bool = True) -> List[Dict[str, Any]]:
     """Bedrock messages: earlier turns (redacted, roles alternating, starting with the user), then the question.
     The newest turns go whole, up to the history budget; older ones as a summary before them (history.py).
-    `documents`: the block about attached files, put before the question (not redacted: the user's own files)."""
+    `documents`: the block about attached files, put before the question (not redacted: the user's own files).
+    `redact=False` with PII_MODE=on: the privacy masking replaces the one-way redaction, with placeholders the
+    answer can be given back with."""
     summary, kept = thread_history.select(history or [], turn_specs)
     out: List[Dict[str, Any]] = []
     if summary:
-        out.append({"role": "user", "content": [{"text": redact_pii(summary)[0]}]})
+        out.append({"role": "user", "content": [{"text": redact_pii(summary)[0] if redact else summary}]})
     for m in kept:
         role, text = m["role"], m["content"]
-        if role == "user":
+        if role == "user" and redact:
             text = redact_pii(text)[0]
         if out and out[-1]["role"] == role:
             out[-1]["content"][0]["text"] += "\n\n" + text
@@ -258,21 +265,39 @@ def run_agent(
     ok_results: List[Dict[str, Any]] = []
     data: List[Dict[str, Any]] = []
     answer, status = "", "ok"
+    # PII_MODE: "on" sends the model placeholders and keeps the real values here; "shadow" only reports them.
+    masking = Masking.start(settings.pii_mode, orgs, {o: org_meta.get(o) or {} for o in orgs}, subject=subject)
+    masked = masking is not None and masking.sends_masked
 
     try:
-        messages = _messages(history, redact_pii(question)[0], turn_specs, documents)
+        messages = _messages(history, question if masked else redact_pii(question)[0], turn_specs, documents,
+                             redact=not masked)
+        asked = messages[-1]
+
+        def outbound() -> List[Dict[str, Any]]:
+            return masking.outbound(messages, asked) if masking is not None else messages
+
         # With files in the chat the law shortcut is skipped: it answers from the question alone.
-        law_answer = None if documents or document_ids else law.answer(question, [dict(m) for m in messages], brief=brief)
+        law_answer = None if documents or document_ids else law.answer(
+            question, [dict(m) for m in (outbound() if masked else messages)], brief=brief)
         if law_answer is not None:
+            if masked:
+                law_answer = dataclasses.replace(law_answer, answer=masking.rehydrate(law_answer.answer))
             return AgentResult(answer=law_answer.answer, status="ok", usage=law_answer.usage, route="law",
                                elapsed_ms=int((time.monotonic() - started) * 1000),
                                blocks=list(law_answer.blocks or []),
-                               verification=_law_verification(law_answer))
+                               verification=_law_verification(law_answer),
+                               privacy=masking.stats() if masking is not None else {})
 
         today = periods.today_in(settings.report_timezone)
-        system = system_prompt(org_meta, orgs, today, settings.report_timezone, brief=brief, attachment=attachment,
-                               documents=bool(documents or document_ids))
-        system += CANARY_RULE.format(marker=CANARY)
+
+        def build_system(meta: Dict[int, Dict[str, Any]], placeholders: bool) -> str:
+            return (system_prompt(meta, orgs, today, settings.report_timezone, brief=brief, attachment=attachment,
+                                  documents=bool(documents or document_ids))
+                    + (PLACEHOLDER_RULES if placeholders else "") + CANARY_RULE.format(marker=CANARY))
+
+        system = build_system(masking.org_meta(org_meta) if masked else org_meta, masked)
+        shadow_system = build_system(masking.org_meta(org_meta), True) if masking is not None and not masked else None
         specs = tools.specs(ctx)
         used, asked_shorter, asked_fetch, asked_books, adapter = 0, False, False, False, planner
         has_files = bool(documents or document_ids)
@@ -280,7 +305,10 @@ def run_agent(
             if deadline - time.monotonic() < MIN_SECONDS_FOR_MODEL_CALL:
                 status, answer = "deadline", OUT_OF_TIME
                 break
-            resp = _converse(adapter, system, messages, specs)
+            if shadow_system is not None:  # shadow: report what "on" would send; send the originals
+                sentinel.inspect(model_id=getattr(adapter, "model_id", ""), label="agent", purpose="agent:masked",
+                                 system=shadow_system, messages=outbound())
+            resp = _converse(adapter, system, outbound() if masked else messages, specs)
             message = (resp.get("output") or {}).get("message") or {"role": "assistant", "content": []}
             messages.append(message)
             uses = [b["toolUse"] for b in message.get("content") or [] if "toolUse" in b]
@@ -306,13 +334,15 @@ def run_agent(
                     audit.event("unchecked_books_claim", user_id=user_id, session_id=session_id, organization_ids=orgs,
                                 tools=[c.get("name") for c in calls])
                 break
-            allowed = uses[:max(0, budget - used)]
+            # Tools run on real values: placeholders the model wrote in its inputs are put back first.
+            real = {u["toolUseId"]: masking.rehydrate_json(u.get("input")) if masked else u.get("input") for u in uses}
+            allowed = [{**u, "input": real[u["toolUseId"]]} for u in uses[:max(0, budget - used)]]
             used += len(allowed)
             for use in allowed:
                 _notify(progress, use)
             outcomes = _run_tools(allowed, ctx)
             results = []
-            for use in uses:
+            for use in [{**u, "input": real[u["toolUseId"]]} for u in uses]:
                 result, ok, ms = outcomes.get(use["toolUseId"], ({"error": BUDGET_USED}, False, 0))
                 calls.append({"name": use.get("name"), "input": use.get("input"), "ok": ok, "ms": ms,
                               "rows": result.get("row_count"), **({"error": result.get("error")} if not ok else {})})
@@ -338,7 +368,9 @@ def run_agent(
     if answer and status == "ok" and CANARY in answer:
         audit.event("canary_hit", user_id=user_id, session_id=session_id, organization_ids=orgs)
         answer = LEAKED
-    report = (verify_answer(answer, _evidence(ok_results, earlier_figures, document_evidence), enforce=False)
+    if masked and answer:
+        answer = masking.rehydrate(answer)   # the user sees real values; the verifier checks the real answer
+    report =(verify_answer(answer, _evidence(ok_results, earlier_figures, document_evidence), enforce=False)
               if answer and status == "ok" else None)
     if answer and status == "ok" and ctx.fta_numbers:
         # The FTA sources this turn numbered: a citation that names none of them is taken out; none at all is logged.
@@ -357,6 +389,7 @@ def run_agent(
         elapsed_ms=int((time.monotonic() - started) * 1000),
         data=data,
         blocks=[fta] if fta else [],
+        privacy=masking.stats() if masking is not None else {},
     )
 
 

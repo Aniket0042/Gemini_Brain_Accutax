@@ -364,6 +364,15 @@ class GeminiBrainSettings(BaseSettings):
     )
 
     # ── Privacy (PII plan) ─────────────────────────────────────
+    pii_mode: str = Field(
+        default="off",
+        description=(
+            "off | shadow | on. on: the agent sends the model placeholders ([SUPPLIER_3], [ORG_1], [TRN_2]) instead "
+            "of names, contact details and identifiers, and puts the real values back in its tool calls and answer. "
+            "shadow: builds the masked messages and lets PII_SENTINEL report them, but sends the originals. "
+            "off: as before."
+        ),
+    )
     pii_sentinel: str = Field(
         default="off",
         description=(

@@ -36,6 +36,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from gemini_brain.config.settings import settings
 from gemini_brain.privacy import dictionary, policy, recognizers
+from gemini_brain.privacy.vault import TOKEN_RX
 
 logger = logging.getLogger("gemini_brain.privacy.sentinel")
 
@@ -148,8 +149,8 @@ class _Scan:
             return
         rule = policy.field_rule(key) if key else policy.FieldRule(policy.SCAN)
         text = str(value).strip()
-        if rule.cls == policy.KEEP or text.lower() in _EMPTY:
-            return
+        if rule.cls == policy.KEEP or text.lower() in _EMPTY or TOKEN_RX.fullmatch(text):
+            return  # figures and the like, empty fields, and placeholders (already masked) are not leaks
         if rule.cls == policy.TOKEN:
             kind = policy.report_kind(rule.kind or "")
             if kind in ("PARTY_NAME", "ORG_NAME") and policy.public_entity(text):

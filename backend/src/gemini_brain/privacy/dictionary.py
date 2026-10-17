@@ -19,12 +19,15 @@ never waits for the dictionary unless it asks to.
 """
 from __future__ import annotations
 
+import concurrent.futures
+import contextvars
 import logging
 import re
 import threading
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from gemini_brain.privacy.policy import LEGAL_SUFFIXES, normalize_name, public_entity
@@ -209,25 +212,47 @@ _built: "OrderedDict[tuple, Tuple[float, Dictionary]]" = OrderedDict()
 _BUILT_MAX = 32
 
 
-def load_names(org_id: int, *, subject: str) -> List[Entry]:
-    """The distinct contact names of one organization, from Cube. A source that fails is skipped and logged."""
+def load_many(org_ids: Sequence[int], *, subject: str) -> Dict[int, List[Entry]]:
+    """The distinct contact names of these organizations, from Cube: one query per source for all of them, the
+    sources at the same time. A source that fails is skipped and logged."""
     from gemini_brain.semantic import cube_client
 
-    entries: List[Entry] = []
-    for view, dimension, kind in SOURCES:
-        member = f"{view}.{dimension}"
-        try:
-            result = cube_client.load({"dimensions": [member], "limit": MAX_NAMES_PER_SOURCE},
-                                      organization_ids=[int(org_id)], subject=subject,
-                                      deadline=time.monotonic() + LOAD_TIMEOUT_SECONDS)
-        except Exception as e:  # noqa: BLE001 - one missing view must not lose the others
-            logger.info("privacy dictionary: %s not read for org %s: %s", member, org_id, e)
-            continue
+    orgs = sorted({int(o) for o in org_ids})
+    out: Dict[int, List[Entry]] = {o: [] for o in orgs}
+    if not orgs:
+        return out
+
+    def one(source: Tuple[str, str, str]) -> List[Tuple[int, Entry]]:
+        view, dimension, kind = source
+        member, org_key = f"{view}.{dimension}", f"{view}.organization_id"
+        result = cube_client.load({"dimensions": [member], "limit": MAX_NAMES_PER_SOURCE * len(orgs)},
+                                  organization_ids=orgs, subject=subject,
+                                  deadline=time.monotonic() + LOAD_TIMEOUT_SECONDS)
+        found = []
         for row in result.rows:
             name = str(row.get(member) or "").strip()
-            if name:
-                entries.append(Entry(name, kind, normalize_name(name)))
-    return entries
+            try:
+                org = int(Decimal(str(row.get(org_key))))
+            except (InvalidOperation, ValueError, TypeError):
+                continue
+            if name and org in out:
+                found.append((org, Entry(name, kind, normalize_name(name))))
+        return found
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(SOURCES), thread_name_prefix="privacy-names") as pool:
+        futures = {pool.submit(contextvars.copy_context().run, one, s): s for s in SOURCES}
+        for future, (view, dimension, _) in futures.items():
+            try:
+                for org, entry in future.result():
+                    out[org].append(entry)
+            except Exception as e:  # noqa: BLE001 - one missing view must not lose the others
+                logger.info("privacy dictionary: %s.%s not read for orgs %s: %s", view, dimension, orgs, e)
+    return out
+
+
+def load_names(org_id: int, *, subject: str) -> List[Entry]:
+    """The distinct contact names of one organization."""
+    return load_many([org_id], subject=subject)[int(org_id)]
 
 
 def _fresh(org_id: int) -> Optional[List[Entry]]:
@@ -236,16 +261,17 @@ def _fresh(org_id: int) -> Optional[List[Entry]]:
 
 
 def _load_into_cache(org_ids: Sequence[int], subject: str) -> None:
-    for org in org_ids:
-        try:
-            entries = load_names(org, subject=subject)
-            with _lock:
-                _names[int(org)] = (time.monotonic(), entries)
-        except Exception as e:  # noqa: BLE001
-            logger.warning("privacy dictionary: org %s not loaded: %s", org, e)
-        finally:
-            with _lock:
-                _loading.discard(int(org))
+    orgs = [int(o) for o in org_ids]
+    try:
+        loaded = load_many(orgs, subject=subject)
+        with _lock:
+            for org, entries in loaded.items():
+                _names[org] = (time.monotonic(), entries)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("privacy dictionary: orgs %s not loaded: %s", orgs, e)
+    finally:
+        with _lock:
+            _loading.difference_update(orgs)
 
 
 def warm(org_ids: Sequence[int], *, subject: str) -> None:
