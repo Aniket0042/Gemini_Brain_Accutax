@@ -90,6 +90,9 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
               + links.guide_buttons(data))
     blocks += _files(question, result, orgs, meta, user_id=user_id, session_id=session_id, answer_text=answer_text,
                      delivery=delivery, documents=docs)
+    privacy = privacy_block(result)
+    if privacy:
+        blocks.append(privacy)
     if session_id:
         if _save_turn(session_id, user_id, orgs, question, answer_text, db_name, blocks,
                       user_blocks=[_chips(docs)] if docs else None):
@@ -512,3 +515,15 @@ def _save_turn(session_id: str, user_id: int, orgs: List[int], question: str, te
     except Exception as e:  # noqa: BLE001 - the answer still reaches the user
         logger.warning("agent preview: could not save turn to %s: %s", session_id, e)
         return False
+
+
+def privacy_block(result: Any) -> Optional[Dict[str, Any]]:
+    """The privacy badge under an answer (PII_MODE=on, PII_BADGE=on): how many names and identifiers this request
+    hid from the model, the placeholders in this question and answer with their real values, and the question and
+    answer as the model saw them. It shows the user only their own question and answer; it is saved with the turn,
+    so the badge is still there when the chat is reopened."""
+    view = getattr(result, "ai_view", None) or {}
+    if not view or (settings.pii_badge or "on").strip().lower() != "on":
+        return None
+    return {"type": "privacy", "total_hidden": int(view.get("total_hidden") or 0), "hidden": view.get("hidden") or {},
+            "items": view.get("items") or [], "question": view.get("question") or "", "answer": view.get("answer") or ""}

@@ -371,3 +371,15 @@ export const downloadPrivacySnapshot = async (id, token = '') => {
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 };
+
+// Live before/after demo: one question with masking on; the reply has the same shape as a snapshot.
+export const runPrivacyDemo = async (question, organizationIds = [], token = '') => {
+  const response = await fetch('/api/v1/privacy/demo', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...authHeaders(token) },
+    body: JSON.stringify({ question, organization_ids: organizationIds }),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw failure(response.status, body);
+  return body;
+};

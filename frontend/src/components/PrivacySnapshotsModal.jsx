@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ShieldCheck, X, RefreshCw, Download } from 'lucide-react';
-import { fetchPrivacySnapshots, fetchPrivacySnapshot, downloadPrivacySnapshot } from '../services/api';
+import { ShieldCheck, X, RefreshCw, Download, Play } from 'lucide-react';
+import { fetchPrivacySnapshots, fetchPrivacySnapshot, downloadPrivacySnapshot, runPrivacyDemo } from '../services/api';
 
 // Privacy snapshots: proof that PII masking works, for admins (PII_SNAPSHOT_ADMINS).
 // Each request shows four panes per model call: what the request held (real values, red), what the model was
@@ -68,11 +68,114 @@ const Verdict = ({ found }) => {
   return <span style={{ ...styles.pill, ...styles.bad }}>Sentinel found: {kinds.map(([k, v]) => `${v} ${k}`).join(', ')}</span>;
 };
 
-export const PrivacySnapshotsModal = ({ onClose, token = '', access = {} }) => {
+// One request, both sides: a tab per model call and four panes per call. Used by the snapshot list and the demo.
+const SnapshotDetail = ({ snap }) => {
+  const [callIndex, setCallIndex] = useState(0);
+  useEffect(() => { setCallIndex(0); }, [snap?.id]);
+
+  const valueRx = useMemo(() => {
+    const values = Object.values(snap?.vault || {}).filter((v) => v && String(v).length >= 3)
+      .sort((a, b) => b.length - a.length).map((v) => escapeRx(String(v)));
+    return values.length ? new RegExp(values.join('|'), 'gi') : null;
+  }, [snap]);
+
+  if (!snap) return null;
+  const call = snap.calls?.[callIndex];
+  const hidden = snap.stats?.hidden || {};
+  const sentLabel = snap.mode === 'on' ? '2 · Sent to the model' : '2 · Would be sent (shadow mode)';
+  return (
+    <>
+      <div style={styles.summary}>
+        <span>{snap.demo ? 'Live demo' : 'Request'} {snap.id}</span>
+        <span>Hidden: {Object.entries(hidden).map(([k, v]) => `${v} ${k.toLowerCase()}`).join(', ') || 'none'}</span>
+        <span>Unresolved placeholders: {snap.stats?.unresolved ?? 0}</span>
+        <span style={{ color: 'var(--ink-faint)' }}>Amounts, VAT, dates and document numbers stay visible by design.</span>
+      </div>
+      <div style={styles.tabs}>
+        {(snap.calls || []).map((c, i) => (
+          <button key={i} onClick={() => setCallIndex(i)}
+            style={{ ...styles.tab, ...(i === callIndex ? styles.tabActive : {}) }}>
+            {PURPOSE[c.purpose] || c.purpose}
+          </button>
+        ))}
+        {call && <Verdict found={call.sentinel} />}
+      </div>
+      {call && (
+        <div style={styles.panes}>
+          <Pane title="1 · What the request held" note="Real values (red), never sent. The model's own turns keep its placeholders.">
+            {snap.raw_available ? highlight(conversationText(call.raw), valueRx, styles.raw)
+              : 'Not kept: no encryption key, or past the retention period.'}
+          </Pane>
+          <Pane title={sentLabel} note="Placeholders (amber) in place of names and identifiers.">
+            {highlight(conversationText(call.sent), TOKEN_RX, styles.tok)}
+          </Pane>
+          <Pane title="3 · Model's reply" note="As the model wrote it.">
+            {highlight(String(call.reply_model || ''), TOKEN_RX, styles.tok)}
+          </Pane>
+          <Pane title="4 · What the user saw" note="Placeholders swapped back on our server.">
+            {snap.raw_available ? highlight(String(call.reply_user || ''), valueRx, styles.raw) : 'Not kept (real-value side).'}
+          </Pane>
+        </div>
+      )}
+    </>
+  );
+};
+
+const DEMO_EXAMPLES = [
+  'Top 5 suppliers by purchases this year',
+  'How much did we pay our biggest supplier this year? Their TRN is 100234567800003.',
+  'Which customers owe us the most right now?',
+];
+
+// Live before/after: ask one question with masking on, then see what the AI got next to the real data.
+const DemoPanel = ({ token, orgIds }) => {
+  const [question, setQuestion] = useState(DEMO_EXAMPLES[0]);
+  const [result, setResult] = useState(null);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState(null);
+
+  const run = async () => {
+    if (!question.trim() || running) return;
+    setRunning(true);
+    setError(null);
+    setResult(null);
+    try {
+      setResult(await runPrivacyDemo(question.trim(), orgIds || [], token));
+    } catch (err) {
+      setError(err.message || 'The demo could not run');
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <div style={styles.demo}>
+      <div style={styles.demoBar}>
+        <textarea id="privacy-demo-question" value={question} onChange={(e) => setQuestion(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) run(); }}
+          rows={2} style={styles.demoInput} placeholder="Ask about suppliers, customers, TRNs…" />
+        <button className="btn btn-primary" onClick={run} disabled={running || !question.trim()}>
+          <Play size={14} /><span>{running ? 'Running…' : 'Run'}</span>
+        </button>
+      </div>
+      <div style={styles.demoHint}>
+        Runs on the organizations selected in the chat ({(orgIds || []).join(', ') || 'none'}), with masking on.
+        Try: {DEMO_EXAMPLES.map((q, i) => (
+          <button key={i} style={styles.example} onClick={() => setQuestion(q)}>{q}</button>
+        ))}
+      </div>
+      {error && <div style={styles.error}>{error}</div>}
+      {running && <div style={styles.empty}>Asking the AI with masking on… this takes 5 to 20 seconds.</div>}
+      {result && <SnapshotDetail snap={result} />}
+    </div>
+  );
+};
+
+export const PrivacySnapshotsModal = ({ onClose, token = '', access = {}, orgIds = [] }) => {
+  const [view, setView] = useState('snapshots');
   const [list, setList] = useState([]);
   const [selected, setSelected] = useState(null);
   const [snap, setSnap] = useState(null);
-  const [callIndex, setCallIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -96,22 +199,11 @@ export const PrivacySnapshotsModal = ({ onClose, token = '', access = {} }) => {
     if (!selected) return;
     let live = true;
     setSnap(null);
-    setCallIndex(0);
     fetchPrivacySnapshot(selected, token)
       .then((s) => { if (live) setSnap(s); })
       .catch((err) => { if (live) setError(err.message || 'Could not load the snapshot'); });
     return () => { live = false; };
   }, [selected, token]);
-
-  const valueRx = useMemo(() => {
-    const values = Object.values(snap?.vault || {}).filter((v) => v && String(v).length >= 3)
-      .sort((a, b) => b.length - a.length).map((v) => escapeRx(String(v)));
-    return values.length ? new RegExp(values.join('|'), 'gi') : null;
-  }, [snap]);
-
-  const call = snap?.calls?.[callIndex];
-  const hidden = snap?.stats?.hidden || {};
-  const sentLabel = snap?.mode === 'on' ? '2 · Sent to the model' : '2 · Would be sent (shadow mode)';
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -120,7 +212,7 @@ export const PrivacySnapshotsModal = ({ onClose, token = '', access = {} }) => {
           <div style={styles.titleGroup}>
             <ShieldCheck size={22} color="var(--accent)" />
             <div>
-              <h3 style={{ margin: 0 }}>Privacy snapshots</h3>
+              <h3 style={{ margin: 0 }}>Privacy</h3>
               <p style={styles.subtitle}>
                 What each request held, what the AI model received, and what the user saw. PII_MODE {access.mode || '?'}
                 {access.snapshots ? '' : ' · snapshots are off (PII_SNAPSHOTS)'}
@@ -129,79 +221,58 @@ export const PrivacySnapshotsModal = ({ onClose, token = '', access = {} }) => {
             </div>
           </div>
           <div style={styles.headerRight}>
-            <button className="btn btn-secondary" onClick={loadList} disabled={loading}>
-              <RefreshCw size={14} className={loading ? 'pulse-animation' : ''} /><span>Refresh</span>
-            </button>
-            {selected && (
-              <button className="btn btn-secondary" onClick={() => downloadPrivacySnapshot(selected, token).catch((e) => setError(e.message))}>
-                <Download size={14} /><span>Download</span>
-              </button>
+            <div style={styles.viewTabs} role="tablist">
+              <button role="tab" aria-selected={view === 'snapshots'} onClick={() => setView('snapshots')}
+                style={{ ...styles.tab, ...(view === 'snapshots' ? styles.tabActive : {}) }}>Snapshots</button>
+              <button role="tab" aria-selected={view === 'demo'} onClick={() => setView('demo')}
+                style={{ ...styles.tab, ...(view === 'demo' ? styles.tabActive : {}) }}>Live demo</button>
+            </div>
+            {view === 'snapshots' && (
+              <>
+                <button className="btn btn-secondary" onClick={loadList} disabled={loading}>
+                  <RefreshCw size={14} className={loading ? 'pulse-animation' : ''} /><span>Refresh</span>
+                </button>
+                {selected && (
+                  <button className="btn btn-secondary" onClick={() => downloadPrivacySnapshot(selected, token).catch((e) => setError(e.message))}>
+                    <Download size={14} /><span>Download</span>
+                  </button>
+                )}
+              </>
             )}
             <button style={styles.closeBtn} onClick={onClose} aria-label="Close"><X size={20} color="var(--ink-faint)" /></button>
           </div>
         </div>
 
-        {error && <div style={styles.error}>{error}</div>}
-
-        <div style={styles.body}>
-          <div style={styles.list}>
-            {!list.length && !loading && <div style={styles.empty}>No snapshots yet. Ask a question with PII_MODE and PII_SNAPSHOTS on.</div>}
-            {list.map((item) => (
-              <button key={item.id} onClick={() => setSelected(item.id)}
-                style={{ ...styles.item, ...(item.id === selected ? styles.itemActive : {}) }}>
-                <div style={styles.itemTop}>
-                  <span>{(item.ts || '').replace('T', ' ').slice(0, 16)}</span>
-                  {item.sentinel_pass === true && <span style={{ ...styles.dot, background: 'var(--success)' }} title="Nothing personal sent" />}
-                  {item.sentinel_pass === false && <span style={{ ...styles.dot, background: 'var(--danger)' }} title="The sentinel found personal data" />}
-                </div>
-                <div style={styles.itemSub}>
-                  user {item.user_id} · orgs {(item.organization_ids || []).join(', ')} · {item.hidden} hidden
-                </div>
-                <div style={styles.itemSub}>{(item.purposes || []).map((p) => PURPOSE[p] || p).join(' + ')}{item.mode === 'shadow' ? ' · shadow' : ''}</div>
-              </button>
-            ))}
-          </div>
-
-          <div style={styles.detail}>
-            {!snap && selected && <div style={styles.empty}>Loading…</div>}
-            {snap && (
-              <>
-                <div style={styles.summary}>
-                  <span>Request {snap.id}</span>
-                  <span>Hidden: {Object.entries(hidden).map(([k, v]) => `${v} ${k.toLowerCase()}`).join(', ') || 'none'}</span>
-                  <span>Unresolved placeholders: {snap.stats?.unresolved ?? 0}</span>
-                  <span style={{ color: 'var(--ink-faint)' }}>Amounts, VAT, dates and document numbers stay visible by design.</span>
-                </div>
-                <div style={styles.tabs}>
-                  {(snap.calls || []).map((c, i) => (
-                    <button key={i} onClick={() => setCallIndex(i)}
-                      style={{ ...styles.tab, ...(i === callIndex ? styles.tabActive : {}) }}>
-                      {PURPOSE[c.purpose] || c.purpose}
-                    </button>
-                  ))}
-                  {call && <Verdict found={call.sentinel} />}
-                </div>
-                {call && (
-                  <div style={styles.panes}>
-                    <Pane title="1 · What the request held" note="Real values (red), never sent. The model's own turns keep its placeholders.">
-                      {snap.raw_available ? highlight(conversationText(call.raw), valueRx, styles.raw)
-                        : 'Not kept: no encryption key, or past the retention period.'}
-                    </Pane>
-                    <Pane title={sentLabel} note="Placeholders (amber) in place of names and identifiers.">
-                      {highlight(conversationText(call.sent), TOKEN_RX, styles.tok)}
-                    </Pane>
-                    <Pane title="3 · Model's reply" note="As the model wrote it.">
-                      {highlight(String(call.reply_model || ''), TOKEN_RX, styles.tok)}
-                    </Pane>
-                    <Pane title="4 · What the user saw" note="Placeholders swapped back on our server.">
-                      {snap.raw_available ? highlight(String(call.reply_user || ''), valueRx, styles.raw) : 'Not kept (real-value side).'}
-                    </Pane>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
+        {view === 'demo' ? (
+          <DemoPanel token={token} orgIds={orgIds} />
+        ) : (
+          <>
+            {error && <div style={styles.error}>{error}</div>}
+            <div style={styles.body}>
+              <div style={styles.list}>
+                {!list.length && !loading && <div style={styles.empty}>No snapshots yet. Ask a question with PII_MODE and PII_SNAPSHOTS on.</div>}
+                {list.map((item) => (
+                  <button key={item.id} onClick={() => setSelected(item.id)}
+                    style={{ ...styles.item, ...(item.id === selected ? styles.itemActive : {}) }}>
+                    <div style={styles.itemTop}>
+                      <span>{(item.ts || '').replace('T', ' ').slice(0, 16)}</span>
+                      {item.sentinel_pass === true && <span style={{ ...styles.dot, background: 'var(--success)' }} title="Nothing personal sent" />}
+                      {item.sentinel_pass === false && <span style={{ ...styles.dot, background: 'var(--danger)' }} title="The sentinel found personal data" />}
+                    </div>
+                    <div style={styles.itemSub}>
+                      user {item.user_id} · orgs {(item.organization_ids || []).join(', ')} · {item.hidden} hidden
+                    </div>
+                    <div style={styles.itemSub}>{(item.purposes || []).map((p) => PURPOSE[p] || p).join(' + ')}{item.mode === 'shadow' ? ' · shadow' : ''}</div>
+                  </button>
+                ))}
+              </div>
+              <div style={styles.detail}>
+                {!snap && selected && <div style={styles.empty}>Loading…</div>}
+                <SnapshotDetail snap={snap} />
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -239,4 +310,10 @@ const styles = {
   ok: { background: 'var(--success-soft)', color: 'var(--success-ink)' },
   bad: { background: 'var(--danger-soft)', color: 'var(--danger-ink)' },
   empty: { color: 'var(--ink-soft)', fontSize: 13, padding: 12 },
+  viewTabs: { display: 'flex', gap: 4, marginRight: 8 },
+  demo: { display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minHeight: 0 },
+  demoBar: { display: 'flex', gap: 8, alignItems: 'stretch' },
+  demoInput: { flex: 1, resize: 'vertical', font: 'inherit', fontSize: 14, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--ink)' },
+  demoHint: { fontSize: 12, color: 'var(--ink-soft)', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' },
+  example: { border: '1px dashed var(--border-strong)', background: 'none', borderRadius: 99, padding: '2px 10px', fontSize: 12, color: 'var(--ink-soft)', cursor: 'pointer' },
 };

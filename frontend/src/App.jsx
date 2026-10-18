@@ -1695,6 +1695,7 @@ export default function App() {
         <PrivacySnapshotsModal
           token={currentUser?.access_token || ''}
           access={privacyAccess}
+          orgIds={scopeOrgIds}
           onClose={() => setShowPrivacy(false)}
         />
       )}

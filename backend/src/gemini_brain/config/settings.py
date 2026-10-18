@@ -391,6 +391,20 @@ class GeminiBrainSettings(BaseSettings):
             "PII_SNAPSHOT_KEY). See privacy/snapshots.py."
         ),
     )
+    pii_badge: str = Field(
+        default="on",
+        description=(
+            "on | off. on (with PII_MODE=on): every answer carries a privacy badge: how many names and IDs were "
+            "hidden from the model, which ones in this question and answer, and what the model saw."
+        ),
+    )
+    pii_demo_orgs: str = Field(
+        default="",
+        description=(
+            "Comma-separated organization ids the privacy page's live before/after demo may run on (admins in "
+            "PII_SNAPSHOT_ADMINS only). Empty: any organization the admin can open."
+        ),
+    )
     pii_snapshot_users: str = Field(
         default="", description="Comma-separated user ids: keep snapshots only of their requests. Empty: everyone.")
     pii_snapshot_sample_pct: int = Field(default=100, ge=0, le=100,

@@ -143,12 +143,13 @@ class Capture:
 
 
 def begin(masking: Any, *, user_id: Any = None, session_id: Optional[str] = None,
-          organization_ids: Sequence[int] = ()) -> None:
-    """Start a capture on this request's masking, when this request is to be kept."""
+          organization_ids: Sequence[int] = (), force: bool = False) -> None:
+    """Start a capture on this request's masking, when this request is to be kept (or `force`: the live demo)."""
     try:
-        if masking is not None and getattr(masking, "capture", None) is None and wanted(user_id):
+        if masking is not None and getattr(masking, "capture", None) is None and (force or wanted(user_id)):
             masking.capture = Capture(user_id=user_id, session_id=session_id, organization_ids=organization_ids,
                                       mode=masking.mode)
+            masking.capture.vault = masking.vault  # the live demo highlights real values with it
     except Exception as e:  # noqa: BLE001
         logger.warning("pii snapshot: not started: %s", e)
 

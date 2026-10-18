@@ -100,6 +100,11 @@ class AgentResult:
     blocks: List[Dict[str, Any]] = field(default_factory=list)
     #: PII masking of this request (PII_MODE shadow or on): mode, values hidden per kind, unresolved placeholders, ms.
     privacy: Dict[str, Any] = field(default_factory=dict)
+    #: What the model saw of this question and answer (PII_MODE=on), for the privacy badge under the answer:
+    #: the question and the answer as sent and written, with placeholders, and the placeholders they hold.
+    ai_view: Dict[str, Any] = field(default_factory=dict)
+    #: The request's privacy snapshot capture (privacy/snapshots.py), when one was kept. Not sent to clients.
+    capture: Any = None
 
 
 def _messages(history: Optional[Sequence[Dict[str, Any]]], question: str,
@@ -247,12 +252,16 @@ def run_agent(
     document_evidence: Optional[Sequence[Any]] = None,
     user_id: Optional[int] = None,
     session_id: Optional[str] = None,
+    pii_mode: Optional[str] = None,
+    capture: bool = False,
 ) -> AgentResult:
     """Answer one question. Never raises. `progress(tool_name, tool_input)` is called before each tool runs.
     `history`: the thread's earlier messages; `turn_specs`: what its turns queried (history.add_spec);
     `earlier_figures`: numbers earlier turns fetched, which an answer may reuse (checked by the verifier).
     `documents`: the prompt block about files attached to this question and earlier in the chat; `document_ids`:
-    the files read_document may serve; `document_evidence`: their fields, as evidence for the verifier."""
+    the files read_document may serve; `document_evidence`: their fields, as evidence for the verifier.
+    `pii_mode`: masking for this request instead of PII_MODE; `capture`: keep its privacy snapshot whatever
+    PII_SNAPSHOTS says (the privacy page's live demo uses both)."""
     started = time.monotonic()
     deadline = started + (deadline_seconds or settings.agent_deadline_seconds)
     budget = max_tool_calls or settings.agent_max_tool_calls
@@ -270,9 +279,19 @@ def run_agent(
     data: List[Dict[str, Any]] = []
     answer, status = "", "ok"
     # PII_MODE: "on" sends the model placeholders and keeps the real values here; "shadow" only reports them.
-    masking = Masking.start(settings.pii_mode, orgs, {o: org_meta.get(o) or {} for o in orgs}, subject=subject)
+    masking = Masking.start(pii_mode or settings.pii_mode, orgs, {o: org_meta.get(o) or {} for o in orgs},
+                            subject=subject)
     masked = masking is not None and masking.sends_masked
-    snapshots.begin(masking, user_id=user_id, session_id=session_id, organization_ids=orgs)
+    snapshots.begin(masking, user_id=user_id, session_id=session_id, organization_ids=orgs, force=capture)
+
+    def ai_view(model_answer: str) -> Dict[str, Any]:
+        """The question as the model got it and the answer as it wrote it, for the badge under the answer."""
+        if not masked or asked is None:
+            return {}
+        sent = masking.outbound(messages, asked)
+        at = next((i for i, m in enumerate(messages) if m is asked), len(messages) - 1)
+        texts = [b.get("text", "") for b in sent[at].get("content") or [] if isinstance(b, dict) and "text" in b]
+        return masking.answer_view(question_sent=texts[-1] if texts else "", answer_sent=model_answer or "")
     messages: List[Dict[str, Any]] = []
     asked: Optional[Dict[str, Any]] = None
     raw_system = sent_system = ""
@@ -305,7 +324,9 @@ def run_agent(
                                elapsed_ms=int((time.monotonic() - started) * 1000),
                                blocks=list(law_answer.blocks or []),
                                verification=_law_verification(law_answer),
-                               privacy=masking.stats() if masking is not None else {})
+                               privacy=masking.stats() if masking is not None else {},
+                               ai_view=ai_view(model_text),
+                               capture=getattr(masking, "capture", None))
 
         today = periods.today_in(settings.report_timezone)
 
@@ -418,6 +439,8 @@ def run_agent(
         data=data,
         blocks=[fta] if fta else [],
         privacy=masking.stats() if masking is not None else {},
+        ai_view=ai_view(model_text) if status == "ok" else {},
+        capture=getattr(masking, "capture", None),
     )
 
 

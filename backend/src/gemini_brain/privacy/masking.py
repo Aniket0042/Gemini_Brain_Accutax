@@ -29,6 +29,8 @@ from gemini_brain.privacy.vault import Vault
 logger = logging.getLogger("gemini_brain.privacy.masking")
 
 MODES = ("off", "shadow", "on")
+#: Most placeholders the badge under one answer lists.
+MAX_BADGE_ITEMS = 100
 
 PLACEHOLDER_RULES = """
 Privacy placeholders
@@ -126,6 +128,24 @@ class Masking:
 
     def rehydrate_json(self, value: Any) -> Any:
         return self.vault.rehydrate_json(value)
+
+    def answer_view(self, *, question_sent: str, answer_sent: str) -> Dict[str, Any]:
+        """For the privacy badge under an answer: the question and answer as the model saw and wrote them, and
+        the placeholders in them with their real values. Only this question and answer: the badge never lists
+        other values the request hid (tool rows the answer does not mention)."""
+        from gemini_brain.privacy.vault import TOKEN_RX
+        items: List[Dict[str, str]] = []
+        seen = set()
+        for text in (question_sent, answer_sent):
+            for m in TOKEN_RX.finditer(text or ""):
+                kind, n = (m.group(1), m.group(2)) if m.group(1) is not None else (m.group(3), m.group(4))
+                label = f"{kind.upper()}_{int(n)}"
+                value = self.vault.value(label)
+                if value is not None and label not in seen:
+                    seen.add(label)
+                    items.append({"token": f"[{label}]", "kind": kind.upper(), "value": value})
+        return {"question": question_sent, "answer": answer_sent, "items": items[:MAX_BADGE_ITEMS],
+                "hidden": self.vault.counts(), "total_hidden": len(self.vault)}
 
     def stats(self) -> Dict[str, Any]:
         out = {"mode": self.mode, "hidden": self.vault.counts(), "unresolved": self.vault.unresolved,

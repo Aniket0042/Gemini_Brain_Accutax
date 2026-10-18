@@ -8,6 +8,7 @@ import { citationSources, linkCitations, citationLinkRenderer } from './citation
 import { MarkdownLink } from './markdownLinks';
 import { SortableMarkdownTable } from './SortableMarkdownTable';
 import { ReportActions } from './blocks/ReportActions';
+import { PrivacyBadge } from './PrivacyBadge';
 import { CodeChrome } from './blocks/CodeBlock';
 import { SqlTraceCard } from './SqlTraceCard';
 import { ApiTraceCard } from './ApiTraceCard';
@@ -199,7 +200,11 @@ const AssistantResponseCard = ({
   // rebuild plan), its structured block replaces the pre-rendered markdown
   // table below. Anything not yet ported keeps using tableMarkdown exactly
   // as before — this is additive, not a behaviour change for those.
-  const blocks = responseData?.blocks;
+  // The privacy badge rides as a block (so it is saved with the turn) but is drawn on its own under the answer,
+  // never as one of the answer's content blocks.
+  const allBlocks = responseData?.blocks;
+  const privacyBlock = Array.isArray(allBlocks) ? allBlocks.find((b) => b?.type === 'privacy') : null;
+  const blocks = Array.isArray(allBlocks) ? allBlocks.filter((b) => b?.type !== 'privacy') : allBlocks;
   const showBlocks = !isStreaming && hasPortedBlocks(blocks);
   const sources = isStreaming ? null : citationSources(blocks);
   const isSecurityError = Boolean(!notice && (responseData?.error || (responseData?.answer && responseData.answer.startsWith('Error:'))));
@@ -294,6 +299,8 @@ const AssistantResponseCard = ({
           {!isStreaming && (
             <ReportActions blocks={blocks} onOpenCanvas={onOpenCanvas} token={token} />
           )}
+
+          {!isStreaming && privacyBlock && <PrivacyBadge block={privacyBlock} />}
 
           {msg.stopped ? (
             <div style={styles.emptyNotice}>
