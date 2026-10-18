@@ -91,8 +91,18 @@ def request_scope() -> Dict[str, Any]:
 
 # ── Scan ────────────────────────────────────────────────────────────────────
 
+def _setting() -> str:
+    return (settings.pii_sentinel or "off").strip().lower()
+
+
 def enabled() -> bool:
-    return (settings.pii_sentinel or "off").strip().lower() == "report"
+    """Whether calls are scanned and logged: PII_SENTINEL=report or strict."""
+    return _setting() in ("report", "strict")
+
+
+def strict() -> bool:
+    """PII_SENTINEL=strict: a value found in a payload about to go out is hidden before it goes (`enforce`)."""
+    return _setting() == "strict"
 
 
 def _mask(value: str) -> str:
@@ -115,12 +125,15 @@ class _Scan:
         self.samples: List[Dict[str, Any]] = []
         self.texts: List[Tuple[str, str]] = []          # (location, text) for the pattern and name passes
         self.names: Dict[str, str] = {}                  # normalized field value -> report kind
+        #: (kind, lower-cased value) -> the value as found. In memory only: never written (see `leaked_values`).
+        self.raw: Dict[Tuple[str, str], str] = {}
         self.free_text_fields = 0
         self.files = 0
         self.file_bytes = 0
         self.chars = 0
 
     def hit(self, kind: str, location: str, value: str, key: Optional[str] = None) -> None:
+        self.raw.setdefault((kind, value.strip().lower()), value.strip())
         self.found[kind] = self.found.get(kind, 0) + 1
         bucket = self.where.setdefault(location, {})
         bucket[kind] = bucket.get(kind, 0) + 1
@@ -215,10 +228,8 @@ def _system_texts(system: Any) -> List[str]:
     return [b["text"] for b in system or [] if isinstance(b, dict) and isinstance(b.get("text"), str)]
 
 
-def scan(system: Any, messages: Sequence[Dict[str, Any]], org_names: Iterable[str] = (),
-         known: Optional[dictionary.Dictionary] = None) -> Dict[str, Any]:
-    """What one call's payload holds. Pure: writes nothing. `known`: the contact dictionary to search with
-    (default: the organization names alone)."""
+def _scan(system: Any, messages: Sequence[Dict[str, Any]], org_names: Iterable[str] = (),
+          known: Optional[dictionary.Dictionary] = None) -> Tuple["_Scan", dictionary.Dictionary]:
     s = _Scan()
     for text in _system_texts(system):
         s.text("system", text)
@@ -230,6 +241,14 @@ def scan(system: Any, messages: Sequence[Dict[str, Any]], org_names: Iterable[st
     if known is None:
         known = dictionary.Dictionary(dictionary.Entry(n, "ORG", policy.normalize_name(n)) for n in org_names if n)
     s.known_names(known)
+    return s, known
+
+
+def scan(system: Any, messages: Sequence[Dict[str, Any]], org_names: Iterable[str] = (),
+         known: Optional[dictionary.Dictionary] = None) -> Dict[str, Any]:
+    """What one call's payload holds. Pure: writes nothing. `known`: the contact dictionary to search with
+    (default: the organization names alone)."""
+    s, known = _scan(system, messages, org_names, known)
     return {
         "found": s.found,
         "distinct": {k: len(v) for k, v in s.distinct.items()},
@@ -245,16 +264,66 @@ def scan(system: Any, messages: Sequence[Dict[str, Any]], org_names: Iterable[st
     }
 
 
+def _known() -> dictionary.Dictionary:
+    request = _request.get() or {}
+    return dictionary.for_orgs(request.get("organization_ids") or (), org_names=request.get("org_names") or ())
+
+
+def leaked_values(system: Any, messages: Sequence[Dict[str, Any]],
+                  known: Optional[dictionary.Dictionary] = None) -> List[Tuple[str, str]]:
+    """(kind, value) of the personal data one payload carries, as found. For `enforce`: never log these."""
+    s, _ = _scan(system, messages, known=known if known is not None else _known())
+    return [(kind, value) for (kind, _), value in s.raw.items()]
+
+
+#: Sentinel kinds -> the vault's placeholder kinds.
+_VAULT_KIND = {"PARTY_NAME": "PARTY", "ORG_NAME": "ORG"}
+
+
+def enforce(system: Any, messages: List[Dict[str, Any]]) -> Tuple[Any, List[Dict[str, Any]], Dict[str, int]]:
+    """PII_SENTINEL=strict, with PII_MODE=on: hide what the masking let through, then let the call go on.
+
+    The payload is scanned as it is about to be sent. Each value found gets a placeholder in the request's vault,
+    so the answer still shows the real value, and the masking learns it, so the snapshot and every later call of
+    the request hide it too. Returns the payload to send (a copy when anything was hidden; the caller's lists are
+    never changed) and the count of values hidden per kind. Without an active "on" masking there is nothing to
+    put real values back with, so the payload goes unchanged."""
+    if not strict():
+        return system, messages, {}
+    from gemini_brain.privacy import masking as masking_module
+    m = masking_module._current.get()
+    if m is None or not m.sends_masked:
+        return system, messages, {}
+    values = leaked_values(system, messages)
+    if not values:
+        return system, messages, {}
+    m.catch([(_VAULT_KIND.get(kind, kind), value) for kind, value in values])
+    counts: Dict[str, int] = {}
+    for kind, _ in values:
+        counts[kind] = counts.get(kind, 0) + 1
+    new_system = m.scrubber.replace_caught(system)
+    new_messages = m.scrubber.replace_caught(list(messages))
+    logger.warning("pii sentinel (strict): hid %s that the masking let through", counts)
+    try:
+        from gemini_brain.agent import audit
+        request = _request.get() or {}
+        audit.event("pii_sentinel_caught", session_id=request.get("session_id"),
+                    organization_ids=request.get("organization_ids") or [], kinds=counts)
+    except Exception as e:  # noqa: BLE001
+        logger.debug("pii sentinel: audit not written: %s", e)
+    return new_system, new_messages, counts
+
+
 def inspect(*, model_id: str, label: str, purpose: str, system: Any,
-            messages: Sequence[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """Scan one outbound call and log it, when PII_SENTINEL=report. Returns the entry (None when off or failed)."""
+            messages: Sequence[Dict[str, Any]], extra: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    """Scan one outbound call and log it, when PII_SENTINEL=report or strict. Returns the entry (None when off or
+    failed). `extra`: fields added to the entry (strict mode: what it hid before the call went)."""
     if not enabled():
         return None
     try:
         t0 = time.perf_counter()
         request = _request.get() or {}
-        known = dictionary.for_orgs(request.get("organization_ids") or (), org_names=request.get("org_names") or ())
-        result = scan(system, messages, known=known)
+        result = scan(system, messages, known=_known())
         entry = {
             "ts": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
             "purpose": purpose or "",
@@ -264,6 +333,7 @@ def inspect(*, model_id: str, label: str, purpose: str, system: Any,
             "organization_ids": request.get("organization_ids") or [],
             "messages": len(messages or []),
             **result,
+            **(extra or {}),
             "scan_ms": round((time.perf_counter() - t0) * 1000, 1),
         }
         _write(entry)

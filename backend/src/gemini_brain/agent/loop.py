@@ -394,7 +394,8 @@ def run_agent(
         answer = masking.rehydrate(answer)   # the user sees real values; the verifier checks the real answer
     if masking is not None and masking.capture is not None and messages:
         masking.capture.add(purpose="agent", model=writer_id, raw_system=raw_system, raw_messages=messages,
-                            sent_system=sent_system, sent_messages=masking.outbound(messages, asked),
+                            sent_system=masking.scrubber.replace_caught(sent_system),
+                            sent_messages=masking.scrubber.replace_caught(masking.outbound(messages, asked)),
                             reply_model=model_text, reply_user=answer)
         snapshots.save(masking)
     report =(verify_answer(answer, _evidence(ok_results, earlier_figures, document_evidence), enforce=False)

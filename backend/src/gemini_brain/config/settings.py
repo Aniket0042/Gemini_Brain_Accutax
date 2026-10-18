@@ -376,9 +376,11 @@ class GeminiBrainSettings(BaseSettings):
     pii_sentinel: str = Field(
         default="off",
         description=(
-            "off | report. report: scan every Bedrock call just before it is sent and log the personal data it "
-            "carries (kinds, counts, where; masked previews only) to PII_SENTINEL_LOG. It never blocks or changes "
-            "a call. Summarise with scripts/pii_leak_report.py."
+            "off | report | strict. report: scan every Bedrock call just before it is sent and log the personal "
+            "data it carries (kinds, counts, where; masked previews only) to PII_SENTINEL_LOG. strict (with "
+            "PII_MODE=on): also hide anything it finds behind the request's placeholders before the call goes, so "
+            "the answer still shows real values; logged as strict_hid. Neither blocks a call. Summarise with "
+            "scripts/pii_leak_report.py."
         ),
     )
     pii_snapshots: str = Field(

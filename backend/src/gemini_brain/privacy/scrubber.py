@@ -15,6 +15,7 @@ Files and images pass as they are: uploads keep the current reader until phase 5
 from __future__ import annotations
 
 import copy
+import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from gemini_brain.privacy import ner, policy, recognizers
@@ -30,6 +31,10 @@ class Scrubber:
         self.names = names or Dictionary()
         #: Names learned from the user's questions (ner.py), searched like the books' names.
         self.learned = Dictionary()
+        #: Exact values the sentinel caught in a payload that was about to go out (PII_SENTINEL=strict):
+        #: lower-cased value -> (kind, value). Hidden wherever they appear from then on.
+        self.caught: Dict[str, Tuple[str, str]] = {}
+        self._caught_rx: Optional[re.Pattern] = None
 
     def learn(self, texts: Sequence[Any]) -> List[str]:
         """Find names the books do not know in the user's own texts (the question, earlier questions) and hide them
@@ -53,11 +58,44 @@ class Scrubber:
             self.learned = Dictionary(found)
         return new
 
+    def catch(self, values: Sequence[Tuple[str, str]]) -> int:
+        """Hide these exact values from now on: what the sentinel found in a payload the masking let through.
+        Returns how many were new."""
+        new = 0
+        for kind, value in values:
+            text = str(value).strip()
+            if len(text) >= 2 and text.lower() not in self.caught:
+                self.caught[text.lower()] = (kind, text)
+                new += 1
+        if new:
+            alternatives = sorted(self.caught, key=len, reverse=True)
+            self._caught_rx = re.compile(r"(?<!\w)(?:" + "|".join(re.escape(v) for v in alternatives) + r")(?!\w)",
+                                         re.IGNORECASE)
+        return new
+
+    def replace_caught(self, value: Any, depth: int = 0) -> Any:
+        """A copy of a payload part (text, JSON, a message list) with only the caught values replaced. Files pass
+        as they are."""
+        if self._caught_rx is None or depth > 24:
+            return value
+        if isinstance(value, str):
+            return self._caught_rx.sub(lambda m: self.vault.token(*self.caught[m.group(0).lower()]), value)
+        if isinstance(value, dict):
+            return {k: (v if k in ("document", "image") else self.replace_caught(v, depth + 1)) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self.replace_caught(v, depth + 1) for v in value]
+        return value
+
     def spans(self, text: str, partial: bool = False) -> List[Tuple[int, int, str, str]]:
         """(start, end, kind, value) to hide, in order, not overlapping. Names win over patterns."""
         out: List[Tuple[int, int, str, str]] = []
+        if self._caught_rx is not None:
+            for m in self._caught_rx.finditer(text):
+                kind, real = self.caught[m.group(0).lower()]
+                out.append((m.start(), m.end(), kind, real))
         for s in self.names.find(text, partial=partial):
-            out.append((s.start, s.end, s.kind, self.names.entries[s.key].name))
+            if not any(a < s.end and s.start < b for a, b, _, _ in out):
+                out.append((s.start, s.end, s.kind, self.names.entries[s.key].name))
         for s in self.learned.find(text, partial=partial):
             if not any(a < s.end and s.start < b for a, b, _, _ in out):
                 out.append((s.start, s.end, s.kind, self.learned.entries[s.key].name))

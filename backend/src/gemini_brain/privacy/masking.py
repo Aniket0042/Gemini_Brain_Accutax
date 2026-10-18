@@ -53,6 +53,8 @@ class Masking:
         self._memo: Dict[int, tuple] = {}
         #: The before/after snapshot of this request (snapshots.begin), or None.
         self.capture: Any = None
+        #: Values the sentinel caught that the masking had let through (PII_SENTINEL=strict); should stay 0.
+        self.sentinel_caught = 0
 
     @classmethod
     def start(cls, mode: str, organization_ids: Sequence[int], org_meta: Dict[int, Dict[str, Any]], *,
@@ -107,6 +109,15 @@ class Masking:
         self.ms += (time.perf_counter() - t0) * 1000
         return new
 
+    def catch(self, values: Sequence[Any]) -> int:
+        """Values the sentinel found in a payload this masking let through (PII_SENTINEL=strict): hidden from now
+        on, in this call and every later one of the request. Returns how many were new."""
+        new = self.scrubber.catch(values)
+        if new:
+            self._memo.clear()
+            self.sentinel_caught += new
+        return new
+
     def text(self, text: str) -> str:
         return self.scrubber.text(text)
 
@@ -119,7 +130,7 @@ class Masking:
     def stats(self) -> Dict[str, Any]:
         out = {"mode": self.mode, "hidden": self.vault.counts(), "unresolved": self.vault.unresolved,
                "names_known": len(self.scrubber.names), "names_learned": len(self.scrubber.learned),
-               "ms": round(self.ms, 1)}
+               "sentinel_caught": self.sentinel_caught, "ms": round(self.ms, 1)}
         if self.capture is not None:
             out["snapshot"] = self.capture.id
         return out

@@ -543,9 +543,11 @@ def _snapshot(prompt: _Prompt, raw_system: str, raw_user: str, reply_model: str,
     if capture is None:
         return
     from gemini_brain.privacy import snapshots
+    caught = prompt.masking.scrubber.replace_caught  # what the strict sentinel hid on the way out, if anything
     capture.add(purpose="report_narration", raw_system=raw_system,
-                raw_messages=[{"role": "user", "content": [{"text": raw_user}]}], sent_system=prompt.masked_system,
-                sent_messages=[{"role": "user", "content": [{"text": prompt.masked_user}]}],
+                raw_messages=[{"role": "user", "content": [{"text": raw_user}]}],
+                sent_system=caught(prompt.masked_system),
+                sent_messages=caught([{"role": "user", "content": [{"text": prompt.masked_user}]}]),
                 reply_model=reply_model, reply_user=reply_user)
     snapshots.save(prompt.masking)
 
