@@ -97,6 +97,16 @@ class Masking:
         self.ms += (time.perf_counter() - t0) * 1000
         return out
 
+    def learn(self, texts: Sequence[Any]) -> List[str]:
+        """Names the books do not know, from the user's own texts (ner.py): hidden from now on in this request.
+        Call before the first outbound(); placeholders already sent stay as they were."""
+        t0 = time.perf_counter()
+        new = self.scrubber.learn(texts)
+        if new:
+            self._memo.clear()
+        self.ms += (time.perf_counter() - t0) * 1000
+        return new
+
     def text(self, text: str) -> str:
         return self.scrubber.text(text)
 
@@ -108,7 +118,8 @@ class Masking:
 
     def stats(self) -> Dict[str, Any]:
         out = {"mode": self.mode, "hidden": self.vault.counts(), "unresolved": self.vault.unresolved,
-               "names_known": len(self.scrubber.names), "ms": round(self.ms, 1)}
+               "names_known": len(self.scrubber.names), "names_learned": len(self.scrubber.learned),
+               "ms": round(self.ms, 1)}
         if self.capture is not None:
             out["snapshot"] = self.capture.id
         return out

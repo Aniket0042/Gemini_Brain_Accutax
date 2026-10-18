@@ -44,3 +44,13 @@ It also checks the answer: it was answered, no placeholder is left, none is unre
 - The test organizations' contacts are single first names (seed data), so long company names and legal forms are tested by unit tests only.
 - The seed data holds no TRNs, emails or phone numbers in the books, so identifiers were tested as user-typed values.
 - Uploaded files are not masked yet (decision D3, phase 5).
+
+## Follow-up, 18 Oct 2026: names that are not in the books
+
+The known gap (pr28, pr29) is closed. Name recognition now runs on the user's questions (`backend/src/gemini_brain/privacy/ner.py`, spaCy `en_core_web_sm`): the current question and the user turns of the last 10 history turns. It hides people and companies the books do not know. It finds a PERSON entity, or any other entity with a legal form ("LLC", "FZE", "Trading") or a filter word before it ("bills from X"). It never hides finance terms, months, places, public bodies or the selected organizations' own names. A learned name is then hidden everywhere in the request, including earlier answers and tool results.
+
+- The set now has 43 cases with no known gaps. The new pr42 is a follow-up to pr29; pr43 holds a company with a legal form and a person.
+- VM run (production code plus the change, in `/tmp/pii_ner`): 0 leaks in 43 cases and 0 answer-check failures. It cost $0.85.
+- False positives: 0 in 82 curated ordinary questions (unit tests) and 0 in 331 questions from the eval sets. In the 89-question replay with `PII_MODE=on`, all 89 were answered and 82 were grounded (81 before). No placeholders were left. The replay cost $2.27.
+- Name recognition adds about 6 ms per question.
+- Still missed: names typed in lower case, names in Arabic script, and a lone name that spaCy reads as a place with no filter word before it. Names that are in the books are still caught by the dictionary.

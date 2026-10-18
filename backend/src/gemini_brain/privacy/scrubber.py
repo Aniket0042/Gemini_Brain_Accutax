@@ -6,16 +6,19 @@ dictionary, and identifiers by pattern. Tool results and tool inputs go field by
 each key: name and contact fields become placeholders whole; free text and other text is searched like any
 text; figures, dates and document numbers pass untouched and unscanned.
 
+Names the books do not know are found in the user's own questions by name recognition (ner.py) and `learn`ed: from
+then on they are hidden like known names, everywhere in the request (earlier answers, tool results, the narrator).
+
 Names of public bodies, banks and utilities stay (policy.public_entity), and so does a field that is empty.
 Files and images pass as they are: uploads keep the current reader until phase 5 (decision D3).
 """
 from __future__ import annotations
 
 import copy
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from gemini_brain.privacy import policy, recognizers
-from gemini_brain.privacy.dictionary import Dictionary
+from gemini_brain.privacy import ner, policy, recognizers
+from gemini_brain.privacy.dictionary import Dictionary, Entry
 from gemini_brain.privacy.vault import Vault
 
 _EMPTY = {"", "-", "—", "unknown", "null", "none", "n/a"}
@@ -25,12 +28,39 @@ class Scrubber:
     def __init__(self, vault: Vault, names: Optional[Dictionary] = None):
         self.vault = vault
         self.names = names or Dictionary()
+        #: Names learned from the user's questions (ner.py), searched like the books' names.
+        self.learned = Dictionary()
+
+    def learn(self, texts: Sequence[Any]) -> List[str]:
+        """Find names the books do not know in the user's own texts (the question, earlier questions) and hide them
+        from then on. Returns the names learned. Names already known, organizations' own names and identifiers are
+        left to the dictionary and the patterns."""
+        found: List[Entry] = list(self.learned.entries.values())
+        new: List[str] = []
+        for text in texts:
+            if not isinstance(text, str) or not text.strip():
+                continue
+            taken = self.spans(text)
+            for f in ner.find(text):
+                if any(a < f.end and f.start < b for a, b, _, _ in taken):
+                    continue
+                key = policy.normalize_name(f.text)
+                if not key or key in self.names.entries or any(e.key == key for e in found):
+                    continue
+                found.append(Entry(f.text, f.kind, key))
+                new.append(f.text)
+        if new:
+            self.learned = Dictionary(found)
+        return new
 
     def spans(self, text: str, partial: bool = False) -> List[Tuple[int, int, str, str]]:
         """(start, end, kind, value) to hide, in order, not overlapping. Names win over patterns."""
         out: List[Tuple[int, int, str, str]] = []
         for s in self.names.find(text, partial=partial):
             out.append((s.start, s.end, s.kind, self.names.entries[s.key].name))
+        for s in self.learned.find(text, partial=partial):
+            if not any(a < s.end and s.start < b for a, b, _, _ in out):
+                out.append((s.start, s.end, s.kind, self.learned.entries[s.key].name))
         for s in recognizers.find(text):
             if policy.public_contact(s.kind, s.text):
                 continue  # a government address (the FTA's): published, and the answer may need to quote it

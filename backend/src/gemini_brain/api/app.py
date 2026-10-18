@@ -97,6 +97,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("VAT knowledge base warm-up skipped: %s", e)
 
+    # PII masking: the name-recognition model for questions, loaded in the background (privacy/ner.py).
+    if (settings.pii_mode or "off").strip().lower() in ("shadow", "on"):
+        try:
+            import threading
+            from gemini_brain.privacy import ner
+            threading.Thread(target=ner.warm, name="pii-ner-warm", daemon=True).start()
+        except Exception as e:
+            logger.warning("PII name recognition warm-up skipped: %s", e)
+
     yield
     if watchdog is not None:
         watchdog.stop()
