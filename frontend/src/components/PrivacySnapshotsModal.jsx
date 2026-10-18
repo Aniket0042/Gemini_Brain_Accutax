@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { ShieldCheck, X, RefreshCw, Download, Play } from 'lucide-react';
 import { fetchPrivacySnapshots, fetchPrivacySnapshot, downloadPrivacySnapshot, runPrivacyDemo } from '../services/api';
 
@@ -10,6 +12,32 @@ const PURPOSE = { agent: 'Chat answer', agent_law: 'VAT law answer', report_narr
 const TOKEN_RX = /\\?\[\s*(SUPPLIER|CUSTOMER|PARTY|PERSON|ORG|TRN|EMAIL|PHONE|IBAN|ADDRESS|EMIRATES_ID|CARD|PASSPORT|GSTIN|PAN|AADHAAR|TAN|CIN|LLPIN|IFSC|UPI_ID|UTR|EWAY_BILL|IRN)[ _-]?\d+\s*\\?\]/gi;
 
 const escapeRx = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// A snapshot's UTC timestamp in the viewer's own time zone.
+const localTime = (ts) => {
+  const d = ts ? new Date(ts) : null;
+  return d && !Number.isNaN(d.getTime())
+    ? d.toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+    : (ts || '');
+};
+
+// A model reply rendered as markdown, with placeholders (amber) or real values (red) marked. The marked parts go
+// through as inline code so they keep their highlight inside tables and bold text.
+const MarkedMarkdown = ({ text, rx, color }) => {
+  const source = rx ? String(text || '').replace(rx, (m) => `\`${m}\``) : String(text || '');
+  rx && (rx.lastIndex = 0);
+  return (
+    <div style={styles.md} className="markdown-body">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
+        code: ({ inline, children, ...props }) => {
+          const value = String(children);
+          const marked = rx && new RegExp(`^(?:${rx.source})$`, rx.flags.replace('g', '')).test(value);
+          return marked ? <mark style={{ ...styles.mark, ...color }}>{value}</mark> : <code {...props}>{children}</code>;
+        },
+      }}>{source}</ReactMarkdown>
+    </div>
+  );
+};
 
 // The text split into plain strings and <mark>s for the matches of `rx`.
 const highlight = (text, rx, color) => {
@@ -29,10 +57,10 @@ const highlight = (text, rx, color) => {
 };
 
 // A conversation as readable text: role, text, tools called and what they returned.
-const conversationText = (side) => {
+const conversationText = (side, withSystem = false) => {
   if (!side) return null;
   const lines = [];
-  if (side.system) lines.push('── SYSTEM ──', side.system, '');
+  if (withSystem && side.system) lines.push('── AI INSTRUCTIONS (SYSTEM PROMPT) ──', side.system, '');
   for (const m of side.messages || []) {
     if (!m || typeof m !== 'object') continue;
     lines.push(`── ${String(m.role || '').toUpperCase()} ──`);
@@ -53,11 +81,11 @@ const conversationText = (side) => {
   return lines.join('\n');
 };
 
-const Pane = ({ title, note, children }) => (
+const Pane = ({ title, note, children, rich = false }) => (
   <div style={styles.pane}>
     <div style={styles.paneTitle}>{title}</div>
     <div style={styles.paneNote}>{note}</div>
-    <pre style={styles.pre}>{children}</pre>
+    {rich ? <div style={styles.rich}>{children}</div> : <pre style={styles.pre}>{children}</pre>}
   </div>
 );
 
@@ -71,6 +99,7 @@ const Verdict = ({ found }) => {
 // One request, both sides: a tab per model call and four panes per call. Used by the snapshot list and the demo.
 const SnapshotDetail = ({ snap }) => {
   const [callIndex, setCallIndex] = useState(0);
+  const [showSystem, setShowSystem] = useState(false);
   useEffect(() => { setCallIndex(0); }, [snap?.id]);
 
   const valueRx = useMemo(() => {
@@ -87,6 +116,9 @@ const SnapshotDetail = ({ snap }) => {
     <>
       <div style={styles.summary}>
         <span>{snap.demo ? 'Live demo' : 'Request'} {snap.id}</span>
+        {snap.ts && <span>{localTime(snap.ts)}</span>}
+        {snap.user_label && <span>{snap.user_label}</span>}
+        {(snap.organization_names || []).length > 0 && <span>{snap.organization_names.join(', ')}</span>}
         <span>Hidden: {Object.entries(hidden).map(([k, v]) => `${v} ${k.toLowerCase()}`).join(', ') || 'none'}</span>
         <span>Unresolved placeholders: {snap.stats?.unresolved ?? 0}</span>
         <span style={{ color: 'var(--ink-faint)' }}>Amounts, VAT, dates and document numbers stay visible by design.</span>
@@ -98,22 +130,26 @@ const SnapshotDetail = ({ snap }) => {
             {PURPOSE[c.purpose] || c.purpose}
           </button>
         ))}
+        <button style={styles.linkBtn} onClick={() => setShowSystem((v) => !v)}>
+          {showSystem ? 'Hide AI instructions' : 'Show AI instructions'}
+        </button>
         {call && <Verdict found={call.sentinel} />}
       </div>
       {call && (
         <div style={styles.panes}>
-          <Pane title="1 · What the request held" note="Real values (red), never sent. The model's own turns keep its placeholders.">
-            {snap.raw_available ? highlight(conversationText(call.raw), valueRx, styles.raw)
+          <Pane title="1 · What the request held" note="The question, the data the AI asked for, real values in red. Never sent to the AI.">
+            {snap.raw_available ? highlight(conversationText(call.raw, showSystem), valueRx, styles.raw)
               : 'Not kept: no encryption key, or past the retention period.'}
           </Pane>
-          <Pane title={sentLabel} note="Placeholders (amber) in place of names and identifiers.">
-            {highlight(conversationText(call.sent), TOKEN_RX, styles.tok)}
+          <Pane title={sentLabel} note="The same, with placeholders (amber) in place of names and identifiers.">
+            {highlight(conversationText(call.sent, showSystem), TOKEN_RX, styles.tok)}
           </Pane>
-          <Pane title="3 · Model's reply" note="As the model wrote it.">
-            {highlight(String(call.reply_model || ''), TOKEN_RX, styles.tok)}
+          <Pane title="3 · Model's reply" note="As the model wrote it." rich>
+            <MarkedMarkdown text={call.reply_model} rx={TOKEN_RX} color={styles.tok} />
           </Pane>
-          <Pane title="4 · What the user saw" note="Placeholders swapped back on our server.">
-            {snap.raw_available ? highlight(String(call.reply_user || ''), valueRx, styles.raw) : 'Not kept (real-value side).'}
+          <Pane title="4 · What the user saw" note="Placeholders swapped back on our server." rich>
+            {snap.raw_available ? <MarkedMarkdown text={call.reply_user} rx={valueRx} color={styles.raw} />
+              : 'Not kept (real-value side).'}
           </Pane>
         </div>
       )}
@@ -128,7 +164,7 @@ const DEMO_EXAMPLES = [
 ];
 
 // Live before/after: ask one question with masking on, then see what the AI got next to the real data.
-const DemoPanel = ({ token, orgIds }) => {
+const DemoPanel = ({ token, orgIds, orgNames = {} }) => {
   const [question, setQuestion] = useState(DEMO_EXAMPLES[0]);
   const [result, setResult] = useState(null);
   const [running, setRunning] = useState(false);
@@ -154,25 +190,35 @@ const DemoPanel = ({ token, orgIds }) => {
         <textarea id="privacy-demo-question" value={question} onChange={(e) => setQuestion(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) run(); }}
           rows={2} style={styles.demoInput} placeholder="Ask about suppliers, customers, TRNs…" />
-        <button className="btn btn-primary" onClick={run} disabled={running || !question.trim()}>
+        <button onClick={run} disabled={running || !question.trim()}
+          style={{ ...styles.runBtn, ...(running || !question.trim() ? styles.runBtnOff : {}) }}>
           <Play size={14} /><span>{running ? 'Running…' : 'Run'}</span>
         </button>
       </div>
       <div style={styles.demoHint}>
-        Runs on the organizations selected in the chat ({(orgIds || []).join(', ') || 'none'}), with masking on.
+        Runs on the organizations selected in the chat ({(orgIds || []).map((o) => orgNames[o] || `Organization ${o}`).join(', ') || 'none'}), with masking on.
         Try: {DEMO_EXAMPLES.map((q, i) => (
           <button key={i} style={styles.example} onClick={() => setQuestion(q)}>{q}</button>
         ))}
       </div>
       {error && <div style={styles.error}>{error}</div>}
       {running && <div style={styles.empty}>Asking the AI with masking on… this takes 5 to 20 seconds.</div>}
+      {!running && !result && !error && (
+        <div style={styles.demoEmpty}>
+          <ShieldCheck size={28} color="var(--accent)" />
+          <div style={styles.demoEmptyTitle}>Run a question to see both sides</div>
+          <div>The four panes appear here: the real data, what the AI received (placeholders), the AI's reply, and the
+            answer the user sees, with the sentinel's verdict on what was sent.</div>
+        </div>
+      )}
       {result && <SnapshotDetail snap={result} />}
     </div>
   );
 };
 
-export const PrivacySnapshotsModal = ({ onClose, token = '', access = {}, orgIds = [] }) => {
+export const PrivacySnapshotsModal = ({ onClose, token = '', access = {}, orgIds = [], orgNames = {} }) => {
   const [view, setView] = useState('snapshots');
+  const [includeTest, setIncludeTest] = useState(false);
   const [list, setList] = useState([]);
   const [selected, setSelected] = useState(null);
   const [snap, setSnap] = useState(null);
@@ -183,7 +229,7 @@ export const PrivacySnapshotsModal = ({ onClose, token = '', access = {}, orgIds
     setLoading(true);
     setError(null);
     try {
-      const items = await fetchPrivacySnapshots(token);
+      const items = await fetchPrivacySnapshots(token, 100, includeTest);
       setList(items);
       if (items.length && !selected) setSelected(items[0].id);
     } catch (err) {
@@ -193,7 +239,7 @@ export const PrivacySnapshotsModal = ({ onClose, token = '', access = {}, orgIds
     }
   };
 
-  useEffect(() => { loadList(); }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadList(); }, [token, includeTest]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!selected) return;
@@ -244,23 +290,29 @@ export const PrivacySnapshotsModal = ({ onClose, token = '', access = {}, orgIds
         </div>
 
         {view === 'demo' ? (
-          <DemoPanel token={token} orgIds={orgIds} />
+          <DemoPanel token={token} orgIds={orgIds} orgNames={orgNames} />
         ) : (
           <>
             {error && <div style={styles.error}>{error}</div>}
             <div style={styles.body}>
               <div style={styles.list}>
+                <label style={styles.filter}>
+                  <input id="privacy-include-test" type="checkbox" checked={includeTest}
+                    onChange={(e) => setIncludeTest(e.target.checked)} />
+                  Show test runs
+                </label>
                 {!list.length && !loading && <div style={styles.empty}>No snapshots yet. Ask a question with PII_MODE and PII_SNAPSHOTS on.</div>}
                 {list.map((item) => (
                   <button key={item.id} onClick={() => setSelected(item.id)}
                     style={{ ...styles.item, ...(item.id === selected ? styles.itemActive : {}) }}>
                     <div style={styles.itemTop}>
-                      <span>{(item.ts || '').replace('T', ' ').slice(0, 16)}</span>
+                      <span>{localTime(item.ts)}</span>
                       {item.sentinel_pass === true && <span style={{ ...styles.dot, background: 'var(--success)' }} title="Nothing personal sent" />}
                       {item.sentinel_pass === false && <span style={{ ...styles.dot, background: 'var(--danger)' }} title="The sentinel found personal data" />}
                     </div>
-                    <div style={styles.itemSub}>
-                      user {item.user_id} · orgs {(item.organization_ids || []).join(', ')} · {item.hidden} hidden
+                    <div style={styles.itemSub}>{item.user_label || `user ${item.user_id}`} · {item.hidden} hidden</div>
+                    <div style={styles.itemSub} title={(item.organization_names || []).join(', ')}>
+                      {(item.organization_names || item.organization_ids || []).join(', ')}
                     </div>
                     <div style={styles.itemSub}>{(item.purposes || []).map((p) => PURPOSE[p] || p).join(' + ')}{item.mode === 'shadow' ? ' · shadow' : ''}</div>
                   </button>
@@ -311,6 +363,14 @@ const styles = {
   bad: { background: 'var(--danger-soft)', color: 'var(--danger-ink)' },
   empty: { color: 'var(--ink-soft)', fontSize: 13, padding: 12 },
   viewTabs: { display: 'flex', gap: 4, marginRight: 8 },
+  linkBtn: { background: 'none', border: 'none', color: 'var(--link)', cursor: 'pointer', fontSize: 12.5, padding: '0 4px' },
+  rich: { fontSize: 12.5, lineHeight: 1.55, background: 'var(--surface-2)', borderRadius: 6, padding: '8px 10px', overflow: 'auto', maxHeight: '62vh', color: 'var(--ink)' },
+  md: { wordBreak: 'break-word' },
+  runBtn: { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 18px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14, background: 'var(--accent)', color: 'var(--surface)' },
+  runBtnOff: { opacity: 0.45, cursor: 'not-allowed' },
+  demoEmpty: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, flex: 1, textAlign: 'center', color: 'var(--ink-soft)', fontSize: 13, padding: 24, maxWidth: 560, margin: '0 auto' },
+  demoEmptyTitle: { fontSize: 15, fontWeight: 600, color: 'var(--ink)' },
+  filter: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ink-soft)', padding: '2px 2px 6px' },
   demo: { display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minHeight: 0 },
   demoBar: { display: 'flex', gap: 8, alignItems: 'stretch' },
   demoInput: { flex: 1, resize: 'vertical', font: 'inherit', fontSize: 14, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--ink)' },

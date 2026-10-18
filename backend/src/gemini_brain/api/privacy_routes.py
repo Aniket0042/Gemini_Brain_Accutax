@@ -46,12 +46,42 @@ def access(current_user: CurrentUser = Depends(get_current_user)) -> Dict[str, A
     return out
 
 
+def _labels(items: List[Dict[str, Any]], current_user: CurrentUser) -> List[Dict[str, Any]]:
+    """Who asked and for which organizations, by email and name instead of ids. Looked up when the page is opened,
+    never stored in a snapshot; an id stays when its name cannot be found."""
+    users = {i.get("user_id") for i in items}
+    orgs = sorted({int(o) for i in items for o in i.get("organization_ids") or []})
+    emails: Dict[int, str] = {}
+    org_names: Dict[int, str] = {}
+    try:
+        from gemini_brain.api.auth import get_user_emails
+        emails = get_user_emails([u for u in users if str(u).isdigit()])
+    except Exception as e:  # noqa: BLE001
+        logger.warning("privacy page: user emails unavailable: %s", e)
+    if current_user.user_id in users and current_user.email:
+        emails.setdefault(int(current_user.user_id), current_user.email)
+    if orgs:
+        try:
+            from gemini_brain.semantic import org_directory
+            org_names = {o: m.get("name") for o, m in org_directory.lookup(orgs, subject="privacy-page").items()}
+        except Exception as e:  # noqa: BLE001
+            logger.warning("privacy page: organization names unavailable: %s", e)
+    for i in items:
+        u = i.get("user_id")
+        i["user_label"] = ("test run" if snapshots.is_test_run(u)
+                           else emails.get(int(u)) if str(u).isdigit() and int(u) in emails else f"user {u}")
+        i["organization_names"] = [org_names.get(int(o)) or f"Organization {o}" for o in i.get("organization_ids") or []]
+    return items
+
+
 @router.get("/snapshots", summary="The newest privacy snapshots")
 def list_snapshots(limit: int = Query(50, ge=1, le=500), user_id: int | None = Query(None),
+                   include_test: bool = Query(False, description="Also list test runs (no signed-in user)"),
                    current_user: CurrentUser = Depends(get_current_user)) -> Dict[str, Any]:
     _admin(current_user)
     _audit(current_user, "list")
-    return {"snapshots": snapshots.recent(limit=limit, user_id=user_id)}
+    return {"snapshots": _labels(snapshots.recent(limit=limit, user_id=user_id, include_test=include_test),
+                                 current_user)}
 
 
 @router.get("/snapshots/{snapshot_id}", summary="One snapshot, both sides")
@@ -61,7 +91,7 @@ def get_snapshot(snapshot_id: str, current_user: CurrentUser = Depends(get_curre
     if snap is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Snapshot not found")
     _audit(current_user, "view", snapshot_id)
-    return snap
+    return _labels([snap], current_user)[0]
 
 
 @router.get("/snapshots/{snapshot_id}/export", response_class=HTMLResponse, summary="One snapshot as an HTML page")
@@ -71,7 +101,7 @@ def export_snapshot(snapshot_id: str, current_user: CurrentUser = Depends(get_cu
     if snap is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Snapshot not found")
     _audit(current_user, "export", snapshot_id)
-    return HTMLResponse(snapshot_html.render(snap), headers={
+    return HTMLResponse(snapshot_html.render(_labels([snap], current_user)[0]), headers={
         "Content-Disposition": f'attachment; filename="privacy-snapshot-{snapshot_id}.html"',
         "Cache-Control": "no-store"})
 

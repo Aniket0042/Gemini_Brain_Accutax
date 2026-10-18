@@ -196,8 +196,13 @@ def _files(snapshot_id: str) -> Optional[Path]:
     return None
 
 
-def recent(limit: int = 50, user_id: Any = None) -> List[Dict[str, Any]]:
-    """Summaries of the newest snapshots, newest first."""
+def is_test_run(user_id: Any) -> bool:
+    """Requests with no signed-in user: evals and smoke tests run from the server (user 0)."""
+    return user_id in (None, "", 0, "0")
+
+
+def recent(limit: int = 50, user_id: Any = None, include_test: bool = True) -> List[Dict[str, Any]]:
+    """Summaries of the newest snapshots, newest first. `include_test=False` leaves out test runs."""
     out: List[Dict[str, Any]] = []
     root = directory()
     if not root.exists():
@@ -209,6 +214,8 @@ def recent(limit: int = 50, user_id: Any = None) -> List[Dict[str, Any]]:
             except (OSError, ValueError):
                 continue
             if user_id is not None and str(snap.get("user_id")) != str(user_id):
+                continue
+            if not include_test and is_test_run(snap.get("user_id")):
                 continue
             leaks = [c.get("sentinel") for c in snap.get("calls") or []]
             out.append({

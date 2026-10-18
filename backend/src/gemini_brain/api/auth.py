@@ -515,6 +515,25 @@ def get_user_by_email(email: str, db_name: str = "") -> dict[str, Any] | None:
     return None
 
 
+def get_user_emails(user_ids: list[int], db_name: str = "") -> dict[int, str]:
+    """{user id: email} for these users from public.users; {} when the DB is unreachable. For admin pages."""
+    ids = sorted({int(u) for u in user_ids if str(u).isdigit() and int(u) > 0})
+    if not ids:
+        return {}
+    try:
+        conn = get_connection(db_name)
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT id, email FROM public.users WHERE id = ANY(%s);", (ids,))
+            return {int(r[0]): str(r[1]) for r in cur.fetchall() if r[1]}
+        finally:
+            cur.close()
+            conn.close()
+    except Exception as e:
+        logger.warning("Failed to query user emails from DB: %s", e)
+    return {}
+
+
 def get_user_allowed_orgs(user_id: int, db_name: str = "") -> list[int]:
     """Organizations the user is granted in user_organizations or owns via organizations.user_id."""
     return _query_user_allowed_orgs(user_id, db_name) or []

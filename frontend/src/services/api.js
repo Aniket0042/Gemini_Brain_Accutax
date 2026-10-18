@@ -340,8 +340,8 @@ export const fetchPrivacyAccess = async (token = '') => {
   }
 };
 
-export const fetchPrivacySnapshots = async (token = '', limit = 100) => {
-  const response = await fetch(`/api/v1/privacy/snapshots?limit=${limit}`, {
+export const fetchPrivacySnapshots = async (token = '', limit = 100, includeTest = false) => {
+  const response = await fetch(`/api/v1/privacy/snapshots?limit=${limit}${includeTest ? '&include_test=true' : ''}`, {
     headers: { Accept: 'application/json', ...authHeaders(token) },
   });
   const body = await response.json().catch(() => null);

@@ -1696,6 +1696,7 @@ export default function App() {
           token={currentUser?.access_token || ''}
           access={privacyAccess}
           orgIds={scopeOrgIds}
+          orgNames={Object.fromEntries(availableTenants.map((t) => [tenantIdOf(t), t?.display_name || t?.name || t?.org_name]).filter(([, n]) => n))}
           onClose={() => setShowPrivacy(false)}
         />
       )}
