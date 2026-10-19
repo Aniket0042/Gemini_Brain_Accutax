@@ -125,7 +125,7 @@ class Capture:
 
     def add(self, *, purpose: str, model: str = "", raw_system: Any = "", raw_messages: Sequence[Any] = (),
             sent_system: Any = "", sent_messages: Sequence[Any] = (), reply_model: str = "",
-            reply_user: str = "") -> None:
+            reply_user: str = "", question_index: Optional[int] = None) -> None:
         """One model call: what the request held, what the model got, what it wrote, what the user saw."""
         try:
             from gemini_brain.privacy import sentinel
@@ -138,6 +138,7 @@ class Capture:
             "raw": {"system": _system_text(raw_system), "messages": _jsonable(list(raw_messages))},
             "sent": {"system": _system_text(sent_system), "messages": _jsonable(list(sent_messages))},
             "reply_model": _jsonable(reply_model or ""), "reply_user": _jsonable(reply_user or ""),
+            "question_index": question_index,
             "sentinel": found,
         })
 
@@ -165,7 +166,7 @@ def save(masking: Any) -> Optional[str]:
             "id": capture.id, "ts": capture.ts.isoformat(timespec="seconds"), "user_id": capture.user_id,
             "session_id": capture.session_id, "organization_ids": capture.organization_ids, "mode": capture.mode,
             "stats": masking.stats() if hasattr(masking, "stats") else {},
-            "calls": [{k: c[k] for k in ("purpose", "model", "sent", "reply_model", "sentinel")} for c in capture.calls],
+            "calls": [{k: c[k] for k in ("purpose", "model", "sent", "reply_model", "sentinel", "question_index")} for c in capture.calls],
         }
         fernet = _fernet()
         sent["raw_kept"] = fernet is not None

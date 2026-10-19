@@ -76,6 +76,63 @@ def _mark_values(text: str, values: List[str]) -> str:
     return rx.sub(lambda m: f'<mark class="raw">{m.group(0)}</mark>', escaped)
 
 
+def _verdict(summary: Dict[str, Any]) -> str:
+    if summary.get("sentinel_pass") is True:
+        return "<span class='pill ok'>Nothing personal sent</span>"
+    if summary.get("sentinel_found"):
+        return f"<span class='pill bad'>Sentinel found: {html.escape(json.dumps(summary['sentinel_found']))}</span>"
+    return "<span class='pill'>Sentinel: not run</span>"
+
+
+def _story_html(story: Dict[str, Any], purpose: Any, values: List[str]) -> str:
+    """One call as the privacy page shows it: summary, what was hidden, step by step, the answer."""
+    s = story.get("summary") or {}
+    kinds = ", ".join(f"{v} {k.lower()}" for k, v in (s.get("hidden_by_kind") or {}).items()) or "none"
+    figures = (f"{s['figures_checked']} sent unchanged" if s.get("figures_checked") and not s.get("figures_changed")
+               else f"{s['figures_changed']} of {s['figures_checked']} changed" if s.get("figures_checked")
+               else "none in the data")
+    cards = (f"<div class='cards'><div class='card'>{_verdict(s)}</div>"
+             f"<div class='card'><b>{s.get('hidden', 0)}</b> values hidden<br><span class='note'>{html.escape(kinds)}</span></div>"
+             f"<div class='card'><b>{s.get('lookups', 0)}</b> lookups by the AI</div>"
+             f"<div class='card'><b>Figures</b><br><span class='note'>{html.escape(figures)}</span></div></div>")
+    rows = "".join(
+        f"<tr><td>{_mark_values(h['value'], values) if h.get('value') else '<em>not kept</em>'}</td>"
+        f"<td><mark class='tok'>{html.escape(h['placeholder'])}</mark></td><td>{html.escape(h['kind'])}</td>"
+        f"<td class='note'>{html.escape(', '.join(h.get('where') or []))}</td></tr>" for h in story.get("hidden") or [])
+    hidden = ("<h3>1 · What was hidden</h3><table><tr><th>Real value</th><th>AI saw</th><th>Type</th><th>Where</th></tr>"
+              + rows + "</table>") if rows else "<h3>1 · What was hidden</h3><p class='note'>Nothing in this call.</p>"
+    steps = []
+    q = story.get("question")
+    if q:
+        label = "Facts sent" if purpose == "report_narration" else "Question"
+        real = (f"<div><span class='note'>Real:</span> {_mark_values(q['raw'], values)}</div>"
+                if q.get("raw") else "")
+        steps.append(f"<li><b>{label}</b>{real}<div><span class='note'>AI got:</span> {_mark_tokens(q['sent'])}</div></li>")
+    if story.get("earlier_turns"):
+        steps.append(f"<li><b>Earlier in this chat</b><div class='note'>{story['earlier_turns']} earlier "
+                     f"question(s) sent with the same placeholders.</div></li>")
+    for st in story.get("steps") or []:
+        bits = [f"{st['tries']} {'try' if st['tries'] == 1 else 'tries'}"]
+        if st.get("rows") is not None:
+            bits.append(f"{st['rows']} rows")
+        if st.get("failed"):
+            bits.append(f"{st['failed']} failed and retried")
+        ins = "".join(f"<div><span class='note'>AI asked for</span> <mark class='tok'>{html.escape(i['placeholder'])}</mark>"
+                      f"{' → ran with ' + _mark_values(i['value'], values) if i.get('value') else ''}</div>"
+                      for i in st.get("inputs") or [])
+        fields = "".join(f"<div><span class='note'>{html.escape(f['field'])}:</span> sent as "
+                         f"<mark class='tok'>{html.escape(f['placeholders'])}</mark></div>" for f in st.get("fields") or [])
+        steps.append(f"<li><b>{html.escape(st['title'])}</b> <span class='note'>· {html.escape(', '.join(bits))}</span>"
+                     f"{ins}{fields}</li>")
+    steps.append("<li><b>Answered</b></li>")
+    a = story.get("answer") or {}
+    answer = ("<h3>3 · The answer</h3><div class='two'><div class='box'><div class='note'>AI wrote</div><pre>"
+              + _mark_tokens(_plain(a.get("model") or "")) + "</pre></div><div class='box'><div class='note'>User saw</div><pre>"
+              + (_mark_values(_plain(a["user"]), values) if a.get("user") else "<em>Not kept (real-value side).</em>")
+              + "</pre></div></div>")
+    return cards + hidden + "<h3>2 · Step by step</h3><ol class='steps'>" + "".join(steps) + "</ol>" + answer
+
+
 def render(snap: Dict[str, Any]) -> str:
     values = list((snap.get("vault") or {}).values())
     stats = snap.get("stats") or {}
@@ -104,12 +161,14 @@ def render(snap: Dict[str, Any]) -> str:
         ]
         instructions = (f"<details><summary>AI instructions (system prompt) as sent</summary>"
                         f"<pre>{html.escape(sent.get('system', ''))}</pre></details>") if sent.get("system") else ""
+        full = ("<details><summary>Full record of this call (both sides, word for word)</summary><div class='panes'>"
+                + "".join(f"<div class='pane'><h3>{h}</h3><p class='note'>{n}</p><pre>{body}</pre></div>"
+                          for h, n, body in panes) + "</div></details>")
+        story = _story_html(call.get("story"), call.get("purpose"), values) if call.get("story") else (
+            f"<p>{verdict}</p>")
         calls_html.append(
             f"<section><h2>Call {i}: {html.escape(PURPOSE.get(call.get('purpose'), str(call.get('purpose'))))}</h2>"
-            f"<p>{verdict}</p><div class='panes'>"
-            + "".join(f"<div class='pane'><h3>{h}</h3><p class='note'>{n}</p><pre>{body}</pre></div>"
-                      for h, n, body in panes)
-            + "</div>" + instructions + "</section>")
+            + story + full + instructions + "</section>")
     summary = ", ".join(f"{v} {k.lower().replace('_', ' ')}" for k, v in sorted(hidden.items())) or "none"
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>Privacy snapshot {html.escape(str(snap.get('id')))}</title>
 <style>
@@ -123,6 +182,11 @@ pre{{white-space:pre-wrap;word-break:break-word;font:11.5px/1.5 ui-monospace,Con
 mark.tok{{background:#fdf0d2;color:#7a4d00}} mark.raw{{background:#fbe7e4;color:#b3261e}}
 .pill{{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:600;background:#eef0ef}}
 .ok{{background:#e2f3e7;color:#1f7a3d}} .bad{{background:#fbe7e4;color:#b3261e}}
+h3{{margin:18px 0 6px}} .cards{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:8px 0}}
+.card{{background:#f6f7f6;border-radius:8px;padding:8px 10px}} table{{border-collapse:collapse;width:100%;font-size:13px}}
+th,td{{text-align:left;padding:5px 8px;border-bottom:1px solid #e3e7e5}} th{{font-size:11px;color:#5b6866;text-transform:uppercase}}
+ol.steps{{padding-left:20px;margin:0}} ol.steps li{{margin:0 0 8px}} .two{{display:grid;grid-template-columns:1fr 1fr;gap:10px}}
+.box{{border:1px solid #d9dfdd;border-radius:8px;padding:8px}}
 @media print{{pre{{max-height:none}} .panes{{grid-template-columns:1fr 1fr}}}}
 </style></head><body>
 <h1>Privacy snapshot</h1>

@@ -97,9 +97,102 @@ const Verdict = ({ found }) => {
 };
 
 // One request, both sides: a tab per model call and four panes per call. Used by the snapshot list and the demo.
+// One call as a short story: what was hidden, step by step, and the answer on both sides. Built by the backend
+// (privacy/snapshot_story.py); the full record stays one click away.
+const Tok = ({ children }) => <mark style={{ ...styles.mark, ...styles.tok }}>{children}</mark>;
+const Real = ({ children }) => <mark style={{ ...styles.mark, ...styles.raw }}>{children}</mark>;
+
+const StoryView = ({ story, purpose, valueRx }) => {
+  const s = story.summary || {};
+  const kinds = Object.entries(s.hidden_by_kind || {}).map(([k, v]) => `${v} ${k.toLowerCase()}`).join(', ') || 'none';
+  const figures = s.figures_checked
+    ? (s.figures_changed ? `${s.figures_changed} of ${s.figures_checked} changed` : `${s.figures_checked} sent unchanged`)
+    : 'None in the data';
+  const q = story.question;
+  const a = story.answer || {};
+  return (
+    <div style={styles.story}>
+      <div style={styles.cards}>
+        <div style={{ ...styles.card, ...(s.sentinel_pass ? styles.ok : s.sentinel_found ? styles.bad : {}) }}>
+          <div style={styles.cardLabel}>Sentinel</div>
+          <div style={styles.cardValue}>{s.sentinel_pass ? 'Nothing personal sent' : s.sentinel_found
+            ? `Found: ${Object.entries(s.sentinel_found).map(([k, v]) => `${v} ${k}`).join(', ')}` : 'Not run'}</div>
+        </div>
+        <div style={styles.card}><div style={styles.cardLabel}>Values hidden</div>
+          <div style={styles.cardValue}>{s.hidden || 0} · <span style={styles.cardSub}>{kinds}</span></div></div>
+        <div style={styles.card}><div style={styles.cardLabel}>AI lookups</div>
+          <div style={styles.cardValue}>{s.lookups || 0}</div></div>
+        <div style={styles.card}><div style={styles.cardLabel}>Figures</div>
+          <div style={styles.cardValue}>{figures}</div></div>
+      </div>
+
+      <div style={styles.section}>1 · What was hidden</div>
+      {(story.hidden || []).length ? (
+        <div style={styles.grid}>
+          <div style={{ ...styles.gridRow, ...styles.gridHead }}><span>Real value</span><span>AI saw</span><span>Type</span><span>Where</span></div>
+          {story.hidden.map((h) => (
+            <div key={h.placeholder} style={styles.gridRow}>
+              <span>{h.value ? <Real>{h.value}</Real> : <em style={styles.muted}>not kept</em>}</span>
+              <span><Tok>{h.placeholder}</Tok></span>
+              <span>{h.kind}</span>
+              <span style={styles.muted}>{(h.where || []).join(', ')}</span>
+            </div>
+          ))}
+        </div>
+      ) : <div style={styles.muted}>Nothing to hide in this call.</div>}
+
+      <div style={styles.section}>2 · Step by step</div>
+      <ol style={styles.steps}>
+        {q && (
+          <li style={styles.step}>
+            <div style={styles.stepTitle}>{purpose === 'report_narration' ? 'Facts sent for the report summary' : 'Question'}</div>
+            {q.raw && <div><span style={styles.muted}>Real: </span>{highlight(q.raw, valueRx, styles.raw)}</div>}
+            <div><span style={styles.muted}>AI got: </span>{highlight(q.sent, TOKEN_RX, styles.tok)}</div>
+          </li>
+        )}
+        {story.earlier_turns > 0 && (
+          <li style={styles.step}>
+            <div style={styles.stepTitle}>Earlier in this chat</div>
+            <div style={styles.muted}>{story.earlier_turns} earlier question(s) sent with the same placeholders.</div>
+          </li>
+        )}
+        {(story.steps || []).map((st, i) => (
+          <li key={i} style={styles.step}>
+            <div style={styles.stepTitle}>
+              {st.title}
+              <span style={styles.muted}> · {st.tries} {st.tries === 1 ? 'try' : 'tries'}
+                {st.rows !== null && st.rows !== undefined ? `, ${st.rows} rows` : ''}
+                {st.failed ? `, ${st.failed} failed and retried` : ''}</span>
+            </div>
+            {(st.inputs || []).map((x) => (
+              <div key={x.placeholder}><span style={styles.muted}>AI asked for </span><Tok>{x.placeholder}</Tok>
+                {x.value && <><span style={styles.muted}> → we ran it with </span><Real>{x.value}</Real></>}</div>
+            ))}
+            {(st.fields || []).map((f) => (
+              <div key={f.field}><span style={styles.muted}>{f.field}: sent as </span><Tok>{f.placeholders}</Tok>
+                {f.values?.length ? <span style={styles.muted}> ({f.values.join(', ')}{f.count > f.values.length ? ', …' : ''})</span> : null}</div>
+            ))}
+          </li>
+        ))}
+        <li style={styles.step}><div style={styles.stepTitle}>Answered</div></li>
+      </ol>
+
+      <div style={styles.section}>3 · The answer</div>
+      <div style={styles.two}>
+        <div style={styles.box}><div style={styles.cardLabel}>AI wrote</div>
+          <MarkedMarkdown text={a.model} rx={TOKEN_RX} color={styles.tok} /></div>
+        <div style={styles.box}><div style={styles.cardLabel}>User saw</div>
+          {a.user ? <MarkedMarkdown text={a.user} rx={valueRx} color={styles.raw} />
+            : <em style={styles.muted}>Not kept (real-value side).</em>}</div>
+      </div>
+    </div>
+  );
+};
+
 const SnapshotDetail = ({ snap }) => {
   const [callIndex, setCallIndex] = useState(0);
   const [showSystem, setShowSystem] = useState(false);
+  const [full, setFull] = useState(false);
   useEffect(() => { setCallIndex(0); }, [snap?.id]);
 
   const valueRx = useMemo(() => {
@@ -110,7 +203,6 @@ const SnapshotDetail = ({ snap }) => {
 
   if (!snap) return null;
   const call = snap.calls?.[callIndex];
-  const hidden = snap.stats?.hidden || {};
   const sentLabel = snap.mode === 'on' ? '2 · Sent to the model' : '2 · Would be sent (shadow mode)';
   return (
     <>
@@ -119,9 +211,7 @@ const SnapshotDetail = ({ snap }) => {
         {snap.ts && <span>{localTime(snap.ts)}</span>}
         {snap.user_label && <span>{snap.user_label}</span>}
         {(snap.organization_names || []).length > 0 && <span>{snap.organization_names.join(', ')}</span>}
-        <span>Hidden: {Object.entries(hidden).map(([k, v]) => `${v} ${k.toLowerCase()}`).join(', ') || 'none'}</span>
-        <span>Unresolved placeholders: {snap.stats?.unresolved ?? 0}</span>
-        <span style={{ color: 'var(--ink-faint)' }}>Amounts, VAT, dates and document numbers stay visible by design.</span>
+        {(snap.stats?.unresolved ?? 0) > 0 && <span>Unresolved placeholders: {snap.stats.unresolved}</span>}
       </div>
       <div style={styles.tabs}>
         {(snap.calls || []).map((c, i) => (
@@ -130,12 +220,20 @@ const SnapshotDetail = ({ snap }) => {
             {PURPOSE[c.purpose] || c.purpose}
           </button>
         ))}
-        <button style={styles.linkBtn} onClick={() => setShowSystem((v) => !v)}>
-          {showSystem ? 'Hide AI instructions' : 'Show AI instructions'}
-        </button>
-        {call && <Verdict found={call.sentinel} />}
+        {call?.story && (
+          <button style={styles.linkBtn} onClick={() => setFull((v) => !v)}>
+            {full ? 'Show the summary' : 'Show full conversation'}
+          </button>
+        )}
+        {(full || !call?.story) && (
+          <button style={styles.linkBtn} onClick={() => setShowSystem((v) => !v)}>
+            {showSystem ? 'Hide AI instructions' : 'Show AI instructions'}
+          </button>
+        )}
+        {call && (full || !call.story) && <Verdict found={call.sentinel} />}
       </div>
-      {call && (
+      {call && call.story && !full && <StoryView story={call.story} purpose={call.purpose} valueRx={valueRx} />}
+      {call && (full || !call.story) && (
         <div style={styles.panes}>
           <Pane title="1 · What the request held" note="The question, the data the AI asked for, real values in red. Never sent to the AI.">
             {snap.raw_available ? highlight(conversationText(call.raw, showSystem), valueRx, styles.raw)
@@ -348,7 +446,7 @@ const styles = {
   detail: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0 },
   summary: { display: 'flex', flexWrap: 'wrap', gap: '4px 16px', fontSize: 12.5, color: 'var(--ink-soft)', marginBottom: 8 },
   tabs: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 },
-  tab: { border: '1px solid var(--border)', background: 'var(--surface)', borderRadius: 99, padding: '4px 12px', cursor: 'pointer', fontSize: 12.5, color: 'var(--ink)' },
+  tab: { borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--border)', background: 'var(--surface)', borderRadius: 99, padding: '4px 12px', cursor: 'pointer', fontSize: 12.5, color: 'var(--ink)' },
   tabActive: { background: 'var(--accent-soft)', borderColor: 'var(--accent)', color: 'var(--accent-ink)', fontWeight: 600 },
   panes: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10, flex: 1, minHeight: 0, overflowY: 'auto' },
   pane: { border: '1px solid var(--border)', borderRadius: 8, padding: 10, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 },
@@ -363,6 +461,22 @@ const styles = {
   bad: { background: 'var(--danger-soft)', color: 'var(--danger-ink)' },
   empty: { color: 'var(--ink-soft)', fontSize: 13, padding: 12 },
   viewTabs: { display: 'flex', gap: 4, marginRight: 8 },
+  story: { overflowY: 'auto', flex: 1, minHeight: 0, paddingRight: 4, fontSize: 13 },
+  cards: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8, marginBottom: 6 },
+  card: { background: 'var(--surface-2)', borderRadius: 8, padding: '8px 10px' },
+  cardLabel: { fontSize: 11, color: 'var(--ink-soft)', marginBottom: 2 },
+  cardValue: { fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' },
+  cardSub: { fontWeight: 400, color: 'var(--ink-soft)' },
+  section: { fontSize: 13, fontWeight: 700, margin: '14px 0 6px', color: 'var(--ink)' },
+  grid: { border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' },
+  gridRow: { display: 'grid', gridTemplateColumns: 'minmax(0,1.6fr) minmax(0,1fr) minmax(0,.7fr) minmax(0,1.3fr)', gap: 8, padding: '6px 10px', borderTop: '1px solid var(--border-soft)', alignItems: 'center' },
+  gridHead: { background: 'var(--surface-2)', fontSize: 11, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '.04em', borderTop: 'none' },
+  muted: { color: 'var(--ink-soft)' },
+  steps: { margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 10 },
+  step: { lineHeight: 1.6 },
+  stepTitle: { fontWeight: 600, color: 'var(--ink)' },
+  two: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 8 },
+  box: { border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', minWidth: 0 },
   linkBtn: { background: 'none', border: 'none', color: 'var(--link)', cursor: 'pointer', fontSize: 12.5, padding: '0 4px' },
   rich: { fontSize: 12.5, lineHeight: 1.55, background: 'var(--surface-2)', borderRadius: 6, padding: '8px 10px', overflow: 'auto', maxHeight: '62vh', color: 'var(--ink)' },
   md: { wordBreak: 'break-word' },

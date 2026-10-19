@@ -548,7 +548,7 @@ def _snapshot(prompt: _Prompt, raw_system: str, raw_user: str, reply_model: str,
                 raw_messages=[{"role": "user", "content": [{"text": raw_user}]}],
                 sent_system=caught(prompt.masked_system),
                 sent_messages=caught([{"role": "user", "content": [{"text": prompt.masked_user}]}]),
-                reply_model=reply_model, reply_user=reply_user)
+                reply_model=reply_model, reply_user=reply_user, question_index=0)
     snapshots.save(prompt.masking)
 
 

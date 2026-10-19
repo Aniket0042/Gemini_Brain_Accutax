@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from gemini_brain.api.auth import CurrentUser, get_current_user
 from gemini_brain.config.settings import settings
-from gemini_brain.privacy import snapshot_html, snapshots
+from gemini_brain.privacy import snapshot_html, snapshot_story, snapshots
 
 logger = logging.getLogger("gemini_brain.api.privacy")
 
@@ -91,7 +91,7 @@ def get_snapshot(snapshot_id: str, current_user: CurrentUser = Depends(get_curre
     if snap is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Snapshot not found")
     _audit(current_user, "view", snapshot_id)
-    return _labels([snap], current_user)[0]
+    return snapshot_story.attach(_labels([snap], current_user)[0])
 
 
 @router.get("/snapshots/{snapshot_id}/export", response_class=HTMLResponse, summary="One snapshot as an HTML page")
@@ -101,7 +101,7 @@ def export_snapshot(snapshot_id: str, current_user: CurrentUser = Depends(get_cu
     if snap is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Snapshot not found")
     _audit(current_user, "export", snapshot_id)
-    return HTMLResponse(snapshot_html.render(_labels([snap], current_user)[0]), headers={
+    return HTMLResponse(snapshot_html.render(snapshot_story.attach(_labels([snap], current_user)[0])), headers={
         "Content-Disposition": f'attachment; filename="privacy-snapshot-{snapshot_id}.html"',
         "Cache-Control": "no-store"})
 
@@ -140,8 +140,8 @@ def demo(body: DemoRequest, current_user: CurrentUser = Depends(get_current_user
     capture = result.capture
     _audit(current_user, "demo", getattr(capture, "id", ""))
     vault = getattr(getattr(capture, "vault", None), "_value_of", {}) or {}
-    return {
+    return snapshot_story.attach({
         "id": getattr(capture, "id", None), "mode": "on", "demo": True, "organization_ids": orgs,
         "answer": result.answer, "status": result.status, "stats": result.privacy, "raw_available": True,
-        "vault": dict(vault), "calls": list(getattr(capture, "calls", None) or []),
-    }
+        "vault": dict(vault), "calls": [dict(c) for c in getattr(capture, "calls", None) or []],
+    })

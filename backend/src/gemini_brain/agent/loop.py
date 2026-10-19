@@ -318,7 +318,7 @@ def run_agent(
             if masking is not None and masking.capture is not None:
                 masking.capture.add(purpose="agent_law", raw_system=LAW_SYSTEM_NOTE, raw_messages=messages,
                                     sent_system=LAW_SYSTEM_NOTE, sent_messages=outbound(), reply_model=model_text,
-                                    reply_user=law_answer.answer)
+                                    reply_user=law_answer.answer, question_index=_index_of(messages, asked))
                 snapshots.save(masking)
             return AgentResult(answer=law_answer.answer, status="ok", usage=law_answer.usage, route="law",
                                elapsed_ms=int((time.monotonic() - started) * 1000),
@@ -417,7 +417,7 @@ def run_agent(
         masking.capture.add(purpose="agent", model=writer_id, raw_system=raw_system, raw_messages=messages,
                             sent_system=masking.scrubber.replace_caught(sent_system),
                             sent_messages=masking.scrubber.replace_caught(masking.outbound(messages, asked)),
-                            reply_model=model_text, reply_user=answer)
+                            reply_model=model_text, reply_user=answer, question_index=_index_of(messages, asked))
         snapshots.save(masking)
     report =(verify_answer(answer, _evidence(ok_results, earlier_figures, document_evidence), enforce=False)
               if answer and status == "ok" else None)
@@ -442,6 +442,11 @@ def run_agent(
         ai_view=ai_view(model_text) if status == "ok" else {},
         capture=getattr(masking, "capture", None),
     )
+
+
+def _index_of(messages: Sequence[Dict[str, Any]], message: Optional[Dict[str, Any]]) -> Optional[int]:
+    """Where the user's question sits in the conversation, by identity (for the privacy snapshot's story)."""
+    return next((i for i, m in enumerate(messages) if m is message), None)
 
 
 def claims_books_unchecked(answer: str, data: Sequence[Dict[str, Any]]) -> bool:
