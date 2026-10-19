@@ -49,8 +49,11 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
     `documents`: the files attached to this question (uploads.context.resolve), already checked."""
     from gemini_brain.agent import models as agent_models
     from gemini_brain.agent.loop import run_agent
+    from gemini_brain.privacy import sensitive
 
     started = time.monotonic()
+    # A card number never goes further than this line: not to the model, the saved chat or any log.
+    question, dropped = sensitive.drop(question)
     orgs = [int(o) for o in organization_ids]
     session_id = usable_session_id(session_id)
     thread = thread_context(session_id, orgs, user_id, db_name)
@@ -86,7 +89,9 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
     _audit(data, docs, user_id=user_id, session_id=session_id, orgs=orgs)
     if review_cards:
         answer_text = _without_tables(answer_text)
-    blocks = (cards + tiles.kpi_tiles(data) + review_cards + list(getattr(result, "blocks", None) or [])
+    answer_text = sensitive.with_answer_line(answer_text, dropped)
+    warning = sensitive.notice_block(dropped)
+    blocks = ([warning] if warning else []) + (cards + tiles.kpi_tiles(data) + review_cards + list(getattr(result, "blocks", None) or [])
               + links.guide_buttons(data))
     blocks += _files(question, result, orgs, meta, user_id=user_id, session_id=session_id, answer_text=answer_text,
                      delivery=delivery, documents=docs)

@@ -398,6 +398,13 @@ class GeminiBrainSettings(BaseSettings):
             "hidden from the model, which ones in this question and answer, and what the model saw."
         ),
     )
+    pii_card_guard: str = Field(
+        default="on",
+        description=(
+            "on | off. on: a card number typed into the chat is removed from the question before the model, the "
+            "saved chat or any log sees it, never put back, and the user is warned on screen (privacy/sensitive.py)."
+        ),
+    )
     pii_demo_orgs: str = Field(
         default="",
         description=(

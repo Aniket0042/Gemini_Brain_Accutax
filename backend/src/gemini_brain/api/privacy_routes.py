@@ -135,7 +135,8 @@ def demo(body: DemoRequest, current_user: CurrentUser = Depends(get_current_user
     except Exception as e:  # noqa: BLE001 - names only label the answer
         logger.warning("privacy demo: organization names unavailable: %s", e)
         meta = {o: {"name": f"Organization {o}"} for o in orgs}
-    result = run_agent(body.question, orgs, meta, subject=f"privacy-demo:{current_user.user_id}",
+    from gemini_brain.privacy import sensitive
+    result = run_agent(sensitive.drop(body.question)[0], orgs, meta, subject=f"privacy-demo:{current_user.user_id}",
                        user_id=current_user.user_id, pii_mode="on", capture=True)
     capture = result.capture
     _audit(current_user, "demo", getattr(capture, "id", ""))

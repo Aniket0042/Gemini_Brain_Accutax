@@ -9,6 +9,7 @@ import { MarkdownLink } from './markdownLinks';
 import { SortableMarkdownTable } from './SortableMarkdownTable';
 import { ReportActions } from './blocks/ReportActions';
 import { PrivacyBadge } from './PrivacyBadge';
+import { SensitiveNotice } from './SensitiveNotice';
 import { CodeChrome } from './blocks/CodeBlock';
 import { SqlTraceCard } from './SqlTraceCard';
 import { ApiTraceCard } from './ApiTraceCard';
@@ -204,7 +205,11 @@ const AssistantResponseCard = ({
   // never as one of the answer's content blocks.
   const allBlocks = responseData?.blocks;
   const privacyBlock = Array.isArray(allBlocks) ? allBlocks.find((b) => b?.type === 'privacy') : null;
-  const blocks = Array.isArray(allBlocks) ? allBlocks.filter((b) => b?.type !== 'privacy') : allBlocks;
+  const sensitiveBlock = Array.isArray(allBlocks) ? allBlocks.find((b) => b?.type === 'sensitive_notice') : null;
+  const sensitiveKinds = sensitiveBlock?.kinds || msg.sensitiveRemoved;
+  const blocks = Array.isArray(allBlocks)
+    ? allBlocks.filter((b) => b?.type !== 'privacy' && b?.type !== 'sensitive_notice')
+    : allBlocks;
   const showBlocks = !isStreaming && hasPortedBlocks(blocks);
   const sources = isStreaming ? null : citationSources(blocks);
   const isSecurityError = Boolean(!notice && (responseData?.error || (responseData?.answer && responseData.answer.startsWith('Error:'))));
@@ -227,6 +232,8 @@ const AssistantResponseCard = ({
       <div style={styles.assistantContentCol}>
         
         <OrgChips organizations={responseData?.organizations} />
+
+        <SensitiveNotice kinds={sensitiveKinds} />
 
         {/* Notice Card for Empty / Partial / Degraded / Denied / Error states */}
         {notice && (

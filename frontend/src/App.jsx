@@ -16,6 +16,7 @@ import { clearUploadBlobs } from './services/uploadBlobs';
 import { FilePreviewPanel, ImageLightbox } from './components/FilePreview';
 import { Trash2 } from 'lucide-react';
 import { isSessionId, newSessionId } from './services/sessionId';
+import { dropCards } from './sensitive';
 import { useAuth0 } from '@auth0/auth0-react';
 
 // Minimal fallback shown only until /api/v1/tenants responds. Deliberately
@@ -1157,7 +1158,9 @@ export default function App() {
     } catch { /* ignore */ }
   };
 
-  const handleSubmitQuery = async (queryText, overrides = {}) => {
+  const handleSubmitQuery = async (typedText, overrides = {}) => {
+    // A card number is removed here, so it is never shown in the chat, kept in this browser or sent.
+    const { text: queryText, cards: cardsRemoved } = dropCards(typedText);
     if (activeHistoryId) {
       const openEntry = chatHistory.find((e) => e.id === activeHistoryId);
       const openKey = entryScopeKey(openEntry);
@@ -1190,6 +1193,7 @@ export default function App() {
       latestStatus: 'Understanding request',
       responseData: null,
       timestamp: Date.now(),
+      ...(cardsRemoved ? { sensitiveRemoved: ['CARD'] } : {}),
     };
     const nextConversation = [...conversation, userTurn, assistantTurn];
     setConversation(nextConversation);
