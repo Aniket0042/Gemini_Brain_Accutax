@@ -94,3 +94,31 @@ def test_export_leads_with_the_story_and_keeps_the_full_record():
         < page.index("Full record of this call")
     assert "Nothing personal sent" in page and "3 tries" in page and "1 failed and retried" in page
     assert "<script" not in page
+
+
+def test_the_question_is_the_title_and_one_line_when_nothing_was_hidden_in_it():
+    hidden_q = snapshot_story.attach({"id": "a", "mode": "on", "vault": VAULT, "stats": {},
+                                      "calls": [_call("Paid TRN 100234567800003?", "Paid TRN [TRN_1]?")]})
+    page = snapshot_html.render(hidden_q)
+    assert page.index("class='question'") < page.index("Request a")
+    assert "Paid TRN <mark class=\"raw\">100234567800003</mark>?" in page.split("Request a")[0]
+    plain = snapshot_story.attach({"id": "b", "mode": "on", "vault": VAULT, "stats": {},
+                                   "calls": [_call("top 10 customers", "top 10 customers")]})
+    page = snapshot_html.render(plain)
+    assert "“top 10 customers”" in page and "Nothing to hide in it: sent as typed." in page
+    assert "<span class='note'>Real:</span> top 10 customers" not in page
+
+
+def test_the_list_shows_the_question_as_sent(tmp_path, monkeypatch):
+    from gemini_brain.config.settings import settings
+    from gemini_brain.privacy import snapshots
+    monkeypatch.setattr(settings, "pii_snapshot_dir", str(tmp_path))
+    day = tmp_path / "2026-10-19"
+    day.mkdir()
+    call = _call("Paid TRN 100234567800003?", "Paid TRN [TRN_1]?")
+    (day / "0123456789abcdef.json").write_text(json.dumps(
+        {"id": "0123456789abcdef", "ts": "2026-10-19T06:38:00+00:00", "user_id": 5, "mode": "on",
+         "calls": [{k: call[k] for k in ("purpose", "sent", "reply_model", "sentinel", "question_index")}]}),
+        encoding="utf-8")
+    [item] = snapshots.recent()
+    assert item["question"] == "Paid TRN [TRN_1]?"                     # the list never holds real values

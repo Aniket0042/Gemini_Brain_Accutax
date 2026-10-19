@@ -202,6 +202,18 @@ def is_test_run(user_id: Any) -> bool:
     return user_id in (None, "", 0, "0")
 
 
+def _sent_question(snap: Dict[str, Any]) -> str:
+    """The request's question as the model got it (placeholders, no real values), for the snapshot list."""
+    from gemini_brain.privacy.snapshot_story import _texts, question_index
+    calls = [c for c in snap.get("calls") or [] if c.get("purpose") != "report_narration"] or snap.get("calls") or []
+    if not calls:
+        return ""
+    messages = (calls[0].get("sent") or {}).get("messages") or []
+    i = calls[0].get("question_index")
+    i = i if isinstance(i, int) and i < len(messages) else question_index(messages)
+    return " ".join(_texts(messages[i]))[:200] if i is not None else ""
+
+
 def recent(limit: int = 50, user_id: Any = None, include_test: bool = True) -> List[Dict[str, Any]]:
     """Summaries of the newest snapshots, newest first. `include_test=False` leaves out test runs."""
     out: List[Dict[str, Any]] = []
@@ -226,6 +238,7 @@ def recent(limit: int = 50, user_id: Any = None, include_test: bool = True) -> L
                 "hidden": sum((snap.get("stats") or {}).get("hidden", {}).values()),
                 "sentinel_pass": all(isinstance(f, dict) and not f for f in leaks) if leaks else None,
                 "raw_kept": bool(snap.get("raw_kept")) and path.with_suffix(".raw").exists(),
+                "question": _sent_question(snap),
             })
             if len(out) >= limit:
                 return out

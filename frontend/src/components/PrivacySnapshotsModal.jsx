@@ -146,8 +146,17 @@ const StoryView = ({ story, purpose, valueRx }) => {
         {q && (
           <li style={styles.step}>
             <div style={styles.stepTitle}>{purpose === 'report_narration' ? 'Facts sent for the report summary' : 'Question'}</div>
-            {q.raw && <div><span style={styles.muted}>Real: </span>{highlight(q.raw, valueRx, styles.raw)}</div>}
-            <div><span style={styles.muted}>AI got: </span>{highlight(q.sent, TOKEN_RX, styles.tok)}</div>
+            {q.raw !== null && q.raw !== undefined && q.raw === q.sent ? (
+              <>
+                <div>{q.sent}</div>
+                <div style={styles.muted}>Nothing to hide in it: sent as typed.</div>
+              </>
+            ) : (
+              <>
+                {q.raw && <div><span style={styles.muted}>Real: </span>{highlight(q.raw, valueRx, styles.raw)}</div>}
+                <div><span style={styles.muted}>AI got: </span>{highlight(q.sent, TOKEN_RX, styles.tok)}</div>
+              </>
+            )}
           </li>
         )}
         {story.earlier_turns > 0 && (
@@ -204,8 +213,16 @@ const SnapshotDetail = ({ snap }) => {
   if (!snap) return null;
   const call = snap.calls?.[callIndex];
   const sentLabel = snap.mode === 'on' ? '2 · Sent to the model' : '2 · Would be sent (shadow mode)';
+  // The request's question as its title: the chat or law answer's, else the first call's.
+  const stories = (snap.calls || []).map((c) => c.story).filter((s) => s?.question);
+  const asked = (stories.find((s) => s.purpose !== 'report_narration') || stories[0])?.question;
   return (
     <>
+      {asked && (
+        <div style={styles.title}>
+          “{asked.raw ? highlight(asked.raw, valueRx, styles.raw) : highlight(asked.sent, TOKEN_RX, styles.tok)}”
+        </div>
+      )}
       <div style={styles.summary}>
         <span>{snap.demo ? 'Live demo' : 'Request'} {snap.id}</span>
         {snap.ts && <span>{localTime(snap.ts)}</span>}
@@ -403,6 +420,11 @@ export const PrivacySnapshotsModal = ({ onClose, token = '', access = {}, orgIds
                 {list.map((item) => (
                   <button key={item.id} onClick={() => setSelected(item.id)}
                     style={{ ...styles.item, ...(item.id === selected ? styles.itemActive : {}) }}>
+                    {item.question && (
+                      <div style={styles.itemQuestion} title={item.question}>
+                        {highlight(item.question, TOKEN_RX, styles.tok)}
+                      </div>
+                    )}
                     <div style={styles.itemTop}>
                       <span>{localTime(item.ts)}</span>
                       {item.sentinel_pass === true && <span style={{ ...styles.dot, background: 'var(--success)' }} title="Nothing personal sent" />}
@@ -461,6 +483,8 @@ const styles = {
   bad: { background: 'var(--danger-soft)', color: 'var(--danger-ink)' },
   empty: { color: 'var(--ink-soft)', fontSize: 13, padding: 12 },
   viewTabs: { display: 'flex', gap: 4, marginRight: 8 },
+  title: { fontSize: 16, fontWeight: 600, color: 'var(--ink)', margin: '0 0 4px', lineHeight: 1.4 },
+  itemQuestion: { fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' },
   story: { overflowY: 'auto', flex: 1, minHeight: 0, paddingRight: 4, fontSize: 13 },
   cards: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8, marginBottom: 6 },
   card: { background: 'var(--surface-2)', borderRadius: 8, padding: '8px 10px' },

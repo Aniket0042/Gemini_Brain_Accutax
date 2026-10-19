@@ -105,9 +105,14 @@ def _story_html(story: Dict[str, Any], purpose: Any, values: List[str]) -> str:
     q = story.get("question")
     if q:
         label = "Facts sent" if purpose == "report_narration" else "Question"
-        real = (f"<div><span class='note'>Real:</span> {_mark_values(q['raw'], values)}</div>"
-                if q.get("raw") else "")
-        steps.append(f"<li><b>{label}</b>{real}<div><span class='note'>AI got:</span> {_mark_tokens(q['sent'])}</div></li>")
+        if q.get("raw") is not None and q["raw"] == q["sent"]:  # nothing to hide in it: one line, said so
+            steps.append(f"<li><b>{label}</b><div>{html.escape(q['sent'])}</div>"
+                         f"<div class='note'>Nothing to hide in it: sent as typed.</div></li>")
+        else:
+            real = (f"<div><span class='note'>Real:</span> {_mark_values(q['raw'], values)}</div>"
+                    if q.get("raw") else "")
+            steps.append(f"<li><b>{label}</b>{real}<div><span class='note'>AI got:</span> "
+                         f"{_mark_tokens(q['sent'])}</div></li>")
     if story.get("earlier_turns"):
         steps.append(f"<li><b>Earlier in this chat</b><div class='note'>{story['earlier_turns']} earlier "
                      f"question(s) sent with the same placeholders.</div></li>")
@@ -131,6 +136,14 @@ def _story_html(story: Dict[str, Any], purpose: Any, values: List[str]) -> str:
               + (_mark_values(_plain(a["user"]), values) if a.get("user") else "<em>Not kept (real-value side).</em>")
               + "</pre></div></div>")
     return cards + hidden + "<h3>2 · Step by step</h3><ol class='steps'>" + "".join(steps) + "</ol>" + answer
+
+
+def _question_of(snap: Dict[str, Any]) -> Any:
+    """(real question or None, question as sent) of the request: its chat or law answer's question, else the
+    first call's. None when no call has one."""
+    stories = [c.get("story") for c in snap.get("calls") or [] if c.get("story") and c["story"].get("question")]
+    first = next((s for s in stories if s.get("purpose") != "report_narration"), stories[0] if stories else None)
+    return (first["question"].get("raw"), first["question"]["sent"]) if first else None
 
 
 def render(snap: Dict[str, Any]) -> str:
@@ -170,6 +183,9 @@ def render(snap: Dict[str, Any]) -> str:
             f"<section><h2>Call {i}: {html.escape(PURPOSE.get(call.get('purpose'), str(call.get('purpose'))))}</h2>"
             + story + full + instructions + "</section>")
     summary = ", ".join(f"{v} {k.lower().replace('_', ' ')}" for k, v in sorted(hidden.items())) or "none"
+    asked = _question_of(snap)
+    question = (f"<p class='question'>“{_mark_values(asked[0], values) if asked[0] else _mark_tokens(asked[1])}”</p>"
+                if asked else "")
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>Privacy snapshot {html.escape(str(snap.get('id')))}</title>
 <style>
 body{{font:14px/1.5 system-ui,Segoe UI,sans-serif;color:#18201f;background:#fff;margin:24px}}
@@ -187,9 +203,11 @@ h3{{margin:18px 0 6px}} .cards{{display:grid;grid-template-columns:repeat(4,minm
 th,td{{text-align:left;padding:5px 8px;border-bottom:1px solid #e3e7e5}} th{{font-size:11px;color:#5b6866;text-transform:uppercase}}
 ol.steps{{padding-left:20px;margin:0}} ol.steps li{{margin:0 0 8px}} .two{{display:grid;grid-template-columns:1fr 1fr;gap:10px}}
 .box{{border:1px solid #d9dfdd;border-radius:8px;padding:8px}}
+.question{{font-size:18px;font-weight:600;margin:6px 0 8px}}
 @media print{{pre{{max-height:none}} .panes{{grid-template-columns:1fr 1fr}}}}
 </style></head><body>
 <h1>Privacy snapshot</h1>
+{question}
 <p class="meta">Request {html.escape(str(snap.get('id')))} · {html.escape(_when(snap.get('ts')))} · {html.escape(str(snap.get('user_label') or f"user {snap.get('user_id')}"))}
  · {html.escape(', '.join(snap.get('organization_names') or [str(o) for o in snap.get('organization_ids') or []]))} · PII_MODE {html.escape(str(snap.get('mode')))}</p>
 <p class="meta">Values hidden: {html.escape(summary)}. Placeholders left unresolved: {stats.get('unresolved', 0)}.
