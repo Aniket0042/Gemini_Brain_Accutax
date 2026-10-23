@@ -535,28 +535,39 @@ def get_user_emails(user_ids: list[int], db_name: str = "") -> dict[int, str]:
 
 
 def get_user_allowed_orgs(user_id: int, db_name: str = "") -> list[int]:
-    """Organizations the user is granted in user_organizations or owns via organizations.user_id."""
-    return _query_user_allowed_orgs(user_id, db_name) or []
+    """Organizations of a local login: Accutax's rule (owned, or invited as a collaborator) plus the
+    local grants in user_organizations."""
+    return _query_user_allowed_orgs(user_id, db_name, local_grants=True) or []
 
 
-_DB_ORG_CACHE: dict[int, tuple[float, list[int]]] = {}
+_DB_ORG_CACHE: dict[tuple[int, bool], tuple[float, list[int]]] = {}
+
+# The rule of Accutax's all_organizations (auth.service fetchAllOrganizations), so a database answer
+# grants what the Accutax dashboard would: organizations the user owns, and those whose collaborator
+# invitation is ACTIVE or INVITED, matched by the accepting user or by email.
+_ACCUTAX_ACCESS_SQL = """
+    SELECT id FROM public.organizations WHERE user_id = %(uid)s
+    UNION
+    SELECT c.organization_id FROM public.collaborators c
+    WHERE c.organization_id IS NOT NULL
+      AND c.status IN ('ACTIVE', 'INVITED')
+      AND (c.accepted_by_user_id = %(uid)s
+           OR LOWER(TRIM(c.email)) = (SELECT LOWER(TRIM(u.email)) FROM public.users u WHERE u.id = %(uid)s))
+"""
+# Grants of the AI's own test accounts (SEED_TEST_USERS). Accutax does not read this table, so only
+# local logins use it.
+_LOCAL_GRANTS_SQL = "UNION SELECT organization_id FROM public.user_organizations WHERE user_id = %(uid)s"
 
 
-def _query_user_allowed_orgs(user_id: int, db_name: str = "") -> list[int] | None:
-    """Like get_user_allowed_orgs, but None when the database could not answer."""
+def _query_user_allowed_orgs(user_id: int, db_name: str = "", *, local_grants: bool = False) -> list[int] | None:
+    """Organizations the database grants the user, or None when it could not answer.
+    `local_grants`: include user_organizations, for local logins only."""
     try:
         conn = get_connection(db_name)
         cur = conn.cursor()
         try:
-            cur.execute(
-                """
-                SELECT organization_id FROM public.user_organizations WHERE user_id = %s
-                UNION
-                SELECT id FROM public.organizations WHERE user_id = %s
-                ORDER BY 1;
-                """,
-                (user_id, user_id),
-            )
+            sql = _ACCUTAX_ACCESS_SQL + (_LOCAL_GRANTS_SQL if local_grants else "") + " ORDER BY 1;"
+            cur.execute(sql, {"uid": user_id})
             return [int(r[0]) for r in cur.fetchall()]
         finally:
             cur.close()
@@ -570,22 +581,24 @@ def _live_allowed_org_ids(user_id: int, accutax_token: str = "") -> list[int] | 
     """Current organization access from the source of truth, or None if unreachable.
 
     Accutax's own organization list comes first, since it is what the dashboard
-    switcher shows (owners and collaborators). The database is the fallback,
-    and the only source for locally issued tokens. Both answers are cached for
-    the same TTL, so revoked access stops working within that window.
+    switcher shows (owners and collaborators). The database is the fallback, by
+    the same rule, and the only source for locally issued tokens, which also get
+    the local grants. Both answers are cached for the same TTL, so revoked access
+    stops working within that window.
     """
     if accutax_token:
         live = _fetch_accutax_orgs(accutax_token, user_id)
         if live is not None:
             return [int(t["id"]) for t in live]
 
+    local = not accutax_token
     now = time.time()
-    cached = _DB_ORG_CACHE.get(user_id)
+    cached = _DB_ORG_CACHE.get((user_id, local))
     if cached and (now - cached[0]) < _ACCUTAX_ORG_CACHE_TTL_SECONDS:
         return cached[1]
-    from_db = _query_user_allowed_orgs(user_id)
+    from_db = _query_user_allowed_orgs(user_id, local_grants=local)
     if from_db is not None:
-        _DB_ORG_CACHE[user_id] = (now, from_db)
+        _DB_ORG_CACHE[(user_id, local)] = (now, from_db)
     return from_db
 
 
