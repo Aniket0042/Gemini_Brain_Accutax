@@ -362,6 +362,15 @@ class GeminiBrainSettings(BaseSettings):
             "Empty (the default) turns it off."
         ),
     )
+    usage_ledger: str = Field(
+        default="",
+        description=(
+            "JSON-lines file with one line per piece of AI spend (an agent answer, a file read, a model call made "
+            "outside both), relative to backend/, for example logs/ai_usage.jsonl: user, organizations, their owners "
+            "and the owner charged, models, tokens, cost and credits (1 credit = $0.001). Records only; nothing is "
+            "limited. Rotates at 50 MB, keeping 5 files. Empty (the default) turns it off."
+        ),
+    )
 
     # ── Privacy (PII plan) ─────────────────────────────────────
     pii_mode: str = Field(

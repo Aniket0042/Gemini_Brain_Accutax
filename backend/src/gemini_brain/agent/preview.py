@@ -47,6 +47,21 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
     `model_key`: the model the user picked ("auto" or None: the thread's last pick, else the default);
     `allowed_models`: the keys this user may pick (agent/models.allowed), checked here.
     `documents`: the files attached to this question (uploads.context.resolve), already checked."""
+    from gemini_brain.usage import ledger
+    with ledger.scope("agent_answer", user_id=user_id, organization_ids=organization_ids,
+                      session_id=session_id) as spend:
+        response = _answer(question, organization_ids, org_meta, session_id=session_id, user_id=user_id,
+                           db_name=db_name, progress=progress, brief=brief, model_key=model_key,
+                           allowed_models=allowed_models, documents=documents)
+        spend.status = str(response.get("status") or "ok")
+        return response
+
+
+def _answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[], Dict[int, Dict[str, Any]]], *,
+            session_id: Optional[str], user_id: int, db_name: str = "",
+            progress: Optional[Callable[[str], None]] = None, brief: bool = False,
+            model_key: Optional[str] = None, allowed_models: Optional[Sequence[str]] = None,
+            documents: Optional[Sequence[Any]] = None) -> Dict[str, Any]:
     from gemini_brain.agent import models as agent_models
     from gemini_brain.agent.loop import run_agent
     from gemini_brain.privacy import sensitive
