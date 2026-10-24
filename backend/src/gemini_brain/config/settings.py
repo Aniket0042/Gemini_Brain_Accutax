@@ -371,6 +371,28 @@ class GeminiBrainSettings(BaseSettings):
             "limited. Rotates at 50 MB, keeping 5 files. Empty (the default) turns it off."
         ),
     )
+    usage_db: str = Field(
+        default="off",
+        description=("on: also write each piece of AI spend to the usage tables (scripts/ops/usage_limits.sql), "
+                     "which the limits and the usage pages read. off (the default): the JSON-lines ledger only."),
+    )
+    usage_enforce: str = Field(
+        default="off",
+        description=("AI usage limits (docs/ORG_TOKEN_LIMITS_STRATEGY.md). off: no check. log: check and log what "
+                     "would happen. soft: also show usage bars and warnings, block nothing. hard: also switch to the "
+                     "lite model and block at the limits. Needs USAGE_DB=on."),
+    )
+    usage_timezone: str = Field(default="Asia/Dubai",
+                                description="Time zone of the daily cap's midnight and the monthly bucket's first day.")
+    usage_lite_model: str = Field(default="haiku-4.5",
+                                  description="Model key (agent/models.py) that answers when an owner's bucket is used up.")
+    usage_platform_alert_usd: float = Field(default=25.0, description="Platform AI spend a day (UTC) that raises an alert.")
+    usage_platform_pause_usd: float = Field(
+        default=100.0, description="Platform AI spend a day (UTC) at which AI pauses for everyone but super-admins.")
+    usage_rate_per_minute: int = Field(default=5, description="Questions a user may send in one minute (USAGE_ENFORCE=hard).")
+    usage_admins: str = Field(
+        default="", description=("Comma-separated emails or user ids who may open the AI usage admin page, besides "
+                                 "users with is_super_admin."))
 
     # ── Privacy (PII plan) ─────────────────────────────────────
     pii_mode: str = Field(

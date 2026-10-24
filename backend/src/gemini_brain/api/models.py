@@ -194,6 +194,7 @@ class QueryResponse(BaseModel):
     api_traces: List[Dict[str, Any]] = Field(default_factory=list, description="Accutax REST API calls (endpoint, params, status) executed during query evaluation.")
     llm_traces: List[Dict[str, Any]] = Field(default_factory=list, description="Bedrock/Claude LLM calls (model, purpose, tokens, duration) executed during query evaluation.")
     context_window: Optional[Dict[str, Any]] = Field(default=None, description="Session's cumulative token usage against a fixed budget, independent of the selected model. {used, limit, remaining, percent}.")
+    usage: Optional[Dict[str, Any]] = Field(default=None, description="AI usage of the buckets this question charged: {mode: full|lite, banner, internal, owners: [{owner_user_id, plan_label, percent, state, resets_at, user}]}. None when limits are off.")
     results: List[Any] = Field(default_factory=list, description="Raw structured results list.")
     error: Optional[str] = Field(default=None, description="Error message if processing failed.")
     status: str = Field(default="ok", description="ok | empty | partial | degraded | failed")

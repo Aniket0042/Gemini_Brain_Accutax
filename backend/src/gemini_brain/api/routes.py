@@ -687,6 +687,12 @@ def create_upload(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="organization_ids must be numbers.")
     if orgs:
         orgs = authorize_org_scope(orgs, current_user, action="uploads.create")
+    from gemini_brain.usage import limits
+    decision = limits.check(current_user.user_id, orgs or [int(o) for o in (current_user.allowed_org_ids or [])[:1]],
+                            kind="document_read")
+    if decision.action == limits.BLOCK:  # reading the file would call a model the bucket cannot pay for
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                            detail={"code": decision.code, "message": decision.message})
 
     chunks, total = [], 0
     while True:  # read in pieces and stop at the limit instead of holding an oversized body

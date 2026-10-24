@@ -9,7 +9,9 @@ import { Header } from './components/Header';
 import { IntroSuggestions } from './components/IntroSuggestions';
 import { ModelHealthModal } from './components/ModelHealthModal';
 import { AnswerCanvas } from './components/canvas/AnswerCanvas';
-import { fetchQueryResponse, streamQueryResponse, fetchTenants, fetchModelCatalog, fetchSessionMessages, createChatSession, deleteChatSession, fetchUploadConfig, fetchPrivacyAccess } from './services/api';
+import { fetchQueryResponse, streamQueryResponse, fetchTenants, fetchModelCatalog, fetchSessionMessages, createChatSession, deleteChatSession, fetchUploadConfig, fetchPrivacyAccess, fetchUsage } from './services/api';
+import { UsageModal } from './components/UsageModal';
+import { worstOwner } from './components/UsageMeter';
 import { PrivacySnapshotsModal } from './components/PrivacySnapshotsModal';
 import { chipsFromBlocks, kindGroup } from './services/attachments';
 import { clearUploadBlobs } from './services/uploadBlobs';
@@ -268,6 +270,9 @@ export default function App() {
   const [showHealthModal, setShowHealthModal] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [privacyAccess, setPrivacyAccess] = useState({ admin: false });
+  // AI usage of the chosen organizations' buckets (null when usage tracking is off).
+  const [usage, setUsage] = useState(null);
+  const [showUsage, setShowUsage] = useState(false);
 
   // Execution & Streaming State
   const [isLoading, setIsLoading] = useState(false);
@@ -1139,6 +1144,15 @@ export default function App() {
     };
   }, [currentUser?.access_token]);
 
+  // AI usage: on sign-in, on a new organization selection, and after each answer (isLoading turns false).
+  useEffect(() => {
+    const token = currentUser?.access_token;
+    if (!token || isLoading) return undefined;
+    let cancelled = false;
+    fetchUsage(scopeOrgIds, token).then((u) => { if (!cancelled) setUsage(u); });
+    return () => { cancelled = true; };
+  }, [currentUser?.access_token, scopeKey, isLoading]);
+
   // A different chat: its files are not this chat's. Close any preview and forget the files fetched for it.
   useEffect(() => {
     setPreviewFile(null);
@@ -1588,6 +1602,8 @@ export default function App() {
           maxOrgs={multiOrg.max}
           onOpenHealthModal={() => setShowHealthModal(true)}
           onOpenPrivacy={privacyAccess.admin ? () => setShowPrivacy(true) : undefined}
+          usage={usage}
+          onOpenUsage={() => setShowUsage(true)}
         />
         <div className="main-stage">
         <div ref={chatScrollAreaRef} style={styles.chatScrollArea}>
@@ -1624,6 +1640,7 @@ export default function App() {
 
       <div style={styles.stickyBottomBar}>
         <div style={styles.inputInnerWrapper}>
+          <UsageBanner usage={usage} />
           <QueryInput
             onSubmitQuery={handleSubmitQuery}
             onStop={handleStopQuery}
@@ -1695,6 +1712,10 @@ export default function App() {
         />
       )}
 
+      {showUsage && usage && (usage.is_owner || usage.is_admin) && (
+        <UsageModal token={currentUser?.access_token || ''} usage={usage} onClose={() => { setShowUsage(false); fetchUsage(scopeOrgIds, currentUser?.access_token || '').then(setUsage); }} />
+      )}
+
       {showPrivacy && privacyAccess.admin && (
         <PrivacySnapshotsModal
           token={currentUser?.access_token || ''}
@@ -1709,6 +1730,29 @@ export default function App() {
     </div>
   );
 }
+
+// A line above the question box when this month's AI is running low, on the lite model, or used up.
+const UsageBanner = ({ usage }) => {
+  const owner = worstOwner(usage);
+  if (!usage || usage.internal || !owner || usage.enforce === 'off' || usage.enforce === 'log') return null;
+  const renews = owner.resets_at ? new Date(owner.resets_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '';
+  const mine = owner.user;
+  let text = '';
+  if (owner.state === 'blocked') text = `This month's AI is used up for ${usage.owners.length > 1 ? 'one of these organizations' : 'this organization'}. It renews on ${renews}.`;
+  else if (owner.state === 'lite') text = `This month's AI is used up, so answers come from a faster, lighter model until ${renews}.`;
+  else if (mine?.disabled) text = 'The account owner has turned AI off for you for this organization.';
+  else if (mine?.percent != null && mine.percent >= 100) text = "You have used today's AI. It is available again at midnight.";
+  else if (owner.state === 'warn') text = `${owner.percent}% of this month's AI is used. It renews on ${renews}.`;
+  else if (mine?.percent != null && mine.percent >= 80) text = `You have used ${mine.percent}% of your AI for today.`;
+  if (!text) return null;
+  const strong = owner.state === 'blocked' || mine?.disabled || (mine?.percent ?? 0) >= 100;
+  return (
+    <div role="status" style={{ fontSize: 12.5, padding: '6px 12px', marginBottom: 6, borderRadius: 8,
+      background: strong ? 'var(--danger-soft)' : 'var(--warning-soft)', color: strong ? 'var(--danger-ink)' : 'var(--warning-ink)' }}>
+      {text}
+    </div>
+  );
+};
 
 const styles = {
   chatScrollArea: {

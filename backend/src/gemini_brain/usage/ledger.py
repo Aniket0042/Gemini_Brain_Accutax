@@ -11,8 +11,12 @@ BedrockAdapter calls add_call() for each model call. A call outside any scope (a
 health check) is written alone with kind "unscoped", so no spend is missed.
 
 1 credit = $0.001 of model cost. An organization's owner is organizations.user_id. A scope that reads the
-organizations of several owners is charged to them in equal parts. Writing never raises and never changes an
-answer. USAGE_LEDGER empty (the default) turns it off.
+organizations of several owners is charged to them in equal parts; a super-admin's spend is charged to owner 0
+(internal). Writing never raises and never changes an answer.
+
+Two outputs, each with its own switch: the JSON-lines file USAGE_LEDGER (empty: off) and, with USAGE_DB=on, the usage
+tables the limits read. With the tables, a scope opens as a running event holding RESERVE_CREDITS against its owners
+(so several questions at once cannot overspend a bucket) and closes with the real cost.
 """
 from __future__ import annotations
 
@@ -36,6 +40,8 @@ CREDITS_PER_USD = 1000
 #: What the limit check will hold before a question (the 90th percentile question, in credits). Recorded with
 #: each line so the hold can be compared with the real cost before enforcement starts.
 RESERVE_CREDITS = 35
+#: The owner charged for Accutax's own use (super-admins) and for spend whose owner is not known.
+INTERNAL_OWNER = 0
 MAX_BYTES = 50 * 1024 * 1024
 BACKUPS = 5
 _BACKEND_ROOT = Path(__file__).resolve().parents[3]
@@ -50,12 +56,23 @@ class Scope:
     organization_ids: List[int]
     session_id: Optional[str] = None
     status: str = "ok"
+    #: full, or lite when the owner's bucket was used up and a cheaper model answered.
+    model_mode: str = "full"
+    event_id: Optional[int] = None
     calls: List[Dict[str, Any]] = field(default_factory=list)
     started: float = field(default_factory=time.monotonic)
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
 
 _current: ContextVar[Optional[Scope]] = ContextVar("usage_scope", default=None)
+
+
+def db_on() -> bool:
+    return (settings.usage_db or "off").strip().lower() == "on"
+
+
+def recording() -> bool:
+    return log_path() is not None or db_on()
 
 
 def log_path() -> Optional[Path]:
@@ -67,13 +84,16 @@ def log_path() -> Optional[Path]:
 
 
 @contextmanager
-def scope(kind: str, *, user_id: Any, organization_ids: Sequence[Any], session_id: Optional[str] = None) -> Iterator[Scope]:
+def scope(kind: str, *, user_id: Any, organization_ids: Sequence[Any], session_id: Optional[str] = None,
+          model_mode: str = "full") -> Iterator[Scope]:
     """Collect the model calls made inside, and write them as one line on the way out (also after an error)."""
     try:
         orgs = [int(o) for o in organization_ids or [] if o is not None]
     except (TypeError, ValueError):
         orgs = []
-    s = Scope(kind=kind, user_id=_int(user_id), organization_ids=orgs, session_id=session_id)
+    s = Scope(kind=kind, user_id=_int(user_id), organization_ids=orgs, session_id=session_id, model_mode=model_mode)
+    if db_on():
+        _open(s)
     token = _current.set(s)
     try:
         yield s
@@ -82,8 +102,8 @@ def scope(kind: str, *, user_id: Any, organization_ids: Sequence[Any], session_i
         raise
     finally:
         _current.reset(token)
-        if log_path() is not None:
-            _write(_entry(s))
+        if recording():
+            _finish(s)
 
 
 def current() -> Optional[Scope]:
@@ -103,15 +123,14 @@ def attach(s: Optional[Scope]) -> Iterator[None]:
 def add_call(model_id: str, label: str, purpose: str, usage: Dict[str, Any]) -> None:
     """One model call, with Bedrock's usage dict (inputTokens, outputTokens, cacheReadInputTokens, ...)."""
     try:
-        if log_path() is None:
+        if not recording():
             return
         call = _call(model_id, label, purpose, usage or {})
         if not any(call[k] for k in ("input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens")):
             return  # the call failed before the model ran: nothing was billed
         s = _current.get()
         if s is None:
-            alone = Scope(kind="unscoped", user_id=None, organization_ids=[], status="ok", calls=[call])
-            _write(_entry(alone))
+            _finish(Scope(kind="unscoped", user_id=None, organization_ids=[], status="ok", calls=[call]))
             return
         with s.lock:
             s.calls.append(call)
@@ -157,16 +176,18 @@ def _entry(s: Scope) -> Dict[str, Any]:
         cost += c["cost_usd"]
     credits = round(cost * CREDITS_PER_USD, 3)
     owners = owners_of(s.organization_ids)
+    payers = [INTERNAL_OWNER] if _internal(s.user_id) else [owners.get(o) for o in s.organization_ids]
     return {
         "ts": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
         "kind": s.kind,
         "status": s.status,
+        "model_mode": s.model_mode,
         "user_id": s.user_id,
         "session_id": s.session_id,
         "organization_ids": s.organization_ids,
         "owners": {str(o): owners.get(o) for o in s.organization_ids},
         "relationship": {str(o): _relationship(s.user_id, owners.get(o)) for o in s.organization_ids},
-        "charge": split_charge(credits, [owners.get(o) for o in s.organization_ids]),
+        "charge": split_charge(credits, payers),
         "calls": len(calls),
         "models": models,
         **totals,
@@ -175,6 +196,52 @@ def _entry(s: Scope) -> Dict[str, Any]:
         "reserved_credits": RESERVE_CREDITS if s.kind == "agent_answer" else 0,
         "elapsed_s": round(time.monotonic() - s.started, 2),
     }
+
+
+def _open(s: Scope) -> None:
+    """The running event and its holds, before any model call. Without it the scope is still written at the end."""
+    try:
+        from gemini_brain.usage import store
+        hold = RESERVE_CREDITS if s.kind == "agent_answer" else 0
+        owners = owners_of(s.organization_ids)
+        payers = [INTERNAL_OWNER] if _internal(s.user_id) else [owners.get(o) for o in s.organization_ids]
+        s.event_id = store.open_event(s.kind, s.user_id, s.session_id, s.organization_ids,
+                                      db_charges(split_charge(hold, payers)), s.model_mode)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("usage ledger: hold not taken: %s", e)
+
+
+def _finish(s: Scope) -> None:
+    entry = _entry(s)
+    if log_path() is not None:
+        _write(entry)
+    if db_on():
+        try:
+            from gemini_brain.usage import store
+            store.close_event(s.event_id, entry, db_charges(entry["charge"]))
+        except Exception as e:  # noqa: BLE001
+            logger.warning("usage ledger: event not saved: %s", e)
+
+
+def db_charges(charge: Dict[str, float]) -> Dict[int, float]:
+    """The charge as the tables keep it: owner id -> credits, with "unknown" and "none" folded into owner 0."""
+    out: Dict[int, float] = {}
+    for owner, credits in charge.items():
+        key = int(owner) if str(owner).lstrip("-").isdigit() else 0
+        out[key] = round(out.get(key, 0) + float(credits), 3)
+    return out
+
+
+def _internal(user_id: Optional[int]) -> bool:
+    """A super-admin's spend is Accutax's own (owner 0), not the customer's. False when it cannot be checked."""
+    if user_id is None or not db_on():
+        return False
+    try:
+        from gemini_brain.usage import store
+        return store.is_super_admin(user_id)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("usage ledger: super-admin check failed: %s", e)
+        return False
 
 
 def split_charge(credits: float, owners: Sequence[Optional[int]]) -> Dict[str, float]:

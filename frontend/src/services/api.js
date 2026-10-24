@@ -383,3 +383,42 @@ export const runPrivacyDemo = async (question, organizationIds = [], token = '')
   if (!response.ok) throw failure(response.status, body);
   return body;
 };
+
+// ── AI usage (docs/ORG_TOKEN_LIMITS_STRATEGY.md): bars for everyone, the owner page, the admin page ──
+const usageJson = async (path, token, init = {}) => {
+  const response = await fetch(`/api/v1/usage${path}`, {
+    ...init,
+    headers: { Accept: 'application/json', ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...authHeaders(token) },
+  });
+  if (!response.ok) {
+    let detail = `Request failed (${response.status})`;
+    try { detail = (await response.json()).detail || detail; } catch { /* keep the status */ }
+    throw new Error(typeof detail === 'string' ? detail : detail.message || 'Request failed');
+  }
+  return response.json();
+};
+
+// null when usage tracking is off or the call fails: the app then shows no meter.
+export const fetchUsage = async (orgIds = [], token = '') => {
+  try {
+    const qs = orgIds.length ? `?org_ids=${orgIds.map(Number).join(',')}` : '';
+    return await usageJson(qs, token);
+  } catch {
+    return null;
+  }
+};
+export const fetchOwnerUsage = (token = '') => usageJson('/owner', token);
+export const setMemberCap = (userId, dailyCredits, disabled, token = '') =>
+  usageJson(`/owner/members/${encodeURIComponent(userId)}`, token, {
+    method: 'PUT', body: JSON.stringify({ daily_credits: dailyCredits, disabled }),
+  });
+export const fetchUsageAdmin = (token = '') => usageJson('/admin', token);
+export const fetchUsageAdminOwner = (ownerId, token = '') => usageJson(`/admin/owners/${encodeURIComponent(ownerId)}`, token);
+export const setOwnerPlan = (ownerId, plan, monthlyCredits, userDailyCredits, token = '') =>
+  usageJson(`/admin/owners/${encodeURIComponent(ownerId)}/plan`, token, {
+    method: 'PUT', body: JSON.stringify({ plan, monthly_credits: monthlyCredits, user_daily_credits: userDailyCredits }),
+  });
+export const addOwnerTopup = (ownerId, credits, reason, expiresDays, token = '') =>
+  usageJson(`/admin/owners/${encodeURIComponent(ownerId)}/topups`, token, {
+    method: 'POST', body: JSON.stringify({ credits, reason, expires_days: expiresDays }),
+  });

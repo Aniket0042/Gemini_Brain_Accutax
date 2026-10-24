@@ -223,6 +223,8 @@ def create_app() -> FastAPI:
     app.include_router(router)
     from gemini_brain.api.privacy_routes import router as privacy_router
     app.include_router(privacy_router)
+    from gemini_brain.api.usage_routes import router as usage_router
+    app.include_router(usage_router)
 
     return app
 

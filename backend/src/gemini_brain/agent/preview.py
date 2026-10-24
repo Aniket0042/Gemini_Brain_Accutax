@@ -47,14 +47,29 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
     `model_key`: the model the user picked ("auto" or None: the thread's last pick, else the default);
     `allowed_models`: the keys this user may pick (agent/models.allowed), checked here.
     `documents`: the files attached to this question (uploads.context.resolve), already checked."""
-    from gemini_brain.usage import ledger
-    with ledger.scope("agent_answer", user_id=user_id, organization_ids=organization_ids,
-                      session_id=session_id) as spend:
-        response = _answer(question, organization_ids, org_meta, session_id=session_id, user_id=user_id,
-                           db_name=db_name, progress=progress, brief=brief, model_key=model_key,
-                           allowed_models=allowed_models, documents=documents)
-        spend.status = str(response.get("status") or "ok")
+    from gemini_brain.usage import ledger, limits
+    decision = limits.check(user_id, organization_ids)
+    if decision.action == limits.BLOCK:
+        return limits.refused_response(decision)
+    if decision.enforce == "hard" and not decision.internal:
+        busy = limits.gate.enter(int(user_id))
+        if busy is not None:
+            return limits.refused_response(busy)
+    try:
+        if decision.action == limits.LITE:  # the owner's bucket is used up: a cheaper model answers
+            model_key = settings.usage_lite_model
+            allowed_models = list(dict.fromkeys(list(allowed_models or []) + [model_key]))
+        with ledger.scope("agent_answer", user_id=user_id, organization_ids=organization_ids,
+                          session_id=session_id, model_mode=decision.model_mode) as spend:
+            response = _answer(question, organization_ids, org_meta, session_id=session_id, user_id=user_id,
+                               db_name=db_name, progress=progress, brief=brief, model_key=model_key,
+                               allowed_models=allowed_models, documents=documents)
+            spend.status = str(response.get("status") or "ok")
+        response["usage"] = limits.public(decision)
         return response
+    finally:
+        if decision.enforce == "hard" and not decision.internal:
+            limits.gate.leave(int(user_id))
 
 
 def _answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[], Dict[int, Dict[str, Any]]], *,

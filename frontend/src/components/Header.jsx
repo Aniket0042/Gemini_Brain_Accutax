@@ -1,6 +1,7 @@
 import React from 'react';
 import { PanelLeft, Plus, Sun, Moon, MonitorSmartphone, Activity, ShieldCheck } from 'lucide-react';
 import { TenantSwitcher } from './TenantSwitcher';
+import { UsageMeter } from './UsageMeter';
 
 // Icon and label per theme state — cycling System → Light → Dark → System,
 // same order and single-icon-button pattern as the reference products.
@@ -25,6 +26,8 @@ export const Header = ({
   maxOrgs = 1,
   onOpenHealthModal,
   onOpenPrivacy,
+  usage,
+  onOpenUsage,
 }) => {
   const { icon: ThemeIcon, label: themeLabel } = THEME_META[theme] || THEME_META.system;
 
@@ -52,6 +55,7 @@ export const Header = ({
       </div>
 
       <div style={styles.headerRight}>
+        <UsageMeter usage={usage} onOpen={onOpenUsage} />
         {onOpenPrivacy && (
           <button
             className="icon-btn"

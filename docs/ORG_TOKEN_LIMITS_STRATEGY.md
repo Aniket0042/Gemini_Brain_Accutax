@@ -15,7 +15,7 @@ The research (section "Sources", added 23 Oct) agrees with the design below. The
 | 2 | **Credits, not tokens or messages** | 1 credit = $0.001. A long hard question costs more credits than a short one, so the bucket is fair. Users see a percent bar, never token numbers. | Designed (4.1). |
 | 3 | **Speed limits and money limits are two different things** | Speed limit: 1 question at a time per user, 5 a minute (stops loops and abuse). Money limit: the monthly bucket (stops overspend). Both are checked. | Designed (4.2 levels 1 and 4 vs 2 and 3). |
 | 4 | **Bucket per owner account, sized per organization and seat** | All organizations of one owner share one bucket. Each organization and each paid user adds credits to it (how Miro and Notion pool per seat). Heavy and light users balance out. Auditors and accountants who work across owners are covered in 0.1. | Revised 23 Oct (0.1). Numbers set after measuring. |
-| 5 | **Personal cap inside the bucket** | Default 1,000 credits a day per user. The organization admin can lower it for a person. | Designed (4.2 level 3). |
+| 5 | **Personal cap inside the bucket** | Default 1,000 credits a day per user. The owner can lower or raise it for a person (decided 24 Oct). | Designed (4.2 level 3). |
 | 6 | **Hold, then settle** | Before a question runs, hold an estimated 35 credits. After it finishes, replace the hold with the real cost. This stops five people at once from spending past an almost-empty bucket. Failed questions are not charged. | Designed (4.5). |
 | 7 | **Warn at 50% and 80%, go "lite" at 100%, then stop** | At 100% law and VAT questions continue on the cheaper model (Haiku); questions that read company data stop with a clear message and the reset date. Never cut off a question halfway. Background jobs (upload reading, VAT review) check the bucket before they start, never in the middle. | Designed (4.4). |
 | 8 | **Spend less, not just limit more** | The cheapest question is the one that costs less to answer: keep prompt caching on (already saves money per call), send simple questions to the cheaper model, cap tool result size and chat history (planned in `USAGE_LIMITS_DESIGN.md`). | Caching live. Routing and history budget planned. |
@@ -107,15 +107,30 @@ SELECT status, account_type_id, count(*) FROM public.collaborators GROUP BY 1, 2
 
 **Monthly bucket rules.** Unused credits do not roll over. Top-ups (bought or granted) last 12 months. Paid overage is off until Accutax has a billing system; the design keeps a place for it (`at_limit = overage`).
 
+**Built end to end, 24 Oct 2026** (the measurement wait was skipped at the user's request; plan sizes are the defaults below until real use says otherwise).
+
+| Part | Where | What it does |
+|---|---|---|
+| Tables | `backend/scripts/ops/usage_limits.sql` (rollback `usage_limits_rollback.sql`), applied to `accutax_bk_1_5` | `ai_owner_plans`, `ai_user_caps`, `ai_topups`, `ai_usage_events`, `ai_usage_charges`, `ai_usage_alerts`; `gemini_brain_ro` may read and write them |
+| Plans | `usage/plans.py` | Trial 2,000 / Standard 10,000 / Pro 25,000 credits per seat a month (seats = owner + ACTIVE collaborators), default daily caps 300 / 1,000 / 2,000, Unlimited for internal and demo. No row = Standard. Lite model for 10% more after the bucket is used, then blocked. |
+| Ledger | `usage/ledger.py` | Every model call metered. A question opens a running event holding 35 credits against its owners, and closes with the real cost. Super-admins are charged to owner 0 (internal). |
+| Check | `usage/limits.py` | Before each question and file upload: platform day spend (alert $25, pause $100), each owner's bucket, the person's daily cap or "AI off", one question at a time and 5 a minute. A failed check lets the question through. |
+| Answer path | `agent/preview.py`, `api/routes.py` | Blocked: a "Usage limit" notice, no model call. Lite: the agent answers with `USAGE_LITE_MODEL` (Haiku 4.5). Each answer carries a `usage` block for the bars. |
+| API | `api/usage_routes.py` | `GET /api/v1/usage` (percent bars), `/usage/owner` and `PUT /usage/owner/members/{id}` (owner raises, lowers or turns off a person's daily cap, within the bucket), `/usage/admin`, plan and top-up endpoints (super-admins and `USAGE_ADMINS`). |
+| App | `UsageMeter.jsx`, `UsageModal.jsx`, `App.jsx`, `NoticeCard.jsx` | Header meter (percent), banner above the question box at 80%, lite and used up, owner page (bucket, people, daily caps), Accutax admin page (spend, owners, plan, top-ups, alerts). |
+| Switches | `.env` | `USAGE_DB=on`, `USAGE_ENFORCE=off|log|soft|hard`, `USAGE_LITE_MODEL`, `USAGE_PLATFORM_ALERT_USD`, `USAGE_PLATFORM_PAUSE_USD`, `USAGE_RATE_PER_MINUTE`, `USAGE_TIMEZONE`, `USAGE_ADMINS`. Roll back: `USAGE_ENFORCE=off`, restart. |
+
+Differences from the earlier design: owners see credit amounts on their own page (they set daily caps in credits, shown also as "about N questions"); everyone else sees percentages only. There is no weekly cap, only the daily one. Alerts (50%, 80%, 100%, lite used up, platform alert and pause, a person spending 5 times their usual day) go to `ai_usage_alerts`, the service log and the admin page; there is no email, because the AI service has no mail sender.
+
 **Step 1 built 23 Oct 2026.** `usage/ledger.py` meters every Bedrock call in `BedrockAdapter` (and the module-level helpers). Agent answers (`agent/preview.py`) and file reads (`uploads/reader.py`) each write one line to `USAGE_LEDGER` (VM: `logs/ai_usage.jsonl`) with user, organizations, owners, the owner charged, models, tokens, cost and credits. Calls outside both (reports built outside a chat, health checks) are written as `unscoped`. Report: `python scripts/usage_report.py logs/ai_usage.jsonl [--month YYYY-MM]`. Turn off: empty `USAGE_LEDGER` and restart.
 
 **What we build first (needs no database change).** Step 1 of the rollout can start now: a usage recorder that writes every AI call (agent, upload, VAT review) with user, active organization, all organization ids, model, tokens, estimated and actual credits to a JSONL file, plus a monthly report per organization (median, 95th, 99th percentile). The database tables in section 5 come after the DBA go-ahead.
 
-**Recommended answers to the open decisions (section 8), for your confirmation:**
+**Decisions, 24 Oct 2026 (section 8):**
 
-- Decision 2: include AI in the Accutax plan with a per-seat bucket (like Wafeq and Ramp, who bundle AI), not a separate add-on, until real usage shows heavy users need a paid tier.
+- Decision 2: AI is **included in the Accutax plan**, with a per-seat bucket (like Wafeq and Ramp, who bundle AI). No separate add-on.
 - Decision 3: at 100%, go "lite" (cheaper model) and then block. No paid overage until billing exists.
-- Decision 4: organization admins may only lower personal caps. Raising goes through Accutax super-admin.
+- Decision 4: the owner can **lower and raise** each person's cap. Raising cannot add credits: the owner's monthly bucket still limits the total.
 - Decision 5: ask the DBA only after the two-week measurement, with real numbers in hand.
 
 ## 1. What the two terms mean here
@@ -303,9 +318,9 @@ Rollback at any stage: `USAGE_ORG_ENFORCE=off` and restart `accutax-ai-api`.
 ## 8. Decisions needed from you
 
 1. ~~Rule for multi-org questions.~~ Decided 15 Oct 2026: charge the active organization now, record the split, move to a billing account later. **Revised and decided 23 Oct 2026 (see 0.1):** charge the owner account (`organizations.user_id`). Questions across several owners are split between them. Collaborators get a cap inside each owner's bucket.
-2. Whether AI plans follow existing Accutax pricing, or are a separate AI add-on (like Wafeq's add-ons).
-3. Default action at 100%: block, degrade, or paid overage.
-4. Whether organization admins may raise user caps or only lower them.
+2. ~~Whether AI plans follow existing Accutax pricing, or are a separate AI add-on.~~ Decided 24 Oct 2026: included in the Accutax plan.
+3. ~~Default action at 100%.~~ Decided 24 Oct 2026: degrade to the lite model, then block.
+4. ~~Whether organization admins may raise user caps or only lower them.~~ Decided 24 Oct 2026: the owner may lower and raise them, within the owner's bucket.
 5. DBA go-ahead for the five tables.
 
 ## Sources
