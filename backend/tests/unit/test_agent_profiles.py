@@ -130,8 +130,8 @@ def test_the_vat_agent_keeps_the_law_route(monkeypatch, fake_loop):
 # ── Cash card ────────────────────────────────────────────────────────────────
 
 def _forecast(oid, name, closing):
-    weeks = [{"week_start": day, "closing_cash": str(c)}
-             for day, c in zip(("2026-10-26", "2026-11-02", "2026-11-09"), closing)]
+    weeks = [{"week_start": start, "week_end": end, "closing_cash": str(c)} for (start, end), c in zip(
+        (("2026-10-25", "2026-10-25"), ("2026-10-26", "2026-11-01"), ("2026-11-02", "2026-11-08")), closing)]
     return {"organization_id": oid, "organization_name": name, "currency": "AED", "opening_cash": "1000.00",
             "weeks": weeks, "closing_cash": str(closing[-1]), "lowest_closing_cash": str(min(closing)),
             "overdue_receivables": "250.00", "overdue_payables": "75.50"}
@@ -145,7 +145,7 @@ def test_cash_card_for_one_organization_has_tiles_and_a_line_chart():
     assert grid["type"] == "kpi_grid" and grid["period"] == "2026-10-26 to 2026-11-15"
     assert [i["label"] for i in grid["items"]][:3] == ["Cash today", "Lowest week", "Closing cash"]
     assert grid["items"][1]["value"] == "AED -50.00"
-    assert chart["chart_type"] == "line" and chart["categories"] == ["26 Oct", "02 Nov", "09 Nov"]
+    assert chart["chart_type"] == "line" and chart["categories"] == ["19 Oct", "26 Oct", "02 Nov"]
     assert chart["series"] == [{"name": "Org Two", "data": [900.0, -50.0, 300.0]}]
 
 

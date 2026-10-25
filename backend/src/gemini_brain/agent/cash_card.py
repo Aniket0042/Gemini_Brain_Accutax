@@ -44,7 +44,7 @@ def cash_blocks(data: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
         "caption": _caption(result, currencies, len(orgs) - len(shown)),
         "x_label": "Week starting",
         "y_label": next(iter(currencies)) if len(currencies) == 1 else "",
-        "categories": [_week(w.get("week_start")) for w in weeks],
+        "categories": [_week(w) for w in weeks],
         "series": [{"name": o.get("organization_name") or f"Organization {o.get('organization_id')}",
                     "data": [_float(w.get("closing_cash")) for w in o["weeks"][:len(weeks)]]} for o in shown],
     })
@@ -77,11 +77,12 @@ def _caption(result: Dict[str, Any], currencies: set, hidden: int) -> str:
     return " ".join(parts)
 
 
-def _week(value: Any) -> str:
+def _week(week: Dict[str, Any]) -> str:
+    """The Monday a week starts on. The first week's week_start is today, so it is taken from week_end."""
     try:
-        return dt.date.fromisoformat(str(value)[:10]).strftime("%d %b")
+        return (dt.date.fromisoformat(str(week.get("week_end"))[:10]) - dt.timedelta(days=6)).strftime("%d %b")
     except ValueError:
-        return str(value)
+        return str(week.get("week_start") or "")
 
 
 def _decimal(value: Any) -> Optional[Decimal]:
