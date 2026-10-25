@@ -64,9 +64,11 @@ def _checked_citations(text: str, blocks: Any) -> tuple:
     return text, report
 
 
-def answer(question: str, messages: List[Dict[str, Any]], brief: bool = False) -> Optional[LawAnswer]:
+def answer(question: str, messages: List[Dict[str, Any]], brief: bool = False,
+           model_id: Optional[str] = None) -> Optional[LawAnswer]:
     """The knowledge-base answer, or None when this is not a law question the knowledge base
-    answers confidently (the tool loop then handles it). Never raises."""
+    answers confidently (the tool loop then handles it). Never raises. `model_id`: instead of the knowledge
+    base's own model (the lite model when the owner's AI for the month is used up)."""
     if about_the_organizations(question) or _ARABIC.search(question or ""):
         return None
     try:
@@ -79,7 +81,7 @@ def answer(question: str, messages: List[Dict[str, Any]], brief: bool = False) -
         if not vat.model_id:
             return None
         system = vat.system + BRIEF_LAW if brief and isinstance(vat.system, str) else vat.system
-        adapter = BedrockAdapter(vat.model_id, label="agent-law")
+        adapter = BedrockAdapter(model_id or vat.model_id, label="agent-law")
         text = adapter.converse(system, messages, max_tokens=vat.max_tokens, purpose="agent_law")
         answer_text, report = _checked_citations(tidy_answer(text or ""), vat.blocks)
         return LawAnswer(answer=answer_text, usage=adapter.get_token_usage(), blocks=vat.blocks)

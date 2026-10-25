@@ -30,7 +30,7 @@ class FakeDB:
     def install(self, monkeypatch):
         m = monkeypatch.setattr
         m(store, "plan_row", lambda o: self.plans.get(o))
-        m(store, "seats", lambda o: self.seat_count.get(o, 1))
+        m(store, "seats", lambda o, as_of=None: self.seat_count.get(o, 1))
         m(store, "topup_credits", lambda o: self.topups.get(o, 0.0))
         m(store, "owner_used", lambda o, since: self.used.get(o, 0.0))
         m(store, "user_used", lambda o, u, since: self.user_today.get((o, u), 0.0))
@@ -325,7 +325,7 @@ class _Cursor:
         self.sql.append(sql)
 
     def fetchone(self):
-        return self.counts if "COUNT(*)" in self.sql[-1] else (11,)
+        return self.counts if "COUNT(" in self.sql[-1] else (11,)
 
     def close(self):
         pass
@@ -353,3 +353,61 @@ def test_store_opens_the_event_when_under_the_limits(monkeypatch):
     cur = _open_with((0, 4), monkeypatch)
     assert store.open_event("agent_answer", 50, None, [24], {7: 35}, gate=(1, 5)) == 11
     assert any("INSERT INTO public.ai_usage_events" in s for s in cur.sql) and cur.sql[-1] == "COMMIT"
+
+
+# ── Seats and lite law answers ───────────────────────────────────────────────
+
+def test_seats_are_capped_by_the_plan(db, hard):
+    db.seat_count[7] = 40                                 # 40 people, Standard allows 10 seats
+    st = limits.check(50, [24]).owners[0]
+    assert st["seats"] == 10 and st["seats_counted"] == 40 and st["bucket"] == 100_000
+
+
+def test_seats_are_counted_as_the_month_began(db, hard, monkeypatch):
+    asked = []
+    monkeypatch.setattr(store, "seats", lambda o, as_of=None: asked.append(as_of) or 1)
+    limits.check(50, [24])
+    assert asked == [limits.periods().month_start]
+
+
+def test_store_seats_ignore_people_who_joined_this_month(monkeypatch):
+    cur = _open_with((3,), monkeypatch)
+    month = limits.periods().month_start
+    assert store.seats(7, month) == 4
+    sql = cur.sql[0]
+    assert "COALESCE(c.approved_at, c.accepted_at) < %s::timestamptz" in sql and "status = 'ACTIVE'" in sql
+
+
+def test_lite_answers_use_the_lite_model_for_vat_law_too(db, hard, monkeypatch):
+    from gemini_brain.agent import models as agent_models
+    seen = []
+    _agent(monkeypatch, seen)
+    db.used[7] = 20_500                                   # lite
+    preview.answer("Is VAT due on exports?", [24], lambda: {}, session_id=None, user_id=53)
+    assert seen[0]["law_model_id"] == agent_models.get("haiku-4.5").bedrock_id()
+    db.used[7] = 0                                        # full
+    preview.answer("Is VAT due on exports?", [24], lambda: {}, session_id=None, user_id=53)
+    assert "law_model_id" not in seen[1]
+
+
+def test_law_route_uses_the_model_it_is_given(monkeypatch):
+    from gemini_brain.agent import law
+    from gemini_brain.reasoning import bedrock_client
+    from gemini_brain.vat_kb import augment as vat_augment
+    used = []
+
+    class Adapter:
+        def __init__(self, model_id, label=""):
+            used.append(model_id)
+
+        def converse(self, *a, **k):
+            return "Exports are zero-rated [1]."
+
+        def get_token_usage(self):
+            return {}
+    monkeypatch.setattr(bedrock_client, "BedrockAdapter", Adapter)
+    monkeypatch.setattr(vat_augment, "augment", lambda *a: SimpleNamespace(
+        model_id="kb-model", system="sys", max_tokens=100, blocks=[]))
+    law.answer("Is VAT due on exports?", [{"role": "user", "content": [{"text": "q"}]}], model_id="lite-model")
+    law.answer("Is VAT due on exports?", [{"role": "user", "content": [{"text": "q"}]}])
+    assert used == ["lite-model", "kb-model"]

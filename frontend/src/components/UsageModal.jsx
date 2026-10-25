@@ -37,7 +37,11 @@ const BucketSummary = ({ bucket, typical }) => (
     <div style={styles.card}>
       <div style={styles.cardLabel}>Plan</div>
       <div style={styles.cardValue}>{bucket.plan_label}</div>
-      <div style={styles.cardSub}>{bucket.seats} seat{bucket.seats === 1 ? '' : 's'}{bucket.topups ? ` · +${num(bucket.topups)} top-up` : ''}</div>
+      <div style={styles.cardSub}>
+        {bucket.seats} seat{bucket.seats === 1 ? '' : 's'}
+        {bucket.seats_counted > bucket.seats ? ` (plan max ${bucket.max_seats})` : ''}
+        {bucket.topups ? ` · +${num(bucket.topups)} top-up` : ''}
+      </div>
     </div>
     <div style={styles.card}>
       <div style={styles.cardLabel}>Status</div>
@@ -118,7 +122,8 @@ const OwnerView = ({ token }) => {
     <div style={styles.scroll}>
       <p style={styles.note}>
         One monthly AI allowance covers all your organizations. When it is used up, answers come from a lighter model
-        for a little longer, then stop until it renews. A daily limit stops one person from using it all; leave it empty
+        for a little longer, then stop until it renews. Each person who was on your team when the month began adds to
+        it (people who join count from next month). A daily limit stops one person from using it all; leave it empty
         for your plan's default. 1 credit = $0.001; a typical question is about {data.typical_question_credits} credits.
       </p>
       <BucketSummary bucket={data.bucket} typical={data.typical_question_credits} />
@@ -165,7 +170,7 @@ const OwnerAdmin = ({ ownerId, plans, token, onChanged }) => {
       <div style={styles.form}>
         <label style={styles.field}>Plan
           <select value={plan} onChange={(e) => setPlan(e.target.value)} style={styles.input}>
-            {plans.map((p) => <option key={p.key} value={p.key}>{p.label}{p.per_seat ? ` · ${num(p.per_seat)}/seat` : ''}</option>)}
+            {plans.map((p) => <option key={p.key} value={p.key}>{p.label}{p.per_seat ? ` · ${num(p.per_seat)}/seat, max ${p.max_seats}` : ''}</option>)}
           </select>
         </label>
         <label style={styles.field}>Monthly credits (override)

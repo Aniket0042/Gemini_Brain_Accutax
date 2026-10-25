@@ -1,6 +1,8 @@
 """
 plans.py — The AI plans an owner account can be on (docs/ORG_TOKEN_LIMITS_STRATEGY.md 4.3). AI is included in the
 Accutax plan: each seat (the owner and each active collaborator) adds credits to the owner's monthly bucket.
+Seats are counted as they were when the month began, up to the plan's max_seats, so inviting people (or fake
+accounts) does not grow this month's bucket; a bigger bucket is a plan change or a top-up by Accutax.
 
 1 credit = $0.001. A typical question costs about 20 credits, the worst about 90.
 """
@@ -18,12 +20,14 @@ class Plan:
     per_seat: Optional[float]
     #: A person's default daily cap inside the bucket. None: no cap.
     user_daily: Optional[float]
+    #: Most seats that add credits. More people may still use AI; they share the bucket. None: no bucket anyway.
+    max_seats: Optional[int] = None
 
 
 PLANS = {
-    "trial": Plan("trial", "Trial", 2_000, 300),
-    "standard": Plan("standard", "Standard", 10_000, 1_000),
-    "pro": Plan("pro", "Pro", 25_000, 2_000),
+    "trial": Plan("trial", "Trial", 2_000, 300, max_seats=2),
+    "standard": Plan("standard", "Standard", 10_000, 1_000, max_seats=10),
+    "pro": Plan("pro", "Pro", 25_000, 2_000, max_seats=50),
     "unlimited": Plan("unlimited", "Unlimited (internal, demo)", None, None),
 }
 DEFAULT = "standard"

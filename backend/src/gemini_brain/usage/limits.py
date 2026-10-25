@@ -97,7 +97,8 @@ def owner_state(owner: int, user_id: Optional[int], p: Periods) -> Dict[str, Any
     from gemini_brain.usage import store
     row = store.plan_row(owner) or {}
     plan = plans.get(row.get("plan"))
-    seats = store.seats(owner)
+    counted = store.seats(owner, p.month_start)  # as the month began: new people count from next month
+    seats = min(counted, plan.max_seats) if plan.max_seats else counted
     topups = store.topup_credits(owner)
     if plan.per_seat is None:
         bucket = None
@@ -116,7 +117,8 @@ def owner_state(owner: int, user_id: Optional[int], p: Periods) -> Dict[str, Any
     else:
         state = "ok"
     out: Dict[str, Any] = {
-        "owner_user_id": owner, "plan": plan.key, "plan_label": plan.label, "seats": seats, "topups": topups,
+        "owner_user_id": owner, "plan": plan.key, "plan_label": plan.label, "seats": seats,
+        "seats_counted": counted, "max_seats": plan.max_seats, "topups": topups,
         "bucket": bucket, "used": round(used, 3), "percent": _pct(used, bucket), "state": state,
         "resets_at": p.next_month.isoformat(), "user": None,
     }

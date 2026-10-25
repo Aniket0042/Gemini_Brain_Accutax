@@ -180,7 +180,8 @@ def admin_page(current_user: CurrentUser = Depends(get_current_user)) -> Dict[st
                      "alert_usd": settings.usage_platform_alert_usd, "pause_usd": settings.usage_platform_pause_usd},
         "internal_month_credits": round(internal.get("month_credits", 0), 1),
         "owners": sorted(owners, key=lambda o: -(o["percent"] or 0)),
-        "plans": [{"key": pl.key, "label": pl.label, "per_seat": pl.per_seat, "user_daily": pl.user_daily}
+        "plans": [{"key": pl.key, "label": pl.label, "per_seat": pl.per_seat, "user_daily": pl.user_daily,
+                   "max_seats": pl.max_seats}
                   for pl in plans.PLANS.values()],
         "alerts": store.recent_alerts(50),
     }

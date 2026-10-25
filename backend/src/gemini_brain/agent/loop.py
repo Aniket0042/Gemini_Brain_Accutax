@@ -254,6 +254,7 @@ def run_agent(
     session_id: Optional[str] = None,
     pii_mode: Optional[str] = None,
     capture: bool = False,
+    law_model_id: Optional[str] = None,
 ) -> AgentResult:
     """Answer one question. Never raises. `progress(tool_name, tool_input)` is called before each tool runs.
     `history`: the thread's earlier messages; `turn_specs`: what its turns queried (history.add_spec);
@@ -261,7 +262,8 @@ def run_agent(
     `documents`: the prompt block about files attached to this question and earlier in the chat; `document_ids`:
     the files read_document may serve; `document_evidence`: their fields, as evidence for the verifier.
     `pii_mode`: masking for this request instead of PII_MODE; `capture`: keep its privacy snapshot whatever
-    PII_SNAPSHOTS says (the privacy page's live demo uses both)."""
+    PII_SNAPSHOTS says (the privacy page's live demo uses both). `law_model_id`: the model of the law route
+    instead of the knowledge base's own (usage limits' lite mode)."""
     started = time.monotonic()
     deadline = started + (deadline_seconds or settings.agent_deadline_seconds)
     budget = max_tool_calls or settings.agent_max_tool_calls
@@ -310,7 +312,8 @@ def run_agent(
 
         # With files in the chat the law shortcut is skipped: it answers from the question alone.
         law_answer = None if documents or document_ids else law.answer(
-            question, [dict(m) for m in (outbound() if masked else messages)], brief=brief)
+            question, [dict(m) for m in (outbound() if masked else messages)], brief=brief,
+            **({"model_id": law_model_id} if law_model_id else {}))
         if law_answer is not None:
             model_text = law_answer.answer
             if masked:

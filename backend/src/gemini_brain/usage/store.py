@@ -220,12 +220,16 @@ def topups_of(owner: int) -> List[Dict[str, Any]]:
 
 # ── People ───────────────────────────────────────────────────────────────────
 
-def seats(owner: int) -> int:
-    """The owner plus each person with an ACTIVE collaborator invitation to one of the owner's organizations."""
+def seats(owner: int, as_of: Optional[datetime.datetime] = None) -> int:
+    """The owner plus each person with an ACTIVE collaborator invitation to one of the owner's organizations,
+    accepted (or approved) before `as_of`. A row with neither time is an old one and counts."""
     row = _run("""SELECT COUNT(DISTINCT c.accepted_by_user_id) FROM public.collaborators c
                   JOIN public.organizations o ON o.id = c.organization_id
                   WHERE o.user_id = %s AND c.status = 'ACTIVE' AND c.accepted_by_user_id IS NOT NULL
-                    AND c.accepted_by_user_id <> %s""", (owner, owner), fetch="one")
+                    AND c.accepted_by_user_id <> %s
+                    AND (%s::timestamptz IS NULL OR COALESCE(c.approved_at, c.accepted_at) IS NULL
+                         OR COALESCE(c.approved_at, c.accepted_at) < %s::timestamptz)""",
+               (owner, owner, as_of, as_of), fetch="one")
     return 1 + int(row[0] or 0)
 
 
