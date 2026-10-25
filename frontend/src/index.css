@@ -2857,6 +2857,7 @@ a.vr-bill-number:hover { text-decoration: underline; }
 .agent-vat  { --agent-hue: 14, 138, 117; }
 .agent-ap   { --agent-hue: 196, 112, 24; }
 .agent-cash { --agent-hue: 104, 84, 196; }
+.agent-reporting { --agent-hue: 40, 120, 200; }
 
 .agents-panel {
   width: 100%;
@@ -2868,7 +2869,7 @@ a.vr-bill-number:hover { text-decoration: underline; }
 .agents-panel-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
 .agents-panel-title { font-size: var(--text-sm); font-weight: 600; color: var(--ink); letter-spacing: 0.02em; }
 .agents-panel-sub { font-size: var(--text-xs); color: var(--ink-soft); }
-.agents-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.agents-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
 @media (max-width: 760px) { .agents-grid { grid-template-columns: 1fr; } }
 
 .agent-card {

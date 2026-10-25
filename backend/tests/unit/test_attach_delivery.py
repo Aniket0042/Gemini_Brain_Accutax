@@ -110,3 +110,12 @@ def test_chart_only_request_has_no_primary_artifact():
     artifacts = [b for b in out if b["type"] == "artifact"]
     assert artifacts
     assert not any(a.get("primary") for a in artifacts)
+
+
+def test_every_named_format_is_primary():
+    """"as PDF and Excel" shows both buttons; the bonus csv stays in the canvas only."""
+    data = [{"month": "Jul 2026", "revenue": 100, "net_profit": 20}, {"month": "Aug 2026", "revenue": 120, "net_profit": 25}]
+    out = attach_delivery("Month-end pack as PDF and Excel: profit and loss report by month", data, [])
+    artifacts = [b for b in out if b["type"] == "artifact"]
+    assert {a["kind"] for a in artifacts if a.get("primary")} == {"pdf", "xlsx"}
+    assert any(a["kind"] == "csv" and not a.get("primary") for a in artifacts)

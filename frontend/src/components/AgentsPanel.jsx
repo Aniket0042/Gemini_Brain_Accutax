@@ -1,12 +1,12 @@
 import React from 'react';
-import { Sparkles, Receipt, FileCheck, Wallet, Play, MessageSquare, Clock } from 'lucide-react';
+import { Sparkles, Receipt, FileCheck, Wallet, FileBarChart, Play, MessageSquare, Clock } from 'lucide-react';
 
 /**
  * Specialist agents (GET /api/v1/agents): the cards on the start screen, the picker above the composer,
  * and the badge over an answer. Each agent is the same Accutax AI with fewer tools and its own job.
  */
 
-const ICONS = { sparkles: Sparkles, receipt: Receipt, 'file-check': FileCheck, wallet: Wallet };
+const ICONS = { sparkles: Sparkles, receipt: Receipt, 'file-check': FileCheck, wallet: Wallet, 'file-chart': FileBarChart };
 
 export function AgentIcon({ icon, size = 15 }) {
   const Icon = ICONS[icon] || Sparkles;
@@ -95,7 +95,7 @@ export function AgentBar({ agents, activeKey, onSelect, onRunNow, disabled }) {
           <span>Run now</span>
         </button>
       )}
-      <span className="agent-bar-hint">or type @vat, @ap, @cash</span>
+      <span className="agent-bar-hint">or type @vat, @ap, @cash, @reporting</span>
     </div>
   );
 }

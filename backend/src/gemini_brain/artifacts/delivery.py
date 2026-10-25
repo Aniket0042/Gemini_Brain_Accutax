@@ -99,6 +99,11 @@ def _chart_hint(text: str) -> Optional[str]:
     return None
 
 
+def named_formats(text: str) -> list:
+    """Every file format the text names, in FILE_PRIORITY order ("as PDF and Excel" -> ["xlsx", "pdf"])."""
+    return [name for name, pattern in FILE_PRIORITY if pattern.search(text or "")]
+
+
 def _file_format(text: str) -> Optional[str]:
     for name, pattern in FILE_PRIORITY:
         if pattern.search(text):

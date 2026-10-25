@@ -113,6 +113,28 @@ _PROFILES: Tuple[AgentProfile, ...] = (
         icon="wallet",
         routines=("Weekly cash outlook", "Alert when the forecast drops below a floor you set"),
     ),
+    AgentProfile(
+        key="reporting",
+        name="Reporting Agent",
+        role="Builds your month-end pack: the P&L by month with a chart, as PDF and Excel files ready to send.",
+        tools=frozenset({"query_metrics", "list_documents"}),
+        instructions=(
+            "You are the Reporting Agent. Your job is reports built from the posted ledger. For a month-end pack, "
+            "call query_metrics once on view pnl with granularity month for the months asked, with revenue, cost of "
+            "sales, gross profit, operating expenses and net profit (the measures the view lists for them). Code "
+            "builds the files and the chart from that result and attaches them below your answer. Write at most 4 "
+            "short lines: the last month's revenue and net profit, the change from the month before (in amount; a "
+            "percentage only when the earlier figure is positive), and the line that moved most. Give no reason for "
+            "a change that the figures do not show; never guess why."
+        ),
+        run_prompt=("Month-end pack as PDF and Excel: profit and loss report by month for the last three complete "
+                    "months, with revenue, cost of sales, gross profit, operating expenses and net profit."),
+        run_label="Month-end P&L pack (PDF + Excel)",
+        suggestions=("Sales by customer last month as Excel", "Expenses by category this quarter as PDF",
+                     "P&L this year by month as a chart"),
+        icon="file-chart",
+        routines=("Month-end pack after each period close",),
+    ),
 )
 
 _BY_KEY: Dict[str, AgentProfile] = {p.key: p for p in _PROFILES}

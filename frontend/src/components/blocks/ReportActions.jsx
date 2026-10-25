@@ -66,10 +66,11 @@ export function ReportActions({ blocks, onOpenCanvas, token }) {
   const artifacts = blocks.filter((b) => b?.type === 'artifact');
   if (!canvas && artifacts.length === 0) return null;
 
-  const primary = artifacts.find((a) => a?.primary === true);
+  // Every format the user named is primary ("as PDF and Excel" shows both buttons).
+  const primaries = artifacts.filter((a) => a?.primary === true);
   let ordered;
-  if (primary) {
-    ordered = [primary];
+  if (primaries.length) {
+    ordered = primaries;
   } else {
     // One button per kind (first artifact of that kind wins); PDF/CSV lead
     // to keep the familiar order, then whatever else came back.

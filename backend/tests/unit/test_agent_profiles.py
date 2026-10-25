@@ -41,6 +41,15 @@ def test_resolve_prefers_the_request_then_the_thread():
         profiles.resolve("retired-agent")
 
 
+def test_the_reporting_agent_asks_for_both_files_and_only_reads_figures():
+    from gemini_brain.artifacts.delivery import detect_delivery, named_formats
+    reporting = profiles.get("reporting")
+    assert reporting.tools == frozenset({"query_metrics", "list_documents"})
+    delivery = detect_delivery(reporting.run_prompt)
+    assert delivery.wants_file and delivery.wants_chart
+    assert set(named_formats(reporting.run_prompt)) == {"pdf", "xlsx"}
+
+
 def test_public_shape():
     public = profiles.get("vat").to_public()
     assert public["name"] == "VAT Agent" and "review_vat" in public["tools"] and public["default"] is False
