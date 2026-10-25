@@ -272,3 +272,23 @@ def test_admin_sets_plan_and_topup(db, hard, monkeypatch):
 def test_usage_api_is_off_without_the_tables(monkeypatch):
     monkeypatch.setattr(ledger.settings, "usage_db", "off")
     assert _client(50).get("/api/v1/usage").status_code == 503
+
+
+def test_lite_answer_does_not_become_the_threads_model(db, hard, monkeypatch):
+    saved = []
+    monkeypatch.setattr(preview, "record_turn", lambda *a, **k: saved.append(k.get("model_key")))
+    monkeypatch.setattr(preview, "_save_turn", lambda *a, **k: True)
+    monkeypatch.setattr(loop, "run_agent", lambda *a, **k: loop.AgentResult(answer="Revenue AED 5.", status="ok"))
+    sid = "8f14e45f-ceea-4e1a-9a3b-7c3c0c2e1d11"
+    db.used[7] = 20_500                      # lite
+    preview.answer("Revenue?", [24], lambda: {}, session_id=sid, user_id=52)
+    db.used[7] = 0                           # renewed
+    preview.answer("Revenue?", [24], lambda: {}, session_id=sid, user_id=52)
+    assert saved == [None, "sonnet-5"]
+
+
+def test_admin_finds_owners_who_have_not_used_ai(db, hard, monkeypatch):
+    monkeypatch.setattr(store, "search_owners", lambda q: [{"owner_user_id": 9, "email": "u9@x.com", "organizations": 1}])
+    assert _client(50).get("/api/v1/usage/admin/owners?q=u9").status_code == 403
+    db.admins.add(1)
+    assert _client(1).get("/api/v1/usage/admin/owners?q=u9").json()["owners"][0]["owner_user_id"] == 9

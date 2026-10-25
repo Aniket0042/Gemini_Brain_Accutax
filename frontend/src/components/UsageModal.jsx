@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Gauge, X, RefreshCw } from 'lucide-react';
 import {
-  fetchOwnerUsage, setMemberCap, fetchUsageAdmin, fetchUsageAdminOwner, setOwnerPlan, addOwnerTopup,
+  fetchOwnerUsage, setMemberCap, fetchUsageAdmin, fetchUsageAdminOwner, setOwnerPlan, addOwnerTopup, searchUsageOwners,
 } from '../services/api';
 import { shortDate } from './UsageMeter';
 
@@ -198,11 +198,22 @@ const AdminView = ({ token }) => {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(null);
+  const [query, setQuery] = useState('');
+  const [found, setFound] = useState(null);
   const load = useCallback(() => {
     setError('');
     fetchUsageAdmin(token).then(setData).catch((e) => setError(e.message));
   }, [token]);
   useEffect(load, [load]);
+  // Any owner, also one who has not used AI yet, by part of the email or the user id.
+  useEffect(() => {
+    const text = query.trim();
+    if (!text) { setFound(null); return undefined; }
+    const timer = setTimeout(() => {
+      searchUsageOwners(text, token).then((r) => setFound(r.owners)).catch((e) => setError(e.message));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query, token]);
   if (error) return <div style={styles.error}>{error}</div>;
   if (!data) return <div style={styles.empty}>Loading…</div>;
   const p = data.platform;
@@ -217,6 +228,20 @@ const AdminView = ({ token }) => {
             <div style={styles.cardValue}>${num(p.month_usd, 2)}</div>
             <div style={styles.cardSub}>internal {num(data.internal_month_credits)} credits · limits {data.enforce}</div></div>
         </div>
+        <input value={query} onChange={(e) => setQuery(e.target.value)} style={styles.input}
+          placeholder="Find an owner by email or user id" aria-label="Find an owner" />
+        {found && (
+          <>
+            {found.map((o) => (
+              <button key={o.owner_user_id} onClick={() => setSelected(o.owner_user_id)}
+                style={{ ...styles.item, ...(selected === o.owner_user_id ? styles.itemActive : {}) }}>
+                <span style={styles.email}>{o.email || `Owner ${o.owner_user_id}`}</span>
+                <span style={styles.muted}>user {o.owner_user_id} · {o.organizations} organization{o.organizations === 1 ? '' : 's'}</span>
+              </button>
+            ))}
+            {!found.length && <div style={styles.muted}>No owner matches.</div>}
+          </>
+        )}
         <div style={styles.section}>Owners this month</div>
         {data.owners.map((o) => (
           <button key={o.owner_user_id} onClick={() => setSelected(o.owner_user_id)}
@@ -297,7 +322,7 @@ const styles = {
   item: { textAlign: 'left', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', cursor: 'pointer', color: 'var(--ink)', font: 'inherit', display: 'flex', flexDirection: 'column', gap: 4 },
   itemActive: { borderColor: 'var(--accent)', background: 'var(--accent-soft)' },
   itemTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, fontWeight: 600, gap: 8 },
-  cards: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8, marginBottom: 6 },
+  cards: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 8, marginBottom: 6 },
   card: { background: 'var(--surface-2)', borderRadius: 8, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 4 },
   cardLabel: { fontSize: 11, color: 'var(--ink-soft)' },
   cardValue: { fontSize: 14, fontWeight: 600, color: 'var(--ink)' },

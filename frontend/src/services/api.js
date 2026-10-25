@@ -413,6 +413,7 @@ export const setMemberCap = (userId, dailyCredits, disabled, token = '') =>
     method: 'PUT', body: JSON.stringify({ daily_credits: dailyCredits, disabled }),
   });
 export const fetchUsageAdmin = (token = '') => usageJson('/admin', token);
+export const searchUsageOwners = (text, token = '') => usageJson(`/admin/owners?q=${encodeURIComponent(text)}`, token);
 export const fetchUsageAdminOwner = (ownerId, token = '') => usageJson(`/admin/owners/${encodeURIComponent(ownerId)}`, token);
 export const setOwnerPlan = (ownerId, plan, monthlyCredits, userDailyCredits, token = '') =>
   usageJson(`/admin/owners/${encodeURIComponent(ownerId)}/plan`, token, {

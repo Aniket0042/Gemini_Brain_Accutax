@@ -186,6 +186,14 @@ def admin_page(current_user: CurrentUser = Depends(get_current_user)) -> Dict[st
     }
 
 
+@router.get("/admin/owners", summary="Find owners by email or user id, including those who have not used AI yet")
+def admin_search_owners(q: str = Query(..., min_length=1, max_length=200),
+                        current_user: CurrentUser = Depends(get_current_user)) -> Dict[str, Any]:
+    store = _store()
+    _admin(current_user)
+    return {"owners": store.search_owners(q)}
+
+
 @router.get("/admin/owners/{owner_id}", summary="One owner's bucket, members and top-ups")
 def admin_owner(owner_id: int, current_user: CurrentUser = Depends(get_current_user)) -> Dict[str, Any]:
     store = _store()

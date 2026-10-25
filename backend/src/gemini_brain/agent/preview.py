@@ -63,7 +63,8 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
                           session_id=session_id, model_mode=decision.model_mode) as spend:
             response = _answer(question, organization_ids, org_meta, session_id=session_id, user_id=user_id,
                                db_name=db_name, progress=progress, brief=brief, model_key=model_key,
-                               allowed_models=allowed_models, documents=documents)
+                               allowed_models=allowed_models, documents=documents,
+                               remember_model=decision.action != limits.LITE)
             spend.status = str(response.get("status") or "ok")
         response["usage"] = limits.public(decision)
         return response
@@ -76,7 +77,9 @@ def _answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[
             session_id: Optional[str], user_id: int, db_name: str = "",
             progress: Optional[Callable[[str], None]] = None, brief: bool = False,
             model_key: Optional[str] = None, allowed_models: Optional[Sequence[str]] = None,
-            documents: Optional[Sequence[Any]] = None) -> Dict[str, Any]:
+            documents: Optional[Sequence[Any]] = None, remember_model: bool = True) -> Dict[str, Any]:
+    """answer()'s work. `remember_model` False (a lite answer): the thread keeps the model it had, so it is
+    not stuck on the lite model once the bucket renews."""
     from gemini_brain.agent import models as agent_models
     from gemini_brain.agent.loop import run_agent
     from gemini_brain.privacy import sensitive
@@ -131,8 +134,8 @@ def _answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[
     if session_id:
         if _save_turn(session_id, user_id, orgs, question, answer_text, db_name, blocks,
                       user_blocks=[_chips(docs)] if docs else None):
-            record_turn(session_id, question, result.tool_calls, delivery, data, db_name, model_key=model.key,
-                        documents=docs)
+            record_turn(session_id, question, result.tool_calls, delivery, data, db_name,
+                        model_key=model.key if remember_model else None, documents=docs)
             _mark_attached(docs)
 
     usage = dict(result.usage or {})

@@ -256,6 +256,17 @@ def owners_usage(month_start: datetime.datetime) -> List[Dict[str, Any]]:
              "events": int(r[3] or 0)} for r in rows]
 
 
+def search_owners(text: str, limit: int = 20) -> List[Dict[str, Any]]:
+    """Users who own organizations, by part of their email or their exact user id."""
+    text = (text or "").strip()
+    uid = int(text) if text.isdigit() else -1
+    rows = _run("""SELECT u.id, u.email, COUNT(o.id) FROM public.users u JOIN public.organizations o ON o.user_id = u.id
+                   WHERE u.id = %s OR u.email ILIKE %s
+                   GROUP BY u.id, u.email ORDER BY u.email LIMIT %s""",
+                (uid, "%" + text.replace("%", r"\%").replace("_", r"\_") + "%", limit), fetch="all")
+    return [{"owner_user_id": int(r[0]), "email": r[1], "organizations": int(r[2])} for r in rows]
+
+
 def plans_all() -> Dict[int, Dict[str, Any]]:
     rows = _run("SELECT owner_user_id, plan, monthly_credits, user_daily_credits FROM public.ai_owner_plans",
                 fetch="all")
