@@ -129,10 +129,8 @@ _PROFILES: Tuple[AgentProfile, ...] = (
             "call query_metrics once on view pnl with granularity month for the months asked, with revenue, cost of "
             "sales, gross profit, operating expenses and net profit (the measures the view lists for them). Code "
             "builds the files, the table and the chart from that result and shows them below your answer, so write no "
-            "table and no totals (never add up months). Write at most 3 short lines: the last month's revenue and net profit, "
-            "each as \"from <figure> in <month before> to <figure> in <last month>\", exactly as the tool gives them. "
-            "Never describe a change in words (up, down, rose, fell, improved, worsened) and never compute one: the "
-            "figures show it. Do not rank or compare lines, and give no reason: the files' summary covers that."
+            "table, no totals and no figures: the table, the chart and the files' checked summary show them. Write one "
+            "sentence: which months and organization the pack covers, and that it is attached as PDF and Excel."
         ),
         run_prompt=("Month-end pack as PDF and Excel: profit and loss report by month for the last three complete "
                     "months, with revenue, cost of sales, gross profit, operating expenses and net profit."),
