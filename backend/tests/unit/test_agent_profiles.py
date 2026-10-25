@@ -48,6 +48,7 @@ def test_the_reporting_agent_asks_for_both_files_and_only_reads_figures():
     delivery = detect_delivery(reporting.run_prompt)
     assert delivery.wants_file and delivery.wants_chart
     assert set(named_formats(reporting.run_prompt)) == {"pdf", "xlsx"}
+    assert preview.attachment(reporting.run_prompt) == "XLSX and PDF files and chart"
 
 
 def test_public_shape():

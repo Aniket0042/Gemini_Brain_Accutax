@@ -345,7 +345,10 @@ def attachment(question: str, delivery: Any = None) -> Optional[str]:
     if delivery is None or delivery.mode == "none":
         return None
     if delivery.wants_file and delivery.format:
-        return f"{delivery.format.upper()} file" + (" and chart" if delivery.wants_chart else "")
+        from gemini_brain.artifacts.delivery import named_formats
+        names = list(dict.fromkeys([delivery.format] + named_formats(question)))
+        files = " and ".join(n.upper() for n in names) + (" files" if len(names) > 1 else " file")
+        return files + (" and chart" if delivery.wants_chart else "")
     return "chart" if delivery.wants_chart else "file"
 
 
