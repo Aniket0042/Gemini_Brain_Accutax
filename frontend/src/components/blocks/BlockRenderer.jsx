@@ -44,7 +44,7 @@ function UnknownBlock({ block }) {
   return <p style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-soft)' }}>{fallbackText}</p>;
 }
 
-export function BlockRenderer({ blocks, verification, onOpenCanvas, token, onPreviewFile }) {
+export function BlockRenderer({ blocks, verification, onOpenCanvas, token, onPreviewFile, onAsk }) {
   if (!Array.isArray(blocks) || blocks.length === 0) return null;
 
   return (
@@ -59,6 +59,7 @@ export function BlockRenderer({ blocks, verification, onOpenCanvas, token, onPre
             onOpenCanvas={onOpenCanvas}
             token={token}
             onPreviewFile={onPreviewFile}
+            onAsk={onAsk}
           />
         );
       })}

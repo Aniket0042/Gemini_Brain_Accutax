@@ -2996,3 +2996,20 @@ a.vr-bill-number:hover { text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) {
   .run-spin, .agent-progress span, .tone-working.agent-dot { animation: none; }
 }
+
+/* ── Findings inbox actions on the VAT review card ── */
+.vr-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.vr-action {
+  display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: var(--radius-pill);
+  border: 1px solid var(--border); background: transparent; color: var(--ink-soft);
+  font-size: 11.5px; font-weight: 500; font-family: inherit; cursor: pointer; transition: all 0.16s ease;
+}
+.vr-action:hover { color: var(--accent-ink); border-color: var(--accent); background: var(--accent-soft); }
+.vr-item-dismissed {
+  display: flex; align-items: center; gap: 8px; border-left-color: var(--success) !important;
+  color: var(--ink-soft); font-size: var(--text-sm);
+}
+.vr-item-dismissed svg { color: var(--success-ink); flex-shrink: 0; }
+.vr-dismissed-text { flex: 1; min-width: 0; }
+.vr-undo { margin-left: auto; }
+.vr-dismissed-note svg { color: var(--success-ink); }

@@ -39,7 +39,9 @@ def _review(result: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         parts.append(f"{findings:,} finding{'s' if findings != 1 else ''}")
     high = int((result.get("findings_by_severity") or {}).get("high") or 0)
     tone = "danger" if high else ("warning" if parts else "success")
-    return {"headline": f"Checked {int(result.get('bills_checked') or 0):,} {noun}",
+    dismissed = int(result.get("dismissed") or 0)
+    return {"headline": f"Checked {int(result.get('bills_checked') or 0):,} {noun}"
+                        + (f" · {dismissed:,} dismissed" if dismissed else ""),
             "badge": " · ".join(parts) or "All clear", "tone": tone}
 
 

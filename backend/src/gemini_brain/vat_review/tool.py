@@ -5,8 +5,9 @@ JSON, and raises ToolInputError for a bad call. Code makes every finding; the mo
 """
 from __future__ import annotations
 
+import hashlib
 import time
-from typing import Any, Dict, List, Sequence
+from typing import AbstractSet, Any, Dict, List, Optional, Sequence
 
 from gemini_brain.config.settings import settings
 from gemini_brain.semantic import periods
@@ -127,7 +128,20 @@ def _row(kind: str, group: Any, org: str, rule: str, level: str, bill: Dict[str,
             ("output_vat" if sales else "input_vat"): bill.get("input_vat"), "status": bill.get("status"), "why": why}
 
 
-def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str, deadline: float) -> Dict[str, Any]:
+def item_key(item: Dict[str, Any], side: str) -> str:
+    """A finding's or duplicate group's key: the same problem on the same bills gets the same key in every review, so
+    a person's "not a duplicate" can be remembered. A hash of side|rule|organization|the bills' ids (sorted), so the key
+    carries no rule name onto the card."""
+    bills = item.get("bills") or ([item["bill"]] if item.get("bill") else [])
+    ids = sorted(str(b.get("document_id") or b.get("document_number") or "") for b in bills)
+    raw = f"{side}|{item.get('rule')}|{item.get('organization_id')}|{','.join(ids)}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
+
+
+def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str, deadline: float,
+        exclude: Optional[AbstractSet[str]] = None) -> Dict[str, Any]:
+    """`exclude`: keys (item_key) of findings and groups the person marked as not a problem; they are left out of the
+    counts and lists, and a note says how many."""
     if not isinstance(params, dict):
         raise ToolInputError("Tool input must be an object")
     mode = params.get("mode", "all")
@@ -177,6 +191,8 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
             found_odd = [f for f in found_odd if f["rule"] in only]
         for item in found_groups + found_odd + found_patterns:
             item.update(tag)
+        for item in found_groups + found_odd:
+            item["key"] = item_key(item, side)
         for item in found_groups + found_odd:  # the sentences are written for bills; a sales review words them for invoices
             item["why"] = for_side(item["why"], side)
         for item in found_patterns:
@@ -193,13 +209,22 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
             notes.append(f"{name}: the scan stopped early ({scan.why_incomplete}); the result may miss problems.")
     if left_out:
         notes.append(f"{left_out} voided, cancelled or draft bills were left out.")
+    dismissed = 0
+    if exclude:
+        kept_groups = [g for g in groups if g["key"] not in exclude]
+        kept_findings = [f for f in findings if f["key"] not in exclude]
+        dismissed = len(groups) - len(kept_groups) + len(findings) - len(kept_findings)
+        groups, findings = kept_groups, kept_findings
+        if dismissed:
+            notes.append(f"{dismissed} {'item' if dismissed == 1 else 'items'} the user marked as not a problem "
+                         f"{'was' if dismissed == 1 else 'were'} left out, as they asked.")
     if want_odd and not with_trn and (not only or "supplier_trn_invalid" in only):
         notes.append("Supplier TRNs were not checked: this book does not provide them.")
     if only:
         notes.append("Only these kinds of problem were looked for: " + "; ".join(RULE_TEXT[r] for r in only) + ".")
 
     out: Dict[str, Any] = {"mode": mode, "side": side, "period": {"start": start.isoformat(), "end": end.isoformat()},
-                           "bills_checked": checked, "organizations": per_org, "notes": notes}
+                           "bills_checked": checked, "organizations": per_org, "notes": notes, "dismissed": dismissed}
     rows: List[Dict[str, Any]] = []
     rules: Dict[str, str] = {}
     if want_dup:

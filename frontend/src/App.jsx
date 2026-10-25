@@ -13,6 +13,7 @@ import { fetchQueryResponse, streamQueryResponse, fetchTenants, fetchModelCatalo
 import { AgentsPanel, AgentBar, parseMention } from './components/AgentsPanel';
 import { newAgentRun, applyAgentStep } from './components/AgentRun';
 import { readAgentRuns, recordAgentRun } from './services/agentRuns';
+import { dismissedKeys } from './services/findings';
 import { UsageModal } from './components/UsageModal';
 import { worstOwner } from './components/UsageMeter';
 import { PrivacySnapshotsModal } from './components/PrivacySnapshotsModal';
@@ -1313,6 +1314,8 @@ export default function App() {
       // Without a picker, "auto": the server uses the default model.
       model: (modelCatalog && !modelCatalog.picker_hidden && model) || 'auto',
       ...(agents.length ? { agent: agentKey } : {}),
+      // Review findings marked "not a problem" in this browser: the next review leaves them out.
+      dismissed_findings: dismissedKeys(),
     };
 
     const token = currentUser?.access_token || '';

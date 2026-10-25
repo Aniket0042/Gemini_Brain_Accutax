@@ -294,6 +294,7 @@ const AssistantResponseCard = ({
           {showBlocks ? (
             <div className="data-table-container" style={styles.markdownWrapper}>
               <BlockRenderer
+                onAsk={onRegenerate ? (q) => onRegenerate(q) : undefined}
                 blocks={chatFacingBlocks(blocks)}
                 verification={responseData?.verification}
                 onOpenCanvas={onOpenCanvas}

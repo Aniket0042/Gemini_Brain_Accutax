@@ -48,8 +48,10 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
            progress: Optional[Callable[[str], None]] = None, brief: bool = False,
            model_key: Optional[str] = None, allowed_models: Optional[Sequence[str]] = None,
            documents: Optional[Sequence[Any]] = None, agent_key: Optional[str] = None,
-           on_step: Optional[Callable[[Dict[str, Any]], None]] = None) -> Dict[str, Any]:
+           on_step: Optional[Callable[[Dict[str, Any]], None]] = None,
+           dismissed: Sequence[str] = ()) -> Dict[str, Any]:
     """Answer with the agent and save the turn. Returns a QueryResponse-shaped dict. Never raises.
+    `dismissed`: keys of review findings the person marked as not a problem in this browser; the review leaves them out.
     `on_step`: gets a step event as each tool call starts and finishes ({"phase", "tool", ...}), for the live run card.
     `agent_key`: the specialist agent the user picked (agent/profiles.py), already checked; None: the thread's last.
     `model_key`: the model the user picked ("auto" or None: the thread's last pick, else the default);
@@ -81,7 +83,8 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
             response = _answer(question, organization_ids, org_meta, session_id=session_id, user_id=user_id,
                                db_name=db_name, progress=progress, brief=brief, model_key=model_key,
                                allowed_models=allowed_models, documents=documents,
-                               lite=decision.action == limits.LITE, agent_key=agent_key, on_step=on_step)
+                               lite=decision.action == limits.LITE, agent_key=agent_key, on_step=on_step,
+                               dismissed=dismissed)
             spend.status = str(response.get("status") or "ok")
         response["usage"] = limits.public(decision)
         return response
@@ -95,7 +98,8 @@ def _answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[
             progress: Optional[Callable[[str], None]] = None, brief: bool = False,
             model_key: Optional[str] = None, allowed_models: Optional[Sequence[str]] = None,
             documents: Optional[Sequence[Any]] = None, lite: bool = False,
-            agent_key: Optional[str] = None, on_step: Optional[Callable[[Dict[str, Any]], None]] = None) -> Dict[str, Any]:
+            agent_key: Optional[str] = None, on_step: Optional[Callable[[Dict[str, Any]], None]] = None,
+            dismissed: Sequence[str] = ()) -> Dict[str, Any]:
     """answer()'s work. `lite` (the owner's AI for the month is used up): UAE VAT law answers use the picked (lite)
     model too, and the thread keeps the model it had, so it is not stuck on the lite model once the bucket renews."""
     from gemini_brain.agent import models as agent_models
@@ -141,6 +145,7 @@ def _answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[
                                {"phase": "done", "tool": name, "ok": ok, "ms": ms, "rows": rows}),
                            brief=brief, attachment=attached, documents=doc_prompt, document_ids=doc_ids,
                            document_evidence=doc_evidence, user_id=user_id, session_id=session_id, profile=profile,
+                           dismissed=dismissed,
                            **model_ids)
     finally:
         traces = _collect_traces(rid)

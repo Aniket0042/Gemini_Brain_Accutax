@@ -257,6 +257,7 @@ def run_agent(
     law_model_id: Optional[str] = None,
     profile: Any = None,
     tool_done: Optional[Callable[[str, bool, int, Optional[int]], None]] = None,
+    dismissed: Sequence[str] = (),
 ) -> AgentResult:
     """Answer one question. Never raises. `progress(tool_name, tool_input)` is called before each tool runs.
     `history`: the thread's earlier messages; `turn_specs`: what its turns queried (history.add_spec);
@@ -267,7 +268,8 @@ def run_agent(
     PII_SNAPSHOTS says (the privacy page's live demo uses both). `law_model_id`: the model of the law route
     instead of the knowledge base's own (usage limits' lite mode). `profile`: the agent answering (agent/profiles.py):
     it limits the tools offered and adds its instructions; None is the general agent. `tool_done(name, ok, ms, rows)`
-    is called after each tool call finishes (the live run card)."""
+    is called after each tool call finishes (the live run card). `dismissed`: review findings the person marked as not a
+    problem (keys); the review leaves them out."""
     started = time.monotonic()
     deadline = started + (deadline_seconds or settings.agent_deadline_seconds)
     budget = max_tool_calls or settings.agent_max_tool_calls
@@ -276,7 +278,7 @@ def run_agent(
                           org_names=[(org_meta.get(o) or {}).get("name") for o in orgs], subject=subject)
     ctx = tools.ToolContext(organization_ids=orgs, subject=subject, deadline=deadline, user_id=user_id,
                             session_id=session_id, document_ids=tuple(document_ids),
-                            allowed_tools=getattr(profile, "tools", None))
+                            allowed_tools=getattr(profile, "tools", None), dismissed=frozenset(dismissed or ()))
     planner_id = model_id or settings.agent_model_id or SONNET5_ID
     writer_id = answer_model_id or settings.agent_answer_model_id or planner_id
     planner = BedrockAdapter(planner_id, label="agent")

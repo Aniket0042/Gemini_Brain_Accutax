@@ -333,7 +333,7 @@ def _agent_events(payload: QueryRequest, current_user: CurrentUser, orgs: list[i
                 payload.query, orgs, _agent_org_meta(orgs, current_user),
                 session_id=payload.session_id, user_id=current_user.user_id, db_name=payload.db_name,
                 progress=events.put, brief=bool(payload.brief), documents=documents, agent_key=agent_key,
-                on_step=events.put, **_model_choice(payload, current_user),
+                on_step=events.put, dismissed=payload.dismissed_findings, **_model_choice(payload, current_user),
             )
         except Exception as e:  # noqa: BLE001 - answer() never raises; this is belt and braces
             logger.warning("agent answer failed: %s", e, exc_info=True)
@@ -880,7 +880,7 @@ async def run_query(
             agent_preview.answer, payload.query, orgs, _agent_org_meta(orgs, current_user),
             session_id=payload.session_id, user_id=current_user.user_id, db_name=payload.db_name,
             brief=bool(payload.brief), documents=documents, agent_key=agent_key,
-            **_model_choice(payload, current_user),
+            dismissed=payload.dismissed_findings, **_model_choice(payload, current_user),
         )
         return QueryResponse(**normalize_envelope(result))
     except Exception as e:

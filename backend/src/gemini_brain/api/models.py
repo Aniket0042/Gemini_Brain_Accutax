@@ -3,7 +3,7 @@ models.py — Pydantic request and response schemas for the Gemini Brain REST AP
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 from pydantic import BaseModel, Field, model_validator
 
 class UIContext(BaseModel):
@@ -98,6 +98,14 @@ class QueryRequest(BaseModel):
             "general agent). Omitted: the agent that answered the thread's last turn, else the general agent."
         ),
         examples=[None],
+    )
+    dismissed_findings: List[Annotated[str, Field(max_length=400)]] = Field(
+        default_factory=list,
+        max_length=1000,
+        description=(
+            "Keys of VAT review findings and duplicate groups the user marked as not a problem (the `key` of a "
+            "vat_review card item). The review leaves them out of its counts and lists."
+        ),
     )
     attachments: List[str] = Field(
         default_factory=list,

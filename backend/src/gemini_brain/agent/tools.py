@@ -107,6 +107,8 @@ class ToolContext:
     fta_evidence: List[float] = field(default_factory=list)
     #: The tools this request's agent may call (agent/profiles.py); None means every tool.
     allowed_tools: Optional[FrozenSet[str]] = None
+    #: Keys of review findings the person marked as not a problem (vat_review.tool.item_key); review_vat leaves them out.
+    dismissed: FrozenSet[str] = frozenset()
 
     def allows(self, name: str) -> bool:
         return self.allowed_tools is None or name in self.allowed_tools
@@ -164,7 +166,8 @@ def execute(name: str, params: Any, ctx: ToolContext) -> Tuple[Dict[str, Any], b
             orgs = ctx.scope(params.get("organization_ids"))
             tool = DATA_TOOLS[name]
             args = {k: v for k, v in params.items() if k != "organization_ids"}
-            return tool.run(args, organization_ids=orgs, subject=ctx.subject, deadline=ctx.call_deadline()), True
+            extra = {"exclude": ctx.dismissed} if name == "review_vat" and ctx.dismissed else {}
+            return tool.run(args, organization_ids=orgs, subject=ctx.subject, deadline=ctx.call_deadline(), **extra), True
         if name == "search_vat_kb":
             return _search_vat_kb(params, ctx), True
         if name == "app_guide":
