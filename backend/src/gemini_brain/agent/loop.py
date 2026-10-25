@@ -256,6 +256,7 @@ def run_agent(
     capture: bool = False,
     law_model_id: Optional[str] = None,
     profile: Any = None,
+    tool_done: Optional[Callable[[str, bool, int, Optional[int]], None]] = None,
 ) -> AgentResult:
     """Answer one question. Never raises. `progress(tool_name, tool_input)` is called before each tool runs.
     `history`: the thread's earlier messages; `turn_specs`: what its turns queried (history.add_spec);
@@ -265,7 +266,8 @@ def run_agent(
     `pii_mode`: masking for this request instead of PII_MODE; `capture`: keep its privacy snapshot whatever
     PII_SNAPSHOTS says (the privacy page's live demo uses both). `law_model_id`: the model of the law route
     instead of the knowledge base's own (usage limits' lite mode). `profile`: the agent answering (agent/profiles.py):
-    it limits the tools offered and adds its instructions; None is the general agent."""
+    it limits the tools offered and adds its instructions; None is the general agent. `tool_done(name, ok, ms, rows)`
+    is called after each tool call finishes (the live run card)."""
     started = time.monotonic()
     deadline = started + (deadline_seconds or settings.agent_deadline_seconds)
     budget = max_tool_calls or settings.agent_max_tool_calls
@@ -395,6 +397,8 @@ def run_agent(
                 result, ok, ms = outcomes.get(use["toolUseId"], ({"error": BUDGET_USED}, False, 0))
                 calls.append({"name": use.get("name"), "input": use.get("input"), "ok": ok, "ms": ms,
                               "rows": result.get("row_count"), **({"error": result.get("error")} if not ok else {})})
+                if use["toolUseId"] in outcomes:
+                    _notify_done(tool_done, use.get("name", ""), ok, ms, result.get("row_count"))
                 if ok:
                     flags = injection.scan_value(result)
                     if flags:  # order-like text in the books: warn the model next to it, and log it
@@ -482,6 +486,16 @@ def _notify(progress: Optional[Callable[[str, Any], None]], use: Dict[str, Any])
         progress(use.get("name", ""), use.get("input"))
     except Exception as e:  # noqa: BLE001 - a status line must never break the answer
         logger.debug("agent progress callback failed: %s", e)
+
+
+def _notify_done(tool_done: Optional[Callable[[str, bool, int, Optional[int]], None]], name: str, ok: bool, ms: int,
+                 rows: Any) -> None:
+    if tool_done is None:
+        return
+    try:
+        tool_done(name, ok, ms, rows if isinstance(rows, int) else None)
+    except Exception as e:  # noqa: BLE001 - a status line must never break the answer
+        logger.debug("agent tool_done callback failed: %s", e)
 
 
 def _run_tools(uses: Sequence[Dict[str, Any]], ctx: tools.ToolContext) -> Dict[str, tuple]:

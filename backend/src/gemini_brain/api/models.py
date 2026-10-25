@@ -203,6 +203,7 @@ class QueryResponse(BaseModel):
     llm_traces: List[Dict[str, Any]] = Field(default_factory=list, description="Bedrock/Claude LLM calls (model, purpose, tokens, duration) executed during query evaluation.")
     context_window: Optional[Dict[str, Any]] = Field(default=None, description="Session's cumulative token usage against a fixed budget, independent of the selected model. {used, limit, remaining, percent}.")
     agent: Optional[Dict[str, Any]] = Field(default=None, description="The agent that answered: {key, name}.")
+    agent_status: Optional[Dict[str, Any]] = Field(default=None, description="A specialist's one-line status after this run, for its card: {headline, badge, tone}.")
     usage: Optional[Dict[str, Any]] = Field(default=None, description="AI usage of the buckets this question charged: {mode: full|lite, banner, internal, owners: [{owner_user_id, plan_label, percent, state, resets_at, user}]}. None when limits are off.")
     results: List[Any] = Field(default_factory=list, description="Raw structured results list.")
     error: Optional[str] = Field(default=None, description="Error message if processing failed.")
@@ -472,6 +473,8 @@ class AgentInfo(BaseModel):
     suggestions: List[str] = Field(default_factory=list)
     #: Routines the agent will run on its own once scheduling is built; shown as "coming soon".
     routines: List[str] = Field(default_factory=list)
+    #: The steps of the live run card: {tool, label, expected}.
+    plan: List[Dict[str, Any]] = Field(default_factory=list)
     default: bool = False
 
 

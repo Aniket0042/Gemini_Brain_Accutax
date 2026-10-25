@@ -333,7 +333,7 @@ def _agent_events(payload: QueryRequest, current_user: CurrentUser, orgs: list[i
                 payload.query, orgs, _agent_org_meta(orgs, current_user),
                 session_id=payload.session_id, user_id=current_user.user_id, db_name=payload.db_name,
                 progress=events.put, brief=bool(payload.brief), documents=documents, agent_key=agent_key,
-                **_model_choice(payload, current_user),
+                on_step=events.put, **_model_choice(payload, current_user),
             )
         except Exception as e:  # noqa: BLE001 - answer() never raises; this is belt and braces
             logger.warning("agent answer failed: %s", e, exc_info=True)
@@ -344,7 +344,10 @@ def _agent_events(payload: QueryRequest, current_user: CurrentUser, orgs: list[i
     threading.Thread(target=work, name="agent-answer", daemon=True).start()
     yield f"data: {json.dumps({'status': 'Reading your question…', 'type': 'agent'})}\n\n"
     while (message := events.get()) is not None:
-        yield f"data: {json.dumps({'status': message, 'type': 'agent'})}\n\n"
+        if isinstance(message, dict):  # a step of the live run card: a tool call started or finished
+            yield f"data: {json.dumps({'type': 'agent_step', **message}, default=str)}\n\n"
+        else:
+            yield f"data: {json.dumps({'status': message, 'type': 'agent'})}\n\n"
     if "result" in box:
         yield f"data: {json.dumps({'final_result': normalize_envelope(box['result'])}, default=str)}\n\n"
         return

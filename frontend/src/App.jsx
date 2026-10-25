@@ -11,6 +11,8 @@ import { ModelHealthModal } from './components/ModelHealthModal';
 import { AnswerCanvas } from './components/canvas/AnswerCanvas';
 import { fetchQueryResponse, streamQueryResponse, fetchTenants, fetchModelCatalog, fetchSessionMessages, createChatSession, deleteChatSession, fetchUploadConfig, fetchPrivacyAccess, fetchUsage, fetchAgents } from './services/api';
 import { AgentsPanel, AgentBar, parseMention } from './components/AgentsPanel';
+import { newAgentRun, applyAgentStep } from './components/AgentRun';
+import { readAgentRuns, recordAgentRun } from './services/agentRuns';
 import { UsageModal } from './components/UsageModal';
 import { worstOwner } from './components/UsageMeter';
 import { PrivacySnapshotsModal } from './components/PrivacySnapshotsModal';
@@ -252,6 +254,9 @@ export default function App() {
     return [...new Set(ids.map(Number))].sort((a, b) => a - b);
   }, [selectedOrgIds, activeOrgId]);
   const scopeKey = scopeOrgIds.join(',');
+  useEffect(() => {
+    setAgentRuns(readAgentRuns(scopeKey));
+  }, [scopeKey]);
 
   // activeTenant is also set outside the switcher (login, handoff, the tenant
   // modal). Any org chosen that way replaces a multi-org selection it is not
@@ -315,6 +320,9 @@ export default function App() {
   // Specialist agents (GET /agents) and the one that answers the next question.
   const [agents, setAgents] = useState([]);
   const [activeAgent, setActiveAgent] = useState('accutax');
+  // Each specialist's last run in this organization scope (this browser only), and the one working now.
+  const [agentRuns, setAgentRuns] = useState({});
+  const [runningAgent, setRunningAgent] = useState(null);
   // Whether this user may attach files, and the limits (GET /uploads/config). Off until the server says on.
   const [uploadConfig, setUploadConfig] = useState({ enabled: false });
   const [model, setModel] = useState(() => {
@@ -1203,6 +1211,7 @@ export default function App() {
     }
     const queryText = mention.agentKey ? mention.text : cleanText;
     const agentKey = overrides.agent || mention.agentKey || activeAgent;
+    const specialist = agents.find((a) => a.key === agentKey && !a.default);
     if (activeHistoryId) {
       const openEntry = chatHistory.find((e) => e.id === activeHistoryId);
       const openKey = entryScopeKey(openEntry);
@@ -1236,7 +1245,9 @@ export default function App() {
       responseData: null,
       timestamp: Date.now(),
       ...(cardsRemoved ? { sensitiveRemoved: ['CARD'] } : {}),
+      ...(specialist ? { agentRun: newAgentRun(specialist, currentScopeNames.join(', ')) } : {}),
     };
+    setRunningAgent(specialist ? specialist.key : null);
     const nextConversation = [...conversation, userTurn, assistantTurn];
     setConversation(nextConversation);
 
@@ -1312,6 +1323,7 @@ export default function App() {
       if (queryControllerRef.current !== controller) return;
       queryControllerRef.current = null;
       setIsLoading(false);
+      setRunningAgent(null);
     };
 
     if (isStreaming) {
@@ -1361,7 +1373,22 @@ export default function App() {
               }
               return updated;
             });
+          } else if (chunk.type === 'agent_step') {
+            setConversation((prev) => {
+              const updated = [...prev];
+              const lastIdx = updated.length - 1;
+              if (lastIdx >= 0 && updated[lastIdx].role === 'assistant' && updated[lastIdx].agentRun) {
+                updated[lastIdx] = { ...updated[lastIdx], agentRun: applyAgentStep(updated[lastIdx].agentRun, chunk) };
+              }
+              return updated;
+            });
           } else if (chunk.final_result) {
+            const ranAgent = chunk.final_result.agent?.key;
+            if (ranAgent && chunk.final_result.agent_status && agents.some((a) => a.key === ranAgent && !a.default)) {
+              setAgentRuns(recordAgentRun(scopeKey, ranAgent, {
+                at: Date.now(), status: chunk.final_result.agent_status, historyId: currentHistoryId, question: queryText,
+              }));
+            }
             setConversation((prev) => {
               const updated = [...prev];
               const lastIdx = updated.length - 1;
@@ -1373,6 +1400,7 @@ export default function App() {
                   tableData: chunk.final_result.table_markdown || updated[lastIdx].tableData,
                   streamingText: chunk.final_result.answer || updated[lastIdx].streamingText,
                   isStreaming: false,
+                  ...(updated[lastIdx].agentRun ? { agentRun: { ...updated[lastIdx].agentRun, finishedAt: Date.now() } } : {}),
                 };
               }
               updateActiveHistoryEntry(updated, chunk.final_result.answer);
@@ -1655,6 +1683,9 @@ export default function App() {
                     onRunNow={handleRunAgent}
                     onSelect={setActiveAgent}
                     disabled={isLoading}
+                    runs={agentRuns}
+                    runningKey={runningAgent}
+                    onOpenRun={handleSelectHistory}
                   />
                 </IntroSuggestions>
               </>

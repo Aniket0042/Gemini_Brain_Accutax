@@ -2935,3 +2935,64 @@ a.vr-bill-number:hover { text-decoration: underline; }
   letter-spacing: 0.02em;
 }
 .agent-badge-icon { width: 18px; height: 18px; border-radius: 6px; }
+
+/* ── Agent team home and live run card (AgentsPanel.jsx, AgentRun.jsx) ── */
+.agent-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.tone-danger.agent-dot { background: var(--danger); }
+.tone-warning.agent-dot, .tone-working.agent-dot { background: var(--warning); }
+.tone-success.agent-dot { background: var(--success); }
+.tone-accent.agent-dot { background: var(--accent); }
+.tone-idle.agent-dot { background: var(--border-strong); }
+.tone-working.agent-dot { animation: agent-pulse 1.2s ease-in-out infinite; }
+@keyframes agent-pulse { 50% { opacity: 0.35; } }
+
+.agent-pill { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: var(--radius-pill); white-space: nowrap; }
+.agent-pill.tone-danger { background: var(--danger-soft); color: var(--danger-ink); }
+.agent-pill.tone-warning { background: var(--warning-soft); color: var(--warning-ink); }
+.agent-pill.tone-success { background: var(--success-soft); color: var(--success-ink); }
+.agent-pill.tone-accent { background: var(--accent-soft); color: var(--accent-ink); }
+
+.agent-status { display: flex; flex-direction: column; gap: 6px; }
+.agent-status-line { display: flex; align-items: center; gap: 6px; font-size: var(--text-sm); color: var(--ink); }
+.agent-status-line.is-idle { color: var(--ink-soft); }
+.agent-status-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.agent-open-btn {
+  display: inline-flex; align-items: center; gap: 2px; padding: 0; border: 0; background: none;
+  font-size: var(--text-xs); font-weight: 600; color: var(--accent-ink); cursor: pointer; font-family: inherit;
+}
+.agent-open-btn:hover { text-decoration: underline; }
+.agent-progress { height: 3px; border-radius: 3px; background: var(--border); overflow: hidden; }
+.agent-progress span { display: block; width: 40%; height: 100%; background: var(--warning); animation: agent-slide 1.4s ease-in-out infinite; }
+@keyframes agent-slide { from { transform: translateX(-100%); } to { transform: translateX(260%); } }
+.agent-card.is-running { border-color: var(--warning); }
+
+.agent-briefing {
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+  padding: 10px 14px; margin-bottom: 8px;
+}
+.agent-briefing-title { display: flex; align-items: center; gap: 6px; font-size: var(--text-xs); font-weight: 600; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+.agent-briefing ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.agent-briefing li { display: flex; align-items: center; gap: 8px; font-size: var(--text-sm); min-width: 0; flex-wrap: wrap; }
+.agent-briefing-name { font-weight: 600; color: var(--ink); }
+.agent-briefing-time { color: var(--ink-soft); font-size: var(--text-xs); margin-left: auto; }
+
+.agent-run-card {
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+  padding: 10px 14px; margin-bottom: 10px; max-width: 560px;
+}
+.agent-run-card.is-live { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+.agent-run-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.agent-run-title { font-size: 13px; font-weight: 600; color: var(--ink); }
+.agent-run-time { margin-left: auto; font-size: var(--text-xs); color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.agent-run-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.agent-run-step { display: flex; align-items: center; gap: 8px; font-size: var(--text-sm); color: var(--ink); }
+.agent-run-step.is-waiting { color: var(--ink-soft); }
+.agent-run-meta { margin-left: auto; font-size: var(--text-xs); color: var(--ink-soft); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.run-ok { color: var(--success); flex-shrink: 0; }
+.run-fail { color: var(--danger); flex-shrink: 0; }
+.run-wait { color: var(--border-strong); flex-shrink: 0; }
+.run-spin { color: var(--warning); flex-shrink: 0; animation: agent-spin 0.9s linear infinite; }
+@keyframes agent-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .run-spin, .agent-progress span, .tone-working.agent-dot { animation: none; }
+}

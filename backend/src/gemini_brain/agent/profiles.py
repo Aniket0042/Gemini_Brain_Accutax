@@ -39,6 +39,9 @@ class AgentProfile:
     routines: Tuple[str, ...] = field(default_factory=tuple)
     #: The title of the files its Run now builds (otherwise the title is made from the question).
     report_title: str = ""
+    #: The steps its live run card shows: (tool, label, expected). Expected steps show as waiting from the start;
+    #: the others appear only when the agent calls that tool. "files" is code building the chart and files.
+    plan: Tuple[Tuple[str, str, bool], ...] = ()
 
     def title_for(self, question: str) -> Optional[str]:
         """The file title for this question: report_title for the Run now question, else None."""
@@ -52,6 +55,7 @@ class AgentProfile:
                 "tools": sorted(self.tools) if self.tools is not None else [],
                 "run_prompt": self.run_prompt, "run_label": self.run_label,
                 "suggestions": list(self.suggestions), "routines": list(self.routines),
+                "plan": [{"tool": t, "label": label, "expected": expected} for t, label, expected in self.plan],
                 "default": self.key == DEFAULT_KEY}
 
 
@@ -81,6 +85,12 @@ _PROFILES: Tuple[AgentProfile, ...] = (
         suggestions=("Any duplicate bills this quarter?", "When is my next VAT return due?",
                      "Is the VAT on my sales invoices right?"),
         icon="receipt",
+        plan=(("review_vat", "Review bills for duplicates and VAT problems", True),
+              ("vat_return", "Work out the VAT return position", True),
+              ("search_vat_kb", "Check the FTA rules behind the findings", False),
+              ("vat_penalty", "Calculate the penalty", False),
+              ("list_documents", "Look up documents in the books", False),
+              ("read_document", "Read your file", False)),
         routines=("Weekly VAT review digest", "VAT return reminder 14 and 7 days before the due date"),
     ),
     AgentProfile(
@@ -99,6 +109,10 @@ _PROFILES: Tuple[AgentProfile, ...] = (
         suggestions=("Upload a bill and ask: is this already in the books?",
                      "Any bills with no supplier name or number?", "Show unusually large bills this month"),
         icon="file-check",
+        plan=(("read_document", "Read your file", False),
+              ("review_vat", "Scan bills for duplicates and odd entries", True),
+              ("list_documents", "Look up bills in the books", False),
+              ("search_vat_kb", "Check the FTA rules behind the findings", False)),
         routines=("Check every uploaded bill", "Weekly duplicate scan"),
     ),
     AgentProfile(
@@ -117,6 +131,9 @@ _PROFILES: Tuple[AgentProfile, ...] = (
         suggestions=("Which customers owe us the most overdue?", "Will cash go below zero in the next 3 months?",
                      "What is my cash position today?"),
         icon="wallet",
+        plan=(("cash_forecast", "Project cash week by week", True),
+              ("query_metrics", "Fetch figures from the ledger", False),
+              ("list_documents", "List the invoices and bills behind it", False)),
         routines=("Weekly cash outlook", "Alert when the forecast drops below a floor you set"),
     ),
     AgentProfile(
@@ -139,6 +156,9 @@ _PROFILES: Tuple[AgentProfile, ...] = (
         suggestions=("Sales by customer last month as Excel", "Expenses by category this quarter as PDF",
                      "P&L this year by month as a chart"),
         icon="file-chart",
+        plan=(("query_metrics", "Pull the P&L by month from the ledger", True),
+              ("list_documents", "List documents", False),
+              ("files", "Build the PDF and Excel files", True)),
         routines=("Month-end pack after each period close",),
     ),
 )

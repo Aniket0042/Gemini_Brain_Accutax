@@ -5,6 +5,7 @@ import { NoticeCard } from './NoticeCard';
 import { AnswerProvenance } from './AnswerProvenance';
 import { BlockRenderer, hasPortedBlocks, chatFacingBlocks } from './blocks/BlockRenderer';
 import { AgentBadge } from './AgentsPanel';
+import { AgentRunCard } from './AgentRun';
 import { citationSources, linkCitations, citationLinkRenderer } from './citations';
 import { MarkdownLink } from './markdownLinks';
 import { SortableMarkdownTable } from './SortableMarkdownTable';
@@ -233,7 +234,8 @@ const AssistantResponseCard = ({
       </div>
       <div style={styles.assistantContentCol}>
         
-        <AgentBadge block={agentBlock} />
+        {/* The run card names the agent while this page holds the run; a reopened chat shows the badge. */}
+        <AgentBadge block={msg.agentRun ? null : agentBlock} />
 
         <OrgChips organizations={responseData?.organizations} />
 
@@ -248,8 +250,12 @@ const AssistantResponseCard = ({
           />
         )}
 
+        {msg.agentRun && (
+          <AgentRunCard run={msg.agentRun} streaming={false} elapsedSeconds={responseData?.token_usage?.elapsed_seconds} />
+        )}
+
         {(() => {
-          const steps = (msg.agentSteps || []).filter(Boolean);
+          const steps = msg.agentRun ? [] : (msg.agentSteps || []).filter(Boolean);
           if (!steps.length) return null;
           return (
             <div style={styles.agentStepsWrapper}>
@@ -492,6 +498,17 @@ export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant
         const prevUserTurn = idx > 0 && conversation[idx - 1].role === 'user' ? conversation[idx - 1].content : '';
 
         // If loading and no text accumulated yet: Show ONLY Icon + Dynamic Text + 3-dots animation
+        if (isStreaming && !hasContent && msg.agentRun) {
+          return (
+            <div key={idx} style={styles.minimalLoaderContainer}>
+              <div style={styles.loaderIconBox}>
+                <Sparkles size={18} color="var(--accent)" className="gemini-sparkle-spin" />
+              </div>
+              <AgentRunCard run={msg.agentRun} streaming />
+            </div>
+          );
+        }
+
         if (isStreaming && !hasContent) {
           const latestLog = streamLogs && streamLogs.length > 0 ? streamLogs[streamLogs.length - 1] : null;
           const statusText = msg.latestStatus || latestLog?.status || 'Understanding request';

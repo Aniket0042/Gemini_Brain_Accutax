@@ -47,8 +47,10 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
            session_id: Optional[str], user_id: int, db_name: str = "",
            progress: Optional[Callable[[str], None]] = None, brief: bool = False,
            model_key: Optional[str] = None, allowed_models: Optional[Sequence[str]] = None,
-           documents: Optional[Sequence[Any]] = None, agent_key: Optional[str] = None) -> Dict[str, Any]:
+           documents: Optional[Sequence[Any]] = None, agent_key: Optional[str] = None,
+           on_step: Optional[Callable[[Dict[str, Any]], None]] = None) -> Dict[str, Any]:
     """Answer with the agent and save the turn. Returns a QueryResponse-shaped dict. Never raises.
+    `on_step`: gets a step event as each tool call starts and finishes ({"phase", "tool", ...}), for the live run card.
     `agent_key`: the specialist agent the user picked (agent/profiles.py), already checked; None: the thread's last.
     `model_key`: the model the user picked ("auto" or None: the thread's last pick, else the default);
     `allowed_models`: the keys this user may pick (agent/models.allowed), checked here.
@@ -79,7 +81,7 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
             response = _answer(question, organization_ids, org_meta, session_id=session_id, user_id=user_id,
                                db_name=db_name, progress=progress, brief=brief, model_key=model_key,
                                allowed_models=allowed_models, documents=documents,
-                               lite=decision.action == limits.LITE, agent_key=agent_key)
+                               lite=decision.action == limits.LITE, agent_key=agent_key, on_step=on_step)
             spend.status = str(response.get("status") or "ok")
         response["usage"] = limits.public(decision)
         return response
@@ -93,7 +95,7 @@ def _answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[
             progress: Optional[Callable[[str], None]] = None, brief: bool = False,
             model_key: Optional[str] = None, allowed_models: Optional[Sequence[str]] = None,
             documents: Optional[Sequence[Any]] = None, lite: bool = False,
-            agent_key: Optional[str] = None) -> Dict[str, Any]:
+            agent_key: Optional[str] = None, on_step: Optional[Callable[[Dict[str, Any]], None]] = None) -> Dict[str, Any]:
     """answer()'s work. `lite` (the owner's AI for the month is used up): UAE VAT law answers use the picked (lite)
     model too, and the thread keeps the model it had, so it is not stuck on the lite model once the bucket renews."""
     from gemini_brain.agent import models as agent_models
@@ -123,13 +125,20 @@ def _answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[
 
     docs = list(documents or [])
     doc_prompt, doc_ids, doc_evidence = _document_context(docs, thread, meta, orgs)
-    on_tool = (lambda name, params: progress(step_label(name, params))) if progress else None
+    step = _stepper(on_step)
+
+    def on_tool(name: str, params: Any) -> None:
+        if progress:
+            progress(step_label(name, params))
+        step({"phase": "start", "tool": name, "label": step_label(name, params).rstrip("…")})
     delivery = delivery_for(question, thread)
     attached = attachment(question, delivery)
     rid, traces = _start_traces()
     try:
         result = run_agent(question, orgs, meta, history=thread.messages, turn_specs=thread.specs,
                            earlier_figures=thread.figures, subject=f"agent-preview:{user_id}", progress=on_tool,
+                           tool_done=lambda name, ok, ms, rows: step(
+                               {"phase": "done", "tool": name, "ok": ok, "ms": ms, "rows": rows}),
                            brief=brief, attachment=attached, documents=doc_prompt, document_ids=doc_ids,
                            document_evidence=doc_evidence, user_id=user_id, session_id=session_id, profile=profile,
                            **model_ids)
@@ -148,8 +157,16 @@ def _answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[
     blocks = ([warning] if warning else []) + agent_badge(profile) + (
         cards + tiles.kpi_tiles(data) + review_cards + _cash_cards(data) + list(getattr(result, "blocks", None) or [])
         + links.guide_buttons(data))
-    blocks += _files(question, result, orgs, meta, user_id=user_id, session_id=session_id, answer_text=answer_text,
-                     delivery=delivery, documents=docs, title=profile.title_for(question))
+    wants_files = delivery is not None and getattr(delivery, "mode", "none") != "none"
+    if wants_files:
+        step({"phase": "start", "tool": FILES_STEP, "label": "Building the files"})
+    files_started = time.monotonic()
+    files = _files(question, result, orgs, meta, user_id=user_id, session_id=session_id, answer_text=answer_text,
+                   delivery=delivery, documents=docs, title=profile.title_for(question))
+    if wants_files:
+        step({"phase": "done", "tool": FILES_STEP, "ok": any(b.get("type") == "artifact" for b in files) or not delivery.wants_file,
+              "ms": int((time.monotonic() - files_started) * 1000), "rows": None})
+    blocks += files
     privacy = privacy_block(result)
     if privacy:
         blocks.append(privacy)
@@ -179,6 +196,7 @@ def _answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[
         },
         "policy": _policy(model, result.route, picker=len(allowed_keys) > 1, profile=profile),
         "agent": {"key": profile.key, "name": profile.name},
+        "agent_status": _agent_status(profile, result, data, blocks),
         "verification": result.verification or None,
         "blocks": blocks or None,
         "api_traces": traces.get("api", []),
@@ -196,6 +214,35 @@ UNAVAILABLE = "UPSTREAM_UNAVAILABLE"
 MODEL_STATE_KEY = "model_key"
 #: conversation_state key: the agent that answered the thread's last turn, used when the next request names none.
 AGENT_STATE_KEY = "agent_key"
+
+
+#: The step event name for building the chart and files after the answer is written.
+FILES_STEP = "files"
+
+
+def _stepper(on_step: Optional[Callable[[Dict[str, Any]], None]]) -> Callable[[Dict[str, Any]], None]:
+    """on_step, made safe: a failing callback never breaks the answer."""
+    def step(event: Dict[str, Any]) -> None:
+        if on_step is None:
+            return
+        try:
+            on_step(event)
+        except Exception as e:  # noqa: BLE001
+            logger.debug("agent preview: step callback failed: %s", e)
+    return step
+
+
+def _agent_status(profile: Any, result: Any, data: Sequence[Dict[str, Any]],
+                  blocks: Sequence[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """The one-line status a specialist's card shows after this run. Never raises."""
+    if getattr(result, "status", "") != "ok":
+        return None
+    try:
+        from gemini_brain.agent.status import status_for
+        return status_for(profile, data, blocks)
+    except Exception as e:  # noqa: BLE001 - the card shows no status instead
+        logger.warning("agent preview: agent status not built: %s", e)
+        return None
 
 
 def agent_badge(profile: Any) -> List[Dict[str, Any]]:
