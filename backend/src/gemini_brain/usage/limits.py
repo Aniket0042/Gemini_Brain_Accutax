@@ -7,7 +7,8 @@ Checked before every question and file read, top to bottom; the strictest result
     2. Owner       each owner whose organizations the question reads: its monthly bucket (plan x seats + top-ups).
                    Used up: the lite model answers; LITE_GRACE more used: blocked until the next month.
     3. Person      inside each of those buckets: the person's daily cap (set by the owner), or AI turned off
-    4. Speed       one question at a time per person, USAGE_RATE_PER_MINUTE a minute (in this process)
+    4. Speed       one question at a time per person, USAGE_RATE_PER_MINUTE a minute. With USAGE_DB=on it is
+                   checked in the usage tables, so it holds across every copy of the service; else in this process
 
 USAGE_ENFORCE: off (no check), log (check and log), soft (bars and warnings, nothing blocked), hard (all of it).
 A failed check lets the question through: the limits protect spend, they must not take the assistant down.
@@ -260,8 +261,23 @@ def _spike(owner: int, user_id: int, today: float, p: Periods) -> None:
 
 # ── Speed ────────────────────────────────────────────────────────────────────
 
+_SPEED_MESSAGES = {
+    "USAGE_BUSY": "Your previous question is still being answered. Ask again when it finishes.",
+    "USAGE_RATE": "You are asking very quickly. Wait a minute, then ask again.",
+}
+
+
+def speed_refusal(code: str) -> Decision:
+    return Decision(action=BLOCK, code=code, message=_SPEED_MESSAGES[code], enforce="hard")
+
+
+def speed_gate() -> tuple:
+    """(running, per_minute) for ledger.scope: the limits the usage tables check as a question opens."""
+    return 1, max(1, settings.usage_rate_per_minute)
+
+
 class Gate:
-    """One question at a time per person and a per-minute rate, in this process (the service runs one worker)."""
+    """The speed limits in this process, for when the usage tables are off (USAGE_DB=off)."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -276,11 +292,9 @@ class Gate:
             while recent and now - recent[0] > 60:
                 recent.popleft()
             if self._running[user_id] >= 1:
-                return Decision(action=BLOCK, code="USAGE_BUSY", enforce="hard",
-                                message="Your previous question is still being answered. Ask again when it finishes.")
+                return speed_refusal("USAGE_BUSY")
             if len(recent) >= max(1, settings.usage_rate_per_minute):
-                return Decision(action=BLOCK, code="USAGE_RATE", enforce="hard",
-                                message="You are asking very quickly. Wait a minute, then ask again.")
+                return speed_refusal("USAGE_RATE")
             self._running[user_id] += 1
             recent.append(now)
             return None

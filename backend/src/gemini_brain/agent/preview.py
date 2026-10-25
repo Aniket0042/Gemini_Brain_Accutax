@@ -7,6 +7,7 @@ thread shows it and follow-ups have context.
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
 from dataclasses import dataclass, field
@@ -51,7 +52,10 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
     decision = limits.check(user_id, organization_ids)
     if decision.action == limits.BLOCK:
         return limits.refused_response(decision)
-    if decision.enforce == "hard" and not decision.internal:
+    speed = decision.enforce == "hard" and not decision.internal
+    # Speed limits: in the usage tables when they are on (shared by every copy of the service), else in this process.
+    in_process = speed and not ledger.db_on()
+    if in_process:
         busy = limits.gate.enter(int(user_id))
         if busy is not None:
             return limits.refused_response(busy)
@@ -59,8 +63,14 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
         if decision.action == limits.LITE:  # the owner's bucket is used up: a cheaper model answers
             model_key = settings.usage_lite_model
             allowed_models = list(dict.fromkeys(list(allowed_models or []) + [model_key]))
-        with ledger.scope("agent_answer", user_id=user_id, organization_ids=organization_ids,
-                          session_id=session_id, model_mode=decision.model_mode) as spend:
+        from gemini_brain.usage.store import Refused
+        with contextlib.ExitStack() as stack:
+            try:  # a refusal comes from entering the scope, before anything runs
+                spend = stack.enter_context(ledger.scope(
+                    "agent_answer", user_id=user_id, organization_ids=organization_ids, session_id=session_id,
+                    model_mode=decision.model_mode, gate=limits.speed_gate() if speed and not in_process else None))
+            except Refused as r:
+                return limits.refused_response(limits.speed_refusal(r.code))
             response = _answer(question, organization_ids, org_meta, session_id=session_id, user_id=user_id,
                                db_name=db_name, progress=progress, brief=brief, model_key=model_key,
                                allowed_models=allowed_models, documents=documents,
@@ -69,7 +79,7 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
         response["usage"] = limits.public(decision)
         return response
     finally:
-        if decision.enforce == "hard" and not decision.internal:
+        if in_process:
             limits.gate.leave(int(user_id))
 
 

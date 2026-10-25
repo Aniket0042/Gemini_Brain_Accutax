@@ -63,6 +63,8 @@ CREATE TABLE IF NOT EXISTS public.ai_usage_events (
 );
 CREATE INDEX IF NOT EXISTS ai_usage_events_created ON public.ai_usage_events (created_at);
 CREATE INDEX IF NOT EXISTS ai_usage_events_running ON public.ai_usage_events (created_at) WHERE status = 'running';
+-- The speed limits: a person's questions running now and asked in the last minute.
+CREATE INDEX IF NOT EXISTS ai_usage_events_user_time ON public.ai_usage_events (user_id, created_at);
 
 -- Who pays for each event: equal parts across the owners of the organizations it read.
 CREATE TABLE IF NOT EXISTS public.ai_usage_charges (

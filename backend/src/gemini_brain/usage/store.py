@@ -10,12 +10,22 @@ from __future__ import annotations
 import datetime
 import json
 import time
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from gemini_brain.db.connection import get_connection
 
 HOLD_MINUTES = 5
 INTERNAL = 0
+#: First key of the per-person advisory lock that makes the speed check and the event insert one step.
+_GATE_LOCK = 7231
+
+
+class Refused(Exception):
+    """A question the speed limits refuse: USAGE_BUSY (one is still running) or USAGE_RATE (too many a minute)."""
+
+    def __init__(self, code: str):
+        super().__init__(code)
+        self.code = code
 _SUPER_ADMIN_CACHE: Dict[int, tuple] = {}
 _CACHE_SECONDS = 300
 
@@ -39,11 +49,30 @@ def _run(sql: str, params: Any = None, *, fetch: str = "") -> Any:
 # ── Events ───────────────────────────────────────────────────────────────────
 
 def open_event(kind: str, user_id: Optional[int], session_id: Optional[str], organization_ids: Sequence[int],
-               holds: Dict[int, float], model_mode: str = "full") -> int:
-    """A running event with its holds (owner -> credits). Returns its id."""
+               holds: Dict[int, float], model_mode: str = "full", *, gate: Optional[Tuple[int, int]] = None) -> int:
+    """A running event with its holds (owner -> credits). Returns its id.
+
+    `gate` (running, per_minute): first check, under a lock on this person, that fewer than `running` of their
+    events of this kind are running and fewer than `per_minute` started in the last minute; else raise Refused.
+    The lock holds until the event is inserted, so two questions sent at once cannot both pass. The check is shared
+    by every copy of the service, as the table is."""
     conn = get_connection()
     cur = conn.cursor()
     try:
+        if gate is not None and user_id is not None:
+            running, per_minute = gate
+            cur.execute("SELECT pg_advisory_xact_lock(%s, %s)", (_GATE_LOCK, int(user_id)))
+            cur.execute(
+                f"""SELECT COUNT(*) FILTER (WHERE status = 'running' AND created_at > now() - interval '{HOLD_MINUTES} minutes'),
+                           COUNT(*) FILTER (WHERE created_at > now() - interval '1 minute')
+                    FROM public.ai_usage_events
+                    WHERE user_id = %s AND kind = %s AND created_at > now() - interval '{HOLD_MINUTES} minutes'""",
+                (user_id, kind))
+            now_running, last_minute = cur.fetchone()
+            if now_running >= running:
+                raise Refused("USAGE_BUSY")
+            if last_minute >= per_minute:
+                raise Refused("USAGE_RATE")
         cur.execute(
             """INSERT INTO public.ai_usage_events (kind, status, user_id, session_id, organization_ids, model_mode,
                    reserved_credits) VALUES (%s, 'running', %s, %s, %s, %s, %s) RETURNING id""",

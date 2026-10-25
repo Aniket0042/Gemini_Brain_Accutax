@@ -292,3 +292,64 @@ def test_admin_finds_owners_who_have_not_used_ai(db, hard, monkeypatch):
     assert _client(50).get("/api/v1/usage/admin/owners?q=u9").status_code == 403
     db.admins.add(1)
     assert _client(1).get("/api/v1/usage/admin/owners?q=u9").json()["owners"][0]["owner_user_id"] == 9
+
+
+# ── Speed limits in the usage tables (shared by every copy of the service) ────
+
+def test_db_speed_refusal_never_calls_the_model(db, hard, monkeypatch):
+    seen, gates = [], []
+
+    def open_event(*a, gate=None, **k):
+        gates.append(gate)
+        raise store.Refused("USAGE_BUSY")
+    monkeypatch.setattr(store, "open_event", open_event)
+    _agent(monkeypatch, seen)
+    r = preview.answer("Revenue?", [24], lambda: {}, session_id=None, user_id=50)
+    assert seen == [] and r["notice"]["code"] == "USAGE_BUSY" and gates == [(1, 5)]
+
+
+def test_db_speed_limit_is_skipped_when_not_hard(db, monkeypatch):
+    monkeypatch.setattr(limits.settings, "usage_enforce", "soft")
+    gates = []
+    monkeypatch.setattr(store, "open_event", lambda *a, gate=None, **k: gates.append(gate) or 1)
+    _agent(monkeypatch, [])
+    preview.answer("Revenue?", [24], lambda: {}, session_id=None, user_id=50)
+    assert gates == [None]
+
+
+class _Cursor:
+    def __init__(self, counts):
+        self.counts, self.sql = counts, []
+
+    def execute(self, sql, params=None):
+        self.sql.append(sql)
+
+    def fetchone(self):
+        return self.counts if "COUNT(*)" in self.sql[-1] else (11,)
+
+    def close(self):
+        pass
+
+
+def _open_with(counts, monkeypatch):
+    cur = _Cursor(counts)
+    conn = SimpleNamespace(cursor=lambda: cur, commit=lambda: cur.sql.append("COMMIT"),
+                           rollback=lambda: cur.sql.append("ROLLBACK"), close=lambda: None)
+    monkeypatch.setattr(store, "get_connection", lambda: conn)
+    return cur
+
+
+@pytest.mark.parametrize("counts,code", [((1, 1), "USAGE_BUSY"), ((0, 5), "USAGE_RATE")])
+def test_store_refuses_under_the_lock_and_inserts_nothing(monkeypatch, counts, code):
+    cur = _open_with(counts, monkeypatch)
+    with pytest.raises(store.Refused) as exc:
+        store.open_event("agent_answer", 50, None, [24], {7: 35}, gate=(1, 5))
+    assert exc.value.code == code
+    assert "pg_advisory_xact_lock" in cur.sql[0] and not any("INSERT" in s for s in cur.sql)
+    assert cur.sql[-1] == "ROLLBACK"
+
+
+def test_store_opens_the_event_when_under_the_limits(monkeypatch):
+    cur = _open_with((0, 4), monkeypatch)
+    assert store.open_event("agent_answer", 50, None, [24], {7: 35}, gate=(1, 5)) == 11
+    assert any("INSERT INTO public.ai_usage_events" in s for s in cur.sql) and cur.sql[-1] == "COMMIT"

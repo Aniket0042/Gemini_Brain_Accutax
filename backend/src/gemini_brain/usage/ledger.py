@@ -30,7 +30,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Sequence
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
 
 from gemini_brain.config.settings import settings
 
@@ -85,15 +85,18 @@ def log_path() -> Optional[Path]:
 
 @contextmanager
 def scope(kind: str, *, user_id: Any, organization_ids: Sequence[Any], session_id: Optional[str] = None,
-          model_mode: str = "full") -> Iterator[Scope]:
-    """Collect the model calls made inside, and write them as one line on the way out (also after an error)."""
+          model_mode: str = "full", gate: Optional[Tuple[int, int]] = None) -> Iterator[Scope]:
+    """Collect the model calls made inside, and write them as one line on the way out (also after an error).
+
+    `gate` (running, per_minute): the speed limits, checked in the usage tables as the event opens (USAGE_DB=on).
+    A refused question raises store.Refused from the `with` line, before anything runs or is written."""
     try:
         orgs = [int(o) for o in organization_ids or [] if o is not None]
     except (TypeError, ValueError):
         orgs = []
     s = Scope(kind=kind, user_id=_int(user_id), organization_ids=orgs, session_id=session_id, model_mode=model_mode)
     if db_on():
-        _open(s)
+        _open(s, gate)
     token = _current.set(s)
     try:
         yield s
@@ -198,15 +201,18 @@ def _entry(s: Scope) -> Dict[str, Any]:
     }
 
 
-def _open(s: Scope) -> None:
-    """The running event and its holds, before any model call. Without it the scope is still written at the end."""
+def _open(s: Scope, gate: Optional[Tuple[int, int]] = None) -> None:
+    """The running event and its holds, before any model call. Without it the scope is still written at the end.
+    A speed-limit refusal is raised; any other failure lets the question run unchecked."""
+    from gemini_brain.usage import store
     try:
-        from gemini_brain.usage import store
         hold = RESERVE_CREDITS if s.kind == "agent_answer" else 0
         owners = owners_of(s.organization_ids)
         payers = [INTERNAL_OWNER] if _internal(s.user_id) else [owners.get(o) for o in s.organization_ids]
         s.event_id = store.open_event(s.kind, s.user_id, s.session_id, s.organization_ids,
-                                      db_charges(split_charge(hold, payers)), s.model_mode)
+                                      db_charges(split_charge(hold, payers)), s.model_mode, gate=gate)
+    except store.Refused:
+        raise
     except Exception as e:  # noqa: BLE001
         logger.warning("usage ledger: hold not taken: %s", e)
 
