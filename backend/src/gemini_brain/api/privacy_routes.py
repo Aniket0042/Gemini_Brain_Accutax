@@ -136,8 +136,11 @@ def demo(body: DemoRequest, current_user: CurrentUser = Depends(get_current_user
         logger.warning("privacy demo: organization names unavailable: %s", e)
         meta = {o: {"name": f"Organization {o}"} for o in orgs}
     from gemini_brain.privacy import sensitive
-    result = run_agent(sensitive.drop(body.question)[0], orgs, meta, subject=f"privacy-demo:{current_user.user_id}",
-                       user_id=current_user.user_id, pii_mode="on", capture=True)
+    from gemini_brain.usage import ledger
+    with ledger.scope("privacy_demo", user_id=current_user.user_id, organization_ids=orgs) as spend:
+        result = run_agent(sensitive.drop(body.question)[0], orgs, meta, subject=f"privacy-demo:{current_user.user_id}",
+                           user_id=current_user.user_id, pii_mode="on", capture=True)
+        spend.status = str(result.status or "ok")
     capture = result.capture
     _audit(current_user, "demo", getattr(capture, "id", ""))
     vault = getattr(getattr(capture, "vault", None), "_value_of", {}) or {}

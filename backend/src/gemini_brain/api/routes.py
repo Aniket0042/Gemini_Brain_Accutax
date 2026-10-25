@@ -687,9 +687,10 @@ def create_upload(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="organization_ids must be numbers.")
     if orgs:
         orgs = authorize_org_scope(orgs, current_user, action="uploads.create")
+    else:  # as a chat that names none: the caller's first organization, which is charged for reading the file
+        orgs = _agent_scope(current_user, [])
     from gemini_brain.usage import limits
-    decision = limits.check(current_user.user_id, orgs or [int(o) for o in (current_user.allowed_org_ids or [])[:1]],
-                            kind="document_read")
+    decision = limits.check(current_user.user_id, orgs, kind="document_read")
     if decision.action == limits.BLOCK:  # reading the file would call a model the bucket cannot pay for
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                             detail={"code": decision.code, "message": decision.message})
@@ -780,6 +781,13 @@ def delete_upload(upload_id: str, current_user: CurrentUser = Depends(get_curren
 
 # ── Health & Diagnostic Endpoints ─────────────────────────────────────────────
 
+def _health_check(prompt: str) -> dict:
+    """Ping every model. Its spend is Accutax's own: one usage line of kind health_check, charged to owner 0."""
+    from gemini_brain.usage import ledger
+    with ledger.scope("health_check", user_id=None, organization_ids=[]):
+        return check_all_models_and_services(test_prompt=prompt)
+
+
 @router.get("/health", response_model=HealthResponse, tags=["Health"])
 def health_check() -> HealthResponse:
     """Check API service health status."""
@@ -798,7 +806,7 @@ def health_check() -> HealthResponse:
 )
 def check_models_get() -> ModelHealthResponse:
     """Run diagnostics on all AI models and backend services."""
-    res = check_all_models_and_services(test_prompt="Respond with 'OK'")
+    res = _health_check("Respond with 'OK'")
     return ModelHealthResponse(**res)
 
 
@@ -811,7 +819,7 @@ def check_models_get() -> ModelHealthResponse:
 )
 def check_models_post(payload: ModelDiagnosticRequest) -> ModelHealthResponse:
     """Run diagnostics on all AI models using a custom test prompt."""
-    res = check_all_models_and_services(test_prompt=payload.test_prompt)
+    res = _health_check(payload.test_prompt)
     return ModelHealthResponse(**res)
 
 

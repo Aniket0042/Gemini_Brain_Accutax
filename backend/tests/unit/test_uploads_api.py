@@ -202,3 +202,17 @@ def test_a_file_read_before_problems_were_kept_still_shows_them():
                                               {"name": "currency", "status": "pass", "detail": ""}]})
     store.update(up["id"], status="ready", checks_failed=1)          # no problems on the record: an older read
     assert client.get(f"/api/v1/uploads/{up['id']}").json()["problems"] == ["Supplier's TRN. The supplier's TRN is not on the document."]
+
+
+def test_upload_without_organizations_belongs_to_the_first_one():
+    """Reading the file costs AI: with no organization named, the caller's first one is charged, as for a chat."""
+    r = _post(f.pdf(), orgs="")
+    assert r.status_code == 201 and store.get(r.json()["id"]).organization_ids == [3]
+
+
+def test_upload_refused_when_the_bucket_cannot_pay(monkeypatch):
+    from gemini_brain.usage import limits
+    monkeypatch.setattr(limits, "check", lambda *a, **k: limits.Decision(
+        action=limits.BLOCK, code="USAGE_LIMIT", message="Used up.", enforce="hard"))
+    r = _post(f.pdf())
+    assert r.status_code == 429 and r.json()["detail"]["code"] == "USAGE_LIMIT"

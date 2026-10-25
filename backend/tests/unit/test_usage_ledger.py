@@ -150,3 +150,12 @@ def test_the_report_summarises_the_ledger(ledger_file):
     month = next(iter(s["owner_month"]))[1]
     assert s["owner_month"][("7", month)] == 25.0 and s["owner_month"][("9", month)] == 5.0
     assert "One question" in report.report(s)
+
+
+def test_health_check_is_its_own_internal_line(ledger_file, monkeypatch):
+    from gemini_brain.api import routes
+    monkeypatch.setattr(routes, "check_all_models_and_services",
+                        lambda test_prompt: ledger.add_call("m", "health", "ping", USAGE) or {"ok": True})
+    assert routes._health_check("OK") == {"ok": True}
+    [line] = lines(ledger_file)
+    assert line["kind"] == "health_check" and line["charge"] == {"none": 10.0}
