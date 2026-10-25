@@ -149,7 +149,7 @@ def _answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[
         cards + tiles.kpi_tiles(data) + review_cards + _cash_cards(data) + list(getattr(result, "blocks", None) or [])
         + links.guide_buttons(data))
     blocks += _files(question, result, orgs, meta, user_id=user_id, session_id=session_id, answer_text=answer_text,
-                     delivery=delivery, documents=docs)
+                     delivery=delivery, documents=docs, title=profile.title_for(question))
     privacy = privacy_block(result)
     if privacy:
         blocks.append(privacy)
@@ -366,6 +366,7 @@ def export_rows(data: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
             for row in rows:
                 if granularity in row:
                     row[granularity] = period_label(row[granularity], granularity)
+                    row.pop("transaction_date", None)  # the same date as the bucket, before it was labelled
         if rows and len(rows) >= len(best):
             best = rows
     return best
@@ -401,8 +402,9 @@ def _plain(row: Dict[str, Any]) -> Dict[str, Any]:
 
 def _files(question: str, result: Any, orgs: List[int], meta: Dict[int, Dict[str, Any]], *, user_id: int,
            session_id: Optional[str], answer_text: str, delivery: Any = None,
-           documents: Sequence[Any] = ()) -> List[Dict[str, Any]]:
-    """Chart, canvas and download blocks when the user asked for a file or a chart; [] otherwise. Never raises."""
+           documents: Sequence[Any] = (), title: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Chart, canvas and download blocks when the user asked for a file or a chart; [] otherwise. Never raises.
+    `title`: the files' title (an agent's Run now); None makes it from the question."""
     try:
         delivery = delivery if delivery is not None else delivery_for(question)
         if delivery is None or delivery.mode == "none":
@@ -416,7 +418,7 @@ def _files(question: str, result: Any, orgs: List[int], meta: Dict[int, Dict[str
         return attach_delivery(
             question, rows, [], status="ok" if rows else "empty", user_id=user_id, organization_id=single,
             session_id=session_id, org_name=(meta.get(single) or {}).get("name") if single else None,
-            answer_text=answer_text, delivery=delivery,
+            answer_text=answer_text, delivery=delivery, title=title,
         )
     except Exception as e:  # noqa: BLE001 - the answer still reaches the user without the file
         logger.warning("agent preview: file not built: %s", e, exc_info=True)

@@ -49,6 +49,15 @@ def test_the_reporting_agent_asks_for_both_files_and_only_reads_figures():
     assert delivery.wants_file and delivery.wants_chart
     assert set(named_formats(reporting.run_prompt)) == {"pdf", "xlsx"}
     assert preview.attachment(reporting.run_prompt) == "XLSX and PDF files and chart"
+    assert reporting.title_for(reporting.run_prompt) == "Month-end P&L pack"
+    assert reporting.title_for("Sales by customer as Excel") is None and profiles.get("vat").title_for("x") is None
+
+
+def test_export_rows_drop_the_date_the_bucket_repeats():
+    rows = [{"pnl.transaction_date": "2026-07-01T00:00:00.000", "pnl.transaction_date.month": "2026-07-01T00:00:00.000",
+             "pnl.organization_id": 27, "pnl.organization_name": "Org 27", "pnl.revenue": "10"}]
+    data = [{"tool": "query_metrics", "input": {"granularity": "month"}, "result": {"rows": rows}}]
+    assert preview.export_rows(data) == [{"month": "Jul 2026", "organization_name": "Org 27", "revenue": "10"}]
 
 
 def test_public_shape():

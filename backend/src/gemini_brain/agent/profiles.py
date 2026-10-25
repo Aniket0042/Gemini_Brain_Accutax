@@ -37,6 +37,12 @@ class AgentProfile:
     icon: str = "sparkles"
     #: The routines this agent will run on its own once phase 1 is built; shown on the card as "coming".
     routines: Tuple[str, ...] = field(default_factory=tuple)
+    #: The title of the files its Run now builds (otherwise the title is made from the question).
+    report_title: str = ""
+
+    def title_for(self, question: str) -> Optional[str]:
+        """The file title for this question: report_title for the Run now question, else None."""
+        return self.report_title or None if (question or "").strip() == self.run_prompt else None
 
     def allows(self, tool: str) -> bool:
         return self.tools is None or tool in self.tools
@@ -130,6 +136,7 @@ _PROFILES: Tuple[AgentProfile, ...] = (
         run_prompt=("Month-end pack as PDF and Excel: profit and loss report by month for the last three complete "
                     "months, with revenue, cost of sales, gross profit, operating expenses and net profit."),
         run_label="Month-end P&L pack (PDF + Excel)",
+        report_title="Month-end P&L pack",
         suggestions=("Sales by customer last month as Excel", "Expenses by category this quarter as PDF",
                      "P&L this year by month as a chart"),
         icon="file-chart",
