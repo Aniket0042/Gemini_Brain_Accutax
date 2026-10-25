@@ -255,6 +255,7 @@ def run_agent(
     pii_mode: Optional[str] = None,
     capture: bool = False,
     law_model_id: Optional[str] = None,
+    profile: Any = None,
 ) -> AgentResult:
     """Answer one question. Never raises. `progress(tool_name, tool_input)` is called before each tool runs.
     `history`: the thread's earlier messages; `turn_specs`: what its turns queried (history.add_spec);
@@ -263,7 +264,8 @@ def run_agent(
     the files read_document may serve; `document_evidence`: their fields, as evidence for the verifier.
     `pii_mode`: masking for this request instead of PII_MODE; `capture`: keep its privacy snapshot whatever
     PII_SNAPSHOTS says (the privacy page's live demo uses both). `law_model_id`: the model of the law route
-    instead of the knowledge base's own (usage limits' lite mode)."""
+    instead of the knowledge base's own (usage limits' lite mode). `profile`: the agent answering (agent/profiles.py):
+    it limits the tools offered and adds its instructions; None is the general agent."""
     started = time.monotonic()
     deadline = started + (deadline_seconds or settings.agent_deadline_seconds)
     budget = max_tool_calls or settings.agent_max_tool_calls
@@ -271,7 +273,8 @@ def run_agent(
     sentinel.note_request(session_id=session_id, organization_ids=orgs,
                           org_names=[(org_meta.get(o) or {}).get("name") for o in orgs], subject=subject)
     ctx = tools.ToolContext(organization_ids=orgs, subject=subject, deadline=deadline, user_id=user_id,
-                            session_id=session_id, document_ids=tuple(document_ids))
+                            session_id=session_id, document_ids=tuple(document_ids),
+                            allowed_tools=getattr(profile, "tools", None))
     planner_id = model_id or settings.agent_model_id or SONNET5_ID
     writer_id = answer_model_id or settings.agent_answer_model_id or planner_id
     planner = BedrockAdapter(planner_id, label="agent")
@@ -311,7 +314,8 @@ def run_agent(
             return masking.outbound(messages, asked) if masking is not None else messages
 
         # With files in the chat the law shortcut is skipped: it answers from the question alone.
-        law_answer = None if documents or document_ids else law.answer(
+        # An agent without the law tool never takes the law shortcut either.
+        law_answer = None if documents or document_ids or not ctx.allows("search_vat_kb") else law.answer(
             question, [dict(m) for m in (outbound() if masked else messages)], brief=brief,
             **({"model_id": law_model_id} if law_model_id else {}))
         if law_answer is not None:
@@ -335,7 +339,7 @@ def run_agent(
 
         def build_system(meta: Dict[int, Dict[str, Any]], placeholders: bool) -> str:
             return (system_prompt(meta, orgs, today, settings.report_timezone, brief=brief, attachment=attachment,
-                                  documents=bool(documents or document_ids))
+                                  documents=bool(documents or document_ids), profile=profile)
                     + (PLACEHOLDER_RULES if placeholders else "") + CANARY_RULE.format(marker=CANARY))
 
         system = build_system(masking.org_meta(org_meta) if masked else org_meta, masked)

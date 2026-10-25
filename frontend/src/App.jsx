@@ -9,7 +9,8 @@ import { Header } from './components/Header';
 import { IntroSuggestions } from './components/IntroSuggestions';
 import { ModelHealthModal } from './components/ModelHealthModal';
 import { AnswerCanvas } from './components/canvas/AnswerCanvas';
-import { fetchQueryResponse, streamQueryResponse, fetchTenants, fetchModelCatalog, fetchSessionMessages, createChatSession, deleteChatSession, fetchUploadConfig, fetchPrivacyAccess, fetchUsage } from './services/api';
+import { fetchQueryResponse, streamQueryResponse, fetchTenants, fetchModelCatalog, fetchSessionMessages, createChatSession, deleteChatSession, fetchUploadConfig, fetchPrivacyAccess, fetchUsage, fetchAgents } from './services/api';
+import { AgentsPanel, AgentBar, parseMention } from './components/AgentsPanel';
 import { UsageModal } from './components/UsageModal';
 import { worstOwner } from './components/UsageMeter';
 import { PrivacySnapshotsModal } from './components/PrivacySnapshotsModal';
@@ -311,6 +312,9 @@ export default function App() {
   // only one model is offered. Effort is not user-selectable.
   const [brief, setBrief] = useState(() => localStorage.getItem('accutax_brief') === '1');
   const [modelCatalog, setModelCatalog] = useState(null);
+  // Specialist agents (GET /agents) and the one that answers the next question.
+  const [agents, setAgents] = useState([]);
+  const [activeAgent, setActiveAgent] = useState('accutax');
   // Whether this user may attach files, and the limits (GET /uploads/config). Off until the server says on.
   const [uploadConfig, setUploadConfig] = useState({ enabled: false });
   const [model, setModel] = useState(() => {
@@ -1115,6 +1119,22 @@ export default function App() {
 
   useEffect(() => {
     const token = currentUser?.access_token;
+    if (!token) return undefined;
+    let cancelled = false;
+    fetchAgents(token).then((data) => {
+      if (cancelled || !data) return;
+      setAgents(data.agents || []);
+      setActiveAgent((prev) => ((data.agents || []).some((a) => a.key === prev) ? prev : data.default_agent || 'accutax'));
+    }).catch((err) => {
+      if (!cancelled) console.warn('Agents unavailable:', err.message);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.access_token]);
+
+  useEffect(() => {
+    const token = currentUser?.access_token;
     if (!token) {
       setUploadConfig({ enabled: false });
       return undefined;
@@ -1174,7 +1194,15 @@ export default function App() {
 
   const handleSubmitQuery = async (typedText, overrides = {}) => {
     // A card number is removed here, so it is never shown in the chat, kept in this browser or sent.
-    const { text: queryText, cards: cardsRemoved } = dropCards(typedText);
+    const { text: cleanText, cards: cardsRemoved } = dropCards(typedText);
+    // "@vat ..." picks the agent for this question and the ones after it.
+    const mention = parseMention(cleanText, agents);
+    if (mention.agentKey) {
+      setActiveAgent(mention.agentKey);
+      if (!mention.text.trim()) return;
+    }
+    const queryText = mention.agentKey ? mention.text : cleanText;
+    const agentKey = overrides.agent || mention.agentKey || activeAgent;
     if (activeHistoryId) {
       const openEntry = chatHistory.find((e) => e.id === activeHistoryId);
       const openKey = entryScopeKey(openEntry);
@@ -1273,6 +1301,7 @@ export default function App() {
       ...(overrides.attachments?.length ? { attachments: overrides.attachments } : {}),
       // Without a picker, "auto": the server uses the default model.
       model: (modelCatalog && !modelCatalog.picker_hidden && model) || 'auto',
+      ...(agents.length ? { agent: agentKey } : {}),
     };
 
     const token = currentUser?.access_token || '';
@@ -1480,6 +1509,11 @@ export default function App() {
 
   // Stop button: cancel the query in flight and keep whatever text has
   // streamed in so far, marked as stopped.
+  const handleRunAgent = (agent) => {
+    setActiveAgent(agent.key);
+    handleSubmitQuery(agent.run_prompt, { agent: agent.key });
+  };
+
   const handleStopQuery = () => {
     const controller = queryControllerRef.current;
     if (!controller) return;
@@ -1614,7 +1648,15 @@ export default function App() {
                   onSelectPrompt={handleSubmitQuery}
                   activeTenant={activeTenant}
                   userName={userName}
-                />
+                >
+                  <AgentsPanel
+                    agents={agents}
+                    activeKey={activeAgent}
+                    onRunNow={handleRunAgent}
+                    onSelect={setActiveAgent}
+                    disabled={isLoading}
+                  />
+                </IntroSuggestions>
               </>
             ) : (
               <div style={styles.activeConvoWrapper}>
@@ -1641,6 +1683,13 @@ export default function App() {
       <div style={styles.stickyBottomBar}>
         <div style={styles.inputInnerWrapper}>
           <UsageBanner usage={usage} />
+          <AgentBar
+            agents={agents}
+            activeKey={activeAgent}
+            onSelect={setActiveAgent}
+            onRunNow={handleRunAgent}
+            disabled={isLoading}
+          />
           <QueryInput
             onSubmitQuery={handleSubmitQuery}
             onStop={handleStopQuery}

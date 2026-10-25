@@ -189,22 +189,39 @@ Attachment
 """
 
 
+SPECIALIST = """
+Your agent
+{instructions}
+- You have only the tools offered to you. When a question needs figures or law your tools do not cover, say in one
+  sentence that {general} or another agent can answer it, and answer the part you can. The rules above that name a
+  tool you do not have do not apply to you.
+- Never write a tool name (review_vat, search_vat_kb, ...) or talk about tools or sessions. When the books cannot be
+  checked just now, say "I could not check your books just now" once, and offer what you can do in plain words.
+"""
+
+
 def system_prompt(org_meta: Dict[int, Dict[str, Any]], organization_ids: Sequence[int],
                   today: dt.date, timezone: str, brief: bool = False, attachment: Optional[str] = None,
-                  documents: bool = False) -> str:
+                  documents: bool = False, profile: Any = None) -> str:
     """`attachment`: "chart" or "file" when code will attach one to this answer, else None.
-    `documents`: the user attached files to this chat (this turn or earlier)."""
+    `documents`: the user attached files to this chat (this turn or earlier).
+    `profile`: the specialist agent answering (agent/profiles.py); None or the general agent adds nothing."""
+    from gemini_brain.agent import profiles
+    specialist = profile is not None and profile.key != profiles.DEFAULT_KEY
     orgs = "\n".join(
         f"- id {o}: {(org_meta.get(o) or {}).get('name') or f'Organization {o}'}"
         f" ({(org_meta.get(o) or {}).get('currency') or 'currency unknown'})"
         for o in organization_ids
     )
     return (
-        "You are Accutax AI, a financial assistant for UAE businesses. You answer with tools.\n"
-        f"Today is {today:%A %d %B %Y} ({timezone}).\n\n"
+        (f"You are the {profile.name} of Accutax AI, a financial assistant for UAE businesses. You answer with tools.\n"
+         if specialist else "You are Accutax AI, a financial assistant for UAE businesses. You answer with tools.\n")
+        + f"Today is {today:%A %d %B %Y} ({timezone}).\n\n"
         f"Organizations selected in this chat ({len(organization_ids)}):\n{orgs}\n\n"
         + RULES
         + (BRIEF if brief else "")
         + (DOCUMENTS if documents else "")
         + (ATTACHED.format(what=attachment) if attachment else NOT_ATTACHED)
+        + (SPECIALIST.format(instructions=f"- {profile.instructions}", general=profiles.get(None).name)
+           if specialist else "")
     )

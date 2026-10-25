@@ -15,7 +15,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, FrozenSet, List, Optional, Sequence, Tuple
 
 from gemini_brain.config.settings import settings
 from gemini_brain.semantic import cash_forecast, list_documents, query_metrics
@@ -105,6 +105,11 @@ class ToolContext:
     fta_numbers: Dict[str, int] = field(default_factory=dict)
     fta_sources: List[Dict[str, Any]] = field(default_factory=list)
     fta_evidence: List[float] = field(default_factory=list)
+    #: The tools this request's agent may call (agent/profiles.py); None means every tool.
+    allowed_tools: Optional[FrozenSet[str]] = None
+
+    def allows(self, name: str) -> bool:
+        return self.allowed_tools is None or name in self.allowed_tools
 
     def scope(self, requested: Any) -> List[int]:
         """The selected organizations, narrowed to the ones the model named. Never widened."""
@@ -146,12 +151,14 @@ def specs(ctx: ToolContext) -> List[Dict[str, Any]]:
     out += [VAT_KB_SPEC, APP_GUIDE_SPEC, vat_return.PENALTY_SPEC]
     if ctx.document_ids:
         out.append(READ_DOCUMENT_SPEC)
-    return out
+    return [s for s in out if ctx.allows(s["toolSpec"]["name"])]
 
 
 def execute(name: str, params: Any, ctx: ToolContext) -> Tuple[Dict[str, Any], bool]:
     """Run one tool call. Returns (result, ok); never raises."""
     params = params if isinstance(params, dict) else {}
+    if not ctx.allows(name):  # the model named a tool its agent was not offered
+        return {"error": f"The tool {name!r} is not available to this agent."}, False
     try:
         if name in DATA_TOOLS:
             orgs = ctx.scope(params.get("organization_ids"))

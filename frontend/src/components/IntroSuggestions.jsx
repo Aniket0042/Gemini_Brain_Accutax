@@ -67,7 +67,7 @@ const SUGGESTIVE_PILLS = [
   },
 ];
 
-export function IntroSuggestions({ onSelectPrompt }) {
+export function IntroSuggestions({ onSelectPrompt, children }) {
   return (
     <div className="intro-hero">
       <h1 className="intro-hero-title">
@@ -77,6 +77,8 @@ export function IntroSuggestions({ onSelectPrompt }) {
       <p className="intro-hero-subtitle">
         Profitability, collections, cash, VAT, expenses, and audit checks — pick a starting point.
       </p>
+
+      {children}
 
       <div className="minimal-suggestion-grid">
         {SUGGESTIONS.map((item) => (

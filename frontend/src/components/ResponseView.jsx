@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { NoticeCard } from './NoticeCard';
 import { AnswerProvenance } from './AnswerProvenance';
 import { BlockRenderer, hasPortedBlocks, chatFacingBlocks } from './blocks/BlockRenderer';
+import { AgentBadge } from './AgentsPanel';
 import { citationSources, linkCitations, citationLinkRenderer } from './citations';
 import { MarkdownLink } from './markdownLinks';
 import { SortableMarkdownTable } from './SortableMarkdownTable';
@@ -206,9 +207,10 @@ const AssistantResponseCard = ({
   const allBlocks = responseData?.blocks;
   const privacyBlock = Array.isArray(allBlocks) ? allBlocks.find((b) => b?.type === 'privacy') : null;
   const sensitiveBlock = Array.isArray(allBlocks) ? allBlocks.find((b) => b?.type === 'sensitive_notice') : null;
+  const agentBlock = Array.isArray(allBlocks) ? allBlocks.find((b) => b?.type === 'agent_badge') : null;
   const sensitiveKinds = sensitiveBlock?.kinds || msg.sensitiveRemoved;
   const blocks = Array.isArray(allBlocks)
-    ? allBlocks.filter((b) => b?.type !== 'privacy' && b?.type !== 'sensitive_notice')
+    ? allBlocks.filter((b) => b?.type !== 'privacy' && b?.type !== 'sensitive_notice' && b?.type !== 'agent_badge')
     : allBlocks;
   const showBlocks = !isStreaming && hasPortedBlocks(blocks);
   const sources = isStreaming ? null : citationSources(blocks);
@@ -231,6 +233,8 @@ const AssistantResponseCard = ({
       </div>
       <div style={styles.assistantContentCol}>
         
+        <AgentBadge block={agentBlock} />
+
         <OrgChips organizations={responseData?.organizations} />
 
         <SensitiveNotice kinds={sensitiveKinds} />

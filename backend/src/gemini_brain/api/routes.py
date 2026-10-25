@@ -28,6 +28,8 @@ from gemini_brain.api.auth import (
 from gemini_brain.api.models import (
     HealthResponse,
     ModelCatalogResponse,
+    AgentInfo,
+    AgentListResponse,
     ModelInfo,
     LoginRequest,
     ModelDiagnosticRequest,
@@ -48,6 +50,7 @@ from gemini_brain.api.models import (
 from gemini_brain.config.settings import settings
 from gemini_brain.health.model_health_checker import check_all_models_and_services
 from gemini_brain.agent import models as agent_models
+from gemini_brain.agent import profiles as agent_profiles
 from gemini_brain.agent import preview as agent_preview
 from gemini_brain.resilience import (
     HTTP_FOR_CODE,
@@ -221,6 +224,31 @@ def _model_choice(payload: QueryRequest, current_user: CurrentUser) -> dict:
             "allowed_models": [m.key for m in agent_models.allowed(current_user.user_id, current_user.email)]}
 
 
+@router.get(
+    "/agents",
+    response_model=AgentListResponse,
+    tags=["Agents"],
+    summary="List the Specialist Agents",
+    description=(
+        "The agents a chat can be answered by: the general agent and the specialists (VAT, AP / Bills, Cash), "
+        "with what each does and the question its Run now button sends. Send the chosen key as `agent` on /query."
+    ),
+)
+def list_agents(current_user: CurrentUser = Depends(get_current_user)) -> AgentListResponse:
+    return AgentListResponse(agents=[AgentInfo(**p.to_public()) for p in agent_profiles.all_profiles()],
+                             default_agent=agent_profiles.DEFAULT_KEY)
+
+
+def _agent_key(payload: QueryRequest) -> Optional[str]:
+    """The agent the request names, checked before anything runs: an unknown key is a plain 400."""
+    if not payload.agent:
+        return None
+    try:
+        return agent_profiles.get(payload.agent).key
+    except agent_profiles.UnknownAgent:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown agent {payload.agent!r}.")
+
+
 
 @router.get(
     "/tenants",
@@ -291,7 +319,7 @@ def _attachments(payload: QueryRequest, current_user: CurrentUser) -> list:
 
 
 def _agent_events(payload: QueryRequest, current_user: CurrentUser, orgs: list[int],
-                  documents: Optional[list] = None) -> Generator[str, None, None]:
+                  documents: Optional[list] = None, agent_key: Optional[str] = None) -> Generator[str, None, None]:
     """SSE for an agent answer: a status line per tool call, then the final result."""
     import queue
     import threading
@@ -304,7 +332,7 @@ def _agent_events(payload: QueryRequest, current_user: CurrentUser, orgs: list[i
             box["result"] = agent_preview.answer(
                 payload.query, orgs, _agent_org_meta(orgs, current_user),
                 session_id=payload.session_id, user_id=current_user.user_id, db_name=payload.db_name,
-                progress=events.put, brief=bool(payload.brief), documents=documents,
+                progress=events.put, brief=bool(payload.brief), documents=documents, agent_key=agent_key,
                 **_model_choice(payload, current_user),
             )
         except Exception as e:  # noqa: BLE001 - answer() never raises; this is belt and braces
@@ -843,11 +871,13 @@ async def run_query(
     import asyncio
     orgs = _agent_scope(current_user, _query_orgs(payload, current_user, action="query"))
     documents = _attachments(payload, current_user)
+    agent_key = _agent_key(payload)
     try:
         result = await asyncio.to_thread(
             agent_preview.answer, payload.query, orgs, _agent_org_meta(orgs, current_user),
             session_id=payload.session_id, user_id=current_user.user_id, db_name=payload.db_name,
-            brief=bool(payload.brief), documents=documents, **_model_choice(payload, current_user),
+            brief=bool(payload.brief), documents=documents, agent_key=agent_key,
+            **_model_choice(payload, current_user),
         )
         return QueryResponse(**normalize_envelope(result))
     except Exception as e:
@@ -880,8 +910,9 @@ def stream_query(
     # event is ever emitted for it.
     orgs = _agent_scope(current_user, _query_orgs(payload, current_user, action="query.stream"))
     documents = _attachments(payload, current_user)  # a refused attachment is a plain error before the stream opens
+    agent_key = _agent_key(payload)
     return StreamingResponse(
-        _agent_events(payload, current_user, orgs, documents),
+        _agent_events(payload, current_user, orgs, documents, agent_key),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
     )

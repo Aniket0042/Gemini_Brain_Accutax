@@ -91,6 +91,14 @@ class QueryRequest(BaseModel):
         default=False,
         description="When true, narration stays to a few short bullets instead of a full write-up.",
     )
+    agent: Optional[str] = Field(
+        default=None,
+        description=(
+            "Key of the specialist agent to answer, from GET /api/v1/agents (vat, ap, cash, or accutax for the "
+            "general agent). Omitted: the agent that answered the thread's last turn, else the general agent."
+        ),
+        examples=[None],
+    )
     attachments: List[str] = Field(
         default_factory=list,
         max_length=10,
@@ -194,6 +202,7 @@ class QueryResponse(BaseModel):
     api_traces: List[Dict[str, Any]] = Field(default_factory=list, description="Accutax REST API calls (endpoint, params, status) executed during query evaluation.")
     llm_traces: List[Dict[str, Any]] = Field(default_factory=list, description="Bedrock/Claude LLM calls (model, purpose, tokens, duration) executed during query evaluation.")
     context_window: Optional[Dict[str, Any]] = Field(default=None, description="Session's cumulative token usage against a fixed budget, independent of the selected model. {used, limit, remaining, percent}.")
+    agent: Optional[Dict[str, Any]] = Field(default=None, description="The agent that answered: {key, name}.")
     usage: Optional[Dict[str, Any]] = Field(default=None, description="AI usage of the buckets this question charged: {mode: full|lite, banner, internal, owners: [{owner_user_id, plan_label, percent, state, resets_at, user}]}. None when limits are off.")
     results: List[Any] = Field(default_factory=list, description="Raw structured results list.")
     error: Optional[str] = Field(default=None, description="Error message if processing failed.")
@@ -448,3 +457,24 @@ class UploadConfig(BaseModel):
     pages_used_today: int = 0
     accept: List[str] = Field(default_factory=list, description="File extensions the picker offers.")
 
+
+
+class AgentInfo(BaseModel):
+    """One specialist agent, for the Agents panel."""
+
+    key: str
+    name: str
+    role: str
+    icon: str = "sparkles"
+    tools: List[str] = Field(default_factory=list)
+    run_prompt: str = ""
+    run_label: str = ""
+    suggestions: List[str] = Field(default_factory=list)
+    #: Routines the agent will run on its own once scheduling is built; shown as "coming soon".
+    routines: List[str] = Field(default_factory=list)
+    default: bool = False
+
+
+class AgentListResponse(BaseModel):
+    agents: List[AgentInfo] = Field(default_factory=list)
+    default_agent: str = "accutax"

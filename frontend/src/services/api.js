@@ -151,6 +151,19 @@ export const streamQueryResponse = (payload, onChunk, onError, onComplete, token
 
 // GET /models lists the one answering model; the app only uses the call to
 // spot an expired session (see App.jsx).
+/** The specialist agents (GET /api/v1/agents): name, job, tools, and the question "Run now" sends. */
+export const fetchAgents = async (token = '') => {
+  const headers = { 'Accept': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  const response = await fetch('/api/v1/agents', { method: 'GET', headers });
+  if (!response.ok) {
+    throw new Error(`Failed to load the agents: ${response.statusText}`);
+  }
+  return await response.json();
+};
+
 export const fetchModelCatalog = async (token = '') => {
   const headers = { 'Accept': 'application/json' };
   if (token) {
