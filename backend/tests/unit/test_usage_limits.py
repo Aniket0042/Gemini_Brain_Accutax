@@ -485,3 +485,48 @@ def test_store_member_events_shape(monkeypatch):
                              "credits": 39.5, "cost_usd": 0.0395, "lite_events": 1}
     assert out["events"][0]["models"] == ["in.anthropic.claude-haiku-4-5"] and out["events"][0]["mode"] == "lite"
     assert all("c.owner_user_id = %s AND c.user_id = %s" in q for q in cur.sql if "SELECT" in q)
+
+
+# ── My usage: every role's own page ──────────────────────────────────────────
+
+def _mine(monkeypatch, per_owner=None):
+    monkeypatch.setattr(store, "user_events", lambda uid, since, limit=50: {
+        "totals": {"events": 2, "credits": 40.0}, "per_owner": per_owner or {7: {"credits": 40.0, "events": 2}},
+        "events": [{"id": 1, "kind": "agent_answer", "credits": 20.0}]})
+
+
+def test_collaborator_sees_their_own_use_and_the_bucket_percent(db, hard, monkeypatch):
+    _mine(monkeypatch)
+    db.used[7] = 5_000
+    db.user_today[(7, 50)] = 250
+    body = _client(50, orgs=(24,)).get("/api/v1/usage/me").json()
+    [b] = body["buckets"]
+    assert b["owner_user_id"] == 7 and b["owner_email"] == "u7@x.com" and b["you_own_it"] is False
+    assert b["percent"] == 25 and b["daily_cap"] == 1_000 and b["used_today"] == 250 and b["today_percent"] == 25
+    assert b["month_credits"] == 40.0 and "used" not in b and "bucket" not in b    # no bucket credit amounts
+    assert body["totals"]["events"] == 2 and body["events"][0]["kind"] == "agent_answer"
+
+
+def test_owner_sees_their_own_bucket_marked(db, hard, monkeypatch):
+    _mine(monkeypatch, {7: {"credits": 9.0, "events": 1}})
+    [b] = _client(7, orgs=(24, 25)).get("/api/v1/usage/me").json()["buckets"]
+    assert b["you_own_it"] is True
+
+
+def test_super_admin_my_usage_is_internal(db, hard, monkeypatch):
+    _mine(monkeypatch, {0: {"credits": 9.0, "events": 1}})
+    db.admins.add(1)
+    body = _client(1).get("/api/v1/usage/me").json()
+    assert body["internal"] is True and body["buckets"] == []
+
+
+def test_store_user_events_spans_every_owner(monkeypatch):
+    import datetime as dt
+    cur = _open_with((3, 900, 100, 20, 55.0, 0), monkeypatch)
+    at = dt.datetime(2026, 10, 26, tzinfo=dt.timezone.utc)
+    answers = iter([[(7, 40.0, 2), (9, 15.0, 1)], [(5, at, "agent_answer", "ok", "full", 2, 900, 100, 20, 55.0, {}, [24, 30])]])
+    cur.fetchall = lambda: next(answers)
+    out = store.user_events(50, at)
+    assert out["per_owner"] == {7: {"credits": 40.0, "events": 2}, 9: {"credits": 15.0, "events": 1}}
+    assert out["events"][0]["credits"] == 55.0 and out["totals"]["events"] == 3
+    assert not any("c.owner_user_id = %s" in q for q in cur.sql)

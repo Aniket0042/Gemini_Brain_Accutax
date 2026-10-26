@@ -333,6 +333,34 @@ def overview(month_start: datetime.datetime, days_since: datetime.datetime, time
     }
 
 
+def user_events(user_id: int, since: datetime.datetime, limit: int = 50) -> Dict[str, Any]:
+    """A person's own use since `since`, across every owner who paid for it: totals, credits per owner and the newest
+    events (no question text: the usage tables never hold it)."""
+    total = _run(f"""SELECT COUNT(DISTINCT e.id), COALESCE(SUM(e.input_tokens), 0), COALESCE(SUM(e.output_tokens), 0),
+                            COALESCE(SUM(e.cache_read_tokens + e.cache_write_tokens), 0), COALESCE(SUM(c.credits), 0),
+                            COUNT(DISTINCT e.id) FILTER (WHERE e.model_mode = 'lite')
+                     FROM public.ai_usage_charges c JOIN public.ai_usage_events e ON e.id = c.event_id
+                     WHERE c.user_id = %s AND c.created_at >= %s AND {_COUNTED}""", (user_id, since), fetch="one")
+    per_owner = _run(f"""SELECT c.owner_user_id, SUM(c.credits), COUNT(DISTINCT c.event_id)
+                         FROM public.ai_usage_charges c JOIN public.ai_usage_events e ON e.id = c.event_id
+                         WHERE c.user_id = %s AND c.created_at >= %s AND {_COUNTED} GROUP BY 1""",
+                     (user_id, since), fetch="all")
+    rows = _run(f"""SELECT e.id, e.created_at, e.kind, e.status, e.model_mode, e.calls, e.input_tokens, e.output_tokens,
+                           e.cache_read_tokens + e.cache_write_tokens, SUM(c.credits), e.models, e.organization_ids
+                    FROM public.ai_usage_charges c JOIN public.ai_usage_events e ON e.id = c.event_id
+                    WHERE c.user_id = %s AND c.created_at >= %s AND {_COUNTED}
+                    GROUP BY e.id ORDER BY e.created_at DESC LIMIT %s""", (user_id, since, limit), fetch="all")
+    return {
+        "totals": {"events": int(total[0]), "input_tokens": int(total[1]), "output_tokens": int(total[2]),
+                   "cached_tokens": int(total[3]), "credits": float(total[4]), "cost_usd": round(float(total[4]) / 1000, 4),
+                   "lite_events": int(total[5])},
+        "per_owner": {int(r[0]): {"credits": float(r[1] or 0), "events": int(r[2] or 0)} for r in per_owner},
+        "events": [{"id": r[0], "at": r[1], "kind": r[2], "status": r[3], "mode": r[4], "calls": r[5],
+                    "input_tokens": r[6], "output_tokens": r[7], "cached_tokens": r[8], "credits": float(r[9]),
+                    "models": sorted((r[10] or {}).keys()), "organization_ids": list(r[11] or [])} for r in rows],
+    }
+
+
 def owners_usage(month_start: datetime.datetime) -> List[Dict[str, Any]]:
     """Every owner charged this month, with their plan row if any."""
     rows = _run(f"""SELECT c.owner_user_id, SUM(c.credits), COUNT(DISTINCT c.user_id), COUNT(DISTINCT c.event_id),

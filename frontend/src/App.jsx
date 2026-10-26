@@ -1795,7 +1795,7 @@ export default function App() {
         />
       )}
 
-      {showUsage && usage && (usage.is_owner || usage.is_admin) && (
+      {showUsage && usage && (
         <UsageModal token={currentUser?.access_token || ''} usage={usage} onClose={() => { setShowUsage(false); fetchUsage(scopeOrgIds, currentUser?.access_token || '').then(setUsage); }} />
       )}
 

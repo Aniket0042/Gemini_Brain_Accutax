@@ -80,6 +80,35 @@ def my_usage(org_ids: str = Query("", description="Comma-separated organization 
             "typical_question_credits": TYPICAL_QUESTION_CREDITS}
 
 
+@router.get("/me", summary="The caller's own AI use this month, for every role: their limit, the buckets, their questions")
+def my_usage_page(current_user: CurrentUser = Depends(get_current_user)) -> Dict[str, Any]:
+    """What anyone may see about themselves: credits and tokens they used this month and today, their daily limit in
+    each owner's bucket, how full each bucket is (percent only) and their newest 50 questions and file reads."""
+    store = _store()
+    me = int(current_user.user_id)
+    p = limits.periods()
+    internal = store.is_super_admin(me)
+    detail = store.user_events(me, p.month_start)
+    orgs = [int(o) for o in current_user.allowed_org_ids or []]
+    owners = set() if internal else {o for o in ledger.owners_of(orgs).values() if o is not None}
+    owners |= {o for o in detail["per_owner"] if o != ledger.INTERNAL_OWNER}
+    names = store.user_emails(owners)
+    buckets = []
+    for owner in sorted(owners):
+        st = limits.owner_state(owner, me, p)
+        user = st.get("user") or {}
+        mine = detail["per_owner"].get(owner) or {}
+        buckets.append({"owner_user_id": owner, "owner_email": names.get(owner), "you_own_it": owner == me,
+                        "plan_label": st["plan_label"], "percent": st["percent"], "state": st["state"],
+                        "resets_at": st["resets_at"], "daily_cap": user.get("daily_cap"),
+                        "used_today": user.get("used_today", 0), "today_percent": user.get("percent"),
+                        "disabled": bool(user.get("disabled")), "day_resets_at": user.get("resets_at"),
+                        "month_credits": round(mine.get("credits", 0), 3), "questions": mine.get("events", 0)})
+    return {"internal": internal, "enforce": limits.enforce_mode(), "timezone": settings.usage_timezone,
+            "buckets": buckets, "totals": detail["totals"], "events": detail["events"],
+            "typical_question_credits": TYPICAL_QUESTION_CREDITS}
+
+
 def _public_owner(st: Dict[str, Any]) -> Dict[str, Any]:
     """What any person in the bucket may see: percentages and dates, no credit amounts."""
     user = st.get("user") or {}

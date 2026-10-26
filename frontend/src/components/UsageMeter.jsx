@@ -27,8 +27,8 @@ export const shortDate = (iso) => {
 export const UsageMeter = ({ usage, onOpen }) => {
   if (!usage || usage.enforce === 'off' || usage.enforce === 'log') return null;
   const owner = worstOwner(usage);
-  const canOpen = usage.is_owner || usage.is_admin;
-  if (!owner && !canOpen) return null;
+  // Everyone can open their own usage ("My usage"); owners and admins also get their own tabs there.
+  if (!owner && !usage.is_owner && !usage.is_admin) return null;
 
   const pct = owner?.percent;
   const width = pct == null ? 0 : Math.min(100, pct);
@@ -39,14 +39,14 @@ export const UsageMeter = ({ usage, onOpen }) => {
     : owner
       ? `AI this month: ${pct == null ? 'no limit' : `${pct}% used`} · renews ${shortDate(owner.resets_at)}`
         + (mine != null ? ` · you today: ${mine}% of your daily limit` : '')
-        + (canOpen ? ' · click for details' : '')
+        + ' · click for details'
       : 'AI usage';
 
   return (
     <button
       className="icon-btn"
-      style={{ ...styles.btn, cursor: canOpen ? 'pointer' : 'default' }}
-      onClick={canOpen ? onOpen : undefined}
+      style={styles.btn}
+      onClick={onOpen}
       title={title}
       aria-label={title}
     >
@@ -65,7 +65,7 @@ export const UsageMeter = ({ usage, onOpen }) => {
 const styles = {
   btn: {
     display: 'flex', alignItems: 'center', gap: 6, height: 'var(--control-h-sm)', padding: '0 8px',
-    background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', flexShrink: 0,
+    background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', flexShrink: 0, cursor: 'pointer',
   },
   track: { width: 46, height: 5, borderRadius: 99, background: 'var(--surface-2, var(--border-soft))', overflow: 'hidden', display: 'inline-block' },
   fill: { display: 'block', height: '100%', borderRadius: 99 },

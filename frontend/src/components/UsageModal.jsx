@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Gauge, X, RefreshCw } from 'lucide-react';
 import {
   fetchOwnerUsage, setMemberCap, fetchUsageAdmin, fetchUsageAdminOwner, setOwnerPlan, addOwnerTopup, searchUsageOwners,
-  fetchMemberUsage,
+  fetchMemberUsage, fetchMyUsage,
 } from '../services/api';
 import { shortDate } from './UsageMeter';
 
@@ -67,33 +67,17 @@ const when = (iso) => {
 // No question text: the usage tables never keep it.
 const PAGE = 10;
 
-const MemberUsage = ({ userId, ownerId, token }) => {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState('');
+// Questions and file reads, newest first, 10 at a time. No question text: the usage tables never keep it.
+const EventsTable = ({ events }) => {
   const [shown, setShown] = useState(PAGE);
-  useEffect(() => {
-    fetchMemberUsage(userId, ownerId, token).then(setData).catch((e) => setError(e.message));
-  }, [userId, ownerId, token]);
-  if (error) return <div style={styles.memberDetail}><div style={styles.error}>{error}</div></div>;
-  if (!data) return <div style={styles.memberDetail}><div style={styles.muted}>Loading…</div></div>;
-  const t = data.totals;
   return (
-    <div style={styles.memberDetail}>
-      <div style={styles.cards}>
-        <div style={styles.card}><div style={styles.cardLabel}>Questions and files</div><div style={styles.cardValue}>{num(t.events)}</div>
-          <div style={styles.cardSub}>{t.lite_events ? `${t.lite_events} on the lite model` : 'all on the full model'}</div></div>
-        <div style={styles.card}><div style={styles.cardLabel}>Tokens in / out</div>
-          <div style={styles.cardValue}>{num(t.input_tokens)} / {num(t.output_tokens)}</div>
-          <div style={styles.cardSub}>+ {num(t.cached_tokens)} cached</div></div>
-        <div style={styles.card}><div style={styles.cardLabel}>Credits</div><div style={styles.cardValue}>{num(t.credits, 1)}</div>
-          <div style={styles.cardSub}>${num(t.cost_usd, 4)}</div></div>
-      </div>
-      {data.events.length ? (
+    <>
+      {events.length ? (
         <div style={styles.grid}>
           <div style={{ ...styles.eventRow, ...styles.head }}>
             <div>When</div><div>What</div><div>Model</div><div>Tokens in / out</div><div>Credits</div>
           </div>
-          {data.events.slice(0, shown).map((e) => (
+          {events.slice(0, shown).map((e) => (
             <div key={e.id} style={styles.eventRow}>
               <div>{when(e.at)}</div>
               <div>{KIND_LABEL[e.kind] || e.kind}{STATUS_LABEL[e.status] ? <span style={styles.muted}> · {STATUS_LABEL[e.status]}</span> : null}
@@ -106,18 +90,95 @@ const MemberUsage = ({ userId, ownerId, token }) => {
           ))}
         </div>
       ) : <div style={styles.muted}>No AI use this month.</div>}
-      {data.events.length > PAGE && (
+      {events.length > PAGE && (
         <div style={styles.moreRow}>
           <span style={styles.muted}>
-            Showing {Math.min(shown, data.events.length)} of {data.events.length}
-            {data.events.length >= 50 ? ' newest' : ''}
+            Showing {Math.min(shown, events.length)} of {events.length}{events.length >= 50 ? ' newest' : ''}
           </span>
-          {shown < data.events.length && (
-            <button style={styles.btn} onClick={() => setShown(shown + PAGE)}>Show {PAGE} more</button>
-          )}
+          {shown < events.length && <button style={styles.btn} onClick={() => setShown(shown + PAGE)}>Show {PAGE} more</button>}
           {shown > PAGE && <button style={styles.btn} onClick={() => setShown(PAGE)}>Show fewer</button>}
         </div>
       )}
+    </>
+  );
+};
+
+const TotalsCards = ({ t }) => (
+  <div style={styles.cards}>
+    <div style={styles.card}><div style={styles.cardLabel}>Questions and files</div><div style={styles.cardValue}>{num(t.events)}</div>
+      <div style={styles.cardSub}>{t.lite_events ? `${t.lite_events} on the lite model` : 'all on the full model'}</div></div>
+    <div style={styles.card}><div style={styles.cardLabel}>Tokens in / out</div>
+      <div style={styles.cardValue}>{num(t.input_tokens)} / {num(t.output_tokens)}</div>
+      <div style={styles.cardSub}>+ {num(t.cached_tokens)} cached</div></div>
+    <div style={styles.card}><div style={styles.cardLabel}>Credits</div><div style={styles.cardValue}>{num(t.credits, 1)}</div>
+      <div style={styles.cardSub}>${num(t.cost_usd, 4)}</div></div>
+  </div>
+);
+
+const MemberUsage = ({ userId, ownerId, token }) => {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    fetchMemberUsage(userId, ownerId, token).then(setData).catch((e) => setError(e.message));
+  }, [userId, ownerId, token]);
+  if (error) return <div style={styles.memberDetail}><div style={styles.error}>{error}</div></div>;
+  if (!data) return <div style={styles.memberDetail}><div style={styles.muted}>Loading…</div></div>;
+  return (
+    <div style={styles.memberDetail}>
+      <TotalsCards t={data.totals} />
+      <EventsTable events={data.events} />
+    </div>
+  );
+};
+
+// Every role's own page: what I used this month and today, my limit in each bucket, how full the bucket is.
+const MyUsageView = ({ token }) => {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  useEffect(() => { fetchMyUsage(token).then(setData).catch((e) => setError(e.message)); }, [token]);
+  if (error) return <div style={styles.error}>{error}</div>;
+  if (!data) return <div style={styles.empty}>Loading…</div>;
+  return (
+    <div style={styles.scroll}>
+      <p style={styles.note}>
+        {data.internal
+          ? 'Your AI use is Accutax\'s own and has no limit.'
+          : 'The organizations you work in share their owner\'s monthly AI. Your daily limit is set by that owner. '}
+        {' '}1 credit = $0.001; a typical question is about {data.typical_question_credits} credits.
+      </p>
+      {data.buckets.map((b) => (
+        <div key={b.owner_user_id}>
+          <div style={styles.section}>
+            {b.you_own_it ? 'Your organizations' : `Organizations of ${b.owner_email || `owner ${b.owner_user_id}`}`}
+          </div>
+          <div style={styles.cards}>
+            <div style={styles.card}>
+              <div style={styles.cardLabel}>Organizations' AI this month</div>
+              <div style={styles.cardValue}>{b.percent == null ? 'No limit' : `${b.percent}% used`}</div>
+              {b.percent != null && <Bar percent={b.percent} state={b.state} />}
+              <div style={styles.cardSub}>{STATE_LABEL[b.state] || b.state} · renews {shortDate(b.resets_at)}</div>
+            </div>
+            <div style={styles.card}>
+              <div style={styles.cardLabel}>You today</div>
+              <div style={styles.cardValue}>
+                {b.disabled ? 'AI off for you' : b.daily_cap == null ? `${num(b.used_today, 1)} credits` : `${num(b.used_today, 1)} of ${num(b.daily_cap)}`}
+              </div>
+              {!b.disabled && b.daily_cap != null && <Bar percent={b.today_percent} state={b.today_percent >= 100 ? 'blocked' : b.today_percent >= 80 ? 'warn' : 'ok'} />}
+              <div style={styles.cardSub}>
+                {b.disabled ? 'the owner turned it off' : b.daily_cap == null ? 'no daily limit' : `≈ ${num(Math.max(0, b.daily_cap - b.used_today) / data.typical_question_credits)} questions left today`}
+              </div>
+            </div>
+            <div style={styles.card}>
+              <div style={styles.cardLabel}>You this month</div>
+              <div style={styles.cardValue}>{num(b.month_credits, 1)} credits</div>
+              <div style={styles.cardSub}>{num(b.questions)} question{b.questions === 1 ? '' : 's'} and files · {b.plan_label}</div>
+            </div>
+          </div>
+        </div>
+      ))}
+      <div style={styles.section}>All my AI use this month</div>
+      <TotalsCards t={data.totals} />
+      <EventsTable events={data.events} />
     </div>
   );
 };
@@ -494,8 +555,15 @@ const AdminView = ({ token }) => {
   );
 };
 
+const TABS = [
+  { key: 'me', label: 'My usage', show: () => true },
+  { key: 'owner', label: 'My organizations', show: (u) => u?.is_owner },
+  { key: 'admin', label: 'Accutax admin', show: (u) => u?.is_admin },
+];
+
 export const UsageModal = ({ token, usage, onClose }) => {
-  const [view, setView] = useState(usage?.is_owner ? 'owner' : 'admin');
+  const tabs = TABS.filter((t) => t.show(usage));
+  const [view, setView] = useState(usage?.is_owner ? 'owner' : usage?.is_admin ? 'admin' : 'me');
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" style={styles.modal} onClick={(e) => e.stopPropagation()}>
@@ -508,17 +576,18 @@ export const UsageModal = ({ token, usage, onClose }) => {
             </div>
           </div>
           <div style={styles.headerRight}>
-            {usage?.is_owner && usage?.is_admin && (
+            {tabs.length > 1 && (
               <div style={styles.tabs} role="tablist">
-                <button role="tab" aria-selected={view === 'owner'} onClick={() => setView('owner')}
-                  style={{ ...styles.tab, ...(view === 'owner' ? styles.tabActive : {}) }}>My organizations</button>
-                <button role="tab" aria-selected={view === 'admin'} onClick={() => setView('admin')}
-                  style={{ ...styles.tab, ...(view === 'admin' ? styles.tabActive : {}) }}>Accutax admin</button>
+                {tabs.map((t) => (
+                  <button key={t.key} role="tab" aria-selected={view === t.key} onClick={() => setView(t.key)}
+                    style={{ ...styles.tab, ...(view === t.key ? styles.tabActive : {}) }}>{t.label}</button>
+                ))}
               </div>
             )}
             <button style={styles.closeBtn} onClick={onClose} aria-label="Close"><X size={18} /></button>
           </div>
         </div>
+        {view === 'me' && <MyUsageView token={token} />}
         {view === 'owner' && usage?.is_owner && <OwnerView token={token} />}
         {view === 'admin' && usage?.is_admin && <AdminView token={token} />}
       </div>

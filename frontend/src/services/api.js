@@ -421,6 +421,7 @@ export const fetchUsage = async (orgIds = [], token = '') => {
   }
 };
 export const fetchOwnerUsage = (token = '') => usageJson('/owner', token);
+export const fetchMyUsage = (token = '') => usageJson('/me', token);
 export const setMemberCap = (userId, dailyCredits, disabled, token = '') =>
   usageJson(`/owner/members/${encodeURIComponent(userId)}`, token, {
     method: 'PUT', body: JSON.stringify({ daily_credits: dailyCredits, disabled }),
