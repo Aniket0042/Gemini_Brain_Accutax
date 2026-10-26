@@ -1743,13 +1743,11 @@ export default function App() {
             onPreviewFile={handlePreviewFile}
           />
           <div style={styles.composerFooter}>
-            <div style={styles.composerFooterCredits}>
-              <CreditStrip usage={usage} />
-            </div>
             <p style={styles.composerFooterText}>
               AccuTax AI · AccuTax Pro · Data is processed securely
             </p>
             <div style={styles.composerFooterMeter}>
+              <CreditStrip usage={usage} />
               <ContextWindowButton contextWindow={latestContextWindow} />
             </div>
           </div>
@@ -1952,14 +1950,11 @@ const styles = {
     color: 'var(--ink-faint)',
     margin: 0,
   },
-  // The person's AI for today, on the left of the footer line (the context meter is on the right).
-  composerFooterCredits: {
-    position: 'absolute',
-    left: '6px',
-    top: '50%',
-    transform: 'translateY(-50%)',
-  },
+  // Right of the footer line: the person's AI for today, then the context meter.
   composerFooterMeter: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
     position: 'absolute',
     right: '6px',
     top: '50%',

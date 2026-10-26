@@ -2982,7 +2982,7 @@ a.vr-bill-number:hover { text-decoration: underline; }
 .agent-chip-run:disabled { opacity: 0.55; cursor: not-allowed; }
 .agent-bar-hint { font-size: var(--text-xs); color: var(--ink-soft); opacity: 0.8; margin-left: 2px; }
 
-/* The person's own AI for today, on the left of the footer line under the composer: as quiet as the footer text,
+/* The person's own AI for today, at the right of the footer line under the composer: as quiet as the footer text,
    a thin bar, then used · left · a day. Colour comes only from the bar (and red text when the day is used up). */
 .credit-strip {
   display: inline-flex; align-items: center; gap: 4px;
