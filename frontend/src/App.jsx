@@ -1717,16 +1717,13 @@ export default function App() {
       <div style={styles.stickyBottomBar}>
         <div style={styles.inputInnerWrapper}>
           <UsageBanner usage={usage} />
-          <div className="composer-top">
-            <AgentBar
-              agents={agents}
-              activeKey={activeAgent}
-              onSelect={setActiveAgent}
-              onRunNow={handleRunAgent}
-              disabled={isLoading}
-            />
-            <CreditStrip usage={usage} />
-          </div>
+          <AgentBar
+            agents={agents}
+            activeKey={activeAgent}
+            onSelect={setActiveAgent}
+            onRunNow={handleRunAgent}
+            disabled={isLoading}
+          />
           <QueryInput
             onSubmitQuery={handleSubmitQuery}
             onStop={handleStopQuery}
@@ -1746,6 +1743,9 @@ export default function App() {
             onPreviewFile={handlePreviewFile}
           />
           <div style={styles.composerFooter}>
+            <div style={styles.composerFooterCredits}>
+              <CreditStrip usage={usage} />
+            </div>
             <p style={styles.composerFooterText}>
               AccuTax AI · AccuTax Pro · Data is processed securely
             </p>
@@ -1951,6 +1951,13 @@ const styles = {
     fontSize: '0.65rem',
     color: 'var(--ink-faint)',
     margin: 0,
+  },
+  // The person's AI for today, on the left of the footer line (the context meter is on the right).
+  composerFooterCredits: {
+    position: 'absolute',
+    left: '6px',
+    top: '50%',
+    transform: 'translateY(-50%)',
   },
   composerFooterMeter: {
     position: 'absolute',
