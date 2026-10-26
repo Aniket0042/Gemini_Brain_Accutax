@@ -440,3 +440,37 @@ def test_law_route_uses_the_model_it_is_given(monkeypatch):
     law.answer("Is VAT due on exports?", [{"role": "user", "content": [{"text": "q"}]}], model_id="lite-model")
     law.answer("Is VAT due on exports?", [{"role": "user", "content": [{"text": "q"}]}])
     assert used == ["lite-model", "kb-model"]
+
+
+def _detail(monkeypatch):
+    monkeypatch.setattr(store, "member_events", lambda owner, uid, since, limit=50: {
+        "totals": {"events": 1, "credits": 39.0}, "events": [{"id": 1, "kind": "agent_answer", "credits": 39.0}]})
+
+
+def test_owner_sees_one_persons_usage_of_their_bucket(db, hard, monkeypatch):
+    _detail(monkeypatch)
+    c = _client(7)
+    body = c.get("/api/v1/usage/owner/members/50/events").json()
+    assert body["user_id"] == 50 and body["totals"]["credits"] == 39.0 and body["events"][0]["kind"] == "agent_answer"
+    assert c.get("/api/v1/usage/owner/members/999/events").status_code == 404
+    assert _client(50).get("/api/v1/usage/owner/members/50/events").status_code == 403
+
+
+def test_admin_sees_one_persons_usage_of_any_bucket(db, hard, monkeypatch):
+    _detail(monkeypatch)
+    assert _client(50).get("/api/v1/usage/admin/owners/7/members/50/events").status_code == 403
+    db.admins.add(1)
+    assert _client(1).get("/api/v1/usage/admin/owners/7/members/50/events").json()["totals"]["events"] == 1
+
+
+def test_store_member_events_shape(monkeypatch):
+    import datetime as dt
+    cur = _open_with((2, 1000, 200, 50, 39.5, 1), monkeypatch)
+    at = dt.datetime(2026, 10, 26, tzinfo=dt.timezone.utc)
+    cur.fetchall = lambda: [(9, at, "agent_answer", "ok", "lite", 2, 1000, 200, 50, 39.5,
+                             {"in.anthropic.claude-haiku-4-5": {}}, [24])]
+    out = store.member_events(7, 50, at)
+    assert out["totals"] == {"events": 2, "input_tokens": 1000, "output_tokens": 200, "cached_tokens": 50,
+                             "credits": 39.5, "cost_usd": 0.0395, "lite_events": 1}
+    assert out["events"][0]["models"] == ["in.anthropic.claude-haiku-4-5"] and out["events"][0]["mode"] == "lite"
+    assert all("c.owner_user_id = %s AND c.user_id = %s" in q for q in cur.sql if "SELECT" in q)

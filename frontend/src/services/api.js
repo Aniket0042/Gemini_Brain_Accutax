@@ -426,6 +426,13 @@ export const setMemberCap = (userId, dailyCredits, disabled, token = '') =>
     method: 'PUT', body: JSON.stringify({ daily_credits: dailyCredits, disabled }),
   });
 export const fetchUsageAdmin = (token = '') => usageJson('/admin', token);
+// One person's use of a bucket this month; ownerId null: the caller's own bucket (owner page).
+export const fetchMemberUsage = (userId, ownerId = null, token = '') => usageJson(
+  ownerId == null
+    ? `/owner/members/${encodeURIComponent(userId)}/events`
+    : `/admin/owners/${encodeURIComponent(ownerId)}/members/${encodeURIComponent(userId)}/events`,
+  token,
+);
 export const searchUsageOwners = (text, token = '') => usageJson(`/admin/owners?q=${encodeURIComponent(text)}`, token);
 export const fetchUsageAdminOwner = (ownerId, token = '') => usageJson(`/admin/owners/${encodeURIComponent(ownerId)}`, token);
 export const setOwnerPlan = (ownerId, plan, monthlyCredits, userDailyCredits, token = '') =>

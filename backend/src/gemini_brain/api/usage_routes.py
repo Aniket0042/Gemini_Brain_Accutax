@@ -153,6 +153,23 @@ def set_member_cap(user_id: int, body: CapUpdate, current_user: CurrentUser = De
     return {"ok": True}
 
 
+@router.get("/owner/members/{user_id}/events", summary="One person's use of the caller's bucket this month")
+def member_usage_detail(user_id: int, current_user: CurrentUser = Depends(get_current_user)) -> Dict[str, Any]:
+    store = _store()
+    owner = int(current_user.user_id)
+    if not store.owned_by(owner):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not own an organization.")
+    return _member_detail(store, owner, user_id)
+
+
+def _member_detail(store: Any, owner: int, user_id: int) -> Dict[str, Any]:
+    """Totals and the newest 50 events of one person in one owner's bucket this month. 404 when they are not in it."""
+    p = limits.periods()
+    if user_id not in {m["user_id"] for m in _members(store, owner, p)}:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="This person does not use these organizations.")
+    return {"user_id": user_id, "since": p.month_start.isoformat(), **store.member_events(owner, user_id, p.month_start)}
+
+
 # ── Accutax admin ────────────────────────────────────────────────────────────
 
 @router.get("/admin", summary="Platform spend, every owner charged this month, plans and alerts")
@@ -207,6 +224,13 @@ def admin_owner(owner_id: int, current_user: CurrentUser = Depends(get_current_u
     return {"bucket": limits.owner_state(owner_id, None, p), "plan_row": store.plan_row(owner_id),
             "members": _members(store, owner_id, p), "topups": store.topups_of(owner_id),
             "email": store.user_emails([owner_id]).get(owner_id)}
+
+
+@router.get("/admin/owners/{owner_id}/members/{user_id}/events", summary="One person's use of an owner's bucket this month")
+def admin_member_detail(owner_id: int, user_id: int, current_user: CurrentUser = Depends(get_current_user)) -> Dict[str, Any]:
+    store = _store()
+    _admin(current_user)
+    return _member_detail(store, owner_id, user_id)
 
 
 class PlanUpdate(BaseModel):

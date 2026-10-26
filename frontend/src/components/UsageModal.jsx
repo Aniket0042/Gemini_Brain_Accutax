@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Gauge, X, RefreshCw } from 'lucide-react';
 import {
   fetchOwnerUsage, setMemberCap, fetchUsageAdmin, fetchUsageAdminOwner, setOwnerPlan, addOwnerTopup, searchUsageOwners,
+  fetchMemberUsage,
 } from '../services/api';
 import { shortDate } from './UsageMeter';
 
@@ -51,8 +52,62 @@ const BucketSummary = ({ bucket, typical }) => (
   </div>
 );
 
+const KIND_LABEL = { agent_answer: 'Question', document_read: 'File read', privacy_demo: 'Privacy demo' };
+const modelName = (id) => (/haiku/i.test(id) ? 'Haiku' : /sonnet/i.test(id) ? 'Sonnet' : /opus/i.test(id) ? 'Opus' : id);
+const when = (iso) => {
+  const d = iso ? new Date(iso) : null;
+  return d && !Number.isNaN(d.getTime())
+    ? d.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+};
+
+// One person's use of the bucket this month: totals and their newest questions and file reads.
+// No question text: the usage tables never keep it.
+const MemberUsage = ({ userId, ownerId, token }) => {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    fetchMemberUsage(userId, ownerId, token).then(setData).catch((e) => setError(e.message));
+  }, [userId, ownerId, token]);
+  if (error) return <div style={styles.detail}><div style={styles.error}>{error}</div></div>;
+  if (!data) return <div style={styles.detail}><div style={styles.muted}>Loading…</div></div>;
+  const t = data.totals;
+  return (
+    <div style={styles.detail}>
+      <div style={styles.cards}>
+        <div style={styles.card}><div style={styles.cardLabel}>Questions and files</div><div style={styles.cardValue}>{num(t.events)}</div>
+          <div style={styles.cardSub}>{t.lite_events ? `${t.lite_events} on the lite model` : 'all on the full model'}</div></div>
+        <div style={styles.card}><div style={styles.cardLabel}>Tokens in / out</div>
+          <div style={styles.cardValue}>{num(t.input_tokens)} / {num(t.output_tokens)}</div>
+          <div style={styles.cardSub}>+ {num(t.cached_tokens)} cached</div></div>
+        <div style={styles.card}><div style={styles.cardLabel}>Credits</div><div style={styles.cardValue}>{num(t.credits, 1)}</div>
+          <div style={styles.cardSub}>${num(t.cost_usd, 4)}</div></div>
+      </div>
+      {data.events.length ? (
+        <div style={styles.grid}>
+          <div style={{ ...styles.eventRow, ...styles.head }}>
+            <div>When</div><div>What</div><div>Model</div><div>Tokens in / out</div><div>Credits</div>
+          </div>
+          {data.events.map((e) => (
+            <div key={e.id} style={styles.eventRow}>
+              <div>{when(e.at)}</div>
+              <div>{KIND_LABEL[e.kind] || e.kind}{e.status !== 'ok' ? <span style={styles.muted}> · {e.status}</span> : null}
+                <div style={styles.muted}>org {e.organization_ids.join(', ')}</div></div>
+              <div>{e.models.map(modelName).join(', ') || '—'}{e.mode === 'lite' ? <span style={styles.muted}> · lite</span> : null}
+                <div style={styles.muted}>{e.calls} call{e.calls === 1 ? '' : 's'}</div></div>
+              <div>{num(e.input_tokens)} / {num(e.output_tokens)}{e.cached_tokens ? <div style={styles.muted}>+ {num(e.cached_tokens)} cached</div> : null}</div>
+              <div>{num(e.credits, 1)}</div>
+            </div>
+          ))}
+        </div>
+      ) : <div style={styles.muted}>No AI use this month.</div>}
+      {data.events.length >= 50 && <div style={styles.muted}>Showing the newest 50.</div>}
+    </div>
+  );
+};
+
 // One person's row: their use and an editable daily limit. `onSave(userId, credits|null, disabled)`.
-const MemberRow = ({ m, typical, onSave, editable }) => {
+// Clicking the person opens their usage this month underneath.
+const MemberRow = ({ m, typical, onSave, editable, ownerId, token, open, onToggle }) => {
   const [cap, setCap] = useState(m.cap_override ?? '');
   const [off, setOff] = useState(m.disabled);
   const [saving, setSaving] = useState(false);
@@ -62,11 +117,13 @@ const MemberRow = ({ m, typical, onSave, editable }) => {
     try { await onSave(m.user_id, cap === '' ? null : Number(cap), off); } finally { setSaving(false); }
   };
   return (
-    <div style={styles.row}>
-      <div style={styles.cellMain}>
-        <div style={styles.email}>{m.email || `User ${m.user_id}`}</div>
+    <>
+    <div style={{ ...styles.row, ...(open ? styles.rowOpen : {}) }}>
+      <button style={styles.personBtn} onClick={onToggle} aria-expanded={open}
+        title={open ? 'Hide usage' : "Show this person's usage this month"}>
+        <div style={styles.email}>{open ? '▾' : '▸'} {m.email || `User ${m.user_id}`}</div>
         <div style={styles.muted}>{m.role}{m.invitation && m.invitation !== 'ACTIVE' ? ` · ${m.invitation.toLowerCase()}` : ''}</div>
-      </div>
+      </button>
       <div style={styles.cell}>{num(m.month_credits)}<div style={styles.muted}>{m.questions} q</div></div>
       <div style={styles.cell}>{num(m.today_credits)}<div style={styles.muted}>of {m.daily_cap == null ? '∞' : num(m.daily_cap)}</div></div>
       <div style={styles.cell}>
@@ -91,19 +148,30 @@ const MemberRow = ({ m, typical, onSave, editable }) => {
         {editable && <button style={styles.btn} disabled={!dirty || saving} onClick={save}>{saving ? 'Saving…' : 'Save'}</button>}
       </div>
     </div>
+    {open && <MemberUsage userId={m.user_id} ownerId={ownerId} token={token} />}
+    </>
   );
 };
 
-const MembersTable = ({ members, typical, onSave, editable = true }) => (
-  <div style={styles.grid}>
-    <div style={{ ...styles.row, ...styles.head }}>
-      <div style={styles.cellMain}>Person</div><div style={styles.cell}>This month</div><div style={styles.cell}>Today</div>
-      <div style={styles.cell}>Daily limit</div><div style={styles.cell}>Access</div><div style={styles.cell} />
+// `ownerId`: the bucket's owner for the admin page; null on the owner's own page. `focus`: a person to open at once.
+const MembersTable = ({ members, typical, onSave, editable = true, ownerId = null, token = '', focus = null }) => {
+  const [open, setOpen] = useState(focus);
+  useEffect(() => { setOpen(focus); }, [focus]);
+  return (
+    <div style={styles.grid}>
+      <div style={{ ...styles.row, ...styles.head }}>
+        <div style={styles.cellMain}>Person</div><div style={styles.cell}>This month</div><div style={styles.cell}>Today</div>
+        <div style={styles.cell}>Daily limit</div><div style={styles.cell}>Access</div><div style={styles.cell} />
+      </div>
+      {members.map((m) => (
+        <MemberRow key={`${m.user_id}-${m.cap_override}-${m.disabled}`} m={m} typical={typical} onSave={onSave}
+          editable={editable} ownerId={ownerId} token={token} open={open === m.user_id}
+          onToggle={() => setOpen(open === m.user_id ? null : m.user_id)} />
+      ))}
+      {!members.length && <div style={styles.empty}>Nobody has used AI this month.</div>}
     </div>
-    {members.map((m) => <MemberRow key={`${m.user_id}-${m.cap_override}-${m.disabled}`} m={m} typical={typical} onSave={onSave} editable={editable} />)}
-    {!members.length && <div style={styles.empty}>Nobody has used AI this month.</div>}
-  </div>
-);
+  );
+};
 
 const OwnerView = ({ token }) => {
   const [data, setData] = useState(null);
@@ -128,12 +196,12 @@ const OwnerView = ({ token }) => {
       </p>
       <BucketSummary bucket={data.bucket} typical={data.typical_question_credits} />
       <div style={styles.section}>People</div>
-      <MembersTable members={data.members} typical={data.typical_question_credits} onSave={save} />
+      <MembersTable members={data.members} typical={data.typical_question_credits} onSave={save} token={token} />
     </div>
   );
 };
 
-const OwnerAdmin = ({ ownerId, plans, token, onChanged }) => {
+const OwnerAdmin = ({ ownerId, plans, token, onChanged, focus }) => {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [plan, setPlan] = useState('standard');
@@ -194,7 +262,8 @@ const OwnerAdmin = ({ ownerId, plans, token, onChanged }) => {
         <div style={styles.muted}>Top-ups: {data.topups.map((t) => `${num(t.credits)} (${t.reason || '—'}, until ${shortDate(t.expires_at) || 'never'})`).join(' · ')}</div>
       )}
       <div style={styles.section}>People</div>
-      <MembersTable members={data.members} typical={20} editable={false} onSave={() => {}} />
+      <MembersTable members={data.members} typical={20} editable={false} onSave={() => {}} ownerId={ownerId}
+        token={token} focus={focus} />
     </div>
   );
 };
@@ -202,7 +271,11 @@ const OwnerAdmin = ({ ownerId, plans, token, onChanged }) => {
 const AdminView = ({ token }) => {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  // The owner on the right, the card that was clicked, and the person to open there (a collaborator from the search).
   const [selected, setSelected] = useState(null);
+  const [picked, setPicked] = useState(null);
+  const [focus, setFocus] = useState(null);
+  const pick = (key, ownerId, person = null) => { setPicked(key); setSelected(ownerId); setFocus(person); };
   const [query, setQuery] = useState('');
   const [found, setFound] = useState(null);
   const load = useCallback(() => {
@@ -238,15 +311,16 @@ const AdminView = ({ token }) => {
         {found && (
           <>
             {found.owners.map((o) => (
-              <button key={`o${o.owner_user_id}`} onClick={() => setSelected(o.owner_user_id)}
-                style={{ ...styles.item, ...(selected === o.owner_user_id ? styles.itemActive : {}) }}>
+              <button key={`o${o.owner_user_id}`} onClick={() => pick(`o${o.owner_user_id}`, o.owner_user_id)}
+                style={{ ...styles.item, ...(picked === `o${o.owner_user_id}` ? styles.itemActive : {}) }}>
                 <span style={styles.email}>{o.email || `Owner ${o.owner_user_id}`}</span>
                 <span style={styles.muted}>owner · user {o.owner_user_id} · {o.organizations} organization{o.organizations === 1 ? '' : 's'}</span>
               </button>
             ))}
             {found.collaborators.map((c) => (
-              <button key={`c${c.email}-${c.owner_user_id}`} onClick={() => setSelected(c.owner_user_id)}
-                style={{ ...styles.item, ...(selected === c.owner_user_id ? styles.itemActive : {}) }}>
+              <button key={`c${c.email}-${c.owner_user_id}`}
+                onClick={() => pick(`c${c.email}-${c.owner_user_id}`, c.owner_user_id, c.user_id)}
+                style={{ ...styles.item, ...(picked === `c${c.email}-${c.owner_user_id}` ? styles.itemActive : {}) }}>
                 <span style={styles.email}>{c.email}</span>
                 <span style={styles.muted}>
                   collaborator{c.status === 'INVITED' ? ' (invited)' : ''}{c.user_id ? ` · user ${c.user_id}` : ''} · owner {c.owner_email}
@@ -258,8 +332,8 @@ const AdminView = ({ token }) => {
         )}
         <div style={styles.section}>Owners this month</div>
         {data.owners.map((o) => (
-          <button key={o.owner_user_id} onClick={() => setSelected(o.owner_user_id)}
-            style={{ ...styles.item, ...(selected === o.owner_user_id ? styles.itemActive : {}) }}>
+          <button key={o.owner_user_id} onClick={() => pick(`m${o.owner_user_id}`, o.owner_user_id)}
+            style={{ ...styles.item, ...(picked === `m${o.owner_user_id}` ? styles.itemActive : {}) }}>
             <div style={styles.itemTop}>
               <span style={styles.email}>{o.email || `Owner ${o.owner_user_id}`}</span>
               <span>{o.percent == null ? '∞' : `${o.percent}%`}</span>
@@ -278,7 +352,7 @@ const AdminView = ({ token }) => {
       </div>
       <div style={styles.detail}>
         {selected
-          ? <OwnerAdmin ownerId={selected} plans={data.plans} token={token} onChanged={load} />
+          ? <OwnerAdmin ownerId={selected} plans={data.plans} token={token} onChanged={load} focus={focus} />
           : <div style={styles.empty}>Pick an owner to change their plan or give a top-up.</div>}
       </div>
     </div>
@@ -349,6 +423,10 @@ const styles = {
   row: { display: 'grid', gridTemplateColumns: 'minmax(0,2fr) minmax(0,.8fr) minmax(0,.8fr) minmax(0,1.3fr) minmax(0,.6fr) minmax(0,.6fr)', gap: 8, padding: '8px 10px', borderTop: '1px solid var(--border-soft)', alignItems: 'center', fontSize: 13 },
   head: { background: 'var(--surface-2)', fontSize: 11, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '.04em', borderTop: 'none' },
   cellMain: { minWidth: 0 },
+  rowOpen: { background: 'var(--accent-soft)' },
+  personBtn: { minWidth: 0, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--ink)', font: 'inherit' },
+  detail: { padding: '10px 12px 12px', borderTop: '1px solid var(--border-soft)', background: 'var(--surface-2)', display: 'flex', flexDirection: 'column', gap: 8 },
+  eventRow: { display: 'grid', gridTemplateColumns: 'minmax(0,1.1fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,1.2fr) minmax(0,.6fr)', gap: 8, padding: '6px 10px', borderTop: '1px solid var(--border-soft)', fontSize: 12.5, alignItems: 'start' },
   cell: { minWidth: 0 },
   email: { fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' },
   muted: { color: 'var(--ink-soft)', fontSize: 11.5 },
