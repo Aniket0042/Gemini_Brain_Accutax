@@ -65,7 +65,7 @@ export const UsageMeter = ({ usage, onOpen }) => {
       {owner && !off && pct != null && (
         <>
           <span style={styles.track}><span style={{ ...styles.fill, width: `${width}%`, backgroundColor: color }} /></span>
-          <span style={styles.label}>{personal ? `You ${pct}%` : `${pct}%`}</span>
+          <span style={styles.label}>{pct}%</span>
         </>
       )}
       {owner && !off && pct == null && <span style={styles.label}>No limit</span>}
