@@ -15,7 +15,7 @@ import { newAgentRun, applyAgentStep } from './components/AgentRun';
 import { readAgentRuns, recordAgentRun } from './services/agentRuns';
 import { dismissedKeys } from './services/findings';
 import { UsageModal } from './components/UsageModal';
-import { worstOwner } from './components/UsageMeter';
+import { worstOwner, CreditStrip } from './components/UsageMeter';
 import { PrivacySnapshotsModal } from './components/PrivacySnapshotsModal';
 import { chipsFromBlocks, kindGroup } from './services/attachments';
 import { clearUploadBlobs } from './services/uploadBlobs';
@@ -1717,13 +1717,16 @@ export default function App() {
       <div style={styles.stickyBottomBar}>
         <div style={styles.inputInnerWrapper}>
           <UsageBanner usage={usage} />
-          <AgentBar
-            agents={agents}
-            activeKey={activeAgent}
-            onSelect={setActiveAgent}
-            onRunNow={handleRunAgent}
-            disabled={isLoading}
-          />
+          <div className="composer-top">
+            <AgentBar
+              agents={agents}
+              activeKey={activeAgent}
+              onSelect={setActiveAgent}
+              onRunNow={handleRunAgent}
+              disabled={isLoading}
+            />
+            <CreditStrip usage={usage} />
+          </div>
           <QueryInput
             onSubmitQuery={handleSubmitQuery}
             onStop={handleStopQuery}

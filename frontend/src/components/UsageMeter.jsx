@@ -73,6 +73,43 @@ export const UsageMeter = ({ usage, onOpen }) => {
   );
 };
 
+const fmt = (n) => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+
+// The person's own AI for today, at the right of the row above the chat box: used / left / daily limit, in credits.
+// Every role sees their own; the bucket it comes from is the one of the chosen organizations that is fullest for them.
+export const CreditStrip = ({ usage, typical = 20 }) => {
+  if (!usage || usage.enforce === 'off' || usage.enforce === 'log' || usage.internal) return null;
+  const owners = (usage.owners || []).filter((o) => o.user);
+  if (!owners.length) return null;
+  const o = owners.reduce((a, b) => ((b.user.percent ?? -1) > (a.user.percent ?? -1) ? b : a));
+  const u = o.user;
+  if (u.disabled) {
+    return <div className="credit-strip is-off" title="The account owner has turned AI off for you">AI off</div>;
+  }
+  const used = Number(u.used_today || 0);
+  const cap = u.daily_cap == null ? null : Number(u.daily_cap);
+  const left = cap == null ? null : Math.max(0, cap - used);
+  const pct = cap ? Math.min(100, Math.round((100 * used) / cap)) : 0;
+  const state = cap != null && used >= cap ? 'blocked' : pct >= 80 || o.state === 'lite' || o.state === 'warn' ? 'warn' : 'ok';
+  const title = cap == null
+    ? `Your AI today: ${fmt(used)} credits, no daily limit. 1 credit = $0.001.`
+    : `Your AI today: ${fmt(used)} of ${fmt(cap)} credits used, ${fmt(left)} left (about ${fmt(left / typical)} questions). `
+      + 'Resets at midnight. 1 credit = $0.001.';
+  return (
+    <div className={`credit-strip is-${state}`} title={title} aria-label={title}>
+      {cap != null && <span className="credit-strip-track"><span className="credit-strip-fill" style={{ width: `${pct}%` }} /></span>}
+      <span><b>{fmt(used)}</b> used</span>
+      {cap != null ? (
+        <>
+          <span className="credit-strip-sep">·</span><span><b>{fmt(left)}</b> left</span>
+          <span className="credit-strip-sep credit-strip-extra">·</span>
+          <span className="credit-strip-extra"><b>{fmt(cap)}</b> a day</span>
+        </>
+      ) : <span className="credit-strip-sep">· no daily limit</span>}
+    </div>
+  );
+};
+
 const styles = {
   btn: {
     display: 'flex', alignItems: 'center', gap: 6, height: 'var(--control-h-sm)', padding: '0 8px',

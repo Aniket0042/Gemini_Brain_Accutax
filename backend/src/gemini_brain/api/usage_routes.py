@@ -110,12 +110,14 @@ def my_usage_page(current_user: CurrentUser = Depends(get_current_user)) -> Dict
 
 
 def _public_owner(st: Dict[str, Any]) -> Dict[str, Any]:
-    """What any person in the bucket may see: percentages and dates, no credit amounts."""
+    """What any person in the bucket may see: the bucket in percent and dates (no credit amounts), and their own day
+    in credits (used today and their daily limit), for the strip above the chat box."""
     user = st.get("user") or {}
     return {"owner_user_id": st["owner_user_id"], "plan_label": st["plan_label"], "percent": st["percent"],
             "state": st["state"], "resets_at": st["resets_at"],
             "user": {"percent": user.get("percent"), "disabled": user.get("disabled"),
-                     "resets_at": user.get("resets_at")} if user else None}
+                     "resets_at": user.get("resets_at"), "used_today": user.get("used_today"),
+                     "daily_cap": user.get("daily_cap")} if user else None}
 
 
 # ── The owner ────────────────────────────────────────────────────────────────

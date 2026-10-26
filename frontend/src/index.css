@@ -2981,6 +2981,25 @@ a.vr-bill-number:hover { text-decoration: underline; }
 .agent-chip-run { border-style: dashed; color: var(--accent-ink); }
 .agent-chip-run:disabled { opacity: 0.55; cursor: not-allowed; }
 .agent-bar-hint { font-size: var(--text-xs); color: var(--ink-soft); opacity: 0.8; margin-left: 2px; }
+
+/* The row above the composer: the agent chips on the left, the person's own AI for today on the right. */
+.composer-top { display: flex; align-items: center; gap: 10px; margin: 0 0 6px 2px; }
+.composer-top .agent-bar { margin: 0; flex: 1; min-width: 0; }
+.credit-strip {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0;
+  padding: 4px 10px; border-radius: var(--radius-pill); border: 1px solid var(--border);
+  font-size: 11.5px; color: var(--ink-soft); white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.credit-strip b { color: var(--ink); font-weight: 600; }
+.credit-strip-sep { opacity: 0.6; }
+.credit-strip-track { width: 44px; height: 5px; border-radius: 99px; background: var(--border-soft); overflow: hidden; margin-right: 3px; }
+.credit-strip-fill { display: block; height: 100%; border-radius: 99px; background: var(--success); }
+.credit-strip.is-warn { border-color: var(--warning, #C8932E); }
+.credit-strip.is-warn .credit-strip-fill { background: var(--warning, #C8932E); }
+.credit-strip.is-blocked, .credit-strip.is-off { border-color: var(--danger); color: var(--danger-ink); }
+.credit-strip.is-blocked .credit-strip-fill { background: var(--danger); }
+/* Narrow screens keep used and left; the daily limit stays in the hover text. */
+@media (max-width: 760px) { .credit-strip-extra { display: none; } }
 @media (max-width: 600px) { .agent-bar-hint { display: none; } }
 
 .agent-badge {

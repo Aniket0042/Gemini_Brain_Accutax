@@ -236,6 +236,12 @@ def test_my_usage_shows_percent_not_credits(db, hard):
     assert body["user_id"] == 50   # the meter shows a collaborator their own day, an owner the bucket
 
 
+def test_usage_gives_a_person_their_own_day_in_credits(db, hard):
+    db.user_today[(7, 50)] = 96
+    user = _client(50).get("/api/v1/usage?org_ids=24").json()["owners"][0]["user"]
+    assert user["used_today"] == 96 and user["daily_cap"] == 1_000 and user["percent"] == 10
+
+
 def test_owner_page_and_caps(db, hard):
     c = _client(7)
     body = c.get("/api/v1/usage/owner").json()
