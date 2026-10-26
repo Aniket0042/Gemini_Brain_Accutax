@@ -167,11 +167,15 @@ def admin_page(current_user: CurrentUser = Depends(get_current_user)) -> Dict[st
         if owner == ledger.INTERNAL_OWNER:
             continue
         st = limits.owner_state(owner, None, p)
-        st.update(users=(charged.get(owner) or {}).get("users", 0), questions=(charged.get(owner) or {}).get("events", 0))
+        used = charged.get(owner) or {}
+        st.update(users=used.get("users", 0), questions=used.get("events", 0), user_ids=used.get("user_ids", []))
         owners.append(st)
-    emails = store.user_emails([o["owner_user_id"] for o in owners])
+    emails = store.user_emails({u for o in owners for u in [o["owner_user_id"], *o["user_ids"]]})
     for o in owners:
         o["email"] = emails.get(o["owner_user_id"])
+        # The people who used this bucket this month, the owner first.
+        ids = sorted(o.pop("user_ids"), key=lambda u: (u != o["owner_user_id"], emails.get(u) or ""))
+        o["people"] = [emails.get(u) or f"User {u}" for u in ids]
     internal = charged.get(ledger.INTERNAL_OWNER, {})
     return {
         "enforce": limits.enforce_mode(),
@@ -187,12 +191,12 @@ def admin_page(current_user: CurrentUser = Depends(get_current_user)) -> Dict[st
     }
 
 
-@router.get("/admin/owners", summary="Find owners by email or user id, including those who have not used AI yet")
+@router.get("/admin/owners", summary="Find owners, and collaborators with the owner whose bucket they use, by email or user id")
 def admin_search_owners(q: str = Query(..., min_length=1, max_length=200),
                         current_user: CurrentUser = Depends(get_current_user)) -> Dict[str, Any]:
     store = _store()
     _admin(current_user)
-    return {"owners": store.search_owners(q)}
+    return {"owners": store.search_owners(q), "collaborators": store.search_collaborators(q)}
 
 
 @router.get("/admin/owners/{owner_id}", summary="One owner's bucket, members and top-ups")

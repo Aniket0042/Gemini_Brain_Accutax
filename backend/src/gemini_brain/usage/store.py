@@ -282,11 +282,12 @@ def member_usage(owner: int, month_start: datetime.datetime, day_start: datetime
 
 def owners_usage(month_start: datetime.datetime) -> List[Dict[str, Any]]:
     """Every owner charged this month, with their plan row if any."""
-    rows = _run(f"""SELECT c.owner_user_id, SUM(c.credits), COUNT(DISTINCT c.user_id), COUNT(DISTINCT c.event_id)
+    rows = _run(f"""SELECT c.owner_user_id, SUM(c.credits), COUNT(DISTINCT c.user_id), COUNT(DISTINCT c.event_id),
+                           array_remove(array_agg(DISTINCT c.user_id), NULL)
                     FROM public.ai_usage_charges c JOIN public.ai_usage_events e ON e.id = c.event_id
                     WHERE c.created_at >= %s AND {_COUNTED} GROUP BY c.owner_user_id""", (month_start,), fetch="all")
     return [{"owner_user_id": int(r[0]), "month_credits": float(r[1] or 0), "users": int(r[2] or 0),
-             "events": int(r[3] or 0)} for r in rows]
+             "events": int(r[3] or 0), "user_ids": [int(u) for u in r[4] or []]} for r in rows]
 
 
 def search_owners(text: str, limit: int = 20) -> List[Dict[str, Any]]:
@@ -298,6 +299,24 @@ def search_owners(text: str, limit: int = 20) -> List[Dict[str, Any]]:
                    GROUP BY u.id, u.email ORDER BY u.email LIMIT %s""",
                 (uid, "%" + text.replace("%", r"\%").replace("_", r"\_") + "%", limit), fetch="all")
     return [{"owner_user_id": int(r[0]), "email": r[1], "organizations": int(r[2])} for r in rows]
+
+
+def search_collaborators(text: str, limit: int = 20) -> List[Dict[str, Any]]:
+    """People invited to someone else's organizations (ACTIVE or INVITED), by part of their email or their user id,
+    with the owner whose bucket they use."""
+    text = (text or "").strip()
+    uid = int(text) if text.isdigit() else -1
+    rows = _run("""SELECT DISTINCT COALESCE(c.accepted_by_user_id, u.id), LOWER(c.email), c.status, o.user_id, ow.email
+                   FROM public.collaborators c
+                   JOIN public.organizations o ON o.id = c.organization_id
+                   JOIN public.users ow ON ow.id = o.user_id
+                   LEFT JOIN public.users u ON LOWER(TRIM(u.email)) = LOWER(TRIM(c.email))
+                   WHERE c.status IN ('ACTIVE', 'INVITED')
+                     AND (COALESCE(c.accepted_by_user_id, u.id) = %s OR c.email ILIKE %s)
+                   ORDER BY 2 LIMIT %s""",
+                (uid, "%" + text.replace("%", r"\%").replace("_", r"\_") + "%", limit), fetch="all")
+    return [{"user_id": r[0], "email": r[1], "status": r[2], "owner_user_id": int(r[3]), "owner_email": r[4]}
+            for r in rows]
 
 
 def plans_all() -> Dict[int, Dict[str, Any]]:

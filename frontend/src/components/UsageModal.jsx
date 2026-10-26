@@ -215,7 +215,7 @@ const AdminView = ({ token }) => {
     const text = query.trim();
     if (!text) { setFound(null); return undefined; }
     const timer = setTimeout(() => {
-      searchUsageOwners(text, token).then((r) => setFound(r.owners)).catch((e) => setError(e.message));
+      searchUsageOwners(text, token).then(setFound).catch((e) => setError(e.message));
     }, 300);
     return () => clearTimeout(timer);
   }, [query, token]);
@@ -234,17 +234,26 @@ const AdminView = ({ token }) => {
             <div style={styles.cardSub}>internal {num(data.internal_month_credits)} credits · limits {data.enforce}</div></div>
         </div>
         <input value={query} onChange={(e) => setQuery(e.target.value)} style={styles.input}
-          placeholder="Find an owner by email or user id" aria-label="Find an owner" />
+          placeholder="Find an owner or a person by email or user id" aria-label="Find an owner or a person" />
         {found && (
           <>
-            {found.map((o) => (
-              <button key={o.owner_user_id} onClick={() => setSelected(o.owner_user_id)}
+            {found.owners.map((o) => (
+              <button key={`o${o.owner_user_id}`} onClick={() => setSelected(o.owner_user_id)}
                 style={{ ...styles.item, ...(selected === o.owner_user_id ? styles.itemActive : {}) }}>
                 <span style={styles.email}>{o.email || `Owner ${o.owner_user_id}`}</span>
-                <span style={styles.muted}>user {o.owner_user_id} · {o.organizations} organization{o.organizations === 1 ? '' : 's'}</span>
+                <span style={styles.muted}>owner · user {o.owner_user_id} · {o.organizations} organization{o.organizations === 1 ? '' : 's'}</span>
               </button>
             ))}
-            {!found.length && <div style={styles.muted}>No owner matches.</div>}
+            {found.collaborators.map((c) => (
+              <button key={`c${c.email}-${c.owner_user_id}`} onClick={() => setSelected(c.owner_user_id)}
+                style={{ ...styles.item, ...(selected === c.owner_user_id ? styles.itemActive : {}) }}>
+                <span style={styles.email}>{c.email}</span>
+                <span style={styles.muted}>
+                  collaborator{c.status === 'INVITED' ? ' (invited)' : ''}{c.user_id ? ` · user ${c.user_id}` : ''} · owner {c.owner_email}
+                </span>
+              </button>
+            ))}
+            {!found.owners.length && !found.collaborators.length && <div style={styles.muted}>Nobody matches.</div>}
           </>
         )}
         <div style={styles.section}>Owners this month</div>
@@ -257,6 +266,7 @@ const AdminView = ({ token }) => {
             </div>
             {o.bucket != null && <Bar percent={o.percent} state={o.state} />}
             <div style={styles.muted}>{o.plan_label} · {num(o.used)} / {o.bucket == null ? '∞' : num(o.bucket)} · {o.users} people · {STATE_LABEL[o.state]}</div>
+            {!!o.people?.length && <div style={styles.muted}>{o.people.join(', ')}</div>}
           </button>
         ))}
         {!data.owners.length && <div style={styles.empty}>No AI use this month yet.</div>}

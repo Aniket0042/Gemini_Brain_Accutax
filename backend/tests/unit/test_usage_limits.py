@@ -289,9 +289,38 @@ def test_lite_answer_does_not_become_the_threads_model(db, hard, monkeypatch):
 
 def test_admin_finds_owners_who_have_not_used_ai(db, hard, monkeypatch):
     monkeypatch.setattr(store, "search_owners", lambda q: [{"owner_user_id": 9, "email": "u9@x.com", "organizations": 1}])
+    monkeypatch.setattr(store, "search_collaborators", lambda q: [])
     assert _client(50).get("/api/v1/usage/admin/owners?q=u9").status_code == 403
     db.admins.add(1)
     assert _client(1).get("/api/v1/usage/admin/owners?q=u9").json()["owners"][0]["owner_user_id"] == 9
+
+
+def test_admin_search_finds_collaborators_with_their_owner(db, hard, monkeypatch):
+    monkeypatch.setattr(store, "search_owners", lambda q: [])
+    monkeypatch.setattr(store, "search_collaborators", lambda q: [
+        {"user_id": 50, "email": "c@x.com", "status": "ACTIVE", "owner_user_id": 7, "owner_email": "u7@x.com"}])
+    db.admins.add(1)
+    body = _client(1).get("/api/v1/usage/admin/owners?q=c@x").json()
+    assert body["owners"] == [] and body["collaborators"][0]["owner_user_id"] == 7
+
+
+def test_store_collaborator_search_matches_email_or_id(monkeypatch):
+    cur = _open_with((0,), monkeypatch)
+    cur.fetchall = lambda: [(1034, "user_org27@accutax.com", "ACTIVE", 5, "owner@x.com")]
+    found = store.search_collaborators("user_org27")
+    assert found == [{"user_id": 1034, "email": "user_org27@accutax.com", "status": "ACTIVE",
+                      "owner_user_id": 5, "owner_email": "owner@x.com"}]
+    assert "c.status IN ('ACTIVE', 'INVITED')" in cur.sql[0] and "c.email ILIKE" in cur.sql[0]
+
+
+def test_admin_list_names_the_people_who_used_each_bucket(db, hard, monkeypatch):
+    monkeypatch.setattr(store, "owners_usage", lambda since: [
+        {"owner_user_id": 7, "month_credits": 9.0, "users": 2, "events": 3, "user_ids": [50, 7]}])
+    monkeypatch.setattr(store, "plans_all", lambda: {})
+    monkeypatch.setattr(store, "recent_alerts", lambda n: [])
+    db.admins.add(1)
+    owner = _client(1).get("/api/v1/usage/admin").json()["owners"][0]
+    assert owner["people"] == ["u7@x.com", "u50@x.com"] and "user_ids" not in owner
 
 
 # ── Speed limits in the usage tables (shared by every copy of the service) ────
