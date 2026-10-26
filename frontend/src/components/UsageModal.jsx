@@ -65,19 +65,16 @@ const when = (iso) => {
 
 // One person's use of the bucket this month: totals and their newest questions and file reads.
 // No question text: the usage tables never keep it.
-const PAGE = 10;
-
-// Questions and file reads, newest first, 10 at a time. No question text: the usage tables never keep it.
-const EventsTable = ({ events }) => {
-  const [shown, setShown] = useState(PAGE);
-  return (
+// Questions and file reads, newest first, in a box of about 6 rows that scrolls by itself (the headings stay put),
+// so the page around it does not move. No question text: the usage tables never keep it.
+const EventsTable = ({ events }) => (
     <>
       {events.length ? (
-        <div style={styles.grid}>
-          <div style={{ ...styles.eventRow, ...styles.head }}>
+        <div style={styles.eventsBox}>
+          <div style={{ ...styles.eventRow, ...styles.head, ...styles.stickyHead }}>
             <div>When</div><div>What</div><div>Model</div><div>Tokens in / out</div><div>Credits</div>
           </div>
-          {events.slice(0, shown).map((e) => (
+          {events.map((e) => (
             <div key={e.id} style={styles.eventRow}>
               <div>{when(e.at)}</div>
               <div>{KIND_LABEL[e.kind] || e.kind}{STATUS_LABEL[e.status] ? <span style={styles.muted}> · {STATUS_LABEL[e.status]}</span> : null}
@@ -90,18 +87,13 @@ const EventsTable = ({ events }) => {
           ))}
         </div>
       ) : <div style={styles.muted}>No AI use this month.</div>}
-      {events.length > PAGE && (
-        <div style={styles.moreRow}>
-          <span style={styles.muted}>
-            Showing {Math.min(shown, events.length)} of {events.length}{events.length >= 50 ? ' newest' : ''}
-          </span>
-          {shown < events.length && <button style={styles.btn} onClick={() => setShown(shown + PAGE)}>Show {PAGE} more</button>}
-          {shown > PAGE && <button style={styles.btn} onClick={() => setShown(PAGE)}>Show fewer</button>}
+      {events.length > 6 && (
+        <div style={styles.mutedSmall}>
+          {events.length} {events.length >= 50 ? 'newest ' : ''}this month · scroll the list for more
         </div>
       )}
     </>
-  );
-};
+);
 
 const TotalsCards = ({ t }) => (
   <div style={styles.cards}>
@@ -639,7 +631,8 @@ const styles = {
   rowBtn: { width: '100%', textAlign: 'left', background: 'none', border: 'none', borderTop: '1px solid var(--border-soft)', cursor: 'pointer', color: 'var(--ink)', font: 'inherit' },
   twoCol: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 },
   statRow: { display: 'flex', justifyContent: 'space-between', gap: 8, padding: '5px 0', borderBottom: '1px solid var(--border-soft)', fontSize: 13 },
-  moreRow: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  eventsBox: { border: '1px solid var(--border)', borderRadius: 8, maxHeight: 330, overflowY: 'auto', flexShrink: 0 },
+  stickyHead: { position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface-2)' },
   rowOpen: { background: 'var(--accent-soft)' },
   personBtn: { minWidth: 0, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--ink)', font: 'inherit' },
   memberDetail: { padding: '10px 12px 12px', borderTop: '1px solid var(--border-soft)', background: 'var(--surface-2)', display: 'flex', flexDirection: 'column', gap: 8 },
