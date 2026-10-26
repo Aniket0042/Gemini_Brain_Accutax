@@ -1,8 +1,9 @@
 import React from 'react';
 import { Gauge } from 'lucide-react';
 
-// The header's AI usage button: how much of this month's AI the chosen organizations' bucket has used, and the
-// person's own day. Percentages only; the owner and admin pages show credits. Hidden when usage tracking is off.
+// The header's AI usage button. An owner (of the chosen organizations' bucket) and an Accutax admin see how much of
+// the month's AI the bucket has used; a collaborator sees their own day against the daily limit the owner set, coloured
+// by the bucket too, so a month that runs low still shows. Percentages only. Hidden when usage tracking is off.
 
 const STATE_COLOR = {
   ok: 'var(--success)',
@@ -30,17 +31,26 @@ export const UsageMeter = ({ usage, onOpen }) => {
   // Everyone can open their own usage ("My usage"); owners and admins also get their own tabs there.
   if (!owner && !usage.is_owner && !usage.is_admin) return null;
 
-  const pct = owner?.percent;
-  const width = pct == null ? 0 : Math.min(100, pct);
-  const color = STATE_COLOR[owner?.state] || STATE_COLOR.ok;
+  // A collaborator: someone who is neither an admin nor the owner of the bucket shown.
+  const personal = !!owner && !usage.is_admin && !usage.internal && owner.owner_user_id !== usage.user_id;
   const mine = owner?.user?.percent;
+  const off = personal && owner?.user?.disabled;
+  const pct = personal ? mine : owner?.percent;
+  const width = pct == null ? 0 : Math.min(100, pct);
+  const personalState = off || (mine ?? 0) >= 100 ? 'blocked' : (mine ?? 0) >= 80 ? 'warn' : 'ok';
+  const rank = { ok: 0, warn: 1, lite: 2, blocked: 3 };
+  const state = personal && (rank[personalState] ?? 0) > (rank[owner.state] ?? 0) ? personalState : owner?.state;
+  const color = STATE_COLOR[state] || STATE_COLOR.ok;
+  const month = owner ? `${owner.percent == null ? 'no limit' : `${owner.percent}% used`}, renews ${shortDate(owner.resets_at)}` : '';
   const title = usage.internal
     ? 'AI usage: Accutax internal, not limited'
-    : owner
-      ? `AI this month: ${pct == null ? 'no limit' : `${pct}% used`} · renews ${shortDate(owner.resets_at)}`
-        + (mine != null ? ` · you today: ${mine}% of your daily limit` : '')
-        + ' · click for details'
-      : 'AI usage';
+    : !owner
+      ? 'AI usage'
+      : personal
+        ? (off ? 'The account owner has turned AI off for you'
+          : `Your AI today: ${mine == null ? 'no daily limit' : `${mine}% of your daily limit`}, resets at midnight`)
+          + ` · organizations' AI this month: ${month} · click for details`
+        : `AI this month: ${month}${mine != null ? ` · you today: ${mine}% of your daily limit` : ''} · click for details`;
 
   return (
     <button
@@ -51,13 +61,14 @@ export const UsageMeter = ({ usage, onOpen }) => {
       aria-label={title}
     >
       <Gauge size={14} color={color} />
-      {owner && pct != null && (
+      {owner && off && <span style={styles.label}>AI off</span>}
+      {owner && !off && pct != null && (
         <>
           <span style={styles.track}><span style={{ ...styles.fill, width: `${width}%`, backgroundColor: color }} /></span>
-          <span style={styles.label}>{pct}%</span>
+          <span style={styles.label}>{personal ? `You ${pct}%` : `${pct}%`}</span>
         </>
       )}
-      {owner && pct == null && <span style={styles.label}>No limit</span>}
+      {owner && !off && pct == null && <span style={styles.label}>No limit</span>}
     </button>
   );
 };

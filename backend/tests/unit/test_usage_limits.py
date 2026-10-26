@@ -233,6 +233,7 @@ def test_my_usage_shows_percent_not_credits(db, hard):
     body = _client(50).get("/api/v1/usage?org_ids=24").json()
     assert body["owners"][0]["percent"] == 50 and "used" not in body["owners"][0]
     assert body["is_owner"] is False and body["is_admin"] is False
+    assert body["user_id"] == 50   # the meter shows a collaborator their own day, an owner the bucket
 
 
 def test_owner_page_and_caps(db, hard):

@@ -75,7 +75,7 @@ def my_usage(org_ids: str = Query("", description="Comma-separated organization 
     internal = store.is_super_admin(current_user.user_id)
     owners = sorted({o for o in ledger.owners_of(orgs).values() if o is not None}) if not internal else []
     states = [_public_owner(limits.owner_state(o, current_user.user_id, p)) for o in owners]
-    return {"enforce": limits.enforce_mode(), "internal": internal, "owners": states,
+    return {"enforce": limits.enforce_mode(), "internal": internal, "owners": states, "user_id": int(current_user.user_id),
             "is_owner": bool(store.owned_by(current_user.user_id)), "is_admin": _is_admin(current_user),
             "typical_question_credits": TYPICAL_QUESTION_CREDITS}
 
