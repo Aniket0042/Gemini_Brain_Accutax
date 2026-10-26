@@ -418,8 +418,14 @@ const AdminView = ({ token }) => {
         </div>
         <input value={query} onChange={(e) => setQuery(e.target.value)} style={styles.input}
           placeholder="Find an owner or a person by email or user id" aria-label="Find an owner or a person" />
+        {found && (found.owners.length + found.collaborators.length > 0) && (
+          <div style={styles.mutedSmall}>
+            {found.owners.length + found.collaborators.length} match{found.owners.length + found.collaborators.length === 1 ? '' : 'es'}
+            {found.owners.length + found.collaborators.length > 5 ? ' · scroll for more' : ''}
+          </div>
+        )}
         {found && (
-          <>
+          <div style={styles.results}>
             {found.owners.map((o) => (
               <button key={`o${o.owner_user_id}`} onClick={() => pick(`o${o.owner_user_id}`, o.owner_user_id)}
                 style={{ ...styles.item, ...(picked === `o${o.owner_user_id}` ? styles.itemActive : {}) }}>
@@ -438,7 +444,7 @@ const AdminView = ({ token }) => {
               </button>
             ))}
             {!found.owners.length && !found.collaborators.length && <div style={styles.muted}>Nobody matches.</div>}
-          </>
+          </div>
         )}
         <div style={styles.section}>Owners this month</div>
         {data.owners.map((o) => (
@@ -538,6 +544,8 @@ const styles = {
   row: { display: 'grid', gridTemplateColumns: 'minmax(0,2fr) minmax(0,.8fr) minmax(0,.8fr) minmax(0,1.3fr) minmax(0,.6fr) minmax(0,.6fr)', gap: 8, padding: '8px 10px', borderTop: '1px solid var(--border-soft)', alignItems: 'center', fontSize: 13 },
   head: { background: 'var(--surface-2)', fontSize: 11, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '.04em', borderTop: 'none' },
   cellMain: { minWidth: 0 },
+  results: { display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 268, overflowY: 'auto', flexShrink: 0, paddingRight: 2 },
+  mutedSmall: { fontSize: 11.5, color: 'var(--ink-soft)' },
   hint: { fontSize: 12.5, color: 'var(--ink-soft)', marginBottom: 4 },
   overview: { display: 'flex', flexDirection: 'column' },
   chart: { display: 'flex', alignItems: 'flex-end', gap: 2, height: 120, padding: '8px 0', borderBottom: '1px solid var(--border)' },
