@@ -53,6 +53,9 @@ const BucketSummary = ({ bucket, typical }) => (
 );
 
 const KIND_LABEL = { agent_answer: 'Question', document_read: 'File read', privacy_demo: 'Privacy demo' };
+// An event's status in words; "ok" and "ready" say nothing extra.
+const STATUS_LABEL = { degraded: 'timed out', failed: 'failed', partial: 'some figures missing', error: 'error' };
+const orgsLabel = (ids) => (ids.length > 3 ? `${ids.length} organizations` : `org ${ids.join(', ')}`);
 const modelName = (id) => (/haiku/i.test(id) ? 'Haiku' : /sonnet/i.test(id) ? 'Sonnet' : /opus/i.test(id) ? 'Opus' : id);
 const when = (iso) => {
   const d = iso ? new Date(iso) : null;
@@ -68,11 +71,11 @@ const MemberUsage = ({ userId, ownerId, token }) => {
   useEffect(() => {
     fetchMemberUsage(userId, ownerId, token).then(setData).catch((e) => setError(e.message));
   }, [userId, ownerId, token]);
-  if (error) return <div style={styles.detail}><div style={styles.error}>{error}</div></div>;
-  if (!data) return <div style={styles.detail}><div style={styles.muted}>Loading…</div></div>;
+  if (error) return <div style={styles.memberDetail}><div style={styles.error}>{error}</div></div>;
+  if (!data) return <div style={styles.memberDetail}><div style={styles.muted}>Loading…</div></div>;
   const t = data.totals;
   return (
-    <div style={styles.detail}>
+    <div style={styles.memberDetail}>
       <div style={styles.cards}>
         <div style={styles.card}><div style={styles.cardLabel}>Questions and files</div><div style={styles.cardValue}>{num(t.events)}</div>
           <div style={styles.cardSub}>{t.lite_events ? `${t.lite_events} on the lite model` : 'all on the full model'}</div></div>
@@ -90,8 +93,8 @@ const MemberUsage = ({ userId, ownerId, token }) => {
           {data.events.map((e) => (
             <div key={e.id} style={styles.eventRow}>
               <div>{when(e.at)}</div>
-              <div>{KIND_LABEL[e.kind] || e.kind}{e.status !== 'ok' ? <span style={styles.muted}> · {e.status}</span> : null}
-                <div style={styles.muted}>org {e.organization_ids.join(', ')}</div></div>
+              <div>{KIND_LABEL[e.kind] || e.kind}{STATUS_LABEL[e.status] ? <span style={styles.muted}> · {STATUS_LABEL[e.status]}</span> : null}
+                <div style={styles.muted} title={e.organization_ids.join(', ')}>{orgsLabel(e.organization_ids)}</div></div>
               <div>{e.models.map(modelName).join(', ') || '—'}{e.mode === 'lite' ? <span style={styles.muted}> · lite</span> : null}
                 <div style={styles.muted}>{e.calls} call{e.calls === 1 ? '' : 's'}</div></div>
               <div>{num(e.input_tokens)} / {num(e.output_tokens)}{e.cached_tokens ? <div style={styles.muted}>+ {num(e.cached_tokens)} cached</div> : null}</div>
@@ -425,7 +428,7 @@ const styles = {
   cellMain: { minWidth: 0 },
   rowOpen: { background: 'var(--accent-soft)' },
   personBtn: { minWidth: 0, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--ink)', font: 'inherit' },
-  detail: { padding: '10px 12px 12px', borderTop: '1px solid var(--border-soft)', background: 'var(--surface-2)', display: 'flex', flexDirection: 'column', gap: 8 },
+  memberDetail: { padding: '10px 12px 12px', borderTop: '1px solid var(--border-soft)', background: 'var(--surface-2)', display: 'flex', flexDirection: 'column', gap: 8 },
   eventRow: { display: 'grid', gridTemplateColumns: 'minmax(0,1.1fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,1.2fr) minmax(0,.6fr)', gap: 8, padding: '6px 10px', borderTop: '1px solid var(--border-soft)', fontSize: 12.5, alignItems: 'start' },
   cell: { minWidth: 0 },
   email: { fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' },
