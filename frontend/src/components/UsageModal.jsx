@@ -301,13 +301,27 @@ const DailySpend = ({ days, timezone }) => {
       cost: byDay[key]?.cost_usd || 0, questions: byDay[key]?.questions || 0 };
   });
   const max = Math.max(...series.map((d) => d.cost), 0.01);
+  const total = series.reduce((a, d) => a + d.cost, 0);
+  const [hover, setHover] = useState(null);
   return (
     <div>
-      <div style={styles.chart} role="img"
+      <div style={styles.chart} role="group" onMouseLeave={() => setHover(null)}
         aria-label={`AI spend per day, last 14 days: ${series.map((d) => `${d.label} $${d.cost.toFixed(2)}`).join(', ')}`}>
-        {series.map((d) => (
-          <div key={d.key} style={styles.barSlot} title={`${d.label}: $${d.cost.toFixed(2)} · ${d.questions} questions`}>
-            <div style={{ ...styles.bar, height: `${Math.max(d.cost > 0 ? 3 : 0, (d.cost / max) * 100)}%` }} />
+        {series.map((d, i) => (
+          <div key={d.key} className="usage-bar-slot" style={styles.barSlot} tabIndex={0}
+            aria-label={`${d.label}: $${d.cost.toFixed(2)}, ${d.questions} questions`}
+            onMouseEnter={() => setHover(i)} onFocus={() => setHover(i)} onBlur={() => setHover(null)}>
+            <div style={{ ...styles.bar, height: `${Math.max(d.cost > 0 ? 3 : 0, (d.cost / max) * 100)}%`,
+              opacity: hover == null || hover === i ? 1 : 0.35 }} />
+            {hover === i && (
+              // The same card as an uploaded bill's (attach-pop): a pill, then the figures; its edge stays inside the chart.
+              <span role="tooltip" className={`usage-pop${i < 3 ? ' at-start' : i > 10 ? ' at-end' : ''}`}>
+                <span className="usage-pop-pill">{d.label}</span>
+                <span className="usage-pop-row"><span>Spend</span><b>${d.cost.toFixed(2)}</b></span>
+                <span className="usage-pop-row"><span>Questions</span><b>{d.questions}</b></span>
+                <span className="usage-pop-row"><span>Share of 14 days</span><b>{total ? Math.round((100 * d.cost) / total) : 0}%</b></span>
+              </span>
+            )}
           </div>
         ))}
       </div>
@@ -549,8 +563,8 @@ const styles = {
   hint: { fontSize: 12.5, color: 'var(--ink-soft)', marginBottom: 4 },
   overview: { display: 'flex', flexDirection: 'column' },
   chart: { display: 'flex', alignItems: 'flex-end', gap: 2, height: 120, padding: '8px 0', borderBottom: '1px solid var(--border)' },
-  barSlot: { flex: 1, height: '100%', display: 'flex', alignItems: 'flex-end', cursor: 'default' },
-  bar: { width: '100%', background: 'var(--accent)', borderRadius: '4px 4px 0 0' },
+  barSlot: { flex: 1, height: '100%', display: 'flex', alignItems: 'flex-end', cursor: 'default', position: 'relative' },
+  bar: { width: '100%', background: 'var(--accent)', borderRadius: '4px 4px 0 0', transition: 'opacity 120ms ease' },
   chartAxis: { display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--ink-soft)', marginTop: 4 },
   topRow: { display: 'grid', gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1.4fr) minmax(0,.6fr) minmax(0,.6fr)', gap: 8, padding: '7px 10px', borderTop: '1px solid var(--border-soft)', alignItems: 'center', fontSize: 13 },
   rowBtn: { width: '100%', textAlign: 'left', background: 'none', border: 'none', borderTop: '1px solid var(--border-soft)', cursor: 'pointer', color: 'var(--ink)', font: 'inherit' },
