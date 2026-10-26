@@ -304,6 +304,35 @@ def member_events(owner: int, user_id: int, since: datetime.datetime, limit: int
     }
 
 
+def overview(month_start: datetime.datetime, days_since: datetime.datetime, timezone: str) -> Dict[str, Any]:
+    """The admin page's month at a glance: spend per day since `days_since` (days in `timezone`), the people who
+    used the most, and the month's spend by model and by kind. Finished events only."""
+    by_day = _run("""SELECT (created_at AT TIME ZONE %s)::date, SUM(cost_usd), COUNT(*) FILTER (WHERE kind = 'agent_answer')
+                     FROM public.ai_usage_events WHERE created_at >= %s AND status <> 'running'
+                     GROUP BY 1 ORDER BY 1""", (timezone, days_since), fetch="all")
+    people = _run(f"""SELECT c.user_id, c.owner_user_id, SUM(c.credits), COUNT(DISTINCT c.event_id)
+                      FROM public.ai_usage_charges c JOIN public.ai_usage_events e ON e.id = c.event_id
+                      WHERE c.created_at >= %s AND c.user_id IS NOT NULL AND {_COUNTED}
+                      GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 10""", (month_start,), fetch="all")
+    models = _run("""SELECT m.key, SUM((m.value->>'cost_usd')::numeric), SUM((m.value->>'calls')::int)
+                     FROM public.ai_usage_events e, jsonb_each(COALESCE(e.models, '{}'::jsonb)) m
+                     WHERE e.created_at >= %s AND e.status <> 'running'
+                     GROUP BY 1 ORDER BY 2 DESC""", (month_start,), fetch="all")
+    kinds = _run("""SELECT kind, COUNT(*), SUM(credits), COUNT(*) FILTER (WHERE model_mode = 'lite'),
+                           COUNT(*) FILTER (WHERE status NOT IN ('ok', 'ready'))
+                    FROM public.ai_usage_events WHERE created_at >= %s AND status <> 'running'
+                    GROUP BY 1 ORDER BY 3 DESC""", (month_start,), fetch="all")
+    return {
+        "by_day": [{"day": r[0].isoformat(), "cost_usd": round(float(r[1] or 0), 4), "questions": int(r[2] or 0)}
+                   for r in by_day],
+        "top_people": [{"user_id": int(r[0]), "owner_user_id": int(r[1]), "credits": float(r[2] or 0),
+                        "events": int(r[3] or 0)} for r in people],
+        "models": [{"model": r[0], "cost_usd": round(float(r[1] or 0), 4), "calls": int(r[2] or 0)} for r in models],
+        "kinds": [{"kind": r[0], "events": int(r[1]), "credits": float(r[2] or 0), "lite": int(r[3]),
+                   "not_ok": int(r[4])} for r in kinds],
+    }
+
+
 def owners_usage(month_start: datetime.datetime) -> List[Dict[str, Any]]:
     """Every owner charged this month, with their plan row if any."""
     rows = _run(f"""SELECT c.owner_user_id, SUM(c.credits), COUNT(DISTINCT c.user_id), COUNT(DISTINCT c.event_id),

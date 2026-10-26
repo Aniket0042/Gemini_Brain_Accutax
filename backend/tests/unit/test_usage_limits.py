@@ -45,6 +45,8 @@ class FakeDB:
         m(store, "member_usage", lambda o, a, b: [{"user_id": 50, "month_credits": 40.0, "today_credits": 5.0, "events": 2}])
         m(store, "user_emails", lambda ids: {i: f"u{i}@x.com" for i in ids})
         m(store, "set_cap", lambda *a: self.set_caps.append(a))
+        m(store, "overview", lambda *a: {"by_day": [], "models": [], "kinds": [],
+                                         "top_people": [{"user_id": 50, "owner_user_id": 7, "credits": 9.0, "events": 1}]})
         m(ledger, "owners_of", lambda orgs: {o: {24: 7, 25: 7, 30: 9}.get(o) for o in orgs})
         m(ledger.settings, "usage_db", "on")
         m(ledger.settings, "usage_ledger", "")
@@ -321,6 +323,15 @@ def test_admin_list_names_the_people_who_used_each_bucket(db, hard, monkeypatch)
     db.admins.add(1)
     owner = _client(1).get("/api/v1/usage/admin").json()["owners"][0]
     assert owner["people"] == ["u7@x.com", "u50@x.com"] and "user_ids" not in owner
+
+
+def test_admin_overview_names_top_people_and_their_owner(db, hard, monkeypatch):
+    monkeypatch.setattr(store, "owners_usage", lambda since: [])
+    monkeypatch.setattr(store, "plans_all", lambda: {})
+    monkeypatch.setattr(store, "recent_alerts", lambda n: [])
+    db.admins.add(1)
+    top = _client(1).get("/api/v1/usage/admin").json()["overview"]["top_people"][0]
+    assert top["email"] == "u50@x.com" and top["owner_email"] == "u7@x.com"
 
 
 # ── Speed limits in the usage tables (shared by every copy of the service) ────

@@ -65,9 +65,12 @@ const when = (iso) => {
 
 // One person's use of the bucket this month: totals and their newest questions and file reads.
 // No question text: the usage tables never keep it.
+const PAGE = 10;
+
 const MemberUsage = ({ userId, ownerId, token }) => {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  const [shown, setShown] = useState(PAGE);
   useEffect(() => {
     fetchMemberUsage(userId, ownerId, token).then(setData).catch((e) => setError(e.message));
   }, [userId, ownerId, token]);
@@ -90,7 +93,7 @@ const MemberUsage = ({ userId, ownerId, token }) => {
           <div style={{ ...styles.eventRow, ...styles.head }}>
             <div>When</div><div>What</div><div>Model</div><div>Tokens in / out</div><div>Credits</div>
           </div>
-          {data.events.map((e) => (
+          {data.events.slice(0, shown).map((e) => (
             <div key={e.id} style={styles.eventRow}>
               <div>{when(e.at)}</div>
               <div>{KIND_LABEL[e.kind] || e.kind}{STATUS_LABEL[e.status] ? <span style={styles.muted}> · {STATUS_LABEL[e.status]}</span> : null}
@@ -103,7 +106,18 @@ const MemberUsage = ({ userId, ownerId, token }) => {
           ))}
         </div>
       ) : <div style={styles.muted}>No AI use this month.</div>}
-      {data.events.length >= 50 && <div style={styles.muted}>Showing the newest 50.</div>}
+      {data.events.length > PAGE && (
+        <div style={styles.moreRow}>
+          <span style={styles.muted}>
+            Showing {Math.min(shown, data.events.length)} of {data.events.length}
+            {data.events.length >= 50 ? ' newest' : ''}
+          </span>
+          {shown < data.events.length && (
+            <button style={styles.btn} onClick={() => setShown(shown + PAGE)}>Show {PAGE} more</button>
+          )}
+          {shown > PAGE && <button style={styles.btn} onClick={() => setShown(PAGE)}>Show fewer</button>}
+        </div>
+      )}
     </div>
   );
 };
@@ -271,6 +285,99 @@ const OwnerAdmin = ({ ownerId, plans, token, onChanged, focus }) => {
   );
 };
 
+const modelShort = (id) => (/haiku/i.test(id) ? 'Haiku' : /sonnet/i.test(id) ? 'Sonnet' : /opus/i.test(id) ? 'Opus' : id);
+const KIND_PLURAL = { agent_answer: 'Questions', document_read: 'File reads', privacy_demo: 'Privacy demos',
+  health_check: 'Health checks', unscoped: 'Other (no owner)' };
+
+// Spend per day for the last 14 days: one series, so one color and no legend; each bar has its own tooltip.
+const DailySpend = ({ days, timezone }) => {
+  const byDay = Object.fromEntries(days.map((d) => [d.day, d]));
+  const end = new Date();
+  const series = Array.from({ length: 14 }, (_, i) => {
+    const d = new Date(end);
+    d.setDate(end.getDate() - (13 - i));
+    const key = d.toLocaleDateString('en-CA', { timeZone: timezone });
+    return { key, label: d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: timezone }),
+      cost: byDay[key]?.cost_usd || 0, questions: byDay[key]?.questions || 0 };
+  });
+  const max = Math.max(...series.map((d) => d.cost), 0.01);
+  return (
+    <div>
+      <div style={styles.chart} role="img"
+        aria-label={`AI spend per day, last 14 days: ${series.map((d) => `${d.label} $${d.cost.toFixed(2)}`).join(', ')}`}>
+        {series.map((d) => (
+          <div key={d.key} style={styles.barSlot} title={`${d.label}: $${d.cost.toFixed(2)} · ${d.questions} questions`}>
+            <div style={{ ...styles.bar, height: `${Math.max(d.cost > 0 ? 3 : 0, (d.cost / max) * 100)}%` }} />
+          </div>
+        ))}
+      </div>
+      <div style={styles.chartAxis}><span>{series[0].label}</span><span>max ${max.toFixed(2)} a day</span><span>{series[13].label}</span></div>
+    </div>
+  );
+};
+
+const Overview = ({ data, onPickPerson }) => {
+  const v = data.overview;
+  const q = v.kinds.find((k) => k.kind === 'agent_answer') || { events: 0, credits: 0, lite: 0, not_ok: 0 };
+  const totalModel = v.models.reduce((a, m) => a + m.cost_usd, 0) || 1;
+  return (
+    <div style={styles.overview}>
+      <div style={styles.section}>This month</div>
+      <div style={styles.cards}>
+        <div style={styles.card}><div style={styles.cardLabel}>Questions</div><div style={styles.cardValue}>{num(q.events)}</div>
+          <div style={styles.cardSub}>{num(q.lite)} on the lite model</div></div>
+        <div style={styles.card}><div style={styles.cardLabel}>Average question</div>
+          <div style={styles.cardValue}>{num(q.events ? q.credits / q.events : 0, 1)} credits</div>
+          <div style={styles.cardSub}>${num(q.events ? q.credits / q.events / 1000 : 0, 4)}</div></div>
+        <div style={styles.card}><div style={styles.cardLabel}>Not fully answered</div><div style={styles.cardValue}>{num(q.not_ok)}</div>
+          <div style={styles.cardSub}>timed out, failed or partial</div></div>
+        <div style={styles.card}><div style={styles.cardLabel}>Owners using AI</div><div style={styles.cardValue}>{num(data.owners.length)}</div>
+          <div style={styles.cardSub}>{num(data.owners.reduce((a, o) => a + (o.users || 0), 0))} people</div></div>
+      </div>
+
+      <div style={styles.section}>Spend per day, last 14 days</div>
+      <DailySpend days={v.by_day} timezone={data.timezone} />
+
+      <div style={styles.section}>Most active people</div>
+      <div style={styles.grid}>
+        <div style={{ ...styles.topRow, ...styles.head }}><div>Person</div><div>Owner</div><div>Questions</div><div>Credits</div></div>
+        {v.top_people.map((t) => (
+          <button key={`${t.user_id}-${t.owner_user_id}`} style={{ ...styles.topRow, ...styles.rowBtn }}
+            onClick={() => onPickPerson(t)} title="Open this person's usage">
+            <span style={styles.email}>{t.email || `User ${t.user_id}`}</span>
+            <span style={{ ...styles.email, ...styles.muted }}>{t.owner_email || `Owner ${t.owner_user_id}`}</span>
+            <span>{num(t.events)}</span><span>{num(t.credits, 1)}</span>
+          </button>
+        ))}
+        {!v.top_people.length && <div style={styles.empty}>No AI use this month yet.</div>}
+      </div>
+
+      <div style={styles.twoCol}>
+        <div>
+          <div style={styles.section}>By model</div>
+          {v.models.map((m) => (
+            <div key={m.model} style={styles.statRow}>
+              <span>{modelShort(m.model)}<span style={styles.muted}> · {num(m.calls)} calls</span></span>
+              <span>${num(m.cost_usd, 2)}<span style={styles.muted}> · {Math.round((100 * m.cost_usd) / totalModel)}%</span></span>
+            </div>
+          ))}
+          {!v.models.length && <div style={styles.muted}>None.</div>}
+        </div>
+        <div>
+          <div style={styles.section}>By type</div>
+          {v.kinds.map((k) => (
+            <div key={k.kind} style={styles.statRow}>
+              <span>{KIND_PLURAL[k.kind] || k.kind}<span style={styles.muted}> · {num(k.events)}</span></span>
+              <span>{num(k.credits, 0)} credits</span>
+            </div>
+          ))}
+          {!v.kinds.length && <div style={styles.muted}>None.</div>}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const AdminView = ({ token }) => {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -356,7 +463,12 @@ const AdminView = ({ token }) => {
       <div style={styles.detail}>
         {selected
           ? <OwnerAdmin ownerId={selected} plans={data.plans} token={token} onChanged={load} focus={focus} />
-          : <div style={styles.empty}>Pick an owner to change their plan or give a top-up.</div>}
+          : (
+            <>
+              <div style={styles.hint}>Pick an owner or a person on the left to change a plan, give a top-up or see their usage.</div>
+              <Overview data={data} onPickPerson={(t) => pick(`t${t.user_id}-${t.owner_user_id}`, t.owner_user_id, t.user_id)} />
+            </>
+          )}
       </div>
     </div>
   );
@@ -395,7 +507,7 @@ export const UsageModal = ({ token, usage, onClose }) => {
 };
 
 const styles = {
-  modal: { maxWidth: '96vw', width: '1100px', height: '86vh', display: 'flex', flexDirection: 'column' },
+  modal: { maxWidth: '96vw', width: '1100px', height: '86vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 12 },
   titleGroup: { display: 'flex', gap: 10, alignItems: 'flex-start' },
   subtitle: { margin: '2px 0 0', fontSize: 12, color: 'var(--ink-soft)' },
@@ -408,9 +520,9 @@ const styles = {
   empty: { color: 'var(--ink-soft)', fontSize: 13, padding: 12 },
   note: { fontSize: 12.5, color: 'var(--ink-soft)', margin: '0 0 10px', lineHeight: 1.5 },
   scroll: { overflowY: 'auto', flex: 1, minHeight: 0 },
-  body: { display: 'flex', gap: 12, flex: 1, minHeight: 0, flexWrap: 'wrap' },
-  list: { flex: '1 1 300px', maxWidth: 380, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, paddingRight: 8 },
-  detail: { flex: '2 1 420px', minWidth: 0, overflowY: 'auto' },
+  body: { display: 'flex', gap: 16, flex: 1, minHeight: 0 },
+  list: { flex: '0 0 320px', minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, paddingRight: 8 },
+  detail: { flex: 1, minWidth: 0, minHeight: 0, overflowY: 'auto', paddingRight: 4 },
   item: { textAlign: 'left', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', cursor: 'pointer', color: 'var(--ink)', font: 'inherit', display: 'flex', flexDirection: 'column', gap: 4 },
   itemActive: { borderColor: 'var(--accent)', background: 'var(--accent-soft)' },
   itemTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, fontWeight: 600, gap: 8 },
@@ -426,6 +538,17 @@ const styles = {
   row: { display: 'grid', gridTemplateColumns: 'minmax(0,2fr) minmax(0,.8fr) minmax(0,.8fr) minmax(0,1.3fr) minmax(0,.6fr) minmax(0,.6fr)', gap: 8, padding: '8px 10px', borderTop: '1px solid var(--border-soft)', alignItems: 'center', fontSize: 13 },
   head: { background: 'var(--surface-2)', fontSize: 11, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '.04em', borderTop: 'none' },
   cellMain: { minWidth: 0 },
+  hint: { fontSize: 12.5, color: 'var(--ink-soft)', marginBottom: 4 },
+  overview: { display: 'flex', flexDirection: 'column' },
+  chart: { display: 'flex', alignItems: 'flex-end', gap: 2, height: 120, padding: '8px 0', borderBottom: '1px solid var(--border)' },
+  barSlot: { flex: 1, height: '100%', display: 'flex', alignItems: 'flex-end', cursor: 'default' },
+  bar: { width: '100%', background: 'var(--accent)', borderRadius: '4px 4px 0 0' },
+  chartAxis: { display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--ink-soft)', marginTop: 4 },
+  topRow: { display: 'grid', gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1.4fr) minmax(0,.6fr) minmax(0,.6fr)', gap: 8, padding: '7px 10px', borderTop: '1px solid var(--border-soft)', alignItems: 'center', fontSize: 13 },
+  rowBtn: { width: '100%', textAlign: 'left', background: 'none', border: 'none', borderTop: '1px solid var(--border-soft)', cursor: 'pointer', color: 'var(--ink)', font: 'inherit' },
+  twoCol: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 },
+  statRow: { display: 'flex', justifyContent: 'space-between', gap: 8, padding: '5px 0', borderBottom: '1px solid var(--border-soft)', fontSize: 13 },
+  moreRow: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   rowOpen: { background: 'var(--accent-soft)' },
   personBtn: { minWidth: 0, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--ink)', font: 'inherit' },
   memberDetail: { padding: '10px 12px 12px', borderTop: '1px solid var(--border-soft)', background: 'var(--surface-2)', display: 'flex', flexDirection: 'column', gap: 8 },

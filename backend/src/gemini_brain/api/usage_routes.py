@@ -172,7 +172,7 @@ def _member_detail(store: Any, owner: int, user_id: int) -> Dict[str, Any]:
 
 # ── Accutax admin ────────────────────────────────────────────────────────────
 
-@router.get("/admin", summary="Platform spend, every owner charged this month, plans and alerts")
+@router.get("/admin", summary="Platform spend, every owner charged this month, the month at a glance, plans and alerts")
 def admin_page(current_user: CurrentUser = Depends(get_current_user)) -> Dict[str, Any]:
     store = _store()
     _admin(current_user)
@@ -194,7 +194,14 @@ def admin_page(current_user: CurrentUser = Depends(get_current_user)) -> Dict[st
         ids = sorted(o.pop("user_ids"), key=lambda u: (u != o["owner_user_id"], emails.get(u) or ""))
         o["people"] = [emails.get(u) or f"User {u}" for u in ids]
     internal = charged.get(ledger.INTERNAL_OWNER, {})
+    view = store.overview(p.month_start, p.day_start - datetime.timedelta(days=13), settings.usage_timezone)
+    names = store.user_emails({u for t in view["top_people"] for u in (t["user_id"], t["owner_user_id"])})
+    for t in view["top_people"]:
+        t["email"] = names.get(t["user_id"])
+        t["owner_email"] = "Accutax (internal)" if t["owner_user_id"] == ledger.INTERNAL_OWNER else names.get(t["owner_user_id"])
     return {
+        "overview": view,
+        "timezone": settings.usage_timezone,
         "enforce": limits.enforce_mode(),
         "platform": {"today_usd": round(store.platform_cost(p.utc_day_start), 4),
                      "month_usd": round(store.platform_cost(p.month_start), 4),
