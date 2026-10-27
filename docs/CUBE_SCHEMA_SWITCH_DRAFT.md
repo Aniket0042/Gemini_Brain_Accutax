@@ -26,8 +26,8 @@ Read from the EC2 backend migrations and entities, and checked against EC2 rows 
 | Foreign currency | `income/expense.currency_code`, `exchange_rate`; `*_items.foreign_line_amount` | **None.** `line_amount` and `tax_amount` hold base-currency (AED) amounts. Example: invoice 1132 is USD 1,000 at 3.6725; `line_amount` = 3,672.50. |
 | Discount on total | `discount_on_total_*` on the header; `gross_line_amount` on lines | **None.** The discount is already spread into `line_amount`; `gross_line_amount` keeps the figure before it. Example: invoice 1108 gross 290, discount 50, `line_amount` 240. |
 | Tax-inclusive entry | `income/expense.amounts_are` | **None expected.** It records how the user typed amounts; stored lines are net. To confirm on one inclusive invoice when one exists (EC2 has only one inclusive quote). |
-| Retention | `retention_*` on the header; `retention_releases` table | **Open balances are wrong.** Held retention is not due, and EC2 already takes it out of `income.amount_due`. Example: invoice 1136 total 5,000, retention 250, `amount_due` 4,750. Cube shows 5,000. |
-| Credit note applied to an invoice | `credit_note_applications` table | **Open balances may be wrong.** The application lowers the invoice's amount due with no journal entry. EC2 has 0 rows today. |
+| Retention | `retention_*` on the header; `retention_releases` table | **Open balances are wrong.** Held retention is not due until released. Example: invoice 1136 total 5,000, retention 250, `amount_due` 4,750. Cube shows 5,000. |
+| Credit note applied to an invoice | `credit_note_applications` table | **No change needed.** EC2 adds applications into `income.amount_paid`, which Cube already subtracts. EC2 has 0 rows today. |
 | Foreign-currency payment | `customer_payment/supplier_payments.base_amount`, `exchange_rate` | **Payments wrong for foreign payments.** `amount` is in the payment currency; `base_amount` is what the bank moved in AED. EC2 has 0 such payments today. |
 | Supplier refund | `supplier_payments.payment_type` = `REFUND` | **Payments wrong for refunds.** A refund is money coming in, but Cube counts it as paid out. EC2 has 0 refunds today. |
 
@@ -61,50 +61,52 @@ ACCUTAX_SCHEMA=v1
 
 The Quadlet unit and docker-compose already pass `cube.env` to the container, so no unit change is needed.
 
-### 3.3 `open_receivables.yml` (and the same in `open_payables.yml`)
+### 3.3 `open_receivables.yml` and `open_payables.yml` (built 27 Oct)
 
-Replace the `outstanding` line:
+How the EC2 backend keeps these figures (Calamity010 `income.service.ts`, `expense.service.ts`):
 
-```yaml
-             {% if schema_v2() %}
-             COALESCE(inc.amount_due, t.total_incl_vat - COALESCE(inc.amount_paid, 0)) AS outstanding,
-             {% else %}
-             t.total_incl_vat - COALESCE(inc.amount_paid, 0) AS outstanding,
-             {% endif %}
-```
+- `amount_paid` is recomputed on every payment: payment items applied, plus credit notes applied to the invoice
+  (`credit_note_applications`). So credit note applications need no extra handling in Cube.
+- `amount_due` is **not** lowered by payments. It is only the total less held retention, set when the invoice is
+  saved, so Cube must not use it.
+- Held retention (invoices and bills only) = `retention_amount` less `retention_releases`, never below 0. It is not due
+  until released.
+- Partly paid bills get the status `PARTIAL_PAID`, not `PARTIALLY_PAID`. The current filter misses them.
 
-On v2 also add a held-retention column and measure:
+v2 changes, each inside `{% if schema_v2() %}` with today's line as the `{% else %}`:
 
-```yaml
-             {% if schema_v2() %}
-             GREATEST(COALESCE(inc.retention_amount, 0) - COALESCE(rr.released, 0), 0) AS retention_held,
-             {% else %}
-             0 AS retention_held,
-             {% endif %}
-```
+- `outstanding` = lines total incl. VAT − held retention − `amount_paid`;
+- a `CROSS JOIN LATERAL` over `retention_releases` (matched on document, type and organization) giving `held`;
+- the status filter also accepts `PARTIAL_PAID`.
 
-with `LEFT JOIN LATERAL (SELECT SUM(r.amount) AS released FROM public.retention_releases r WHERE r.document_type = 'INCOME' AND r.document_id = inc.id) rr ON true` inside the v2 branch.
-Payables use `e.`, `expense` and `document_type = 'EXPENSE'`.
+### 3.4 `payment_lines.yml` (built 27 Oct)
 
-To check before building: whether EC2 also lowers `amount_due` for credit note applications and payments in every
-path (invoice 1107 has `amount_due` 0 and `amount_paid` 0, so it looks maintained). If not, subtract
-`credit_note_applications` in the v2 branch instead.
+- Customer payments: `received` = `COALESCE(base_amount, amount)` − `amount_refunded`. `base_amount` is set only on
+  payments of foreign-currency invoices (what the bank moved in the base currency). Refund payments are not part of
+  that plan, so `amount_refunded` is already in the base currency.
+- Supplier payments: `REFUND` rows count as received, other rows as paid, both at `COALESCE(base_amount, amount)`;
+  `payment_type` shows `SUPPLIER_REFUND` for refunds. The member description still says `SUPPLIER_PAYMENT` only, to
+  keep `/meta` identical on the VM.
+- `payment_applications` uses `amount_applied`, which is already in the base currency: no change.
 
-### 3.4 `payment_lines.yml`
+### 3.4a Test record (27 Oct, throwaway containers on the VM, removed afterwards; live Cube untouched)
 
-Customer side, v2:
+- v1 against the live VM Cube: setting absent and `v1` both gave 0 differences (243 queries + `/meta`).
+- v2 (EC2 DB) against the live VM Cube: `/meta` identical; SQL differs only in `receivables`, `payables` and
+  `payments` (16 queries each), as intended.
+- Figures on EC2, v1 vs v2 vs the EC2 backend's own formula run directly in SQL:
 
-```yaml
-             {% if schema_v2() %}
-             COALESCE(cp.base_amount, cp.amount) - COALESCE(cp.amount_refunded, 0) * COALESCE(cp.exchange_rate, 1) AS received,
-             {% else %}
-             cp.amount - COALESCE(cp.amount_refunded, 0) AS received,
-             {% endif %}
-```
+  | | v1 | v2 | direct SQL |
+  |---|---|---|---|
+  | Org 1 receivables | 89,108.05 (20) | 88,858.05 (20) | 88,858.05 (20) |
+  | Invoice 1136 (retention 250) | 5,000.00 | 4,750.00 | 4,750 (`amount_due`) |
+  | Org 2 receivables | 26,847.50 (4) | 26,847.50 (4) | 26,847.50 (4) |
+  | Org 1 payables | 189.00 (1) | 189.00 (1) | 189.00 (1) |
+  | Org 1 received / paid | 2,857,203.21 / 2,272,943.90 | same | same |
+  | Org 2 received / paid | 3,695,208.32 / 577,095.75 | same | same |
 
-Supplier side, v2: `REFUND` rows go to `received`, other rows to `paid`, both from `COALESCE(sp.base_amount, sp.amount)`.
-`payment_type` shows `SUPPLIER_REFUND` for refunds. The `payment_applications` cube uses `amount_applied`, which stays
-in base currency; no change.
+  Payments match on both because EC2 has no foreign-currency payments or supplier refunds yet; those branches are
+  checked only by reading the SQL until such rows exist.
 
 ### 3.5 Optional on v2: new dimensions
 
@@ -123,7 +125,7 @@ On v1 the same members return the base currency and 0, so views and agent prompt
 ## 4. Database grants on EC2
 
 `cube_reader` must exist on `accutax_db` with `SELECT` on the tables in `semantic/dba/*.sql`, plus
-`retention_releases` and `credit_note_applications` for v2. `accutax_user` cannot create roles, so this needs the
+`retention_releases` for v2. `accutax_user` cannot create roles, so this needs the
 database superuser.
 
 ## 5. Risks
@@ -152,7 +154,7 @@ database superuser.
    - live vs new model, setting absent: 0 differences; with `ACCUTAX_SCHEMA=v1`: 0 differences;
    - negative control (`line_amount * 1` in `sales_lines`): 35 differences, exit 1. The test catches a one-word change.
    Run the same comparison before every later model deploy.
-3. Write the v2 branches (3.3, 3.4); unit-test the compiled SQL for both values.
+3. Write the v2 branches (3.3, 3.4); unit-test the compiled SQL for both values. Built and tested 27 Oct (3.4a).
 4. Run a second Cube on the VM against EC2 with `ACCUTAX_SCHEMA=v2`; compare open balances and payments with the
    zereco.ai dashboard for invoices 1106-1136.
 5. Optional dimensions (3.5).

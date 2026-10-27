@@ -2,6 +2,9 @@
 # Same rules as open_receivables, on expense / expense_items, including local_today. The document date
 # is reception_date (text), falling back to created_date, as Accutax does.
 #
+# v2 (EC2 accutax_db, model/globals.py): retention still held from the supplier is not due, so it is taken
+# off; EC2 bills use the status PARTIAL_PAID.
+#
 # No curly braces in SQL literals: Cube's YAML reads {...} as a member reference.
 cubes:
   - name: open_payables
@@ -19,7 +22,11 @@ cubes:
              CASE WHEN CAST(e.due_date AS TEXT) ~ '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
                   THEN CAST(LEFT(CAST(e.due_date AS TEXT), 10) AS DATE) END         AS due_date,
              COALESCE(NULLIF(c.name, ''), NULLIF(c.organization_name, ''), 'Unknown') AS vendor_name,
+      {% if schema_v2() %}
+             t.total_incl_vat - rh.held - COALESCE(e.amount_paid, 0) AS outstanding,
+      {% else %}
              t.total_incl_vat - COALESCE(e.amount_paid, 0) AS outstanding,
+      {% endif %}
              lt.local_today                                AS local_today
       FROM   public.expense e
       JOIN   public.status_type st ON st.id = e.status_type_id
@@ -33,10 +40,24 @@ cubes:
                FROM   public.expense_items ei
                WHERE  ei.expense_id = e.id
              ) t
+      {% if schema_v2() %}
+      CROSS  JOIN LATERAL (
+               SELECT CASE WHEN e.expense_type = 'BILL'
+                           THEN GREATEST(COALESCE(e.retention_amount, 0) - COALESCE(SUM(r.amount), 0), 0)
+                           ELSE 0 END AS held
+               FROM   public.retention_releases r
+               WHERE  r.document_type = 'EXPENSE' AND r.document_id = e.id
+                 AND  r.organization_id = e.organization_id
+             ) rh
+      {% endif %}
       WHERE  e.expense_type IN ('BILL', 'EXPENSE', 'CASH_EXPENSE')
         AND  e.is_draft = false
         AND  e.voided_at IS NULL
+      {% if schema_v2() %}
+        AND  st.value IN ('PENDING', 'PARTIALLY_PAID', 'PARTIAL_PAID')
+      {% else %}
         AND  st.value IN ('PENDING', 'PARTIALLY_PAID')
+      {% endif %}
         AND  NOT (CAST(e.reception_date AS TEXT) ~ '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
                   AND CAST(LEFT(CAST(e.reception_date AS TEXT), 10) AS DATE) > lt.local_today)
 
