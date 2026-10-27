@@ -367,6 +367,24 @@ class TokenResponse(BaseModel):
     tenants: List[Dict[str, Any]] = Field(default_factory=list, description="Metadata list of accessible tenant organizations.")
 
 
+class HandoffRequest(BaseModel):
+    """A one-time code from the Accutax dashboard (?handoff=1&code=...)."""
+
+    code: str = Field(..., pattern=r"^[A-Za-z0-9_-]{20,128}$", description="The one-time handoff code.")
+
+
+class HandoffResponse(TokenResponse):
+    """A session for the dashboard user, plus where the dashboard left off."""
+
+    name: str = Field(default="", description="Display name from the dashboard.")
+    organization_id: Optional[int] = Field(default=None, description="The organization the dashboard was on.")
+    session_id: Optional[str] = Field(default=None, description="The chat thread to open, if the widget had one.")
+    current_page: Optional[str] = Field(default=None, description="The dashboard page the user came from.")
+    conversation: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Turns to continue: role, content, optional tableMarkdown and timestamp.",
+    )
+
+
 class TenantInfo(BaseModel):
     """Metadata describing a single selectable tenant organization in the UI."""
 

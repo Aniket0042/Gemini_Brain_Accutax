@@ -23,6 +23,26 @@ export const loginUser = async (email, password) => {
   return await response.json();
 };
 
+// Redeem the dashboard's one-time handoff code (services/handoff.js). Never retried: a code works once.
+export const redeemHandoffCode = async (code) => {
+  const response = await fetch('/api/v1/auth/handoff', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify({ code }),
+  });
+
+  if (!response.ok) {
+    // Our backend explains itself in `detail`; a proxy or network error does not, so say it plainly.
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Could not continue from the dashboard. Sign in below.');
+  }
+
+  return await response.json();
+};
+
 export const fetchQueryResponse = async (payload, token = '', signal = undefined) => {
   const headers = {
     'Content-Type': 'application/json',

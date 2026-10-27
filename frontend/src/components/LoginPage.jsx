@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import { Brain, Lock, Mail, Sparkles, AlertCircle, ArrowRight, Eye, EyeOff, Building2, ShieldCheck } from 'lucide-react';
 import { loginUser } from '../services/api';
 
-export const LoginPage = ({ onLoginSuccess }) => {
+// notice: why the dashboard handoff did not sign the user in (shown until they try again).
+export const LoginPage = ({ onLoginSuccess, notice = null }) => {
   const [email, setEmail] = useState('genthird456@gmail.com');
   const [password, setPassword] = useState('Password123$$');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState(notice);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

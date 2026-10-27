@@ -136,6 +136,14 @@ class GeminiBrainSettings(BaseSettings):
             "chat widget can call /query without a second login."
         ),
     )
+    handoff_service_key: str = Field(
+        default="",
+        description=(
+            "The Accutax backend's HANDOFF_SERVICE_KEY, sent as x-handoff-service-key when this server redeems a "
+            "one-time handoff code (POST /handoff/exchange). Empty: the code is sent alone, which works only while "
+            "the Accutax backend has no key set."
+        ),
+    )
     jwt_algorithm: str = Field(
         default="HS256",
         description="JWT signing algorithm.",

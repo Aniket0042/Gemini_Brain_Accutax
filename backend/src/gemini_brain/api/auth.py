@@ -248,6 +248,86 @@ def authenticate_with_accutax_api(email: str, password: str) -> dict[str, Any] |
     return None
 
 
+class HandoffRedeemError(Exception):
+    """A handoff code could not be redeemed. status is the HTTP status for our own client."""
+
+    def __init__(self, status_code: int, detail: str):
+        super().__init__(detail)
+        self.status_code = status_code
+        self.detail = detail
+
+
+def redeem_accutax_handoff(code: str) -> dict[str, Any]:
+    """Swap a one-time dashboard code for the user's Accutax session, server to server.
+
+    The Accutax dashboard opens the chat at ?handoff=1&code=..., and only this server may redeem the code
+    (POST {ACCUTAX_BASE_URL}/handoff/exchange). The code works once and for 60 seconds, so a failure is never retried.
+    Returns the upstream token, user and what to open, in the shape authenticate_with_accutax_api returns plus the
+    handoff fields. Raises HandoffRedeemError otherwise.
+    """
+    import httpx
+
+    headers = {"x-handoff-service-key": settings.handoff_service_key} if settings.handoff_service_key else {}
+    url = f"{settings.accutax_base_url.rstrip('/')}/handoff/exchange"
+    try:
+        resp = httpx.post(url, json={"code": code, "audience": "ai-chat"}, headers=headers,
+                          timeout=httpx.Timeout(5.0, connect=2.0))
+    except Exception as e:
+        logger.warning("Handoff exchange unreachable: %s", e)
+        raise HandoffRedeemError(503, "The dashboard could not be reached. Try again in a moment.") from e
+
+    # The upstream answers 410 for unknown, used and expired codes alike, and 400 for a malformed one.
+    if resp.status_code in (400, 404, 410):
+        raise HandoffRedeemError(410, "This link has expired. Open the AI again from the dashboard.")
+    if resp.status_code == 403:
+        logger.error("Handoff exchange refused this server: HANDOFF_SERVICE_KEY does not match the Accutax backend")
+        raise HandoffRedeemError(502, "The AI could not confirm your dashboard sign-in.")
+    if resp.status_code not in (200, 201):
+        logger.warning("Handoff exchange returned %s", resp.status_code)
+        raise HandoffRedeemError(502, "The AI could not confirm your dashboard sign-in.")
+
+    try:
+        data = resp.json()
+        token = str(data["access_token"])
+        user_id = int(data["user_id"])
+    except Exception as e:
+        logger.warning("Handoff exchange answered without a usable token or user id")
+        raise HandoffRedeemError(502, "The AI could not confirm your dashboard sign-in.") from e
+
+    allowed_orgs = _live_allowed_org_ids(user_id, token) or []
+    email = str(data.get("email") or "")
+    _remember_trusted_token(token, {
+        "sub": str(user_id),
+        "userId": user_id,
+        "email": email,
+        "allowed_org_ids": allowed_orgs,
+        "accutax_token": token,
+    })
+    org = data.get("organization_id")
+    try:
+        org = int(org) if org is not None else None
+    except (TypeError, ValueError):
+        org = None
+    conversation = [
+        {k: t[k] for k in ("role", "content", "tableMarkdown", "timestamp") if k in t}
+        for t in (data.get("conversation") or [])
+        if isinstance(t, dict) and t.get("role") in ("user", "assistant") and isinstance(t.get("content"), str)
+    ]
+    logger.info("Handoff redeemed for user %d (org %s)", user_id, org)
+    return {
+        "access_token": token,
+        "user_id": user_id,
+        "email": email,
+        "name": str(data.get("name") or email),
+        "allowed_org_ids": allowed_orgs,
+        # The org the dashboard was on, only when this user may still open it.
+        "organization_id": org if org in allowed_orgs else None,
+        "session_id": data.get("session_id") or None,
+        "current_page": data.get("current_page") or None,
+        "conversation": conversation,
+    }
+
+
 def decode_access_token(token: str) -> dict[str, Any]:
     """Decode and validate a JWT access token, extracting user ID and claims.
 

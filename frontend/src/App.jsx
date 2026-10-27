@@ -9,7 +9,8 @@ import { Header } from './components/Header';
 import { IntroSuggestions } from './components/IntroSuggestions';
 import { ModelHealthModal } from './components/ModelHealthModal';
 import { AnswerCanvas } from './components/canvas/AnswerCanvas';
-import { fetchQueryResponse, streamQueryResponse, fetchTenants, fetchModelCatalog, fetchSessionMessages, createChatSession, deleteChatSession, fetchUploadConfig, fetchPrivacyAccess, fetchUsage, fetchAgents } from './services/api';
+import { fetchQueryResponse, streamQueryResponse, fetchTenants, fetchModelCatalog, fetchSessionMessages, createChatSession, deleteChatSession, fetchUploadConfig, fetchPrivacyAccess, fetchUsage, fetchAgents, redeemHandoffCode } from './services/api';
+import { claimCode, handoffCodeFrom, toWidgetHandoff, urlWithoutCode } from './services/handoff';
 import { AgentsPanel, AgentBar, parseMention } from './components/AgentsPanel';
 import { newAgentRun, applyAgentStep } from './components/AgentRun';
 import { readAgentRuns, recordAgentRun } from './services/agentRuns';
@@ -380,6 +381,9 @@ export default function App() {
       return false;
     }
   });
+  // Newer dashboard: a one-time code in the URL instead of a postMessage (services/handoff.js).
+  const [handoffCode] = useState(() => handoffCodeFrom(window.location.search));
+  const [handoffNotice, setHandoffNotice] = useState(null);
   const [handoffTimedOut, setHandoffTimedOut] = useState(false);
   const [handoffSettled, setHandoffSettled] = useState(() => {
     try {
@@ -646,6 +650,30 @@ export default function App() {
       applyWidgetHandoff(pendingHandoffRef.current);
     }
   }, [currentUser]);
+
+  // Redeem the dashboard's one-time code once, then continue exactly as a postMessage handoff would.
+  useEffect(() => {
+    if (!handoffCode) return;
+    const clean = urlWithoutCode(window.location.href);
+    if (clean) window.history.replaceState({}, '', clean);
+    if (!claimCode(handoffCode, sessionStorage)) return;
+    redeemHandoffCode(handoffCode)
+      .then((res) => {
+        const data = toWidgetHandoff(res);
+        try {
+          sessionStorage.setItem('accutax_widget_handoff', JSON.stringify(data));
+        } catch {
+          /* ignore quota */
+        }
+        applyWidgetHandoff(data);
+      })
+      .catch((err) => {
+        setHandoffNotice(err.message || 'Could not continue from the dashboard. Sign in below.');
+        sanitizeSensitiveQueryParams({ includeHandoff: true });
+        setHandoffTimedOut(true);
+        setHandoffSettled(true);
+      });
+  }, [handoffCode]);
 
   useEffect(() => {
     if (widgetSessionId) return undefined;
@@ -1608,7 +1636,7 @@ export default function App() {
         </div>
       );
     }
-    return <LoginPage onLoginSuccess={handleLoginSuccess} />;
+    return <LoginPage onLoginSuccess={handleLoginSuccess} notice={handoffNotice} />;
   }
 
   const hasStartedChat = conversation.length > 0;

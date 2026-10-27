@@ -14,6 +14,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 from gemini_brain.api.auth import (
     CurrentUser,
+    HandoffRedeemError,
     authenticate_with_accutax_api,
     authorize_org_scope,
     create_access_token,
@@ -23,6 +24,7 @@ from gemini_brain.api.auth import (
     get_user_allowed_orgs,
     get_user_by_email,
     placeholder_tenants,
+    redeem_accutax_handoff,
     verify_password,
 )
 from gemini_brain.api.models import (
@@ -32,6 +34,8 @@ from gemini_brain.api.models import (
     AgentListResponse,
     ModelInfo,
     LoginRequest,
+    HandoffRequest,
+    HandoffResponse,
     ModelDiagnosticRequest,
     ModelHealthResponse,
     QueryRequest,
@@ -193,6 +197,46 @@ def login_json(payload: LoginRequest) -> TokenResponse:
         email=user["email"],
         allowed_org_ids=allowed_org_ids,
         tenants=tenants,
+    )
+
+
+@router.post(
+    "/auth/handoff",
+    response_model=HandoffResponse,
+    tags=["Authentication"],
+    summary="Continue from the Accutax Dashboard (One-Time Code)",
+    description=(
+        "Redeems the one-time code the dashboard put in the chat URL (?handoff=1&code=...) with the Accutax "
+        "backend, server to server, and issues a session for that user. The code works once and for 60 seconds."
+    ),
+)
+def login_handoff(payload: HandoffRequest) -> HandoffResponse:
+    """Sign in the dashboard user from a handoff code; the browser never holds the dashboard token."""
+    try:
+        upstream = redeem_accutax_handoff(payload.code)
+    except HandoffRedeemError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    live = fetch_accutax_accessible_orgs(upstream["access_token"], upstream["user_id"])
+    tenants = live if live else _resolve_tenants_for_org_ids(upstream["allowed_org_ids"])
+    session_token = create_access_token(
+        user_id=upstream["user_id"],
+        email=upstream["email"],
+        allowed_org_ids=upstream["allowed_org_ids"],
+        accutax_token=upstream["access_token"],
+    )
+    return HandoffResponse(
+        access_token=session_token,
+        token_type="bearer",
+        expires_in=3600,
+        user_id=upstream["user_id"],
+        email=upstream["email"],
+        allowed_org_ids=upstream["allowed_org_ids"],
+        tenants=tenants,
+        name=upstream["name"],
+        organization_id=upstream["organization_id"],
+        session_id=upstream["session_id"],
+        current_page=upstream["current_page"],
+        conversation=upstream["conversation"],
     )
 
 
