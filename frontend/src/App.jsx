@@ -11,7 +11,7 @@ import { ModelHealthModal } from './components/ModelHealthModal';
 import { AnswerCanvas } from './components/canvas/AnswerCanvas';
 import { fetchQueryResponse, streamQueryResponse, fetchTenants, fetchModelCatalog, fetchSessionMessages, createChatSession, deleteChatSession, fetchUploadConfig, fetchPrivacyAccess, fetchUsage, fetchAgents, redeemHandoffCode } from './services/api';
 import { claimCode, handoffCodeFrom, toWidgetHandoff, urlWithoutCode } from './services/handoff';
-import { AgentsPanel, AgentBar, parseMention } from './components/AgentsPanel';
+import { parseMention } from './components/AgentsPanel';
 import { newAgentRun, applyAgentStep } from './components/AgentRun';
 import { readAgentRuns, recordAgentRun } from './services/agentRuns';
 import { dismissedKeys } from './services/findings';
@@ -1232,12 +1232,9 @@ export default function App() {
   const handleSubmitQuery = async (typedText, overrides = {}) => {
     // A card number is removed here, so it is never shown in the chat, kept in this browser or sent.
     const { text: cleanText, cards: cardsRemoved } = dropCards(typedText);
-    // "@vat ..." picks the agent for this question and the ones after it.
+    // "@vat ..." picks the agent for this question only: there is no agent bar to show a sticky choice.
     const mention = parseMention(cleanText, agents);
-    if (mention.agentKey) {
-      setActiveAgent(mention.agentKey);
-      if (!mention.text.trim()) return;
-    }
+    if (mention.agentKey && !mention.text.trim()) return;
     const queryText = mention.agentKey ? mention.text : cleanText;
     const agentKey = overrides.agent || mention.agentKey || activeAgent;
     const specialist = agents.find((a) => a.key === agentKey && !a.default);
@@ -1568,11 +1565,6 @@ export default function App() {
 
   // Stop button: cancel the query in flight and keep whatever text has
   // streamed in so far, marked as stopped.
-  const handleRunAgent = (agent) => {
-    setActiveAgent(agent.key);
-    handleSubmitQuery(agent.run_prompt, { agent: agent.key });
-  };
-
   const handleStopQuery = () => {
     const controller = queryControllerRef.current;
     if (!controller) return;
@@ -1707,18 +1699,7 @@ export default function App() {
                   onSelectPrompt={handleSubmitQuery}
                   activeTenant={activeTenant}
                   userName={userName}
-                >
-                  <AgentsPanel
-                    agents={agents}
-                    activeKey={activeAgent}
-                    onRunNow={handleRunAgent}
-                    onSelect={setActiveAgent}
-                    disabled={isLoading}
-                    runs={agentRuns}
-                    runningKey={runningAgent}
-                    onOpenRun={handleSelectHistory}
-                  />
-                </IntroSuggestions>
+                />
               </>
             ) : (
               <div style={styles.activeConvoWrapper}>
@@ -1745,13 +1726,6 @@ export default function App() {
       <div style={styles.stickyBottomBar}>
         <div style={styles.inputInnerWrapper}>
           <UsageBanner usage={usage} />
-          <AgentBar
-            agents={agents}
-            activeKey={activeAgent}
-            onSelect={setActiveAgent}
-            onRunNow={handleRunAgent}
-            disabled={isLoading}
-          />
           <QueryInput
             onSubmitQuery={handleSubmitQuery}
             onStop={handleStopQuery}
