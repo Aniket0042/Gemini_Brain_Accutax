@@ -1822,7 +1822,8 @@ export default function App() {
       )}
 
       {showUsage && usage && (
-        <UsageModal token={currentUser?.access_token || ''} usage={usage} onClose={() => { setShowUsage(false); fetchUsage(scopeOrgIds, currentUser?.access_token || '').then(setUsage); }} />
+        <UsageModal token={currentUser?.access_token || ''} usage={usage}
+          orgNames={Object.fromEntries(availableTenants.map((t) => [tenantIdOf(t), tenantNameOf(t)]))} onClose={() => { setShowUsage(false); fetchUsage(scopeOrgIds, currentUser?.access_token || '').then(setUsage); }} />
       )}
 
       {showPrivacy && privacyAccess.admin && (

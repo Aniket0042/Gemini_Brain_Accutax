@@ -483,13 +483,13 @@ def test_admin_sees_one_persons_usage_of_any_bucket(db, hard, monkeypatch):
 
 def test_store_member_events_shape(monkeypatch):
     import datetime as dt
-    cur = _open_with((2, 1000, 200, 50, 39.5, 1), monkeypatch)
+    cur = _open_with((2, 1000, 200, 50, 39.5, 1, 1), monkeypatch)
     at = dt.datetime(2026, 10, 26, tzinfo=dt.timezone.utc)
     cur.fetchall = lambda: [(9, at, "agent_answer", "ok", "lite", 2, 1000, 200, 50, 39.5,
                              {"in.anthropic.claude-haiku-4-5": {}}, [24])]
     out = store.member_events(7, 50, at)
     assert out["totals"] == {"events": 2, "input_tokens": 1000, "output_tokens": 200, "cached_tokens": 50,
-                             "credits": 39.5, "cost_usd": 0.0395, "lite_events": 1}
+                             "credits": 39.5, "cost_usd": 0.0395, "lite_events": 1, "not_ok": 1}
     assert out["events"][0]["models"] == ["in.anthropic.claude-haiku-4-5"] and out["events"][0]["mode"] == "lite"
     assert all("c.owner_user_id = %s AND c.user_id = %s" in q for q in cur.sql if "SELECT" in q)
 
@@ -529,11 +529,56 @@ def test_super_admin_my_usage_is_internal(db, hard, monkeypatch):
 
 def test_store_user_events_spans_every_owner(monkeypatch):
     import datetime as dt
-    cur = _open_with((3, 900, 100, 20, 55.0, 0), monkeypatch)
+    cur = _open_with((3, 900, 100, 20, 55.0, 0, 2), monkeypatch)
     at = dt.datetime(2026, 10, 26, tzinfo=dt.timezone.utc)
     answers = iter([[(7, 40.0, 2), (9, 15.0, 1)], [(5, at, "agent_answer", "ok", "full", 2, 900, 100, 20, 55.0, {}, [24, 30])]])
     cur.fetchall = lambda: next(answers)
     out = store.user_events(50, at)
     assert out["per_owner"] == {7: {"credits": 40.0, "events": 2}, 9: {"credits": 15.0, "events": 1}}
-    assert out["events"][0]["credits"] == 55.0 and out["totals"]["events"] == 3
+    assert out["events"][0]["credits"] == 55.0 and out["totals"]["events"] == 3 and out["totals"]["not_ok"] == 2
     assert not any("c.owner_user_id = %s" in q for q in cur.sql)
+
+
+
+# ── Redesign data: joined dates, owner activity and history, spend split ────
+
+def test_owner_page_says_who_counts_from_next_month(db, hard, monkeypatch):
+    import datetime as dt
+    joined = dt.datetime.now(dt.timezone.utc)
+    monkeypatch.setattr(store, "collaborators_of", lambda o: [
+        {"user_id": 50, "email": "c@x.com", "status": "ACTIVE", "joined_at": joined},
+        {"user_id": 51, "email": "d@x.com", "status": "ACTIVE", "joined_at": dt.datetime(2020, 1, 1)},
+        {"user_id": 52, "email": "e@x.com", "status": "INVITED", "joined_at": None}])
+    body = _client(7).get("/api/v1/usage/owner").json()
+    by_id = {m["user_id"]: m for m in body["members"]}
+    assert by_id[50]["counts_next_month"] is True and by_id[51]["counts_next_month"] is False
+    assert by_id[52]["counts_next_month"] is True and body["organizations"] == 2 and body["renews_in_days"] >= 1
+
+
+def test_admin_owner_detail_has_activity_and_history(db, hard, monkeypatch):
+    import datetime as dt
+    at = dt.datetime(2026, 10, 25, tzinfo=dt.timezone.utc)
+    monkeypatch.setattr(store, "plan_row", lambda o: {"plan": "standard", "monthly_credits": None,
+                                                      "user_daily_credits": None, "updated_by": 1, "updated_at": at})
+    monkeypatch.setattr(store, "topups_of", lambda o: [{"id": 1, "credits": 500.0, "reason": "Pilot", "expires_at": None,
+                                                        "created_at": at + dt.timedelta(days=1)}])
+    monkeypatch.setattr(store, "owner_alerts", lambda o: [{"cycle": "2026-10", "level": "80", "detail": {},
+                                                           "created_at": at + dt.timedelta(days=2)}])
+    monkeypatch.setattr(store, "owner_events", lambda o, since: {"totals": {"events": 1}, "events": [
+        {"id": 9, "user_id": 50, "credits": 20.0}]})
+    db.admins.add(1)
+    body = _client(1).get("/api/v1/usage/admin/owners/7").json()
+    assert body["activity"]["events"][0]["email"] == "u50@x.com"
+    assert [h["kind"] for h in body["history"]] == ["alert", "topup", "plan"]
+    assert body["organizations"] == 2
+
+
+def test_store_owner_events_and_overview_split(monkeypatch):
+    import datetime as dt
+    at = dt.datetime(2026, 10, 26, tzinfo=dt.timezone.utc)
+    cur = _open_with((3, 120.0, 1, 40.0, 2, 100.0), monkeypatch)
+    cur.fetchall = lambda: [(9, at, 50, "agent_answer", "degraded", "full", 2, 100, 20, 0, 40.0, {}, [24])]
+    out = store.owner_events(7, at)
+    assert out["totals"] == {"events": 3, "credits": 120.0, "not_ok": 1, "not_ok_credits": 40.0,
+                             "questions": 2, "question_credits": 100.0}
+    assert out["events"][0]["user_id"] == 50 and out["events"][0]["status"] == "degraded"

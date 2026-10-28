@@ -235,11 +235,13 @@ def seats(owner: int, as_of: Optional[datetime.datetime] = None) -> int:
 
 def collaborators_of(owner: int) -> List[Dict[str, Any]]:
     """People invited to the owner's organizations (ACTIVE or INVITED), with their user id when they have one."""
-    rows = _run("""SELECT DISTINCT COALESCE(c.accepted_by_user_id, u.id) AS uid, LOWER(c.email), c.status
+    rows = _run("""SELECT COALESCE(c.accepted_by_user_id, u.id) AS uid, LOWER(c.email), c.status,
+                          MIN(COALESCE(c.approved_at, c.accepted_at))
                    FROM public.collaborators c JOIN public.organizations o ON o.id = c.organization_id
                    LEFT JOIN public.users u ON LOWER(TRIM(u.email)) = LOWER(TRIM(c.email))
-                   WHERE o.user_id = %s AND c.status IN ('ACTIVE', 'INVITED')""", (owner,), fetch="all")
-    return [{"user_id": r[0], "email": r[1], "status": r[2]} for r in rows]
+                   WHERE o.user_id = %s AND c.status IN ('ACTIVE', 'INVITED')
+                   GROUP BY 1, 2, 3""", (owner,), fetch="all")
+    return [{"user_id": r[0], "email": r[1], "status": r[2], "joined_at": r[3]} for r in rows]
 
 
 def owned_by(user_id: int) -> List[int]:
@@ -285,7 +287,7 @@ def member_events(owner: int, user_id: int, since: datetime.datetime, limit: int
     usage tables never hold it)."""
     total = _run(f"""SELECT COUNT(*), COALESCE(SUM(e.input_tokens), 0), COALESCE(SUM(e.output_tokens), 0),
                               COALESCE(SUM(e.cache_read_tokens + e.cache_write_tokens), 0), COALESCE(SUM(c.credits), 0),
-                              COUNT(*) FILTER (WHERE e.model_mode = 'lite')
+                              COUNT(*) FILTER (WHERE e.model_mode = 'lite'), COUNT(*) FILTER (WHERE e.status NOT IN ('ok', 'ready'))
                        FROM public.ai_usage_charges c JOIN public.ai_usage_events e ON e.id = c.event_id
                        WHERE c.owner_user_id = %s AND c.user_id = %s AND c.created_at >= %s AND {_COUNTED}""",
                  (owner, user_id, since), fetch="one")
@@ -297,11 +299,39 @@ def member_events(owner: int, user_id: int, since: datetime.datetime, limit: int
     return {
         "totals": {"events": int(total[0]), "input_tokens": int(total[1]), "output_tokens": int(total[2]),
                    "cached_tokens": int(total[3]), "credits": float(total[4]), "cost_usd": round(float(total[4]) / 1000, 4),
-                   "lite_events": int(total[5])},
+                   "lite_events": int(total[5]), "not_ok": int(total[6])},
         "events": [{"id": r[0], "at": r[1], "kind": r[2], "status": r[3], "mode": r[4], "calls": r[5],
                     "input_tokens": r[6], "output_tokens": r[7], "cached_tokens": r[8], "credits": float(r[9]),
                     "models": sorted((r[10] or {}).keys()), "organization_ids": list(r[11] or [])} for r in rows],
     }
+
+
+def owner_events(owner: int, since: datetime.datetime, limit: int = 100) -> Dict[str, Any]:
+    """Everything charged to an owner's bucket since `since`, every person together: totals and the newest events."""
+    total = _run(f"""SELECT COUNT(*), COALESCE(SUM(c.credits), 0), COUNT(*) FILTER (WHERE e.status NOT IN ('ok', 'ready')),
+                            COALESCE(SUM(c.credits) FILTER (WHERE e.status NOT IN ('ok', 'ready')), 0),
+                            COUNT(*) FILTER (WHERE e.kind = 'agent_answer'),
+                            COALESCE(SUM(c.credits) FILTER (WHERE e.kind = 'agent_answer'), 0)
+                     FROM public.ai_usage_charges c JOIN public.ai_usage_events e ON e.id = c.event_id
+                     WHERE c.owner_user_id = %s AND c.created_at >= %s AND {_COUNTED}""", (owner, since), fetch="one")
+    rows = _run(f"""SELECT e.id, e.created_at, c.user_id, e.kind, e.status, e.model_mode, e.calls, e.input_tokens,
+                           e.output_tokens, e.cache_read_tokens + e.cache_write_tokens, c.credits, e.models, e.organization_ids
+                    FROM public.ai_usage_charges c JOIN public.ai_usage_events e ON e.id = c.event_id
+                    WHERE c.owner_user_id = %s AND c.created_at >= %s AND {_COUNTED}
+                    ORDER BY e.created_at DESC LIMIT %s""", (owner, since, limit), fetch="all")
+    return {
+        "totals": {"events": int(total[0]), "credits": float(total[1]), "not_ok": int(total[2]),
+                   "not_ok_credits": float(total[3]), "questions": int(total[4]), "question_credits": float(total[5])},
+        "events": [{"id": r[0], "at": r[1], "user_id": r[2], "kind": r[3], "status": r[4], "mode": r[5], "calls": r[6],
+                    "input_tokens": r[7], "output_tokens": r[8], "cached_tokens": r[9], "credits": float(r[10]),
+                    "models": sorted((r[11] or {}).keys()), "organization_ids": list(r[12] or [])} for r in rows],
+    }
+
+
+def owner_alerts(owner: int, limit: int = 20) -> List[Dict[str, Any]]:
+    rows = _run("""SELECT cycle, level, detail, created_at FROM public.ai_usage_alerts
+                   WHERE owner_user_id = %s ORDER BY created_at DESC LIMIT %s""", (owner, limit), fetch="all")
+    return [{"cycle": r[0], "level": r[1], "detail": r[2], "created_at": r[3]} for r in rows]
 
 
 def overview(month_start: datetime.datetime, days_since: datetime.datetime, timezone: str) -> Dict[str, Any]:
@@ -310,6 +340,18 @@ def overview(month_start: datetime.datetime, days_since: datetime.datetime, time
     by_day = _run("""SELECT (created_at AT TIME ZONE %s)::date, SUM(cost_usd), COUNT(*) FILTER (WHERE kind = 'agent_answer')
                      FROM public.ai_usage_events WHERE created_at >= %s AND status <> 'running'
                      GROUP BY 1 ORDER BY 1""", (timezone, days_since), fetch="all")
+    split = _run(f"""SELECT (c.created_at AT TIME ZONE %s)::date,
+                            COALESCE(SUM(c.credits) FILTER (WHERE c.owner_user_id <> 0), 0) / 1000.0,
+                            COALESCE(SUM(c.credits) FILTER (WHERE c.owner_user_id = 0), 0) / 1000.0
+                     FROM public.ai_usage_charges c JOIN public.ai_usage_events e ON e.id = c.event_id
+                     WHERE c.created_at >= %s AND e.status <> 'running' GROUP BY 1""", (timezone, days_since), fetch="all")
+    attention = _run(f"""SELECT COALESCE(SUM(c.credits) FILTER (WHERE c.owner_user_id = 0), 0),
+                                COUNT(DISTINCT c.event_id) FILTER (WHERE c.owner_user_id = 0),
+                                COALESCE(SUM(c.credits), 0),
+                                COUNT(DISTINCT c.event_id) FILTER (WHERE c.owner_user_id <> 0 AND e.status NOT IN ('ok', 'ready')),
+                                COALESCE(SUM(c.credits) FILTER (WHERE c.owner_user_id <> 0 AND e.status NOT IN ('ok', 'ready')), 0)
+                         FROM public.ai_usage_charges c JOIN public.ai_usage_events e ON e.id = c.event_id
+                         WHERE c.created_at >= %s AND e.status <> 'running'""", (month_start,), fetch="one")
     people = _run(f"""SELECT c.user_id, c.owner_user_id, SUM(c.credits), COUNT(DISTINCT c.event_id)
                       FROM public.ai_usage_charges c JOIN public.ai_usage_events e ON e.id = c.event_id
                       WHERE c.created_at >= %s AND c.user_id IS NOT NULL AND {_COUNTED}
@@ -322,9 +364,14 @@ def overview(month_start: datetime.datetime, days_since: datetime.datetime, time
                            COUNT(*) FILTER (WHERE status NOT IN ('ok', 'ready'))
                     FROM public.ai_usage_events WHERE created_at >= %s AND status <> 'running'
                     GROUP BY 1 ORDER BY 3 DESC""", (month_start,), fetch="all")
+    parts = {r[0].isoformat(): (float(r[1] or 0), float(r[2] or 0)) for r in split}
     return {
-        "by_day": [{"day": r[0].isoformat(), "cost_usd": round(float(r[1] or 0), 4), "questions": int(r[2] or 0)}
-                   for r in by_day],
+        "by_day": [{"day": r[0].isoformat(), "cost_usd": round(float(r[1] or 0), 4), "questions": int(r[2] or 0),
+                    "owners_usd": round(parts.get(r[0].isoformat(), (0, 0))[0], 4),
+                    "no_owner_usd": round(parts.get(r[0].isoformat(), (0, 0))[1], 4)} for r in by_day],
+        "attention": {"no_owner_credits": float(attention[0]), "no_owner_events": int(attention[1]),
+                      "all_credits": float(attention[2]), "not_ok_events": int(attention[3]),
+                      "not_ok_credits": float(attention[4])},
         "top_people": [{"user_id": int(r[0]), "owner_user_id": int(r[1]), "credits": float(r[2] or 0),
                         "events": int(r[3] or 0)} for r in people],
         "models": [{"model": r[0], "cost_usd": round(float(r[1] or 0), 4), "calls": int(r[2] or 0)} for r in models],
@@ -338,7 +385,8 @@ def user_events(user_id: int, since: datetime.datetime, limit: int = 50) -> Dict
     events (no question text: the usage tables never hold it)."""
     total = _run(f"""SELECT COUNT(DISTINCT e.id), COALESCE(SUM(e.input_tokens), 0), COALESCE(SUM(e.output_tokens), 0),
                             COALESCE(SUM(e.cache_read_tokens + e.cache_write_tokens), 0), COALESCE(SUM(c.credits), 0),
-                            COUNT(DISTINCT e.id) FILTER (WHERE e.model_mode = 'lite')
+                            COUNT(DISTINCT e.id) FILTER (WHERE e.model_mode = 'lite'),
+                            COUNT(DISTINCT e.id) FILTER (WHERE e.status NOT IN ('ok', 'ready'))
                      FROM public.ai_usage_charges c JOIN public.ai_usage_events e ON e.id = c.event_id
                      WHERE c.user_id = %s AND c.created_at >= %s AND {_COUNTED}""", (user_id, since), fetch="one")
     per_owner = _run(f"""SELECT c.owner_user_id, SUM(c.credits), COUNT(DISTINCT c.event_id)
@@ -353,7 +401,7 @@ def user_events(user_id: int, since: datetime.datetime, limit: int = 50) -> Dict
     return {
         "totals": {"events": int(total[0]), "input_tokens": int(total[1]), "output_tokens": int(total[2]),
                    "cached_tokens": int(total[3]), "credits": float(total[4]), "cost_usd": round(float(total[4]) / 1000, 4),
-                   "lite_events": int(total[5])},
+                   "lite_events": int(total[5]), "not_ok": int(total[6])},
         "per_owner": {int(r[0]): {"credits": float(r[1] or 0), "events": int(r[2] or 0)} for r in per_owner},
         "events": [{"id": r[0], "at": r[1], "kind": r[2], "status": r[3], "mode": r[4], "calls": r[5],
                     "input_tokens": r[6], "output_tokens": r[7], "cached_tokens": r[8], "credits": float(r[9]),

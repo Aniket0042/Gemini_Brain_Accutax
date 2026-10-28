@@ -129,13 +129,17 @@ def _members(store: Any, owner: int, p: limits.Periods) -> List[Dict[str, Any]]:
     default_cap = row.get("user_daily_credits") if row.get("user_daily_credits") is not None else plan.user_daily
     usage = {u["user_id"]: u for u in store.member_usage(owner, p.month_start, p.day_start)}
     caps = store.caps_of(owner)
-    people: Dict[int, Dict[str, Any]] = {owner: {"role": "owner", "invitation": "ACTIVE"}}
+    people: Dict[int, Dict[str, Any]] = {owner: {"role": "owner", "invitation": "ACTIVE", "joined_at": None}}
     for c in store.collaborators_of(owner):
         if c["user_id"] is not None and int(c["user_id"]) != owner:
-            people.setdefault(int(c["user_id"]), {"role": "collaborator", "invitation": c["status"]})
+            joined = c.get("joined_at")
+            people.setdefault(int(c["user_id"]), {
+                "role": "collaborator", "invitation": c["status"], "joined_at": joined,
+                # Joined this month (or not yet accepted): adds to the bucket only from next month.
+                "counts_next_month": c["status"] != "ACTIVE" or (joined is not None and _aware(joined) >= p.month_start)})
     for uid in usage:
         if uid is not None:
-            people.setdefault(int(uid), {"role": "other", "invitation": None})
+            people.setdefault(int(uid), {"role": "other", "invitation": None, "joined_at": None})
     emails = store.user_emails(list(people))
     out = []
     for uid, info in people.items():
@@ -149,6 +153,11 @@ def _members(store: Any, owner: int, p: limits.Periods) -> List[Dict[str, Any]]:
     return sorted(out, key=lambda m: (m["role"] != "owner", -m["month_credits"]))
 
 
+def _aware(at: datetime.datetime) -> datetime.datetime:
+    """collaborators' times are stored without a zone (UTC); compare them with the zoned month start."""
+    return at if at.tzinfo else at.replace(tzinfo=datetime.timezone.utc)
+
+
 @router.get("/owner", summary="The caller's own bucket: how much is used, by whom, and each person's daily cap")
 def owner_page(current_user: CurrentUser = Depends(get_current_user)) -> Dict[str, Any]:
     store = _store()
@@ -157,7 +166,12 @@ def owner_page(current_user: CurrentUser = Depends(get_current_user)) -> Dict[st
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not own an organization.")
     p = limits.periods()
     return {"bucket": limits.owner_state(owner, None, p), "members": _members(store, owner, p),
+            "organizations": len(store.owned_by(owner)), "renews_in_days": _days_until(p.next_month),
             "typical_question_credits": TYPICAL_QUESTION_CREDITS}
+
+
+def _days_until(at: datetime.datetime) -> int:
+    return max(0, (at - datetime.datetime.now(at.tzinfo)).days + 1)
 
 
 class CapUpdate(BaseModel):
@@ -239,11 +253,14 @@ def admin_page(current_user: CurrentUser = Depends(get_current_user)) -> Dict[st
                      "alert_usd": settings.usage_platform_alert_usd, "pause_usd": settings.usage_platform_pause_usd},
         "internal_month_credits": round(internal.get("month_credits", 0), 1),
         "owners": sorted(owners, key=lambda o: -(o["percent"] or 0)),
-        "plans": [{"key": pl.key, "label": pl.label, "per_seat": pl.per_seat, "user_daily": pl.user_daily,
-                   "max_seats": pl.max_seats}
-                  for pl in plans.PLANS.values()],
+        "plans": _plan_catalog(),
         "alerts": store.recent_alerts(50),
     }
+
+
+def _plan_catalog() -> List[Dict[str, Any]]:
+    return [{"key": pl.key, "label": pl.label, "per_seat": pl.per_seat, "user_daily": pl.user_daily,
+             "max_seats": pl.max_seats} for pl in plans.PLANS.values()]
 
 
 @router.get("/admin/owners", summary="Find owners, and collaborators with the owner whose bucket they use, by email or user id")
@@ -259,9 +276,26 @@ def admin_owner(owner_id: int, current_user: CurrentUser = Depends(get_current_u
     store = _store()
     _admin(current_user)
     p = limits.periods()
-    return {"bucket": limits.owner_state(owner_id, None, p), "plan_row": store.plan_row(owner_id),
-            "members": _members(store, owner_id, p), "topups": store.topups_of(owner_id),
-            "email": store.user_emails([owner_id]).get(owner_id)}
+    members = _members(store, owner_id, p)
+    activity = store.owner_events(owner_id, p.month_start)
+    names = {m["user_id"]: m["email"] for m in members}
+    for e in activity["events"]:
+        e["email"] = names.get(e["user_id"])
+    plan_row = store.plan_row(owner_id)
+    topups = store.topups_of(owner_id)
+    # What happened to this bucket, newest first: alerts, top-ups and the last plan change.
+    history = [{"at": a["created_at"], "kind": "alert", "level": a["level"], "detail": a["detail"]}
+               for a in store.owner_alerts(owner_id)]
+    history += [{"at": t["created_at"], "kind": "topup", "credits": t["credits"], "reason": t["reason"],
+                 "expires_at": t["expires_at"]} for t in topups]
+    if plan_row and plan_row.get("updated_at"):
+        history.append({"at": plan_row["updated_at"], "kind": "plan", "plan": plan_row["plan"],
+                        "monthly_credits": plan_row["monthly_credits"], "by": plan_row.get("updated_by")})
+    history.sort(key=lambda h: _aware(h["at"]) if isinstance(h["at"], datetime.datetime) else h["at"], reverse=True)
+    return {"bucket": limits.owner_state(owner_id, None, p), "plan_row": plan_row, "members": members,
+            "topups": topups, "email": store.user_emails([owner_id]).get(owner_id),
+            "organizations": len(store.owned_by(owner_id)), "activity": activity, "history": history[:20],
+            "renews_in_days": _days_until(p.next_month), "plans": _plan_catalog()}
 
 
 @router.get("/admin/owners/{owner_id}/members/{user_id}/events", summary="One person's use of an owner's bucket this month")
