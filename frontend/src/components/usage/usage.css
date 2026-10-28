@@ -1,7 +1,8 @@
 /* AI usage screens (UsageModal and components/usage/*): one look for the member, owner and admin views.
    Built on the app's theme tokens, so light and dark both work. Classes are prefixed uz-. */
 
-.uz-modal { width: 1220px; max-width: 96vw; height: 92vh; display: flex; flex-direction: column;
+/* .modal-content.uz-modal: outranks index.css's .modal-content (580px), which can load after this file. */
+.modal-content.uz-modal { width: 1220px; max-width: 96vw; height: 92vh; max-height: 92vh; display: flex; flex-direction: column;
   padding: 0 !important; overflow: hidden !important; }
 .uz-top { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 14px;
   padding: 22px 28px 0; }
