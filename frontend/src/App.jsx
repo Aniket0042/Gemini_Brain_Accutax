@@ -1689,6 +1689,12 @@ export default function App() {
           onOpenPrivacy={privacyAccess.admin ? () => setShowPrivacy(true) : undefined}
           usage={usage}
           onOpenUsage={() => setShowUsage(true)}
+          meters={(
+            <div style={styles.headerMeters}>
+              <CreditStrip usage={usage} />
+              <ContextWindowButton contextWindow={latestContextWindow} placement="down" />
+            </div>
+          )}
         />
         <div className="main-stage">
         <div ref={chatScrollAreaRef} style={styles.chatScrollArea}>
@@ -1744,12 +1750,6 @@ export default function App() {
             token={currentUser?.access_token || ''}
             onPreviewFile={handlePreviewFile}
           />
-          <div style={styles.composerFooter}>
-            <div style={styles.composerFooterMeter}>
-              <CreditStrip usage={usage} />
-              <ContextWindowButton contextWindow={latestContextWindow} />
-            </div>
-          </div>
         </div>
       </div>
         </div>
@@ -1933,25 +1933,11 @@ const styles = {
     width: '100%',
     margin: '0 auto',
   },
-  composerFooter: {
-    position: 'relative',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '20px',
-    marginTop: '6px',
-    maxWidth: 'var(--content-width)',
-    width: '100%',
-    margin: '6px auto 0',
-  },
-  // Right of the footer line: the person's AI for today, then the context meter.
-  composerFooterMeter: {
+  // Top right of the header: the person's AI for today, then the context meter.
+  headerMeters: {
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
-    position: 'absolute',
-    right: '6px',
-    top: '50%',
-    transform: 'translateY(-50%)',
+    marginRight: '4px',
   },
 };

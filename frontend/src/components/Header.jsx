@@ -28,6 +28,7 @@ export const Header = ({
   onOpenPrivacy,
   usage,
   onOpenUsage,
+  meters,
 }) => {
   const { icon: ThemeIcon, label: themeLabel } = THEME_META[theme] || THEME_META.system;
 
@@ -55,6 +56,7 @@ export const Header = ({
       </div>
 
       <div style={styles.headerRight}>
+        {meters}
         <UsageMeter usage={usage} onOpen={onOpenUsage} />
         {onOpenPrivacy && (
           <button
