@@ -25,6 +25,20 @@ import {
   saveBot,
   tryBotDraft,
 } from '../../services/bots';
+import './bots.css';
+
+// One click fills the sentence box; the user can edit it before building.
+const SENTENCE_EXAMPLES = [
+  'Every Monday at 9am, check my bills for duplicates',
+  'Remind me 7 days before each VAT return',
+  'Check sales invoices for wrong VAT on the 1st of each month',
+];
+
+const TEMPLATE_ICONS = {
+  vat_weekly_digest: Calendar,
+  vat_return_reminder: Clock,
+  vat_full_watch: Layers,
+};
 
 export default function BotBuilder({
   open,
@@ -201,14 +215,14 @@ export default function BotBuilder({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="bot-modal-top">
-          <div className="flex items-center gap-2">
-            <Bot className="w-5 h-5 text-accent" />
-            <span className="font-semibold text-ink">
+          <div className="bot-modal-title">
+            <span className="bot-modal-title-icon"><Bot className="w-4 h-4" /></span>
+            <span>
               {step === 'start'
-                ? 'Create a VAT Bot'
+                ? 'Create a VAT bot'
                 : step === 'setup'
-                ? 'Configure VAT Bot'
-                : 'Bot Activated'}
+                ? 'Set up your VAT bot'
+                : 'Your bot is on'}
             </span>
           </div>
           <button
@@ -233,23 +247,28 @@ export default function BotBuilder({
           {step === 'start' && (
             <div className="bot-start-view">
               <div className="bot-sentence-box">
-                <label className="bot-sentence-label">
+                <label className="bot-sentence-label" htmlFor="bot-sentence-input">
                   <Wand2 className="w-4 h-4 text-accent" />
                   <span>Describe what you want your bot to do</span>
                 </label>
-                <form onSubmit={handleSentenceSubmit} className="flex gap-2 mt-2">
+                <p className="bot-sentence-hint">
+                  Say when it runs and what it checks. You can change everything on the next screen.
+                </p>
+                <form onSubmit={handleSentenceSubmit} className="bot-sentence-form">
                   <input
+                    id="bot-sentence-input"
                     type="text"
-                    className="input-text-clean flex-1"
-                    placeholder="e.g. Check for duplicate bills every Monday at 9am and email me..."
+                    className="input-text-clean"
+                    placeholder="Every Monday at 9am, check my bills for duplicates"
                     value={sentenceText}
                     onChange={(e) => setSentenceText(e.target.value)}
                     disabled={busy}
+                    maxLength={500}
                     autoFocus
                   />
                   <button
                     type="submit"
-                    className="btn-primary flex items-center gap-2"
+                    className="btn-primary"
                     disabled={busy || !sentenceText.trim()}
                   >
                     {busy ? (
@@ -257,33 +276,49 @@ export default function BotBuilder({
                     ) : (
                       <Send className="w-4 h-4" />
                     )}
-                    <span>Build</span>
+                    <span>Build bot</span>
                   </button>
                 </form>
+                <div className="bot-sentence-examples">
+                  {SENTENCE_EXAMPLES.map((ex) => (
+                    <button
+                      key={ex}
+                      type="button"
+                      className="bot-sentence-example"
+                      onClick={() => setSentenceText(ex)}
+                      disabled={busy}
+                    >
+                      {ex}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="bot-or-divider">
-                <span>or pick a ready-made template</span>
+                <span>or start from a template</span>
               </div>
 
               <div className="bot-templates-grid">
                 {templates.map((t) => (
-                  <div
+                  <button
                     key={t.id}
+                    type="button"
                     className="bot-template-card"
-                    onClick={() => !busy && handlePickTemplate(t.id)}
+                    onClick={() => handlePickTemplate(t.id)}
+                    disabled={busy}
                   >
-                    <div className="flex items-start justify-between">
+                    <div className="bot-template-top">
+                      <span className="bot-template-icon">
+                        {(() => {
+                          const Icon = TEMPLATE_ICONS[t.id] || Sparkles;
+                          return <Icon className="w-4 h-4" />;
+                        })()}
+                      </span>
                       <h4 className="bot-template-title">{t.title}</h4>
-                      <Sparkles className="w-4 h-4 text-accent flex-shrink-0" />
                     </div>
                     <p className="bot-template-desc">{t.summary}</p>
-                    <div className="bot-template-footer">
-                      <span className="text-xs text-accent font-medium">
-                        Use this template →
-                      </span>
-                    </div>
-                  </div>
+                    <span className="bot-template-cta">Use this template →</span>
+                  </button>
                 ))}
               </div>
             </div>

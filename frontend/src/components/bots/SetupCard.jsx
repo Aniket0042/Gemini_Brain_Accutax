@@ -16,6 +16,17 @@ import {
   X,
 } from 'lucide-react';
 
+// "Mon 3 Nov, 08:00", plus "(VAT return)" for a run before a return's due date. The time is the server's
+// (Dubai), so it is shown as the server sent it, not moved to the browser's time zone.
+function runLabel(run) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(run.at || '');
+  if (!m) return run.reason;
+  const day = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  const date = day.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+  const forReturn = /before the VAT return/i.test(run.reason || '') ? ' (VAT return)' : '';
+  return `${date}, ${m[4]}:${m[5]}${forReturn}`;
+}
+
 const WATCH_ITEMS = [
   { id: 'duplicate_bill', label: 'A bill looks recorded twice', side: 'Purchases' },
   { id: 'vat_rate_wrong', label: 'VAT on a bill is not 0% or 5%', side: 'Purchases' },
@@ -306,7 +317,7 @@ export default function SetupCard({
           <div className="setup-next-runs">
             <span className="setup-next-label">Next runs:</span>
             <span className="setup-next-dates">
-              {nextRuns.map((r) => r.reason.includes('due') ? `${r.reason}` : r.reason).join(' · ')}
+              {nextRuns.map(runLabel).join(' · ')}
             </span>
           </div>
         )}

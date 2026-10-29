@@ -1,0 +1,185 @@
+/* bots.css — Layout helpers and controls for the bot screens (components/bots/*).
+
+   The bot screens use short utility class names (flex, gap-2, w-4, text-xs ...). This app has no Tailwind, so they
+   are defined here, only inside the bot modal, where nothing else in the app can pick them up. The rest of the bot
+   styles live in index.css under "Bots (components/bots/*)". */
+
+.bot-modal-container .flex { display: flex; }
+.bot-modal-container .block { display: block; }
+.bot-modal-container .flex-1 { flex: 1 1 0%; min-width: 0; }
+.bot-modal-container .flex-col { flex-direction: column; }
+.bot-modal-container .flex-shrink-0 { flex-shrink: 0; }
+.bot-modal-container .items-center { align-items: center; }
+.bot-modal-container .items-start { align-items: flex-start; }
+.bot-modal-container .justify-between { justify-content: space-between; }
+.bot-modal-container .min-w-0 { min-width: 0; }
+.bot-modal-container .w-full { width: 100%; }
+.bot-modal-container .max-w-sm { max-width: 24rem; }
+.bot-modal-container .mx-auto { margin-left: auto; margin-right: auto; }
+.bot-modal-container .ml-auto { margin-left: auto; }
+.bot-modal-container .mr-1 { margin-right: 4px; }
+.bot-modal-container .my-2 { margin-top: 8px; margin-bottom: 8px; }
+.bot-modal-container .mt-0\.5 { margin-top: 2px; }
+.bot-modal-container .mt-1 { margin-top: 4px; }
+.bot-modal-container .mt-2 { margin-top: 8px; }
+.bot-modal-container .mt-4 { margin-top: 16px; }
+.bot-modal-container .mt-6 { margin-top: 20px; }
+.bot-modal-container .mb-1 { margin-bottom: 4px; }
+.bot-modal-container .mb-2 { margin-bottom: 8px; }
+.bot-modal-container .mb-3 { margin-bottom: 12px; }
+.bot-modal-container .mb-4 { margin-bottom: 16px; }
+.bot-modal-container .gap-1 { gap: 4px; }
+.bot-modal-container .gap-1\.5 { gap: 6px; }
+.bot-modal-container .gap-2 { gap: 8px; }
+.bot-modal-container .gap-3 { gap: 12px; }
+.bot-modal-container .pl-4 { padding-left: 16px; }
+.bot-modal-container .pr-2 { padding-right: 8px; }
+.bot-modal-container .px-2 { padding-left: 8px; padding-right: 8px; }
+.bot-modal-container .px-2\.5 { padding-left: 10px; padding-right: 10px; }
+.bot-modal-container .px-3 { padding-left: 12px; padding-right: 12px; }
+.bot-modal-container .px-3\.5 { padding-left: 14px; padding-right: 14px; }
+.bot-modal-container .px-4 { padding-left: 16px; padding-right: 16px; }
+.bot-modal-container .py-1 { padding-top: 4px; padding-bottom: 4px; }
+.bot-modal-container .py-1\.5 { padding-top: 6px; padding-bottom: 6px; }
+.bot-modal-container .py-2 { padding-top: 8px; padding-bottom: 8px; }
+.bot-modal-container .py-8 { padding-top: 32px; padding-bottom: 32px; }
+.bot-modal-container .text-center { text-align: center; }
+.bot-modal-container .break-words { overflow-wrap: anywhere; }
+.bot-modal-container .list-disc { list-style: disc; }
+.bot-modal-container .text-2xs { font-size: 10px; }
+.bot-modal-container .text-xs { font-size: var(--text-sm); }
+.bot-modal-container .text-sm { font-size: var(--text-ui); }
+.bot-modal-container .font-medium { font-weight: 500; }
+.bot-modal-container .font-semibold { font-weight: 600; }
+.bot-modal-container .font-mono { font-family: var(--font-mono); }
+.bot-modal-container .text-ink { color: var(--ink); }
+.bot-modal-container .text-ink-soft { color: var(--ink-soft); }
+.bot-modal-container .text-ink-muted,
+.bot-modal-container .text-ink-faint { color: var(--ink-faint); }
+.bot-modal-container .text-accent { color: var(--accent); }
+.bot-modal-container .text-success { color: var(--success-ink); }
+.bot-modal-container .text-warning { color: var(--warning-ink); }
+.bot-modal-container .text-danger { color: var(--danger-ink); }
+.bot-modal-container .bg-surface { background: var(--surface); }
+.bot-modal-container .bg-surface-2 { background: var(--surface-2); }
+.bot-modal-container .border { border-width: 1px; border-style: solid; }
+.bot-modal-container .border-border { border-color: var(--border); }
+.bot-modal-container .rounded-md { border-radius: var(--radius-sm); }
+.bot-modal-container .rounded-lg { border-radius: var(--radius-md); }
+
+/* Icon sizes: lucide icons are 24px unless told otherwise. */
+.bot-modal-container svg.w-3 { width: 12px; height: 12px; }
+.bot-modal-container svg.w-3\.5 { width: 14px; height: 14px; }
+.bot-modal-container svg.w-4 { width: 16px; height: 16px; }
+.bot-modal-container svg.w-5 { width: 18px; height: 18px; }
+.bot-modal-container svg.w-6 { width: 22px; height: 22px; }
+.bot-modal-container svg.w-8 { width: 28px; height: 28px; }
+
+@keyframes bot-spin { to { transform: rotate(360deg); } }
+.bot-modal-container .animate-spin { animation: bot-spin 0.9s linear infinite; }
+
+/* ── Controls ── */
+.bot-modal-container .btn-primary,
+.bot-modal-container .btn-secondary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 34px; padding: 0 14px; border-radius: var(--radius-sm); font-family: inherit;
+  font-size: var(--text-ui); white-space: nowrap;
+}
+.bot-modal-container .btn-primary.text-xs,
+.bot-modal-container .btn-secondary.text-xs { height: 28px; padding: 0 10px; font-size: var(--text-sm); }
+
+.btn-icon-subtle {
+  display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; flex-shrink: 0;
+  padding: 0; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent;
+  color: var(--ink-soft); cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.btn-icon-subtle:hover { background: var(--surface-2); border-color: var(--border); color: var(--ink); }
+
+.btn-subtle {
+  display: inline-flex; align-items: center; gap: 4px; border: 1px solid transparent; border-radius: var(--radius-sm);
+  background: transparent; color: var(--ink-soft); font-family: inherit; cursor: pointer;
+}
+.btn-subtle:hover,
+.btn-subtle.active { background: var(--surface-2); color: var(--ink); }
+
+.btn-chip {
+  font-family: inherit; font-size: var(--text-xs); padding: 3px 10px; border-radius: var(--radius-pill);
+  border: 1px solid var(--warning); background: var(--surface); color: var(--warning-ink); cursor: pointer;
+}
+.btn-chip:hover { background: var(--warning-soft); }
+
+.btn-text-small {
+  font-family: inherit; font-size: var(--text-sm); font-weight: 600; color: var(--accent); background: none;
+  border: none; padding: 2px 4px; cursor: pointer;
+}
+.btn-text-small:hover { text-decoration: underline; }
+
+.input-text-clean,
+.input-field,
+.bot-input-field {
+  height: 38px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--ink); font-family: inherit; font-size: var(--text-ui); outline: none;
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+.input-text-clean::placeholder,
+.input-field::placeholder,
+.bot-input-field::placeholder { color: var(--ink-faint); }
+.input-text-clean:focus,
+.input-field:focus,
+.bot-input-field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+textarea.bot-input-field { height: auto; min-height: 80px; padding: 8px 12px; resize: vertical; }
+
+.bot-alert { border-radius: var(--radius-sm); }
+.bot-alert.success { background: var(--success-soft); color: var(--success-ink); }
+.bot-alert.error { background: var(--danger-soft); color: var(--danger-ink); }
+.bot-hint-box { color: var(--ink-soft); font-size: var(--text-sm); line-height: 1.45; }
+.bot-inbox-runs,
+.bot-inbox-findings,
+.bot-approvals-list { display: flex; flex-direction: column; gap: 10px; }
+.bot-inbox-approvals {
+  border: 1px solid var(--warning); background: var(--warning-soft); border-radius: var(--radius-md); padding: 12px 14px;
+}
+
+/* ── Start screen: title, one-sentence box, templates ── */
+.bot-modal-title { display: flex; align-items: center; gap: 10px; font-size: var(--text-lg); font-weight: 600; color: var(--ink); }
+.bot-modal-title-icon {
+  width: 30px; height: 30px; border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent-ink);
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.bot-sentence-box { padding: 16px; }
+.bot-sentence-hint { font-size: var(--text-sm); color: var(--ink-faint); margin: 4px 0 10px; }
+.bot-sentence-form { display: flex; gap: 8px; align-items: stretch; }
+.bot-sentence-form .input-text-clean { flex: 1; min-width: 0; height: 40px; }
+.bot-sentence-form .btn-primary { height: 40px; padding: 0 18px; }
+.bot-sentence-examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.bot-sentence-example {
+  font-family: inherit; font-size: var(--text-sm); padding: 4px 10px; border-radius: var(--radius-pill);
+  border: 1px solid var(--border); background: var(--surface); color: var(--ink-soft); cursor: pointer;
+}
+.bot-sentence-example:hover { border-color: var(--accent); color: var(--accent-ink); }
+
+.bot-or-divider { gap: 12px; }
+.bot-or-divider::before,
+.bot-or-divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+
+.bot-template-card { gap: 8px; min-height: 140px; text-align: left; font-family: inherit; }
+.bot-template-top { display: flex; align-items: center; gap: 10px; }
+.bot-template-icon {
+  width: 30px; height: 30px; border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent-ink);
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.bot-template-title { margin: 0; }
+.bot-template-desc { margin: 0; flex: 1; }
+.bot-template-cta { font-size: var(--text-sm); font-weight: 600; color: var(--accent); }
+.bot-template-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bot-template-card:disabled { opacity: 0.6; cursor: wait; transform: none; }
+
+/* Home banner: keep clear of the suggestion cards below it */
+.bot-home-banner { margin: 14px auto 22px; padding: 5px 5px 5px 14px; font-size: var(--text-sm); }
+.bot-home-banner-btn { padding: 5px 12px; font-size: var(--text-sm); }
+
+@media (max-width: 640px) {
+  .bot-sentence-form { flex-direction: column; }
+  .bot-templates-grid { grid-template-columns: 1fr; }
+}
