@@ -1689,12 +1689,6 @@ export default function App() {
           onOpenPrivacy={privacyAccess.admin ? () => setShowPrivacy(true) : undefined}
           usage={usage}
           onOpenUsage={() => setShowUsage(true)}
-          meters={(
-            <div style={styles.headerMeters}>
-              <CreditStrip usage={usage} />
-              <ContextWindowButton contextWindow={latestContextWindow} placement="down" />
-            </div>
-          )}
         />
         <div className="main-stage">
         <div ref={chatScrollAreaRef} style={styles.chatScrollArea}>
@@ -1732,6 +1726,9 @@ export default function App() {
       <div style={styles.stickyBottomBar}>
         <div style={styles.inputInnerWrapper}>
           <UsageBanner usage={usage} />
+          <div style={styles.composerTopMeter}>
+            <CreditStrip usage={usage} />
+          </div>
           <QueryInput
             onSubmitQuery={handleSubmitQuery}
             onStop={handleStopQuery}
@@ -1750,6 +1747,11 @@ export default function App() {
             token={currentUser?.access_token || ''}
             onPreviewFile={handlePreviewFile}
           />
+          <div style={styles.composerFooter}>
+            <div style={styles.composerFooterMeter}>
+              <ContextWindowButton contextWindow={latestContextWindow} />
+            </div>
+          </div>
         </div>
       </div>
         </div>
@@ -1933,11 +1935,33 @@ const styles = {
     width: '100%',
     margin: '0 auto',
   },
-  // Top right of the header: the person's AI for today, then the context meter.
-  headerMeters: {
+  composerFooter: {
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '20px',
+    marginTop: '6px',
+    maxWidth: 'var(--content-width)',
+    width: '100%',
+    margin: '6px auto 0',
+  },
+  // Just above the chat box's top right corner: the person's AI for today.
+  composerTopMeter: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    maxWidth: 'var(--content-width)',
+    margin: '0 auto 6px',
+    padding: '0 6px',
+  },
+  // Right of the footer line: the context meter.
+  composerFooterMeter: {
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
-    marginRight: '4px',
+    position: 'absolute',
+    right: '6px',
+    top: '50%',
+    transform: 'translateY(-50%)',
   },
 };

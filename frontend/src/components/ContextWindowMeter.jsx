@@ -45,8 +45,7 @@ const RingIcon = ({ percent, size = 20 }) => {
 // Round trigger button at the bottom of the composer — click opens a small
 // popover with just the context-window row (no plan/5-hour/weekly limits;
 // this app has no such tiers, only the fixed per-session token budget).
-// placement: 'up' opens the details above the ring (under the chat box), 'down' below it (in the header).
-export const ContextWindowButton = ({ contextWindow, placement = 'up' }) => {
+export const ContextWindowButton = ({ contextWindow }) => {
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef(null);
 
@@ -82,7 +81,7 @@ export const ContextWindowButton = ({ contextWindow, placement = 'up' }) => {
       </button>
 
       {open && (
-        <div style={placement === 'down' ? { ...styles.popover, bottom: 'auto', top: 'calc(100% + 8px)' } : styles.popover}>
+        <div style={styles.popover}>
           <div style={styles.row}>
             <span style={styles.label}>Context window</span>
             <span style={styles.fraction}>{formatTokens(used)} / {formatTokens(limit)} ({pct}%)</span>
