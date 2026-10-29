@@ -3,7 +3,7 @@ models.py — Pydantic request and response schemas for the Gemini Brain REST AP
 """
 from __future__ import annotations
 
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field, model_validator
 
 class UIContext(BaseModel):
@@ -507,3 +507,181 @@ class AgentInfo(BaseModel):
 class AgentListResponse(BaseModel):
     agents: List[AgentInfo] = Field(default_factory=list)
     default_agent: str = "accutax"
+
+
+# ── Bot Schemas (docs/VAT_BOT_IMPLEMENTATION_PLAN.md) ─────────────────────────
+
+from gemini_brain.bots.schema import BotDraft, BotIssue
+
+
+class TemplateItem(BaseModel):
+    id: str
+    title: str
+    summary: str
+    draft: BotDraft
+
+
+class BotTemplatesResponse(BaseModel):
+    templates: List[TemplateItem] = Field(default_factory=list)
+
+
+class WatchItem(BaseModel):
+    id: str
+    label: str
+    side: str
+    default_on: bool
+
+
+class BotWatchesResponse(BaseModel):
+    watches: List[WatchItem] = Field(default_factory=list)
+
+
+class NextRunInfo(BaseModel):
+    at: str
+    reason: str
+
+
+class DraftResponse(BaseModel):
+    draft: BotDraft
+    issues: List[BotIssue] = Field(default_factory=list)
+    next_runs: List[NextRunInfo] = Field(default_factory=list)
+    monthly_credits: int = 0
+
+
+class FromTemplateRequest(BaseModel):
+    template_id: str
+    org_ids: List[int] = Field(default_factory=list)
+
+
+class FromSentenceRequest(BaseModel):
+    text: str
+    org_ids: List[int] = Field(default_factory=list)
+
+
+class FromChatRequest(BaseModel):
+    question: str
+    agent: str = "vat"
+    org_ids: List[int] = Field(default_factory=list)
+
+
+class CheckDraftRequest(BaseModel):
+    draft: BotDraft
+
+
+class TryDraftRequest(BaseModel):
+    draft: BotDraft
+    preset: str = "last_month"
+
+
+class CreateBotRequest(BaseModel):
+    draft: BotDraft
+    status: Literal["active", "paused"] = "active"
+
+
+class UpdateBotRequest(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=60)
+    draft: Optional[BotDraft] = None
+    #: "error" is set by the runner only, never by the user.
+    status: Optional[Literal["active", "paused"]] = None
+    status_note: Optional[str] = Field(None, max_length=200)
+
+
+class BotListResponse(BaseModel):
+    bots: List[Dict[str, Any]]
+
+
+class BotTickResult(BaseModel):
+    bot_id: str
+    name: str
+    status: str
+    summary: Optional[Dict[str, Any]] = None
+
+
+class BotTickResponse(BaseModel):
+    timestamp: str
+    ran: int
+    results: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class BotFindingItem(BaseModel):
+    bot_id: str
+    bot_name: str
+    key: str
+    org_id: int
+    rule: str
+    watch_id: Optional[str] = None
+    watch_label: Optional[str] = None
+    why_text: Optional[str] = None
+    state: str
+    amount: Optional[float] = None
+    first_seen_run: Optional[str] = None
+    last_seen_run: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class BotApprovalItem(BaseModel):
+    id: str
+    run_id: Optional[str] = None
+    bot_id: str
+    bot_name: Optional[str] = None
+    action: str = "email_outside"
+    status: str = "pending"  # "pending" | "approved" | "rejected"
+    recipient: Optional[str] = None
+    subject: Optional[str] = None
+    content: Optional[str] = None
+    created_at: Optional[str] = None
+    decided_at: Optional[str] = None
+
+
+class EditApprovalRequest(BaseModel):
+    recipient: Optional[str] = None
+    subject: Optional[str] = None
+    content: Optional[str] = None
+
+
+class BotMemoryItem(BaseModel):
+    id: int
+    bot_id: str
+    text: str
+    source: str  # "note" | "dismissal"
+    finding_key: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class CreateMemoryRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=200)
+    #: Users add notes; "dismissal" lines come only from dismissing a finding.
+    source: Literal["note"] = "note"
+
+
+class BotInboxResponse(BaseModel):
+    unread_count: int
+    bots_count: int
+    runs: List[Dict[str, Any]] = Field(default_factory=list)
+    findings: List[BotFindingItem] = Field(default_factory=list)
+    approvals: List[BotApprovalItem] = Field(default_factory=list)
+
+
+class DismissFindingRequest(BaseModel):
+    note: Optional[str] = Field(None, max_length=200)
+    supplier: Optional[str] = Field(None, max_length=200)
+
+
+class BotEventRequest(BaseModel):
+    event: str
+    org_id: int
+    document_id: Optional[int] = None
+    document_ids: List[int] = Field(default_factory=list)
+
+
+class BotEventResponse(BaseModel):
+    status: str
+    event: str
+    org_id: int
+    bots_checked: int = 0
+    findings_matched: int = 0
+    new_findings: int = 0
+    quiet_hours: bool = False
+    details: List[Dict[str, Any]] = Field(default_factory=list)
+
+

@@ -6,6 +6,7 @@ JSON, and raises ToolInputError for a bad call. Code makes every finding; the mo
 from __future__ import annotations
 
 import hashlib
+import sys
 import time
 from typing import AbstractSet, Any, Dict, List, Optional, Sequence
 
@@ -139,9 +140,11 @@ def item_key(item: Dict[str, Any], side: str) -> str:
 
 
 def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str, deadline: float,
-        exclude: Optional[AbstractSet[str]] = None) -> Dict[str, Any]:
+        exclude: Optional[AbstractSet[str]] = None, unlimited: bool = False) -> Dict[str, Any]:
     """`exclude`: keys (item_key) of findings and groups the person marked as not a problem; they are left out of the
-    counts and lists, and a note says how many."""
+    counts and lists, and a note says how many.
+    `unlimited`: return every group and finding, not the first `limit`. For bots, which compare one run's findings
+    with the last run's and must see all of them. Not offered to the model (the tool spec has no such field)."""
     if not isinstance(params, dict):
         raise ToolInputError("Tool input must be an object")
     mode = params.get("mode", "all")
@@ -154,6 +157,8 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
         limit = max(1, min(int(params.get("limit") or DEFAULT_LIMIT), MAX_LIMIT))
     except (TypeError, ValueError):
         raise ToolInputError("limit must be a number") from None
+    if unlimited:
+        limit = sys.maxsize
     today = periods.today_in(settings.report_timezone)
     try:
         start, end = periods.resolve(params.get("period"), today)

@@ -207,6 +207,18 @@ def test_the_tool_limits_the_groups_shown_and_says_so(monkeypatch):
     assert out["groups_found"] == 5 and len(out["groups"]) == 2 and any("first 2 of 5" in n for n in out["notes"])
 
 
+def test_unlimited_returns_every_group_for_bots(monkeypatch):
+    bills = []
+    for i in range(60):
+        bills += [bill(f"D{i}", vendor=f"V{i}", id_=f"a{i}"), bill(f"D{i}", vendor=f"V{i}", id_=f"b{i}", date="2026-04-01")]
+    fake_cube(monkeypatch, bills)
+    out = tool.run({"mode": "duplicates", "period": {"start": "2026-01-01", "end": "2026-12-31"}, "limit": 10},
+                   organization_ids=[7], subject="t", deadline=1e12, unlimited=True)
+    assert out["groups_found"] == 60 and len(out["groups"]) == 60
+    capped = run_tool(monkeypatch, bills, limit=500)
+    assert len(capped["groups"]) == tool.MAX_LIMIT
+
+
 def test_an_incomplete_scan_is_stated(monkeypatch):
     fake_cube(monkeypatch, [bill(f"X{i}", date="2026-03-01", net=float(i + 1)) for i in range(600)])
     out = tool.run({"mode": "duplicates", "period": {"start": "2026-03-01", "end": "2026-03-01"}},

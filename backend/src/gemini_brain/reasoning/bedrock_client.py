@@ -575,6 +575,7 @@ def converse_tools(
     max_tokens: int = settings.bedrock_max_tokens,
     model_id: Optional[str] = None,
     purpose: str = "sql_agent",
+    tool_choice: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Module-level tool-calling Converse (agents / coordinator)."""
     _model = model_id or MODEL_ID
@@ -591,6 +592,8 @@ def converse_tools(
         )
         if tools:
             kwargs["toolConfig"] = {"tools": tools}
+            if tool_choice:
+                kwargs["toolConfig"]["toolChoice"] = {"tool": {"name": tool_choice}}
         resp = client.converse(**kwargs)
         usage = resp.get("usage", {})
         call_usage.update(usage)

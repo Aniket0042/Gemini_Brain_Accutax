@@ -1,0 +1,312 @@
+[
+  {
+    "id": "s01",
+    "category": "weekly",
+    "sentence": "Check our VAT every Monday morning at 09:00",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "mon",
+      "time": "09:00",
+      "is_bot": true
+    }
+  },
+  {
+    "id": "s02",
+    "category": "monthly",
+    "sentence": "Run a VAT check on the 1st of every month at 10:00",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "schedule_kind": "monthly",
+      "day_of_month": 1,
+      "time": "10:00",
+      "is_bot": true
+    }
+  },
+  {
+    "id": "s03",
+    "category": "before_return",
+    "sentence": "Check our VAT 7 days before each VAT return deadline",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "schedule_kind": "before_deadline",
+      "days_before": [7],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "s04",
+    "category": "after_quarter",
+    "sentence": "Review our VAT position 3 days after each quarter ends",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "schedule_kind": "after_period_end",
+      "days_after": 3,
+      "is_bot": true
+    }
+  },
+  {
+    "id": "s05",
+    "category": "time",
+    "sentence": "Review duplicate bills every Friday at 17:30",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "fri",
+      "time": "17:30",
+      "watches": ["duplicate_bill"],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "s06",
+    "category": "email",
+    "sentence": "Send me an email digest of VAT problems every Wednesday at 08:00",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "wed",
+      "deliver_contains": "email",
+      "is_bot": true
+    }
+  },
+  {
+    "id": "s07",
+    "category": "bell",
+    "sentence": "Alert me in app notifications if any VAT rate is wrong",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "deliver_contains": "bell",
+      "watches": ["vat_rate_wrong"],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "s08",
+    "category": "sales",
+    "sentence": "Check our sales invoices for wrong VAT or zero rating every week",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "schedule_kind": "weekly",
+      "watches": ["sales_vat_wrong"],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "s09",
+    "category": "two_watches",
+    "sentence": "Check for duplicate bills and missing bill details every Tuesday",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "tue",
+      "watches": ["duplicate_bill", "bill_missing_details"],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "s10",
+    "category": "org_match",
+    "sentence": "Check VAT for Al Futtaim LLC every Monday morning",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "org_ids": [1],
+      "schedule_kind": "weekly",
+      "day": "mon",
+      "is_bot": true
+    }
+  },
+  {
+    "id": "s11",
+    "category": "unknown_org",
+    "sentence": "Watch VAT for Unknown Enterprises LLC every month",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "has_question_or_issue_for_org": true,
+      "is_bot": true
+    }
+  },
+  {
+    "id": "s12",
+    "category": "vague",
+    "sentence": "Keep an eye on VAT",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "is_bot": true
+    }
+  },
+  {
+    "id": "s13",
+    "category": "non_bot",
+    "sentence": "What is my VAT for Q3?",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "is_bot": false,
+      "fallback_or_issue": true
+    }
+  },
+  {
+    "id": "s14",
+    "category": "non_bot",
+    "sentence": "How do I file my VAT return in UAE?",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "is_bot": false,
+      "fallback_or_issue": true
+    }
+  },
+  {
+    "id": "s15",
+    "category": "non_bot",
+    "sentence": "Show me our top 5 suppliers by spend this year",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "is_bot": false,
+      "fallback_or_issue": true
+    }
+  },
+  {
+    "id": "s16",
+    "category": "weekly_high_sensitivity",
+    "sentence": "Audit our supplier bills every Tuesday with high sensitivity for unusual amounts",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "tue",
+      "sensitivity": "more",
+      "watches": ["unusual_bill"],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "s17",
+    "category": "before_deadline_multiple",
+    "sentence": "Remind me about our VAT return 14 days and 2 days before the deadline",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "schedule_kind": "before_deadline",
+      "is_bot": true
+    }
+  },
+  {
+    "id": "s18",
+    "category": "monthly_mid",
+    "sentence": "Check our VAT rates on the 15th of each month",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "schedule_kind": "monthly",
+      "day_of_month": 15,
+      "watches": ["vat_rate_wrong"],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "s19",
+    "category": "multi_delivery",
+    "sentence": "Send an email and in-app alert every Thursday for missing bill details",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "thu",
+      "deliver_contains": ["email", "bell"],
+      "watches": ["bill_missing_details"],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "s20",
+    "category": "org_match_watch",
+    "sentence": "Check Apex Holdings for duplicate bills every week",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [2],
+    "expected": {
+      "org_ids": [2],
+      "watches": ["duplicate_bill"],
+      "schedule_kind": "weekly",
+      "is_bot": true
+    }
+  },
+  {
+    "id": "s21",
+    "category": "full_watch",
+    "sentence": "Run a full monthly VAT review checking all rules and potential penalties",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "schedule_kind": "monthly",
+      "is_bot": true
+    }
+  },
+  {
+    "id": "s22",
+    "category": "after_quarter_single_day",
+    "sentence": "Review VAT 1 day after each quarter ends at 09:00",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "schedule_kind": "after_period_end",
+      "days_after": 1,
+      "time": "09:00",
+      "is_bot": true
+    }
+  },
+  {
+    "id": "s23",
+    "category": "weekly_sunday",
+    "sentence": "Scan for duplicate supplier invoices every Sunday evening at 18:00",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "sun",
+      "time": "18:00",
+      "watches": ["duplicate_bill"],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "s24",
+    "category": "fewer_sensitivity",
+    "sentence": "Send only obvious VAT errors every Friday with low sensitivity",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "fri",
+      "sensitivity": "fewer",
+      "is_bot": true
+    }
+  },
+  {
+    "id": "s25",
+    "category": "before_deadline_email",
+    "sentence": "Email me 5 days before each VAT deadline about our net payable",
+    "allowed_orgs": {"1": "Al Futtaim LLC", "2": "Apex Holdings"},
+    "current_org_ids": [1],
+    "expected": {
+      "schedule_kind": "before_deadline",
+      "days_before": [5],
+      "deliver_contains": "email",
+      "is_bot": true
+    }
+  }
+]

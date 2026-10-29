@@ -21,10 +21,20 @@ import { PrivacySnapshotsModal } from './components/PrivacySnapshotsModal';
 import { chipsFromBlocks, kindGroup } from './services/attachments';
 import { clearUploadBlobs } from './services/uploadBlobs';
 import { FilePreviewPanel, ImageLightbox } from './components/FilePreview';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Bot, X } from 'lucide-react';
 import { isSessionId, newSessionId } from './services/sessionId';
 import { dropCards } from './sensitive';
 import { useAuth0 } from '@auth0/auth0-react';
+import BotBuilder from './components/bots/BotBuilder';
+import BotList from './components/bots/BotList';
+import InboxView from './components/bots/InboxView';
+import BotMemoryView from './components/bots/BotMemoryView';
+import {
+  listBots, updateBot, deleteBot,
+  fetchUserBots, deleteBotOnServer, pauseBotOnServer, resumeBotOnServer, migrateLocalBotsToServer,
+  fetchBotInbox, markBotInboxSeen, dismissBotFinding, undismissBotFinding,
+  approveBotAction, rejectBotAction, editBotAction
+} from './services/bots';
 
 // Minimal fallback shown only until /api/v1/tenants responds. Deliberately
 // carries no figures: the previous version described specific invoice counts
@@ -238,7 +248,14 @@ function stripSessionIdFromUrl() {
 
 export default function App() {
   // Current Authenticated User & Token State
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem('gemini_brain_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
 
   // Active Tenant Context State
   const [activeTenant, setActiveTenant] = useState(null);
@@ -247,6 +264,170 @@ export default function App() {
   // the single-org code paths below keep working unchanged.
   const [selectedOrgIds, setSelectedOrgIds] = useState([]);
   const [multiOrg, setMultiOrg] = useState({ enabled: false, max: 1 });
+
+  // Bots modal & list state (Phase 1 & Phase 2)
+  const [isBotsOpen, setIsBotsOpen] = useState(false);
+  const [isBuilderOpen, setIsBuilderOpen] = useState(false);
+  const [builderStart, setBuilderStart] = useState({ mode: 'blank' });
+  const [bots, setBots] = useState([]);
+  const [botInbox, setBotInbox] = useState({ unread_count: 0, bots_count: 0, runs: [], findings: [] });
+  const [botModalTab, setBotModalTab] = useState('bots'); // 'bots' | 'inbox'
+  const [memoryBot, setMemoryBot] = useState(null);
+  const [inboxLoading, setInboxLoading] = useState(false);
+
+  const reloadInbox = async () => {
+    const token = currentUser?.access_token;
+    if (!token) return;
+    try {
+      setInboxLoading(true);
+      const data = await fetchBotInbox(token);
+      setBotInbox(data || { unread_count: 0, bots_count: 0, runs: [], findings: [], approvals: [] });
+    } catch (e) {
+      console.warn('Failed to fetch bot inbox:', e);
+    } finally {
+      setInboxLoading(false);
+    }
+  };
+
+  const reloadBots = async () => {
+    const token = currentUser?.access_token;
+    if (token) {
+      try {
+        await migrateLocalBotsToServer(token);
+        const serverBots = await fetchUserBots(token);
+        setBots(serverBots);
+        await reloadInbox();
+        return;
+      } catch (e) {
+        console.warn('Failed to fetch server bots:', e);
+      }
+    }
+    setBots(listBots());
+  };
+
+  const handleDismissFinding = async (botId, key, note = '', supplier = '') => {
+    const token = currentUser?.access_token;
+    if (!token) return;
+    try {
+      await dismissBotFinding(botId, key, note, supplier, token);
+      await reloadInbox();
+    } catch (e) {
+      console.warn('Failed to dismiss finding:', e);
+    }
+  };
+
+  const handleUndismissFinding = async (botId, key) => {
+    const token = currentUser?.access_token;
+    if (!token) return;
+    try {
+      await undismissBotFinding(botId, key, token);
+      await reloadInbox();
+    } catch (e) {
+      console.warn('Failed to restore finding:', e);
+    }
+  };
+
+  const handleMarkInboxSeen = async () => {
+    const token = currentUser?.access_token;
+    if (!token) return;
+    try {
+      await markBotInboxSeen(token);
+      await reloadInbox();
+    } catch (e) {
+      console.warn('Failed to mark inbox read:', e);
+    }
+  };
+
+  const handleApproveAction = async (botId, approvalId) => {
+    const token = currentUser?.access_token;
+    if (!token) return;
+    try {
+      await approveBotAction(botId, approvalId, token);
+      await reloadInbox();
+    } catch (e) {
+      console.warn('Failed to approve bot action:', e);
+    }
+  };
+
+  const handleRejectAction = async (botId, approvalId) => {
+    const token = currentUser?.access_token;
+    if (!token) return;
+    try {
+      await rejectBotAction(botId, approvalId, token);
+      await reloadInbox();
+    } catch (e) {
+      console.warn('Failed to reject bot action:', e);
+    }
+  };
+
+  const handleEditApproveAction = async (botId, approvalId, updates) => {
+    const token = currentUser?.access_token;
+    if (!token) return;
+    try {
+      await editBotAction(botId, approvalId, updates, token);
+      await reloadInbox();
+    } catch (e) {
+      console.warn('Failed to update and approve bot action:', e);
+    }
+  };
+
+  useEffect(() => {
+    reloadBots();
+  }, [isBotsOpen, isBuilderOpen, currentUser?.access_token]);
+
+  const handleOpenBots = () => {
+    reloadBots();
+    setIsBotsOpen(true);
+  };
+
+  const handleStartNewBot = (startConfig = { mode: 'blank' }) => {
+    setBuilderStart(startConfig);
+    setIsBotsOpen(false);
+    setIsBuilderOpen(true);
+  };
+
+  const handleToggleBot = async (id) => {
+    const target = bots.find((b) => b.id === id);
+    if (!target) return;
+    const token = currentUser?.access_token;
+    if (token) {
+      try {
+        if (target.status === 'active') {
+          await pauseBotOnServer(id, token);
+        } else {
+          await resumeBotOnServer(id, token);
+        }
+        await reloadBots();
+        return;
+      } catch (e) {
+        console.warn('Server toggle failed, falling back to local:', e);
+      }
+    }
+    const newStatus = target.status === 'active' ? 'paused' : 'active';
+    updateBot(id, { status: newStatus });
+    setBots(listBots());
+  };
+
+  const handleDeleteBot = async (id) => {
+    const token = currentUser?.access_token;
+    if (token) {
+      try {
+        await deleteBotOnServer(id, token);
+        await reloadBots();
+        return;
+      } catch (e) {
+        console.warn('Server delete failed, falling back to local:', e);
+      }
+    }
+    deleteBot(id);
+    setBots(listBots());
+  };
+
+  const handleEditBot = (bot) => {
+    setBuilderStart({ mode: 'blank', initialDraft: bot.draft, botId: bot.id });
+    setIsBotsOpen(false);
+    setIsBuilderOpen(true);
+  };
 
   const activeOrgId = activeTenant?.organization_id ?? activeTenant?.id ?? null;
   const scopeOrgIds = useMemo(() => {
@@ -1689,6 +1870,8 @@ export default function App() {
           onOpenPrivacy={privacyAccess.admin ? () => setShowPrivacy(true) : undefined}
           usage={usage}
           onOpenUsage={() => setShowUsage(true)}
+          onOpenBots={handleOpenBots}
+          botsUnreadCount={botInbox.unread_count || 0}
         />
         <div className="main-stage">
         <div ref={chatScrollAreaRef} style={styles.chatScrollArea}>
@@ -1699,7 +1882,19 @@ export default function App() {
                   onSelectPrompt={handleSubmitQuery}
                   activeTenant={activeTenant}
                   userName={userName}
-                />
+                >
+                  <div className="bot-home-banner">
+                    <Bot size={13} color="var(--accent)" />
+                    <span>Let a bot watch your VAT</span>
+                    <button
+                      type="button"
+                      className="bot-home-banner-btn"
+                      onClick={() => handleStartNewBot({ mode: 'blank' })}
+                    >
+                      New bot
+                    </button>
+                  </div>
+                </IntroSuggestions>
               </>
             ) : (
               <div style={styles.activeConvoWrapper}>
@@ -1715,6 +1910,7 @@ export default function App() {
                     if (block?.spec) setCanvasSpec(block.spec);
                     setCanvasOpen(true);
                   }}
+                  onMakeBot={handleStartNewBot}
                 />
               </div>
             )}
@@ -1811,6 +2007,109 @@ export default function App() {
           onClose={() => setShowPrivacy(false)}
         />
       )}
+
+      {/* Bots Management Modal */}
+      {isBotsOpen && (
+        <div className="bot-modal-backdrop" onClick={() => { setIsBotsOpen(false); setMemoryBot(null); }}>
+          <div className="bot-modal-container" onClick={(e) => e.stopPropagation()}>
+            <div className="bot-modal-top">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Bot size={18} color="var(--accent)" />
+                  <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--ink)' }}>VAT Bots</span>
+                </div>
+                <div className="bot-nav-tabs">
+                  <button
+                    type="button"
+                    className={`bot-nav-tab ${botModalTab === 'bots' && !memoryBot ? 'active' : ''}`}
+                    onClick={() => { setBotModalTab('bots'); setMemoryBot(null); }}
+                  >
+                    <span>Bots</span>
+                    {bots.length > 0 && <span style={{ opacity: 0.7 }}>({bots.length})</span>}
+                  </button>
+                  <button
+                    type="button"
+                    className={`bot-nav-tab ${botModalTab === 'inbox' && !memoryBot ? 'active' : ''}`}
+                    onClick={() => { setBotModalTab('inbox'); setMemoryBot(null); }}
+                  >
+                    <span>Inbox</span>
+                    {botInbox.unread_count > 0 && (
+                      <span className="bot-unread-badge">{botInbox.unread_count}</span>
+                    )}
+                  </button>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn-icon-subtle"
+                onClick={() => { setIsBotsOpen(false); setMemoryBot(null); }}
+                aria-label="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="bot-modal-content">
+              {memoryBot ? (
+                <BotMemoryView
+                  bot={memoryBot}
+                  onBack={() => setMemoryBot(null)}
+                  onMemoryChanged={() => {
+                    reloadInbox();
+                    reloadBots();
+                  }}
+                  token={currentUser?.access_token || ''}
+                />
+              ) : botModalTab === 'bots' ? (
+                <BotList
+                  bots={bots}
+                  onNewBot={() => handleStartNewBot({ mode: 'blank' })}
+                  onEdit={handleEditBot}
+                  onToggle={handleToggleBot}
+                  onDelete={handleDeleteBot}
+                  onViewMemory={(b) => setMemoryBot(b)}
+                />
+              ) : (
+                <InboxView
+                  inbox={botInbox}
+                  onDismissFinding={handleDismissFinding}
+                  onUndismissFinding={handleUndismissFinding}
+                  onMarkSeen={handleMarkInboxSeen}
+                  onRefresh={reloadInbox}
+                  loading={inboxLoading}
+                  onApproveAction={handleApproveAction}
+                  onRejectAction={handleRejectAction}
+                  onEditApproveAction={handleEditApproveAction}
+                  onEditBot={(botId) => {
+                    const b = bots.find((x) => x.id === botId);
+                    if (b) handleEditBot(b);
+                  }}
+                  onSeeFindingsInChat={(finding) => {
+                    setIsBotsOpen(false);
+                    handleSubmitQuery(`Investigate VAT issue ${finding.key} (${finding.rule}) on organization ${finding.org_id}`, { agent: 'vat' });
+                  }}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bot Builder Flow Modal */}
+      <BotBuilder
+        open={isBuilderOpen}
+        onClose={() => {
+          setIsBuilderOpen(false);
+          setBots(listBots());
+        }}
+        token={currentUser?.access_token || ''}
+        orgIds={scopeOrgIds}
+        orgNames={Object.fromEntries(availableTenants.map((t) => [tenantIdOf(t), tenantNameOf(t)]))}
+        start={builderStart}
+        onSeeFindings={() => {
+          setIsBuilderOpen(false);
+          handleSubmitQuery('Check our VAT for problems and duplicate bills', { agent: 'vat' });
+        }}
+      />
 
       </div>
     </div>

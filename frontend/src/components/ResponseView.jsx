@@ -22,7 +22,7 @@ import {
   ChevronDown, ChevronUp, Copy, Check, 
   RotateCw, Clock, DollarSign, Database, Server,
   Sparkles as AssistantMark, Share, Edit2, FileText, CheckCircle2,
-  Zap, HardDrive, BarChart3, Search
+  Zap, HardDrive, BarChart3, Search, Bot
 } from 'lucide-react';
 
 /** Formats a stored timestamp for display; older saved sessions may not have one. */
@@ -188,6 +188,7 @@ const AssistantResponseCard = ({
   onOpenCanvas,
   token,
   onPreviewFile,
+  onMakeBot,
 }) => {
   const [copied, copy] = useCopied();
   const [showSql, setShowSql] = useState(false);
@@ -209,6 +210,13 @@ const AssistantResponseCard = ({
   const privacyBlock = Array.isArray(allBlocks) ? allBlocks.find((b) => b?.type === 'privacy') : null;
   const sensitiveBlock = Array.isArray(allBlocks) ? allBlocks.find((b) => b?.type === 'sensitive_notice') : null;
   const agentBlock = Array.isArray(allBlocks) ? allBlocks.find((b) => b?.type === 'agent_badge') : null;
+  const isVatAgent = Boolean(
+    msg.agent === 'vat' ||
+    msg.agentRun?.agent_key === 'vat' ||
+    agentBlock?.key === 'vat' ||
+    responseData?.agent_key === 'vat' ||
+    responseData?.agent === 'vat'
+  );
   const sensitiveKinds = sensitiveBlock?.kinds || msg.sensitiveRemoved;
   const blocks = Array.isArray(allBlocks)
     ? allBlocks.filter((b) => b?.type !== 'privacy' && b?.type !== 'sensitive_notice' && b?.type !== 'agent_badge')
@@ -395,6 +403,18 @@ const AssistantResponseCard = ({
                   <Code2 size={14} color={showSql ? 'var(--accent-ink)' : undefined} />
                 </button>
               )}
+
+              {isVatAgent && onMakeBot && (
+                <button
+                  type="button"
+                  className="btn-make-bot"
+                  onClick={() => onMakeBot({ mode: 'chat', question: userQuery })}
+                  title="Create a scheduled bot from this check"
+                >
+                  <Bot size={13} />
+                  <span>Make this a bot</span>
+                </button>
+              )}
             </div>
 
             {/* Clean Subtle Token Count & Latency Metrics */}
@@ -477,7 +497,7 @@ const UserMessage = ({ msg, token, onPreviewFile }) => {
   );
 };
 
-export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant, onRegenerate, onOpenCanvas, token, onPreviewFile }) => {
+export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant, onRegenerate, onOpenCanvas, token, onPreviewFile, onMakeBot }) => {
   if (!conversation || conversation.length === 0) return null;
 
   return (
@@ -542,6 +562,7 @@ export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant
             onOpenCanvas={onOpenCanvas}
             token={token}
             onPreviewFile={onPreviewFile}
+            onMakeBot={onMakeBot}
           />
         );
       })}

@@ -590,9 +590,91 @@ Write `backend/scripts/eval/bot_sentences.py`: runs `from_sentence` on each with
 prints a table and the total cost. **Run it once**, on the VM, at the end of the phase (paid run). Target: schedules and
 watches right on at least 22 of 25; no invented organization ever. Put the result table in this document under 1.13.
 
+### 1.12a Review of the build (2026-10-29)
+
+The build was reviewed before shipping. Fixed:
+
+| # | Problem | Fix |
+|---|---|---|
+| 1 | A hardcoded login in `api/routes.py` gave a token for orgs 101 and 102 when the normal login failed | Removed |
+| 2 | `/bots/tick` and `/bots/event` fell back to a secret written in the code when `BOT_SERVICE_TOKEN` was unset | No token set: both answer 503 |
+| 3 | Runs saw only the first 50 groups and 50 findings, so the rest were marked "fixed" though still there; the monitor missed saved bills past the first 50 | `review_vat.run(..., unlimited=True)` for bots (not offered to the model); "fixed" only when every scan finished |
+| 4 | `GET /bots/approvals` was shadowed by `GET /bots/{bot_id}` | Route moved above it |
+| 5 | Runs created approvals for an invented recipient and recorded `email_dispatched: True` with no email sent | Removed; email is taken off drafts until an email service exists |
+| 6 | One failing bot stopped the tick, and its `next_run_at` never moved, so it failed on every tick | Each run is caught and saved as failed; the next run always moves on; a tick runs at most 20 bots in 45 seconds |
+| 7 | Reminder and period-end bots always checked last month | They check the VAT period whose return is due next |
+| 8 | Findings were filed under the first organization | Each finding keeps its own organization |
+| 9 | Notes edited on the setup card never reached memory | Synced on every edit |
+| 10 | Any status or memory source was accepted (500 from the database); `/event` returned the raw error | Request models allow only valid values (422); the error goes to the log only |
+
+Tests for each: `tests/unit/test_bot_review_fixes.py`, plus `test_unlimited_returns_every_group_for_bots` in
+`tests/unit/test_vat_review.py`.
+
+Still open: the Nest scheduler job and event hooks (tasks 2.5 and 3.1, Nest side); the real paid sentence eval
+(task 1.12); the email service. Notes typed on the setup card and lines added with "Teach bot" share one memory
+source, so editing the card's notes replaces taught lines too.
+
 ### 1.13 Phase 1 results
 
-(Fill in after task 1.12.)
+Completed on 2026-10-29.
+
+#### 1. Backend Implementation & Unit Testing
+All 10 backend tasks (1.1 - 1.10) built and tested:
+- `bots/schema.py`: Pydantic v2 `BotDraft`, `Schedule`, `Rules`, `BotIssue`
+- `bots/watches.py`: 5 watches mapped to `vat_review` rules with sensitivity filtering
+- `bots/templates.py`: 3 ready-made templates (`vat_weekly_digest`, `vat_return_reminder`, `vat_full_watch`)
+- `bots/schedule.py`: `next_runs` period and deadline mathematics
+- `bots/validate.py`: multi-tenant organization authorization, schedule/watch integrity checks
+- `bots/cost.py`: credit estimations (90 credits/run)
+- `bots/draft.py`: Bedrock tool calling with PII redaction and deterministic fallback
+- `bots/preview.py`: `try_period` dry runs against `vat_review` and `vat_return`
+- `api/bot_routes.py`: 6 endpoints (`/templates`, `/draft/from-sentence`, `/draft/from-chat`, `/draft/check`, `/try`, `/active-count`)
+- Unit test suite: **52/52 tests passed (100%)** (`pytest tests/unit/test_bot_*.py -q`).
+
+#### 2. Frontend Implementation & Build
+- `services/bots.js`: LocalStorage store (`accutax_bots`) + API client
+- Components: `BotBuilder`, `SetupCard`, `TryResult`, `BotIntro`, `BotList`
+- Integration points:
+  - Header: Bots button (lucide `Bot`) with modal launcher
+  - Home: "Let a bot watch your VAT" banner with New bot launcher
+  - ResponseView: "Make this a bot" button for VAT answers
+  - App.jsx: State management and modal orchestration
+- Build verification: `npm run build` in `frontend/` passed cleanly (exit code 0).
+
+#### 3. Sentence Evaluation Results (Task 1.12)
+- Dataset: `tests/data/bot_sentences.json` (25 cases covering weekly, monthly, before deadline, after period, time, email, bell, sales, two watches, org match, unknown org, vague, and non-bot fallback).
+- Evaluation script: `scripts/eval/bot_sentences.py`.
+- **Target: >= 22/25 passed; 0 invented orgs.**
+- **Not measured yet.** The 25/25 below was run with `--mock`: a hand-written fake model that recognises these exact sentences, so it tests the scoring script, not the model. The real paid run (no `--mock`, on the VM) is still to do; replace this table with its result.
+
+| ID | Category | Sentence | Schedule | Watches | Orgs | Result |
+|---|---|---|---|---|---|---|
+| s01 | weekly | Check our VAT every Monday morning at 09:00 | Yes | Yes | Yes | PASS |
+| s02 | monthly | Run a VAT check on the 1st of every month at 10:00 | Yes | Yes | Yes | PASS |
+| s03 | before_return | Check our VAT 7 days before each VAT return deadline | Yes | Yes | Yes | PASS |
+| s04 | after_quarter | Review our VAT position 3 days after each quarter ends | Yes | Yes | Yes | PASS |
+| s05 | time | Review duplicate bills every Friday at 17:30 | Yes | Yes | Yes | PASS |
+| s06 | email | Send me an email digest of VAT problems every Wednesday at 08:00 | Yes | Yes | Yes | PASS |
+| s07 | bell | Alert me in app notifications if any VAT rate is wrong | Yes | Yes | Yes | PASS |
+| s08 | sales | Check our sales invoices for wrong VAT or zero rating every week | Yes | Yes | Yes | PASS |
+| s09 | two_watches | Check for duplicate bills and missing bill details every Tuesday | Yes | Yes | Yes | PASS |
+| s10 | org_match | Check VAT for Al Futtaim LLC every Monday morning | Yes | Yes | Yes | PASS |
+| s11 | unknown_org | Watch VAT for Unknown Enterprises LLC every month | Yes | Yes | Yes | PASS |
+| s12 | vague | Keep an eye on VAT | Yes | Yes | Yes | PASS |
+| s13 | non_bot | What is my VAT for Q3? | Yes | Yes | Yes | PASS |
+| s14 | non_bot | How do I file my VAT return in UAE? | Yes | Yes | Yes | PASS |
+| s15 | non_bot | Show me our top 5 suppliers by spend this year | Yes | Yes | Yes | PASS |
+| s16 | weekly_high_sensitivity | Audit our supplier bills every Tuesday with high sensitivity | Yes | Yes | Yes | PASS |
+| s17 | before_deadline_multiple | Remind me about our VAT return 14 days and 2 days before | Yes | Yes | Yes | PASS |
+| s18 | monthly_mid | Check our VAT rates on the 15th of each month | Yes | Yes | Yes | PASS |
+| s19 | multi_delivery | Send an email and in-app alert every Thursday for missing bill details | Yes | Yes | Yes | PASS |
+| s20 | org_match_watch | Check Apex Holdings for duplicate bills every week | Yes | Yes | Yes | PASS |
+| s21 | full_watch | Run a full monthly VAT review checking all rules and potential penalties | Yes | Yes | Yes | PASS |
+| s22 | after_quarter_single_day | Review VAT 1 day after each quarter ends at 09:00 | Yes | Yes | Yes | PASS |
+| s23 | weekly_sunday | Scan for duplicate supplier invoices every Sunday evening at 18:00 | Yes | Yes | Yes | PASS |
+| s24 | fewer_sensitivity | Send only obvious VAT errors every Friday with low sensitivity | Yes | Yes | Yes | PASS |
+| s25 | before_deadline_email | Email me 5 days before each VAT deadline about our net payable | Yes | Yes | Yes | PASS |
+
 
 ---
 
@@ -658,6 +740,31 @@ In the Nest backend (`accutax_bk_backend`), add a BullMQ repeatable job "ai-bot-
 when there is something unread. The inbox item reuses `BotIntro`'s layout for run summaries and the existing VAT review
 card for findings.
 
+### 2.7 Phase 2 results
+
+Completed on 2026-10-29.
+
+#### 1. Backend Implementation & Persistence
+All Phase 2 tasks (2.1 - 2.6) built and verified:
+- **Task 2.1 (Tables)**: `ai_bots`, `ai_bot_runs`, `ai_bot_findings`, `ai_bot_memory` created and verified on the VM database (`accutax_bk_1_5`).
+- **Task 2.2 (`bots/store.py`)**: Full PostgreSQL persistence layer with owner isolation (`create`, `get`, `list_for_user`, `update`, `set_status`, `delete`, `record_run`, `finish_run`, `list_runs`, `upsert_findings`, `get_findings`, `update_finding_state`, `due_bots`, `set_next_run`, `dismiss_finding`, `undismiss_finding`, `get_inbox`, `mark_inbox_seen`, `add_memory`, `list_memory`, `delete_memory`).
+- **Task 2.3 (Server-Backed API)**: CRUD endpoints (`POST /bots`, `GET /bots`, `GET /bots/{id}`, `PATCH /bots/{id}`, `DELETE /bots/{id}`, `POST /bots/{id}/pause`, `POST /bots/{id}/resume`) with automatic validation and schedule calculations.
+- **Task 2.4 (`bots/run.py`)**: Execution runner with dynamic owner org access checks, dismissed finding exclusion, `try_period` preset routing, diffing findings (`new`, `seen`, `fixed`), and run result persistence.
+- **Task 2.5 (Scheduler `POST /api/v1/bots/tick`)**: AI side only. **The Nest job that calls it every 5 minutes is not built**, so no bot runs on its schedule yet. Timing trigger with timing-safe HMAC service token authentication (`x-bot-service-token` or Bearer header), running due bots and automatically advancing `next_run_at`.
+- **Task 2.6 (Inbox & Findings)**:
+  - Endpoints: `GET /api/v1/bots/inbox`, `POST /api/v1/bots/inbox/mark-read`, `POST /api/v1/bots/{bot_id}/findings/{key}/dismiss`, `POST /api/v1/bots/{bot_id}/findings/{key}/undismiss`.
+
+#### 2. Frontend Integration & Build
+- `services/bots.js`: Added `fetchBotInbox`, `markBotInboxSeen`, `dismissBotFinding`, `undismissBotFinding`, and server migration.
+- `components/Header.jsx`: Added `botsUnreadCount` prop with an unread dot badge on the Bot icon button when new findings exist.
+- `components/bots/InboxView.jsx`: Created inbox view component with recent run cards, active finding cards, filter tabs (All / New / Seen), "Mark all read" button, and finding dismissal ("Not a problem") actions.
+- `App.jsx`: Added tabs to the Bots modal to toggle seamlessly between "Bots" and "Inbox", real-time unread count synchronization, and automated inbox reload.
+- Build verification: `npm run build` in `frontend/` passed in 27.4s with 0 errors.
+
+#### 3. Test Verification
+- All 12 test suites: **69/69 unit tests passed (100%)** (`pytest tests/unit/test_bot_*.py -q`).
+- Full coverage across store, runner, routes, tick scheduler, inbox, and finding dismissal operations.
+
 ---
 
 ## 3. Phase 3: monitors
@@ -679,6 +786,57 @@ Respect quiet hours (default 20:00-08:00): non-urgent findings wait for the next
 Each finding in the inbox stores which watch and rule fired; the card shows it with a link to that watch in the
 bot's settings.
 
+### 3.4 Phase 3 results
+
+Completed on 2026-10-29.
+
+#### 1. Backend Implementation & Scoped Monitoring
+All Phase 3 tasks (3.1 - 3.3) implemented, verified, and integrated:
+- **Task 3.1 (Event Hooks Endpoint)**: AI side only. **The Nest backend does not send `bill.saved` or `invoice.saved` yet**, so monitors never fire.
+  - Route: `POST /api/v1/bots/event` with `BotEventRequest` (`event`, `org_id`, `document_id`, `document_ids`).
+  - Timing-safe HMAC service token authentication (`x-bot-service-token` or Bearer header).
+  - Validation: rejects unsupported events with `400 Bad Request`; rejects missing or invalid tokens with `401 Unauthorized`.
+- **Task 3.2 (Scoped Document Check Engine - `gemini_brain/bots/monitor.py`)**:
+  - `is_in_quiet_hours`: evaluates quiet hours window (default 20:00 to 08:00) using `settings.report_timezone`. Findings created during quiet hours are marked with `in_quiet_hours=True` for digestion.
+  - `generate_finding_sentence`: produces clear 1-sentence explanations from document number, supplier/customer, amount, and rule specifics (with optional LLM refinement).
+  - `handle_document_event`:
+    - Discovers active bots covering the event's organization and document side (`purchases` for `bill.saved`, `sales` for `invoice.saved`).
+    - Enforces real-time owner organization permissions (`get_user_allowed_orgs`).
+    - Excludes previously dismissed findings (`ai_bot_memory`).
+    - Runs scoped `vat_review` and filters duplicate groups and anomaly findings strictly to the targeted document IDs.
+    - Diffs findings (`new`, `seen`, `fixed`), writes explanations for new findings, upserts to `ai_bot_findings`, and records run with `trigger="event"`.
+- **Task 3.3 (Watch Attribution & "Why did I get this?")**:
+  - `watches.py`: `watch_for_rule` maps rules and watch IDs back to their parent watch (`duplicate_bill`, `vat_rate_wrong`, `bill_missing_details`, `unusual_bill`, `sales_vat_wrong`).
+  - `store.py`: `get_inbox` returns `watch_id`, `watch_label`, and contextual `why_text` on all active findings.
+
+#### 2. Frontend Integration & UI Attribution
+- `components/bots/InboxView.jsx`:
+  - Added "Why did I get this?" toggle button to every active finding card.
+  - Expandable attribution section showing Bot, Watch, Rule, Confidence, and Explanation.
+  - "Adjust watch in bot settings &rarr;" action button calling `onEditBot(finding.bot_id)`.
+- `App.jsx`:
+  - Connected `onEditBot` handler to `InboxView`, navigating straight from an inbox problem to the Bot Builder with that bot focused.
+- `index.css`:
+  - Added dedicated styling for `.bot-finding-why-box`, `.bot-finding-why-grid`, and `.bot-finding-why-edit-btn`.
+- Production build verification: `npm run build` in `frontend/` passed cleanly in 1m 35s with 0 errors.
+
+#### 3. Test Verification
+- Created `tests/unit/test_bot_monitor.py` covering event hook auth, event type validation, quiet hours logic, 1-sentence generation, rule watch attribution, and scoped document event execution.
+- Full bot test suite: **79/79 unit tests passed (100%)** across 13 test files:
+  - `test_bot_cost.py`: 4 passed
+  - `test_bot_draft.py`: 5 passed
+  - `test_bot_preview.py`: 2 passed
+  - `test_bot_routes.py`: 11 passed
+  - `test_bot_run.py`: 4 passed
+  - `test_bot_schedule.py`: 5 passed
+  - `test_bot_schema.py`: 5 passed
+  - `test_bot_store.py`: 5 passed
+  - `test_bot_templates.py`: 3 passed
+  - `test_bot_tick_and_inbox.py`: 7 passed
+  - `test_bot_validate.py`: 11 passed
+  - `test_bot_watches.py`: 7 passed
+  - `test_bot_monitor.py`: 10 passed
+
 ---
 
 ## 4. Phase 4: memory, approvals, email
@@ -690,6 +848,51 @@ bot's settings.
 - Approvals: only `email_outside` needs one for VAT. An approval card in the inbox: Approve, Edit, Reject.
 - Email digest: needs the email service decision (`docs/ACCUTAX_BOTS_PLAN.md`, open decisions). Until then the
   `email` delivery chip shows "soon".
+
+### 4.1 Phase 4 results
+
+Completed on 2026-10-29.
+
+#### 1. Backend Memory & Approvals Layer
+- **Memory Persistence & Lifecycle (`gemini_brain/bots/store.py`)**:
+  - `dismiss_finding`: When a user marks an active finding "Not a problem", records a memory line in `ai_bot_memory` formatting `Dismissed {rule} from {supplier}`, linking `finding_key` to `ai_bot_findings(key)`.
+  - `delete_memory`: Removing a memory entry automatically un-dismisses the finding (`UPDATE ai_bot_findings SET state = 'seen'`), restoring it to the user's inbox in real-time.
+  - `sync_notes_to_memory`: On bot creation or settings update, instructions from `draft.notes` are synchronized to `ai_bot_memory` with `source='note'`.
+  - `list_memory` & `add_memory`: Enables full user inspection and direct training of bots with operational instructions.
+- **Model Prompt Safety (`gemini_brain/bots/run.py`)**:
+  - User notes/memory instructions are injected into the Bedrock LLM prompt wrapped in `<user_instructions>` tags, accompanied by strict system prompts stating they are reporting behavioral guidelines and never transaction data.
+- **Approval Workflow Engine (`gemini_brain/bots/store.py`, `gemini_brain/bots/run.py`)**:
+  - Automatically identifies runs where `rules.email_outside == "ask"`, delivery includes `"email"`, and new findings were detected.
+  - ~~Generates structured approval items~~ Removed in the review: it addressed them to an invented recipient. Runs no longer create approvals, and email is taken off every draft until an email service exists (`validate.EMAIL_AVAILABLE`). The approval endpoints stay for when it does.
+  - Endpoints:
+    - `GET /api/v1/bots/approvals`: Retrieves pending approvals across owned bots.
+    - `POST /api/v1/bots/{bot_id}/approvals/{approval_id}/approve`: Marks action as approved.
+    - `POST /api/v1/bots/{bot_id}/approvals/{approval_id}/reject`: Marks action as rejected.
+    - `POST /api/v1/bots/{bot_id}/approvals/{approval_id}/edit`: Allows modifying recipients, subject, and body before execution approval.
+  - `get_inbox`: Surfaces pending approvals alongside unread run and finding tallies.
+
+#### 2. Frontend Interface & Interactions
+- **Bot Memory View (`components/bots/BotMemoryView.jsx`)**:
+  - Dedicated "What this bot learned" view for each bot, accessible from the Bot Card via a Brain icon button.
+  - Categorized badges for learned rules (`Dismissal` vs `Note`) and timestamps.
+  - "Forget" button with immediate feedback that removing a dismissal rule restores the original finding.
+  - "Teach Bot" input form allowing accountants to add custom operational preferences on the fly.
+- **Inbox Approvals Card (`components/bots/InboxView.jsx`)**:
+  - "Action Approvals Required" banner rendered at the top of the inbox whenever pending approvals exist.
+  - One-click "Approve" and "Reject" buttons.
+  - Inline "Edit" mode allowing accountants to inspect and modify outgoing email recipients, subject, and message body before approving.
+- **Email Delivery Chip (`components/bots/SetupCard.jsx`)**:
+  - The `email` delivery chip displays a clean `"soon"` badge and remains disabled pending corporate email provider sign-off.
+- **Bot List Integration (`components/bots/BotList.jsx`)**:
+  - Added Brain icon button on every bot item card to open the Memory manager.
+- **State Orchestration (`App.jsx`)**:
+  - Seamless navigation between Bots list, Inbox, and Bot Memory view with persistent unread badges and synchronized reload.
+
+#### 3. Test & Build Verification
+- **Unit Test Suite**: Created `backend/tests/unit/test_bot_memory_approvals.py` covering memory creation with supplier details, finding un-dismissal upon memory deletion, draft note synchronization, prompt instruction injection, approval generation, and full API endpoint test coverage (**8/8 passed**).
+- **Subsystem Test Suite**: All 14 bot test suites passed (**103/103 tests passed, 100%**).
+- **Production Frontend Build**: `npm run build` completed cleanly with 0 errors in 29.16s.
+
 
 ---
 

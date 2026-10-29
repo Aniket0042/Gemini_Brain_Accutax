@@ -144,6 +144,10 @@ class GeminiBrainSettings(BaseSettings):
             "the Accutax backend has no key set."
         ),
     )
+    bot_service_token: str = Field(
+        default="",
+        description="Shared secret for backend-to-backend bot triggers (POST /api/v1/bots/tick, POST /api/v1/bots/event).",
+    )
     jwt_algorithm: str = Field(
         default="HS256",
         description="JWT signing algorithm.",
