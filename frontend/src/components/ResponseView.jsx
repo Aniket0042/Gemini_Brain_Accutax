@@ -5,6 +5,7 @@ import { NoticeCard } from './NoticeCard';
 import { AnswerProvenance } from './AnswerProvenance';
 import { BlockRenderer, hasPortedBlocks, chatFacingBlocks } from './blocks/BlockRenderer';
 import { AgentBadge } from './AgentsPanel';
+import BotIntroMessage from './bots/BotIntroMessage';
 import { AgentRunCard } from './AgentRun';
 import { citationSources, linkCitations, citationLinkRenderer } from './citations';
 import { MarkdownLink } from './markdownLinks';
@@ -497,7 +498,7 @@ const UserMessage = ({ msg, token, onPreviewFile }) => {
   );
 };
 
-export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant, onRegenerate, onOpenCanvas, token, onPreviewFile, onMakeBot }) => {
+export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant, onRegenerate, onOpenCanvas, token, onPreviewFile, onMakeBot, botActions = {} }) => {
   if (!conversation || conversation.length === 0) return null;
 
   return (
@@ -507,6 +508,19 @@ export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant
 
         if (isUser) {
           return <UserMessage key={idx} msg={msg} token={token} onPreviewFile={onPreviewFile} />;
+        }
+
+        // A bot that was just turned on, introducing itself with its first run.
+        if (msg.role === 'bot_intro') {
+          return (
+            <BotIntroMessage
+              key={idx}
+              msg={msg}
+              onOpenInbox={botActions.onOpenInbox || (() => {})}
+              onEditBot={botActions.onEditBot || (() => {})}
+              onOpenBot={botActions.onOpenBot || (() => {})}
+            />
+          );
         }
 
         // Assistant Turn

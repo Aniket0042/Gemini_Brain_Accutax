@@ -78,6 +78,20 @@ def _current_findings(reviews: List[Dict[str, Any]], fallback_org: int) -> List[
     return out
 
 
+def _return_position(prev: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The VAT return that is due next, from the run's vat_return check: period, due date, output VAT, input VAT and
+    net. The first organization's (a bot over several shows one, and says how many). None when the check did not run."""
+    orgs = prev.get("return") if isinstance(prev.get("return"), list) else []
+    if not orgs:
+        return None
+    o = orgs[0]
+    currency = next((org.get("currency") for rev in prev.get("reviews") or [] for org in rev.get("organizations") or []
+                     if org.get("organization_id") == o.get("organization_id") and org.get("currency")), None)
+    return {"organization_id": o.get("organization_id"), "organizations": len(orgs), "period": o.get("period"),
+            "due_date": o.get("due_date"), "output_vat": o.get("output_vat"), "input_vat": o.get("input_vat"),
+            "net_vat_payable": o.get("net_vat_payable"), "position": o.get("position"), "currency": currency or "AED"}
+
+
 def _headline(checked: Dict[str, int], new_count: int, fixed_count: int, active: int) -> str:
     bills, invoices = checked["bills"], checked["invoices"]
     text = f"Checked {bills} bills" + (f" and {invoices} sales invoices" if invoices else "") + "."
@@ -190,6 +204,7 @@ def _run(bot: Dict[str, Any], bot_id: str, run_id: str, bot_org_ids: List[int],
         "fixed_findings": fixed_count,
         "total_active_findings": len(current),
         "complete": bool(prev.get("complete", True)),
+        "return_position": _return_position(prev),
     }
     if "email" in draft.deliver:
         # No email service yet (docs/ACCUTAX_BOTS_PLAN.md, open decisions): say so instead of claiming a send.

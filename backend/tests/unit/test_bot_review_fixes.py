@@ -194,3 +194,22 @@ def test_editing_a_bot_keeps_its_notes_in_memory():
         store.update("bot-1", 7, {"draft": BotDraft(org_ids=[101], notes=["Al Futtaim rent repeats monthly"])})
     sync.assert_called_once()
     assert sync.call_args.args[1] == ["Al Futtaim rent repeats monthly"]
+
+
+def test_a_run_keeps_the_return_position(stores):
+    prev = _review()
+    prev["return"] = [{"organization_id": 101, "period": {"start": "2026-10-01", "end": "2026-12-31"},
+                       "due_date": "2027-01-28", "output_vat": 41280.0, "input_vat": 22860.0,
+                       "net_vat_payable": 18420.0, "position": "payable"}]
+    prev["reviews"][0]["organizations"] = [{"organization_id": 101, "currency": "AED"}]
+    with patch.object(store, "get", return_value=_bot()),          patch("gemini_brain.bots.preview.try_period", return_value=prev):
+        res = run_mod.run_bot("bot-1")
+    rp = res["summary"]["return_position"]
+    assert rp["due_date"] == "2027-01-28" and rp["net_vat_payable"] == 18420.0 and rp["currency"] == "AED"
+    assert rp["organizations"] == 1
+
+
+def test_no_return_position_when_the_check_did_not_run(stores):
+    with patch.object(store, "get", return_value=_bot()),          patch("gemini_brain.bots.preview.try_period", return_value=_review()):
+        res = run_mod.run_bot("bot-1")
+    assert res["summary"]["return_position"] is None

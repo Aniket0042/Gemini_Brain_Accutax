@@ -379,7 +379,7 @@ export default function App() {
       const res = startConfig.mode === 'template'
         ? await createDraftFromTemplate(startConfig.templateId, scopeOrgIds, token)
         : await createDraftFromChat(startConfig.question, 'vat', scopeOrgIds, token);
-      setBuilderInit({ initial: res, botId: null, botStatus: null });
+      setBuilderInit({ initial: res, botId: null, botStatus: null, fromChat: startConfig.mode === 'chat' });
       setPage('builder');
     } catch (e) {
       setBotsNotice(e.message || 'Could not start the bot. Describe it in one sentence instead.');
@@ -387,11 +387,23 @@ export default function App() {
     }
   };
 
-  const handleBuilderDone = async (botId) => {
+  // Saved: an edited bot opens its page; a new bot introduces itself in chat with its first run. Made from a chat
+  // answer, it joins that chat; otherwise it starts a new one.
+  const handleBuilderDone = (botId, info = {}) => {
+    const fromChat = builderInit?.fromChat;
+    // Go to where the user lands first; the bots list reloads in the background.
+    if (!info.created) {
+      setActiveBotId(botId);
+      setPage('bot');
+    } else {
+      const intro = { role: 'bot_intro', bot: info.bot, run: info.run || {}, timestamp: Date.now() };
+      if (!fromChat) handleClearConversation();
+      setConversation((prev) => [...(fromChat ? prev : []), intro]);
+      setHistoryDirty(true);
+      setPage('chat');
+    }
     setBuilderInit(null);
-    await reloadBots();
-    setActiveBotId(botId);
-    setPage('bot');
+    reloadBots();
   };
 
   const handleToggleBot = async (id) => {
@@ -1873,7 +1885,7 @@ export default function App() {
       <div className={`main-content${showCanvas || showFilePreview ? ' has-canvas' : ''}`}>
         <div className="chat-column">
         <Header
-          sessionTitle={hasStartedChat ? conversation[0].content : ''}
+          sessionTitle={hasStartedChat ? (conversation[0].content || (conversation[0].bot ? `${conversation[0].bot.name} turned on` : '')) : ''}
           onNewSession={handleClearConversation}
           onToggleSidebar={() => setSidebarCollapsed(prev => !prev)}
           theme={theme}
@@ -1994,6 +2006,11 @@ export default function App() {
                     setCanvasOpen(true);
                   }}
                   onMakeBot={handleStartNewBot}
+                  botActions={{
+                    onOpenInbox: handleOpenBotInbox,
+                    onEditBot: (id) => { const b = bots.find((x) => x.id === id); if (b) handleEditBot(b); },
+                    onOpenBot: handleOpenBot,
+                  }}
                 />
               </div>
             )}

@@ -234,9 +234,10 @@ export default function BotBuilderPage({ initial, botId = null, botStatus = null
         onDone(botId);
       } else {
         const bot = await createBotOnServer(clean, 'active', token);
-        // It runs once right away, so the bot's page opens with real results.
-        await runBotNow(bot.id, token, { first: true }).catch(() => null);
-        onDone(bot.id);
+        // It runs once right away, and introduces itself in chat with the results.
+        const run = await runBotNow(bot.id, token, { first: true })
+          .catch((e) => ({ status: 'failed', error: e.message }));
+        onDone(bot.id, { created: true, bot, run });
       }
     } catch (e) {
       setError(e.message || 'Could not save the bot.');

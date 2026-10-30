@@ -524,7 +524,7 @@ def run_bot_now(
     with ledger.scope("bot_run", user_id=current_user.user_id, organization_ids=b["org_ids"]):
         res = run_bot(bot_id, trigger="first_run" if first else "manual")
     return JSONResponse(content={"status": res.get("status"), "summary": res.get("summary"),
-                                 "error": res.get("error")})
+                                 "error": res.get("error"), "credits": (res.get("run") or {}).get("credits")})
 
 
 @router.patch("/{bot_id}", summary="Update a bot")
