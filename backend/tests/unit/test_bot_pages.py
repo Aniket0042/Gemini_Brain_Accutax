@@ -87,6 +87,9 @@ def test_run_now(auth_headers):
         res = client.post("/api/v1/bots/b1/run", headers=auth_headers)
     assert res.status_code == 200 and res.json()["summary"]["headline"] == "Checked 3 bills."
     run.assert_called_once_with("b1", trigger="manual")
+    with patch.object(store, "get", return_value=_bot()),          patch.object(run_mod, "run_bot", return_value={"status": "ok", "summary": {}}) as run:
+        client.post("/api/v1/bots/b1/run?first=true", headers=auth_headers)
+    run.assert_called_once_with("b1", trigger="first_run")
 
 
 def test_no_more_than_ten_bots(auth_headers):

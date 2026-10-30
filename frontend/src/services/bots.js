@@ -85,7 +85,7 @@ export async function tryBotDraft(draft, preset = 'last_month', token = '') {
     headers: authHeaders(token),
     body: JSON.stringify({ draft, preset }),
   });
-  return handleResponse(res, 'Failed to run bot trial');
+  return handleResponse(res, 'Could not check last month just now. Try again in a moment.');
 }
 
 // ── Server-Backed Store (Phase 2) ──────────────────────────────────────────
@@ -162,8 +162,8 @@ export async function fetchBotFindings(id, token = '') {
   return handleResponse(res, 'Failed to load the findings');
 }
 
-export async function runBotNow(id, token = '') {
-  const res = await fetch(`/api/v1/bots/${encodeURIComponent(id)}/run`, {
+export async function runBotNow(id, token = '', { first = false } = {}) {
+  const res = await fetch(`/api/v1/bots/${encodeURIComponent(id)}/run${first ? '?first=true' : ''}`, {
     method: 'POST',
     headers: authHeaders(token),
   });

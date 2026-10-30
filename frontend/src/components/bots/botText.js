@@ -144,3 +144,52 @@ export const RULE_LABEL = {
 };
 
 export const TRIGGER_LABEL ={ schedule: 'Scheduled', first_run: 'First run', manual: 'Run now', event: 'New document' };
+
+/** The checks a VAT bot can run, grouped as the builder shows them. Ids match bots/watches.py. */
+export const WATCH_INFO = [
+  { id: 'duplicate_bill', side: 'purchases', label: 'A bill looks recorded twice',
+    desc: 'Same number, or same total from the same supplier a few days apart.' },
+  { id: 'vat_rate_wrong', side: 'purchases', label: 'VAT on a bill is not 0% or 5%',
+    desc: 'Wrong rate, negative VAT, or VAT with no amount.' },
+  { id: 'bill_missing_details', side: 'purchases', label: 'A bill is missing its supplier or number, or is dated in the future',
+    desc: "These bills can't support a VAT claim." },
+  { id: 'unusual_bill', side: 'purchases', label: "A bill far above the supplier's usual amount",
+    desc: "Compared with that supplier's past bills." },
+  { id: 'sales_vat_wrong', side: 'sales', label: 'A sales invoice with wrong or no output VAT',
+    desc: "Zero VAT where 5% is expected, or a rate that isn't 0% or 5%." },
+];
+
+/** Short names for the preview's per-check bars. */
+export const WATCH_BAR = {
+  duplicate_bill: 'Recorded twice', vat_rate_wrong: 'VAT not 0% or 5%', bill_missing_details: 'Missing details',
+  unusual_bill: 'Unusually large', sales_vat_wrong: 'Sales VAT wrong',
+};
+
+/** The tag and the "Runs" line on each template card. */
+export const TEMPLATE_META = {
+  vat_weekly_digest: { tag: 'Most popular', runs: 'Mondays, 08:00' },
+  vat_return_reminder: { tag: 'Never miss a deadline', runs: 'Before each return, 09:00' },
+  vat_full_watch: { tag: 'Everything on', runs: 'Mondays + before returns' },
+};
+
+/** "Weekly · Monday 09:00", for the chips under "Here's what we understood". */
+export function scheduleChip(schedule) {
+  if (!schedule) return '';
+  const at = schedule.time || '08:00';
+  if (schedule.kind === 'weekly') return `Weekly · ${DAY_NAMES[schedule.day] || ''} ${at}`.replace('  ', ' ');
+  if (schedule.kind === 'monthly') return `Monthly · ${ordinal(schedule.day_of_month || 1)}, ${at}`;
+  if (schedule.kind === 'before_deadline') return `${listWords((schedule.days_before || []).map(String))} days before each return`;
+  if (schedule.kind === 'after_period_end') return `${schedule.days_after || 0} days after each period`;
+  return '';
+}
+
+export const DELIVER_LABEL = { inbox: 'Inbox', bell: 'Bell alerts', email: 'Email digest' };
+
+/** "Checks every Monday at 08:00 and 14, 7 and 1 days before each VAT return, looks for 5 kinds of problems, and
+ *  tells you in your inbox and bell." */
+export function inShort(draft = {}) {
+  const when = (draft.schedules || []).map((s) => scheduleLine(s).replace(/^Every /, 'every ')).filter(Boolean);
+  const n = (draft.watches || []).length;
+  const where = (draft.deliver || ['inbox']).filter((d) => d !== 'email').map((d) => (d === 'inbox' ? 'inbox' : 'bell'));
+  return `Checks ${when.length ? listWords(when) : 'on no schedule yet'}, looks for ${n} kind${n === 1 ? '' : 's'} of problem${n === 1 ? '' : 's'}, and tells you in your ${listWords(where)}.`;
+}

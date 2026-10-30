@@ -25,7 +25,8 @@ import { Trash2, Bot, X } from 'lucide-react';
 import { isSessionId, newSessionId } from './services/sessionId';
 import { dropCards } from './sensitive';
 import { useAuth0 } from '@auth0/auth0-react';
-import BotBuilder from './components/bots/BotBuilder';
+import BotCreate from './components/bots/BotCreate';
+import BotBuilderPage from './components/bots/BotBuilderPage';
 import BotList from './components/bots/BotList';
 import InboxView from './components/bots/InboxView';
 import BotMemoryView from './components/bots/BotMemoryView';
@@ -35,7 +36,8 @@ import {
   listBots, updateBot, deleteBot,
   fetchUserBots, deleteBotOnServer, pauseBotOnServer, resumeBotOnServer, migrateLocalBotsToServer,
   fetchBotInbox, markBotInboxSeen, dismissBotFinding, undismissBotFinding,
-  approveBotAction, rejectBotAction, editBotAction, fetchBotsSummary
+  approveBotAction, rejectBotAction, editBotAction, fetchBotsSummary,
+  createDraftFromTemplate, createDraftFromChat
 } from './services/bots';
 
 // Minimal fallback shown only until /api/v1/tenants responds. Deliberately
@@ -269,8 +271,9 @@ export default function App() {
 
   // Bots modal & list state (Phase 1 & Phase 2)
   const [isBotsOpen, setIsBotsOpen] = useState(false);
-  const [isBuilderOpen, setIsBuilderOpen] = useState(false);
-  const [builderStart, setBuilderStart] = useState({ mode: 'blank' });
+  // The builder page's starting point: {initial: draft response, botId, botStatus} (botId set when editing).
+  const [builderInit, setBuilderInit] = useState(null);
+  const [botsNotice, setBotsNotice] = useState('');
   const [bots, setBots] = useState([]);
   const [botInbox, setBotInbox] = useState({ unread_count: 0, bots_count: 0, runs: [], findings: [] });
   const [botModalTab, setBotModalTab] = useState('bots'); // 'bots' | 'inbox'
@@ -380,7 +383,7 @@ export default function App() {
 
   useEffect(() => {
     reloadBots();
-  }, [isBotsOpen, isBuilderOpen, currentUser?.access_token]);
+  }, [isBotsOpen, currentUser?.access_token]);
 
   const handleOpenBots = () => {
     reloadBots();
@@ -397,10 +400,32 @@ export default function App() {
     setIsBotsOpen(true);
   };
 
-  const handleStartNewBot = (startConfig = { mode: 'blank' }) => {
-    setBuilderStart(startConfig);
+  // New bot: the Create page; a template or a chat question goes straight to the builder with its draft.
+  const handleStartNewBot = async (startConfig = { mode: 'blank' }) => {
+    const token = currentUser?.access_token || '';
     setIsBotsOpen(false);
-    setIsBuilderOpen(true);
+    setBotsNotice('');
+    if (startConfig.mode !== 'template' && startConfig.mode !== 'chat') {
+      setPage('new');
+      return;
+    }
+    try {
+      const res = startConfig.mode === 'template'
+        ? await createDraftFromTemplate(startConfig.templateId, scopeOrgIds, token)
+        : await createDraftFromChat(startConfig.question, 'vat', scopeOrgIds, token);
+      setBuilderInit({ initial: res, botId: null, botStatus: null });
+      setPage('builder');
+    } catch (e) {
+      setBotsNotice(e.message || 'Could not start the bot. Describe it in one sentence instead.');
+      setPage('new');
+    }
+  };
+
+  const handleBuilderDone = async (botId) => {
+    setBuilderInit(null);
+    await reloadBots();
+    setActiveBotId(botId);
+    setPage('bot');
   };
 
   const handleToggleBot = async (id) => {
@@ -441,9 +466,13 @@ export default function App() {
   };
 
   const handleEditBot = (bot) => {
-    setBuilderStart({ mode: 'edit', initialDraft: bot.draft, botId: bot.id });
     setIsBotsOpen(false);
-    setIsBuilderOpen(true);
+    setBuilderInit({
+      initial: { draft: bot.draft, issues: [], next_runs: [], monthly_credits: bot.monthly_credits || 0 },
+      botId: bot.id,
+      botStatus: bot.status,
+    });
+    setPage('builder');
   };
 
   const activeOrgId = activeTenant?.organization_id ?? activeTenant?.id ?? null;
@@ -1901,7 +1930,28 @@ export default function App() {
         {page !== 'chat' ? (
           <div className="main-stage">
             <div style={styles.chatScrollArea}>
-              {page === 'bots' ? (
+              {page === 'new' ? (
+                <BotCreate
+                  token={currentUser?.access_token || ''}
+                  orgs={availableTenants.map((t) => ({ id: tenantIdOf(t), name: tenantNameOf(t) }))}
+                  orgIds={scopeOrgIds}
+                  orgLabel={currentScopeNames.join(', ')}
+                  notice={botsNotice}
+                  onBack={() => setPage('bots')}
+                  onDraft={(res) => { setBuilderInit({ initial: res, botId: null, botStatus: null }); setPage('builder'); }}
+                />
+              ) : page === 'builder' && builderInit ? (
+                <BotBuilderPage
+                  key={builderInit.botId || 'new'}
+                  initial={builderInit.initial}
+                  botId={builderInit.botId}
+                  botStatus={builderInit.botStatus}
+                  token={currentUser?.access_token || ''}
+                  orgs={availableTenants.map((t) => ({ id: tenantIdOf(t), name: tenantNameOf(t) }))}
+                  onBack={() => setPage(builderInit.botId ? 'bot' : 'new')}
+                  onDone={handleBuilderDone}
+                />
+              ) : page === 'bots' || page === 'builder' ? (
                 <BotsHome
                   bots={bots}
                   summary={botsSummary}
@@ -2151,24 +2201,6 @@ export default function App() {
           </div>
         </div>
       )}
-
-      {/* Bot Builder Flow Modal */}
-      <BotBuilder
-        open={isBuilderOpen}
-        onClose={() => {
-          setIsBuilderOpen(false);
-          reloadBots();
-        }}
-        onSaved={() => reloadBots()}
-        token={currentUser?.access_token || ''}
-        orgIds={scopeOrgIds}
-        orgNames={Object.fromEntries(availableTenants.map((t) => [tenantIdOf(t), tenantNameOf(t)]))}
-        start={builderStart}
-        onSeeFindings={() => {
-          setIsBuilderOpen(false);
-          handleSubmitQuery('Check our VAT for problems and duplicate bills', { agent: 'vat' });
-        }}
-      />
 
       </div>
     </div>

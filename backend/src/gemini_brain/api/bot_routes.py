@@ -508,6 +508,7 @@ def get_bot_findings(
 @router.post("/{bot_id}/run", summary="Run a bot now")
 def run_bot_now(
     bot_id: str,
+    first: bool = Query(default=False, description="The run right after the bot is turned on"),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> Any:
     b = store.get(bot_id=bot_id, owner_user_id=current_user.user_id)
@@ -521,7 +522,7 @@ def run_bot_now(
                             detail={"code": decision.code, "message": decision.message})
     from gemini_brain.bots.run import run_bot
     with ledger.scope("bot_run", user_id=current_user.user_id, organization_ids=b["org_ids"]):
-        res = run_bot(bot_id, trigger="manual")
+        res = run_bot(bot_id, trigger="first_run" if first else "manual")
     return JSONResponse(content={"status": res.get("status"), "summary": res.get("summary"),
                                  "error": res.get("error")})
 
