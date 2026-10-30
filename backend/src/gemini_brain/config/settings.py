@@ -148,6 +148,17 @@ class GeminiBrainSettings(BaseSettings):
         default="",
         description="Shared secret for backend-to-backend bot triggers (POST /api/v1/bots/tick, POST /api/v1/bots/event).",
     )
+    bot_scheduler_enabled: bool = Field(
+        default=False,
+        description=(
+            "Run bots inside this service (bots/scheduler.py): due bots on their schedule, and a poll for new bills "
+            "and sales invoices for monitor bots. Turn on in one environment's service only."
+        ),
+    )
+    bot_scheduler_interval_seconds: int = Field(
+        default=300,
+        description="Seconds between bot scheduler cycles (at least 60).",
+    )
     jwt_algorithm: str = Field(
         default="HS256",
         description="JWT signing algorithm.",

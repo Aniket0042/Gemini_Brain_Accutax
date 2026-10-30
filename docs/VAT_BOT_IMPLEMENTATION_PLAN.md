@@ -610,7 +610,7 @@ The build was reviewed before shipping. Fixed:
 Tests for each: `tests/unit/test_bot_review_fixes.py`, plus `test_unlimited_returns_every_group_for_bots` in
 `tests/unit/test_vat_review.py`.
 
-Still open: the Nest scheduler job and event hooks (tasks 2.5 and 3.1, Nest side); the real paid sentence eval
+Still open: the real paid sentence eval
 (task 1.12); the email service. Notes typed on the setup card and lines added with "Teach bot" share one memory
 source, so editing the card's notes replaces taught lines too.
 
@@ -734,6 +734,27 @@ In the Nest backend (`accutax_bk_backend`), add a BullMQ repeatable job "ai-bot-
 `hmac.compare_digest`). The AI service runs `due_bots(now)` and `run_bot` for each, one at a time, and sets the next
 `next_run_at` with `schedule.next_runs`. This keeps the schedule logic in one place (Python) and the Nest side tiny.
 
+### 2.5a Bots without the Accutax backend (2026-10-30)
+
+Decided: no change to `accutax_bk_backend`. Both triggers run inside the AI service.
+
+- **Scheduler** (`bots/scheduler.py`): a background thread started at API startup when `BOT_SCHEDULER_ENABLED=true`.
+  Every `BOT_SCHEDULER_INTERVAL_SECONDS` (default 300, at least 60) it runs the bots that are due (at most 20 bots or
+  45 seconds per cycle; the rest stay due), moves each bot's next run on even after a failure, then polls for new
+  documents. A Postgres advisory lock wraps each cycle, so two processes never run it at once.
+  `POST /api/v1/bots/tick` runs the same `run_due_bots()` for an outside scheduler, still behind `BOT_SERVICE_TOKEN`.
+- **Monitor poll** (`bots/poller.py`): `expense` and `income` have no "updated" column, and `created_date` is not
+  reliable (seed data has future dates), so new bills and sales invoices are found by id (ids only grow), with
+  primary-key index scans only, for the organizations that have an active bot. Each organization's new documents go
+  to `monitor.handle_document_event`, as the `/event` route would.
+- **Limits:** only new documents are seen. An edited old bill, or a draft finalised later, is caught by the bot's
+  scheduled run, not by the poll. The last id is kept in memory, so after a restart the poll starts from the newest
+  id; documents saved while the service was down are also left to the scheduled run. Alerts arrive up to one interval
+  after the bill is saved.
+- **Turn on:** set `BOT_SCHEDULER_ENABLED=true` in the AI service's `.env` in one environment, then restart the
+  service. `BOT_SERVICE_TOKEN` is not needed for this.
+- Tests: `tests/unit/test_bot_scheduler.py`.
+
 ### 2.6 Task: inbox and bell
 
 `GET /bots/inbox`: the owner's latest run results and new findings across bots. The header's Bots button shows a dot
@@ -750,7 +771,7 @@ All Phase 2 tasks (2.1 - 2.6) built and verified:
 - **Task 2.2 (`bots/store.py`)**: Full PostgreSQL persistence layer with owner isolation (`create`, `get`, `list_for_user`, `update`, `set_status`, `delete`, `record_run`, `finish_run`, `list_runs`, `upsert_findings`, `get_findings`, `update_finding_state`, `due_bots`, `set_next_run`, `dismiss_finding`, `undismiss_finding`, `get_inbox`, `mark_inbox_seen`, `add_memory`, `list_memory`, `delete_memory`).
 - **Task 2.3 (Server-Backed API)**: CRUD endpoints (`POST /bots`, `GET /bots`, `GET /bots/{id}`, `PATCH /bots/{id}`, `DELETE /bots/{id}`, `POST /bots/{id}/pause`, `POST /bots/{id}/resume`) with automatic validation and schedule calculations.
 - **Task 2.4 (`bots/run.py`)**: Execution runner with dynamic owner org access checks, dismissed finding exclusion, `try_period` preset routing, diffing findings (`new`, `seen`, `fixed`), and run result persistence.
-- **Task 2.5 (Scheduler `POST /api/v1/bots/tick`)**: AI side only. **The Nest job that calls it every 5 minutes is not built**, so no bot runs on its schedule yet. Timing trigger with timing-safe HMAC service token authentication (`x-bot-service-token` or Bearer header), running due bots and automatically advancing `next_run_at`.
+- **Task 2.5 (Scheduler `POST /api/v1/bots/tick`)**: Superseded on 2026-10-30: no Nest job is needed. The scheduler runs inside the AI service (`bots/scheduler.py`, see 2.5a). Timing trigger with timing-safe HMAC service token authentication (`x-bot-service-token` or Bearer header), running due bots and automatically advancing `next_run_at`.
 - **Task 2.6 (Inbox & Findings)**:
   - Endpoints: `GET /api/v1/bots/inbox`, `POST /api/v1/bots/inbox/mark-read`, `POST /api/v1/bots/{bot_id}/findings/{key}/dismiss`, `POST /api/v1/bots/{bot_id}/findings/{key}/undismiss`.
 
@@ -792,7 +813,7 @@ Completed on 2026-10-29.
 
 #### 1. Backend Implementation & Scoped Monitoring
 All Phase 3 tasks (3.1 - 3.3) implemented, verified, and integrated:
-- **Task 3.1 (Event Hooks Endpoint)**: AI side only. **The Nest backend does not send `bill.saved` or `invoice.saved` yet**, so monitors never fire.
+- **Task 3.1 (Event Hooks Endpoint)**: Superseded on 2026-10-30: no Nest hooks are needed. New documents are found by polling (`bots/poller.py`, see 2.5a).
   - Route: `POST /api/v1/bots/event` with `BotEventRequest` (`event`, `org_id`, `document_id`, `document_ids`).
   - Timing-safe HMAC service token authentication (`x-bot-service-token` or Bearer header).
   - Validation: rejects unsupported events with `400 Bad Request`; rejects missing or invalid tokens with `401 Unauthorized`.

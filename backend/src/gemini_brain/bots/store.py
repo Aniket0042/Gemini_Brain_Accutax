@@ -10,7 +10,7 @@ import datetime as dt
 import json
 import logging
 from contextlib import contextmanager
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Union
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Set, Union
 
 from gemini_brain.bots.schema import BotDraft
 from gemini_brain.db import connection
@@ -457,6 +457,13 @@ def due_bots(
         cur.execute(query, (current_time, limit))
         rows = cur.fetchall() or []
         return [_bot_from_row(r) for r in rows]
+
+
+def active_org_ids(*, conn: Optional[Any] = None) -> Set[int]:
+    """Every organization at least one active bot covers: the ones the monitor poll looks at."""
+    with _get_cur(conn) as cur:
+        cur.execute("SELECT DISTINCT unnest(org_ids) FROM ai_bots WHERE status = 'active'")
+        return {int(r[0]) for r in cur.fetchall() or []}
 
 
 def list_active_bots_for_org(

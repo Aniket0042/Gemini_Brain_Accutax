@@ -143,8 +143,8 @@ def test_the_tick_keeps_going_when_one_bot_fails(monkeypatch):
     monkeypatch.setattr(settings, "bot_service_token", "test-bot-service-token")
     bots = [_bot(), {**_bot(), "id": "bot-2"}]
     with patch.object(store, "due_bots", return_value=bots), \
-         patch("gemini_brain.api.bot_routes.run_bot", side_effect=[RuntimeError("boom"), {"status": "ok"}]), \
-         patch("gemini_brain.api.bot_routes.vat_return_tool.filing_frequencies", return_value={}), \
+         patch("gemini_brain.bots.run.run_bot", side_effect=[RuntimeError("boom"), {"status": "ok"}]), \
+         patch("gemini_brain.vat_return.tool.filing_frequencies", return_value={}), \
          patch.object(store, "set_next_run") as next_run:
         res = client.post("/api/v1/bots/tick", headers={"x-bot-service-token": "test-bot-service-token"})
     assert res.status_code == 200 and res.json()["ran"] == 2

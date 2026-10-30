@@ -46,7 +46,7 @@ def test_tick_auth_unauthorized(valid_service_token):
 
 
 @patch("gemini_brain.bots.store.due_bots")
-@patch("gemini_brain.api.bot_routes.run_bot")
+@patch("gemini_brain.bots.run.run_bot")
 @patch("gemini_brain.bots.store.set_next_run")
 @patch("gemini_brain.vat_return.tool.filing_frequencies", return_value={101: "quarterly"})
 def test_tick_execution_success(

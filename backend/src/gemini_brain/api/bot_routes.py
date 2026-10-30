@@ -46,7 +46,7 @@ from gemini_brain.api.models import (
     WatchItem,
 )
 from gemini_brain.bots import cost, draft as bot_draft, monitor, preview, schedule, store, templates, validate, watches
-from gemini_brain.bots.run import run_bot
+from gemini_brain.bots import scheduler as bot_scheduler
 from gemini_brain.bots.schema import BotDraft, BotIssue
 from gemini_brain.config.settings import settings
 from gemini_brain.usage import ledger, limits
@@ -56,9 +56,6 @@ logger = logging.getLogger("gemini_brain.api.bot_routes")
 
 router = APIRouter(prefix="/api/v1/bots", tags=["Bots"])
 
-#: One tick runs at most this many bots and stops starting new ones after this many seconds.
-TICK_MAX_BOTS = 20
-TICK_BUDGET_SECONDS = 45.0
 
 
 def _user_org_dict(current_user: CurrentUser) -> Dict[int, str]:
@@ -342,44 +339,10 @@ def _verify_service_token(
 def tick_scheduler(
     authorized: bool = Depends(_verify_service_token),
 ) -> BotTickResponse:
+    # The same work the in-process scheduler does (bots/scheduler.py), for a scheduler outside this service.
     tz = ZoneInfo(settings.report_timezone) if settings.report_timezone else dt.timezone.utc
     now = dt.datetime.now(tz)
-    started = time.monotonic()
-    due = store.due_bots(now=now, limit=TICK_MAX_BOTS)
-
-    results: List[Dict[str, Any]] = []
-    for bot in due:
-        # Bots left over wait for the next tick (every 5 minutes), so one call never runs past the proxy timeout.
-        if time.monotonic() - started > TICK_BUDGET_SECONDS:
-            break
-        bot_id = bot["id"]
-        try:
-            run_res = run_bot(bot_id, trigger="schedule")
-        except Exception:
-            logger.exception("Bot %s run failed in tick", bot_id)
-            run_res = {"status": "failed"}
-
-        # Always move next_run_at on, even after a failure; otherwise the same bot is due again on every tick.
-        try:
-            draft = BotDraft(**bot["draft"])
-            subject = f"bot-sched:{bot_id}"
-            deadline = time.monotonic() + 5.0
-            freqs = vat_return_tool.filing_frequencies(draft.org_ids, subject, deadline) if draft.org_ids else {}
-            runs = schedule.next_runs(draft, dt.datetime.now(tz), freqs, count=1)
-            next_run_at = runs[0].at if runs else None
-        except Exception:
-            logger.exception("Could not work out the next run of bot %s", bot_id)
-            next_run_at = None
-        try:
-            store.set_next_run(bot_id, next_run_at)
-        except Exception:
-            logger.exception("Could not save the next run of bot %s", bot_id)
-        results.append({
-            "bot_id": bot_id,
-            "name": bot["name"],
-            "status": run_res.get("status", "unknown"),
-            "summary": run_res.get("summary"),
-        })
+    results = bot_scheduler.run_due_bots()
 
     return BotTickResponse(
         timestamp=now.isoformat(),
