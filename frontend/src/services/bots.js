@@ -140,6 +140,36 @@ export async function resumeBotOnServer(id, token = '') {
   return handleResponse(res, 'Failed to resume bot');
 }
 
+// ── Bots pages: home numbers, one bot, its runs and findings, run now ─────
+
+export async function fetchBotsSummary(token = '') {
+  const res = await fetch('/api/v1/bots/summary', { headers: authHeaders(token) });
+  return handleResponse(res, 'Failed to load the bots summary');
+}
+
+export async function fetchBot(id, token = '') {
+  const res = await fetch(`/api/v1/bots/${encodeURIComponent(id)}`, { headers: authHeaders(token) });
+  return handleResponse(res, 'Failed to load the bot');
+}
+
+export async function fetchBotRuns(id, token = '', limit = 20) {
+  const res = await fetch(`/api/v1/bots/${encodeURIComponent(id)}/runs?limit=${limit}`, { headers: authHeaders(token) });
+  return handleResponse(res, 'Failed to load the run history');
+}
+
+export async function fetchBotFindings(id, token = '') {
+  const res = await fetch(`/api/v1/bots/${encodeURIComponent(id)}/findings`, { headers: authHeaders(token) });
+  return handleResponse(res, 'Failed to load the findings');
+}
+
+export async function runBotNow(id, token = '') {
+  const res = await fetch(`/api/v1/bots/${encodeURIComponent(id)}/run`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
+  return handleResponse(res, 'The run did not start');
+}
+
 export async function migrateLocalBotsToServer(token = '') {
   if (!token) return [];
   const local = listBots();

@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 
 from gemini_brain.api.auth import get_user_allowed_orgs
 from gemini_brain.bots import store, watches
+from gemini_brain.bots.run import finding_detail
 from gemini_brain.bots.schema import BotDraft
 from gemini_brain.config.settings import settings
 from gemini_brain.vat_review import tool as vat_review_tool
@@ -214,6 +215,7 @@ def handle_document_event(
                         "why": g.get("why") or g.get("reason", ""),
                         "supplier": first_b.get("vendor_name") or first_b.get("supplier"),
                         "document_number": first_b.get("document_number") or first_b.get("bill_number"),
+                        "detail": finding_detail(g, side),
                     })
 
             # Check single anomaly findings containing document_ids
@@ -234,6 +236,7 @@ def handle_document_event(
                         "why": f.get("why") or f.get("reason", ""),
                         "supplier": bill.get("vendor_name") or bill.get("supplier"),
                         "document_number": bill.get("document_number") or bill.get("bill_number") or bill.get("invoice_number"),
+                        "detail": finding_detail(f, side),
                     })
 
         total_matched += len(matched_items)

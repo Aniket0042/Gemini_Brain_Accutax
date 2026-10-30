@@ -145,10 +145,10 @@ class FakeCursor:
             self.rowcount = len(self._results)
 
         elif "INSERT INTO ai_bot_findings" in q:
-            bot_id, key, org_id, rule, state, amount, r1, r2 = params
+            bot_id, key, org_id, rule, state, amount, detail, r1, r2 = params
             f_key = (str(bot_id), str(key))
             now = dt.datetime.now(dt.timezone.utc)
-            self.db["findings"][f_key] = (bot_id, key, org_id, rule, state, amount, r1, r2, now)
+            self.db["findings"][f_key] = (bot_id, key, org_id, rule, state, amount, r1, r2, now, detail)
             self.rowcount = 1
 
         elif "SELECT rule FROM ai_bot_findings" in q:

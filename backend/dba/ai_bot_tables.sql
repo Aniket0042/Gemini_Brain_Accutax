@@ -56,6 +56,9 @@ CREATE TABLE IF NOT EXISTS ai_bot_findings (
     PRIMARY KEY (bot_id, key)
 );
 CREATE INDEX IF NOT EXISTS idx_ai_bot_findings_state ON ai_bot_findings (bot_id, state);
+-- What the inbox card shows: the side, the bills (number, date, supplier, total, VAT, id) and the sentence. Added
+-- 2026-10-30; the ALTER keeps the script safe to run on a database that already has the table.
+ALTER TABLE ai_bot_findings ADD COLUMN IF NOT EXISTS detail jsonb;
 
 -- What a bot has learned: the user's notes and lines made from dismissed findings. Each line is editable or removable.
 CREATE TABLE IF NOT EXISTS ai_bot_memory (

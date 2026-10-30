@@ -4,89 +4,89 @@
    are defined here, only inside the bot modal, where nothing else in the app can pick them up. The rest of the bot
    styles live in index.css under "Bots (components/bots/*)". */
 
-.bot-modal-container .flex { display: flex; }
-.bot-modal-container .block { display: block; }
-.bot-modal-container .flex-1 { flex: 1 1 0%; min-width: 0; }
-.bot-modal-container .flex-col { flex-direction: column; }
-.bot-modal-container .flex-shrink-0 { flex-shrink: 0; }
-.bot-modal-container .items-center { align-items: center; }
-.bot-modal-container .items-start { align-items: flex-start; }
-.bot-modal-container .justify-between { justify-content: space-between; }
-.bot-modal-container .min-w-0 { min-width: 0; }
-.bot-modal-container .w-full { width: 100%; }
-.bot-modal-container .max-w-sm { max-width: 24rem; }
-.bot-modal-container .mx-auto { margin-left: auto; margin-right: auto; }
-.bot-modal-container .ml-auto { margin-left: auto; }
-.bot-modal-container .mr-1 { margin-right: 4px; }
-.bot-modal-container .my-2 { margin-top: 8px; margin-bottom: 8px; }
-.bot-modal-container .mt-0\.5 { margin-top: 2px; }
-.bot-modal-container .mt-1 { margin-top: 4px; }
-.bot-modal-container .mt-2 { margin-top: 8px; }
-.bot-modal-container .mt-4 { margin-top: 16px; }
-.bot-modal-container .mt-6 { margin-top: 20px; }
-.bot-modal-container .mb-1 { margin-bottom: 4px; }
-.bot-modal-container .mb-2 { margin-bottom: 8px; }
-.bot-modal-container .mb-3 { margin-bottom: 12px; }
-.bot-modal-container .mb-4 { margin-bottom: 16px; }
-.bot-modal-container .gap-1 { gap: 4px; }
-.bot-modal-container .gap-1\.5 { gap: 6px; }
-.bot-modal-container .gap-2 { gap: 8px; }
-.bot-modal-container .gap-3 { gap: 12px; }
-.bot-modal-container .pl-4 { padding-left: 16px; }
-.bot-modal-container .pr-2 { padding-right: 8px; }
-.bot-modal-container .px-2 { padding-left: 8px; padding-right: 8px; }
-.bot-modal-container .px-2\.5 { padding-left: 10px; padding-right: 10px; }
-.bot-modal-container .px-3 { padding-left: 12px; padding-right: 12px; }
-.bot-modal-container .px-3\.5 { padding-left: 14px; padding-right: 14px; }
-.bot-modal-container .px-4 { padding-left: 16px; padding-right: 16px; }
-.bot-modal-container .py-1 { padding-top: 4px; padding-bottom: 4px; }
-.bot-modal-container .py-1\.5 { padding-top: 6px; padding-bottom: 6px; }
-.bot-modal-container .py-2 { padding-top: 8px; padding-bottom: 8px; }
-.bot-modal-container .py-8 { padding-top: 32px; padding-bottom: 32px; }
-.bot-modal-container .text-center { text-align: center; }
-.bot-modal-container .break-words { overflow-wrap: anywhere; }
-.bot-modal-container .list-disc { list-style: disc; }
-.bot-modal-container .text-2xs { font-size: 10px; }
-.bot-modal-container .text-xs { font-size: var(--text-sm); }
-.bot-modal-container .text-sm { font-size: var(--text-ui); }
-.bot-modal-container .font-medium { font-weight: 500; }
-.bot-modal-container .font-semibold { font-weight: 600; }
-.bot-modal-container .font-mono { font-family: var(--font-mono); }
-.bot-modal-container .text-ink { color: var(--ink); }
-.bot-modal-container .text-ink-soft { color: var(--ink-soft); }
-.bot-modal-container .text-ink-muted,
-.bot-modal-container .text-ink-faint { color: var(--ink-faint); }
-.bot-modal-container .text-accent { color: var(--accent); }
-.bot-modal-container .text-success { color: var(--success-ink); }
-.bot-modal-container .text-warning { color: var(--warning-ink); }
-.bot-modal-container .text-danger { color: var(--danger-ink); }
-.bot-modal-container .bg-surface { background: var(--surface); }
-.bot-modal-container .bg-surface-2 { background: var(--surface-2); }
-.bot-modal-container .border { border-width: 1px; border-style: solid; }
-.bot-modal-container .border-border { border-color: var(--border); }
-.bot-modal-container .rounded-md { border-radius: var(--radius-sm); }
-.bot-modal-container .rounded-lg { border-radius: var(--radius-md); }
+:is(.bot-modal-container, .bots-page) .flex { display: flex; }
+:is(.bot-modal-container, .bots-page) .block { display: block; }
+:is(.bot-modal-container, .bots-page) .flex-1 { flex: 1 1 0%; min-width: 0; }
+:is(.bot-modal-container, .bots-page) .flex-col { flex-direction: column; }
+:is(.bot-modal-container, .bots-page) .flex-shrink-0 { flex-shrink: 0; }
+:is(.bot-modal-container, .bots-page) .items-center { align-items: center; }
+:is(.bot-modal-container, .bots-page) .items-start { align-items: flex-start; }
+:is(.bot-modal-container, .bots-page) .justify-between { justify-content: space-between; }
+:is(.bot-modal-container, .bots-page) .min-w-0 { min-width: 0; }
+:is(.bot-modal-container, .bots-page) .w-full { width: 100%; }
+:is(.bot-modal-container, .bots-page) .max-w-sm { max-width: 24rem; }
+:is(.bot-modal-container, .bots-page) .mx-auto { margin-left: auto; margin-right: auto; }
+:is(.bot-modal-container, .bots-page) .ml-auto { margin-left: auto; }
+:is(.bot-modal-container, .bots-page) .mr-1 { margin-right: 4px; }
+:is(.bot-modal-container, .bots-page) .my-2 { margin-top: 8px; margin-bottom: 8px; }
+:is(.bot-modal-container, .bots-page) .mt-0\.5 { margin-top: 2px; }
+:is(.bot-modal-container, .bots-page) .mt-1 { margin-top: 4px; }
+:is(.bot-modal-container, .bots-page) .mt-2 { margin-top: 8px; }
+:is(.bot-modal-container, .bots-page) .mt-4 { margin-top: 16px; }
+:is(.bot-modal-container, .bots-page) .mt-6 { margin-top: 20px; }
+:is(.bot-modal-container, .bots-page) .mb-1 { margin-bottom: 4px; }
+:is(.bot-modal-container, .bots-page) .mb-2 { margin-bottom: 8px; }
+:is(.bot-modal-container, .bots-page) .mb-3 { margin-bottom: 12px; }
+:is(.bot-modal-container, .bots-page) .mb-4 { margin-bottom: 16px; }
+:is(.bot-modal-container, .bots-page) .gap-1 { gap: 4px; }
+:is(.bot-modal-container, .bots-page) .gap-1\.5 { gap: 6px; }
+:is(.bot-modal-container, .bots-page) .gap-2 { gap: 8px; }
+:is(.bot-modal-container, .bots-page) .gap-3 { gap: 12px; }
+:is(.bot-modal-container, .bots-page) .pl-4 { padding-left: 16px; }
+:is(.bot-modal-container, .bots-page) .pr-2 { padding-right: 8px; }
+:is(.bot-modal-container, .bots-page) .px-2 { padding-left: 8px; padding-right: 8px; }
+:is(.bot-modal-container, .bots-page) .px-2\.5 { padding-left: 10px; padding-right: 10px; }
+:is(.bot-modal-container, .bots-page) .px-3 { padding-left: 12px; padding-right: 12px; }
+:is(.bot-modal-container, .bots-page) .px-3\.5 { padding-left: 14px; padding-right: 14px; }
+:is(.bot-modal-container, .bots-page) .px-4 { padding-left: 16px; padding-right: 16px; }
+:is(.bot-modal-container, .bots-page) .py-1 { padding-top: 4px; padding-bottom: 4px; }
+:is(.bot-modal-container, .bots-page) .py-1\.5 { padding-top: 6px; padding-bottom: 6px; }
+:is(.bot-modal-container, .bots-page) .py-2 { padding-top: 8px; padding-bottom: 8px; }
+:is(.bot-modal-container, .bots-page) .py-8 { padding-top: 32px; padding-bottom: 32px; }
+:is(.bot-modal-container, .bots-page) .text-center { text-align: center; }
+:is(.bot-modal-container, .bots-page) .break-words { overflow-wrap: anywhere; }
+:is(.bot-modal-container, .bots-page) .list-disc { list-style: disc; }
+:is(.bot-modal-container, .bots-page) .text-2xs { font-size: 10px; }
+:is(.bot-modal-container, .bots-page) .text-xs { font-size: var(--text-sm); }
+:is(.bot-modal-container, .bots-page) .text-sm { font-size: var(--text-ui); }
+:is(.bot-modal-container, .bots-page) .font-medium { font-weight: 500; }
+:is(.bot-modal-container, .bots-page) .font-semibold { font-weight: 600; }
+:is(.bot-modal-container, .bots-page) .font-mono { font-family: var(--font-mono); }
+:is(.bot-modal-container, .bots-page) .text-ink { color: var(--ink); }
+:is(.bot-modal-container, .bots-page) .text-ink-soft { color: var(--ink-soft); }
+:is(.bot-modal-container, .bots-page) .text-ink-muted,
+:is(.bot-modal-container, .bots-page) .text-ink-faint { color: var(--ink-faint); }
+:is(.bot-modal-container, .bots-page) .text-accent { color: var(--accent); }
+:is(.bot-modal-container, .bots-page) .text-success { color: var(--success-ink); }
+:is(.bot-modal-container, .bots-page) .text-warning { color: var(--warning-ink); }
+:is(.bot-modal-container, .bots-page) .text-danger { color: var(--danger-ink); }
+:is(.bot-modal-container, .bots-page) .bg-surface { background: var(--surface); }
+:is(.bot-modal-container, .bots-page) .bg-surface-2 { background: var(--surface-2); }
+:is(.bot-modal-container, .bots-page) .border { border-width: 1px; border-style: solid; }
+:is(.bot-modal-container, .bots-page) .border-border { border-color: var(--border); }
+:is(.bot-modal-container, .bots-page) .rounded-md { border-radius: var(--radius-sm); }
+:is(.bot-modal-container, .bots-page) .rounded-lg { border-radius: var(--radius-md); }
 
 /* Icon sizes: lucide icons are 24px unless told otherwise. */
-.bot-modal-container svg.w-3 { width: 12px; height: 12px; }
-.bot-modal-container svg.w-3\.5 { width: 14px; height: 14px; }
-.bot-modal-container svg.w-4 { width: 16px; height: 16px; }
-.bot-modal-container svg.w-5 { width: 18px; height: 18px; }
-.bot-modal-container svg.w-6 { width: 22px; height: 22px; }
-.bot-modal-container svg.w-8 { width: 28px; height: 28px; }
+:is(.bot-modal-container, .bots-page) svg.w-3 { width: 12px; height: 12px; }
+:is(.bot-modal-container, .bots-page) svg.w-3\.5 { width: 14px; height: 14px; }
+:is(.bot-modal-container, .bots-page) svg.w-4 { width: 16px; height: 16px; }
+:is(.bot-modal-container, .bots-page) svg.w-5 { width: 18px; height: 18px; }
+:is(.bot-modal-container, .bots-page) svg.w-6 { width: 22px; height: 22px; }
+:is(.bot-modal-container, .bots-page) svg.w-8 { width: 28px; height: 28px; }
 
 @keyframes bot-spin { to { transform: rotate(360deg); } }
-.bot-modal-container .animate-spin { animation: bot-spin 0.9s linear infinite; }
+:is(.bot-modal-container, .bots-page) .animate-spin { animation: bot-spin 0.9s linear infinite; }
 
 /* ── Controls ── */
-.bot-modal-container .btn-primary,
-.bot-modal-container .btn-secondary {
+:is(.bot-modal-container, .bots-page) .btn-primary,
+:is(.bot-modal-container, .bots-page) .btn-secondary {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   height: 34px; padding: 0 14px; border-radius: var(--radius-sm); font-family: inherit;
   font-size: var(--text-ui); white-space: nowrap;
 }
-.bot-modal-container .btn-primary.text-xs,
-.bot-modal-container .btn-secondary.text-xs { height: 28px; padding: 0 10px; font-size: var(--text-sm); }
+:is(.bot-modal-container, .bots-page) .btn-primary.text-xs,
+:is(.bot-modal-container, .bots-page) .btn-secondary.text-xs { height: 28px; padding: 0 10px; font-size: var(--text-sm); }
 
 .btn-icon-subtle {
   display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; flex-shrink: 0;

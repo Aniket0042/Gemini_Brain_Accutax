@@ -56,7 +56,7 @@ def test_dismissal_creates_memory_with_supplier(fake_conn):
     memories = store.list_memory(bot_id, conn=fake_conn)
     assert len(memories) == 1
     assert "Acme Trading LLC" in memories[0]["text"]
-    assert "duplicate_bill" in memories[0]["text"]
+    assert memories[0]["text"].endswith("Marked not a problem.")  # in words, not the rule name
     assert memories[0]["source"] == "dismissal"
     assert memories[0]["finding_key"] == "bill-xyz"
 

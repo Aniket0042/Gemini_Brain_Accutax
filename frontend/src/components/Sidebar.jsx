@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Sparkles, Plus, ArrowLeft, Trash2, ChevronDown, MoreVertical, Pin, PinOff, Pencil, Building2, Lock } from 'lucide-react';
+import { Sparkles, Plus, ArrowLeft, Trash2, ChevronDown, MoreVertical, Pin, PinOff, Pencil, Building2, Lock, MessageSquare, Bot } from 'lucide-react';
+import { initials } from './bots/botText';
+import './bots/bots-pages.css';
 
 /**
  * Groups chat history entries into time-based sections (Today, Yesterday, This Week, Earlier).
@@ -72,6 +74,13 @@ export const Sidebar = ({
   onDeleteHistory,
   onRenameHistory,
   onPinHistory,
+  // Bots pages: page is 'chat', 'bots' (home) or 'bot' (one bot, activeBotId).
+  bots = [],
+  page = 'chat',
+  activeBotId = null,
+  onOpenChats,
+  onOpenBots,
+  onOpenBot,
 }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
@@ -323,6 +332,47 @@ export const Sidebar = ({
           )}
         </div>
       </div>
+
+      {/* Chats and Bots, then the user's bots: the bots pages live beside the chat. */}
+      {onOpenBots && (
+        <nav className="sb-nav" aria-label="Sections">
+          <button
+            type="button"
+            className={`sb-nav-item${page === 'chat' ? ' active' : ''}`}
+            onClick={onOpenChats}
+          >
+            <MessageSquare size={15} />
+            <span>Chats</span>
+          </button>
+          <button
+            type="button"
+            className={`sb-nav-item${page !== 'chat' ? ' active' : ''}`}
+            onClick={onOpenBots}
+          >
+            <Bot size={15} />
+            <span>Bots</span>
+            {bots.length > 0 && <span className="sb-nav-count">{bots.length}</span>}
+          </button>
+          {bots.length > 0 && (
+            <div className="sb-bots">
+              <h2 className="sb-section-title">Your bots</h2>
+              {bots.map((b) => (
+                <button
+                  key={b.id}
+                  type="button"
+                  className={`sb-bot${page === 'bot' && activeBotId === b.id ? ' active' : ''}`}
+                  onClick={() => onOpenBot(b.id)}
+                  title={b.status === 'paused' ? `${b.name} (paused)` : b.status === 'error' ? `${b.name} (needs attention)` : b.name}
+                >
+                  <span className="sb-bot-initials">{initials(b.name)}</span>
+                  <span className="sb-bot-name">{b.name}</span>
+                  <span className={`sb-bot-dot is-${b.status}`} aria-hidden="true" />
+                </button>
+              ))}
+            </div>
+          )}
+        </nav>
+      )}
 
       {/* Chat history. Chats for the current org selection come first; chats
           from other selections follow under "Other organizations", labelled

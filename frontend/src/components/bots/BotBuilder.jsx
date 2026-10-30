@@ -24,6 +24,7 @@ import {
   fetchBotTemplates,
   saveBot,
   tryBotDraft,
+  updateBotOnServer,
 } from '../../services/bots';
 import './bots.css';
 
@@ -49,6 +50,7 @@ export default function BotBuilder({
   start = { mode: 'blank' },
   onSeeFindingsInChat,
   onSeeFindings,
+  onSaved,
 }) {
   const [step, setStep] = useState('start'); // 'start' | 'setup' | 'intro'
   const [sentenceText, setSentenceText] = useState('');
@@ -79,6 +81,26 @@ export default function BotBuilder({
     fetchBotTemplates('vat', token)
       .then((res) => setTemplates(res.templates || []))
       .catch((err) => console.warn('Could not load bot templates:', err));
+
+    // Editing a saved bot: open its settings on the setup card.
+    if (start?.mode === 'edit' && start.initialDraft) {
+      setDraft(start.initialDraft);
+      setStep('setup');
+      checkBotDraft(start.initialDraft, token)
+        .then((res) => {
+          setIssues(res.issues || []);
+          setNextRuns(res.next_runs || []);
+          setCredits(res.monthly_credits || 0);
+        })
+        .catch(() => null);
+      return;
+    }
+
+    // Started from a template card on the Bots home.
+    if (start?.mode === 'template' && start.templateId) {
+      handlePickTemplate(start.templateId);
+      return;
+    }
 
     // If starting from chat action
     if (start?.mode === 'chat' && start.question) {
@@ -173,18 +195,19 @@ export default function BotBuilder({
     setBusy(true);
     setErrorMsg('');
     try {
-      // 1. Save in server store (or fallback to browser store)
-      let bot = null;
-      if (token) {
-        try {
-          bot = await createBotOnServer(draft, 'active', token);
-        } catch {
-          bot = saveBot(draft);
-        }
-      } else {
-        bot = saveBot(draft);
+      // Editing: save the changes to the same bot and close.
+      if (start?.mode === 'edit' && start.botId) {
+        await updateBotOnServer(start.botId, { draft }, token);
+        onSaved?.(start.botId);
+        onClose();
+        return;
       }
+
+      // 1. Save to the account. Without a sign-in (local demo) it is kept in this browser; with one, a failure is
+      //    shown rather than hidden in the browser, so the user never ends up with a bot that only seems saved.
+      const bot = token ? await createBotOnServer(draft, 'active', token) : saveBot(draft);
       setCreatedBot(bot);
+      onSaved?.(bot?.id);
 
       // 2. First run trial
       const res = await tryBotDraft(draft, 'this_quarter', token);
@@ -221,7 +244,7 @@ export default function BotBuilder({
               {step === 'start'
                 ? 'Create a VAT bot'
                 : step === 'setup'
-                ? 'Set up your VAT bot'
+                ? (start?.mode === 'edit' ? 'Edit your VAT bot' : 'Set up your VAT bot')
                 : 'Your bot is on'}
             </span>
           </div>
@@ -335,6 +358,7 @@ export default function BotBuilder({
                 onChange={handleDraftChange}
                 onTry={handleTry}
                 onTurnOn={handleTurnOn}
+                turnOnLabel={start?.mode === 'edit' ? 'Save changes' : 'Turn on'}
                 busy={busy}
               />
 

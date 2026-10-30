@@ -45,19 +45,36 @@ def _due_period(draft: BotDraft, subject: str) -> Optional[Dict[str, str]]:
     return {"start": start.isoformat(), "end": end.isoformat()}
 
 
+def finding_detail(item: Dict[str, Any], side: str) -> Dict[str, Any]:
+    """What the inbox card shows for a duplicate group or a finding: the side, the sentence, how sure the check is,
+    and its bills (number, date, supplier or customer, amount before VAT, VAT, Accutax id). From review_vat's own
+    fields only; at most 10 bills."""
+    bills = item.get("bills") or ([item["bill"]] if item.get("bill") else [])
+    return {
+        "side": side,
+        "why": item.get("why") or "",
+        "level": item.get("confidence") or item.get("severity") or item.get("level"),
+        "currency": item.get("currency"),
+        "bills": [{"id": b.get("document_id"), "number": b.get("document_number"), "date": b.get("document_date"),
+                   "party": b.get("vendor_name"), "amount": b.get("net_purchases"), "vat": b.get("input_vat")}
+                  for b in bills[:10]],
+    }
+
+
 def _current_findings(reviews: List[Dict[str, Any]], fallback_org: int) -> List[Dict[str, Any]]:
     """Every duplicate group and finding of the reviews, in the shape ai_bot_findings stores."""
     out: List[Dict[str, Any]] = []
     for rev in reviews:
+        side = rev.get("side") or "purchases"
         for g in rev.get("groups") or []:
             out.append({"key": g["key"], "org_id": int(g.get("organization_id") or fallback_org),
                         "rule": g.get("rule", "duplicate"), "amount": float(g.get("extra_amount") or 0.0),
-                        "state": "new"})
+                        "state": "new", "detail": finding_detail(g, side)})
         for f in rev.get("findings") or []:
             amount = (f.get("bill") or {}).get("total")
             out.append({"key": f["key"], "org_id": int(f.get("organization_id") or fallback_org),
                         "rule": f.get("rule", "anomaly"), "amount": float(amount) if amount is not None else None,
-                        "state": "new"})
+                        "state": "new", "detail": finding_detail(f, side)})
     return out
 
 

@@ -54,6 +54,9 @@ from gemini_brain.vat_return import tool as vat_return_tool
 
 logger = logging.getLogger("gemini_brain.api.bot_routes")
 
+#: Most bots one user can have (the bots home shows "4 of 10").
+MAX_BOTS = 10
+
 router = APIRouter(prefix="/api/v1/bots", tags=["Bots"])
 
 
@@ -95,7 +98,8 @@ def get_templates(
     tmpl_list = templates.all_templates(agent=agent)
     return BotTemplatesResponse(
         templates=[
-            TemplateItem(id=t.id, title=t.title, summary=t.summary, draft=t.draft)
+            TemplateItem(id=t.id, title=t.title, summary=t.summary, draft=t.draft,
+                         monthly_credits=cost.monthly_credits(t.draft, {}))
             for t in tmpl_list
         ]
     )
@@ -277,6 +281,9 @@ def create_bot(
     payload: CreateBotRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> Any:
+    if len(store.list_for_user(owner_user_id=current_user.user_id)) >= MAX_BOTS:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail=f"You already have {MAX_BOTS} bots. Delete one to add another.")
     allowed = current_user.allowed_org_ids or []
     validated_draft, _ = validate.validate(
         payload.draft,
@@ -310,7 +317,20 @@ def list_bots(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> Any:
     bots = store.list_for_user(owner_user_id=current_user.user_id)
-    return JSONResponse(content={"bots": bots})
+    return JSONResponse(content={"bots": _with_overview(bots)})
+
+
+def _with_overview(bots: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Each bot with its last run, finding counts, run totals and monthly cost estimate (bots home and detail)."""
+    over = store.overviews([b["id"] for b in bots]) if bots else {}
+    out = []
+    for b in bots:
+        try:
+            est = cost.monthly_credits(BotDraft(**b["draft"]), {})
+        except Exception:
+            est = None
+        out.append({**b, "overview": over.get(b["id"]) or {}, "monthly_credits": est})
+    return out
 
 
 def _verify_service_token(
@@ -399,6 +419,52 @@ def mark_inbox_read(
 
 
 # Fixed paths go before /{bot_id}, or FastAPI reads "approvals" as a bot id.
+@router.get("/summary", summary="Numbers for the bots home: next run, open problems, next VAT return, usage")
+def bots_summary(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Any:
+    bots = _with_overview(store.list_for_user(owner_user_id=current_user.user_id))
+    active = [b for b in bots if b["status"] == "active"]
+
+    upcoming = sorted((b for b in active if b.get("next_run_at")), key=lambda b: b["next_run_at"])
+    next_run = {"at": upcoming[0]["next_run_at"], "bot_id": upcoming[0]["id"], "bot_name": upcoming[0]["name"]}         if upcoming else None
+
+    # Open problems across the user's bots, split as the home card shows them.
+    duplicate_rules = set(watches.get("duplicate_bill").rules)
+    open_total = new_total = duplicates = 0
+    for b in bots:
+        for f in store.get_findings(b["id"]):
+            if f["state"] not in ("new", "seen"):
+                continue
+            open_total += 1
+            new_total += f["state"] == "new"
+            duplicates += f["rule"] in duplicate_rules
+
+    # The next VAT return of the organization the bots cover first (else the user's first), from the books.
+    orgs = [o for b in bots for o in b["org_ids"]] or list(current_user.allowed_org_ids or [])[:1]
+    next_return = None
+    if orgs:
+        try:
+            res = vat_return_tool.run({"which": "next_due"}, organization_ids=[orgs[0]],
+                                      subject=f"bot-home:{current_user.user_id}", deadline=time.monotonic() + 10)
+            o = (res.get("organizations") or [None])[0]
+            if o:
+                next_return = {"organization_id": o["organization_id"], "period": o["period"],
+                               "due_date": o["due_date"], "days_to_due": o["days_to_due"]}
+        except Exception:
+            logger.warning("Next VAT return for the bots home failed", exc_info=True)
+
+    return JSONResponse(content={
+        "bots": len(bots), "active": len(active), "max_bots": MAX_BOTS,
+        "next_run": next_run,
+        "open_problems": {"total": open_total, "new": new_total, "duplicates": duplicates,
+                          "other": open_total - duplicates},
+        "next_return": next_return,
+        "credits": {"estimate_per_month": sum(b["monthly_credits"] or 0 for b in active),
+                    "this_month": sum((b["overview"] or {}).get("credits_this_month", 0) for b in bots)},
+    })
+
+
 @router.get("/approvals", response_model=List[BotApprovalItem], summary="List pending bot action approvals")
 def list_approvals(
     current_user: CurrentUser = Depends(get_current_user),
@@ -415,7 +481,49 @@ def get_bot(
     b = store.get(bot_id=bot_id, owner_user_id=current_user.user_id)
     if not b:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bot not found")
-    return JSONResponse(content=b)
+    return JSONResponse(content=_with_overview([b])[0])
+
+
+@router.get("/{bot_id}/runs", summary="A bot's run history, newest first")
+def get_bot_runs(
+    bot_id: str,
+    limit: int = Query(default=20, ge=1, le=100),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Any:
+    if not store.get(bot_id=bot_id, owner_user_id=current_user.user_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bot not found")
+    return JSONResponse(content={"runs": store.list_runs(bot_id, limit=limit)})
+
+
+@router.get("/{bot_id}/findings", summary="A bot's findings, newest first")
+def get_bot_findings(
+    bot_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Any:
+    if not store.get(bot_id=bot_id, owner_user_id=current_user.user_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bot not found")
+    return JSONResponse(content={"findings": store.get_findings(bot_id)})
+
+
+@router.post("/{bot_id}/run", summary="Run a bot now")
+def run_bot_now(
+    bot_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Any:
+    b = store.get(bot_id=bot_id, owner_user_id=current_user.user_id)
+    if not b:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bot not found")
+    if b["status"] != "active":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Resume the bot before running it")
+    decision = limits.check(current_user.user_id, b["org_ids"])
+    if decision.action == limits.BLOCK:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                            detail={"code": decision.code, "message": decision.message})
+    from gemini_brain.bots.run import run_bot
+    with ledger.scope("bot_run", user_id=current_user.user_id, organization_ids=b["org_ids"]):
+        res = run_bot(bot_id, trigger="manual")
+    return JSONResponse(content={"status": res.get("status"), "summary": res.get("summary"),
+                                 "error": res.get("error")})
 
 
 @router.patch("/{bot_id}", summary="Update a bot")

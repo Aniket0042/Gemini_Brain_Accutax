@@ -42,6 +42,16 @@ def _iso(val: Any) -> Optional[str]:
     return str(val)
 
 
+def _json(val: Any) -> Any:
+    """A jsonb value as Python: psycopg2 already decodes it, a plain driver may hand back text."""
+    if isinstance(val, str):
+        try:
+            return json.loads(val)
+        except ValueError:
+            return None
+    return val
+
+
 def _bot_from_row(row: Sequence[Any]) -> Dict[str, Any]:
     draft_val = row[5]
     if isinstance(draft_val, str):
@@ -355,9 +365,9 @@ def upsert_findings(
 
     query = """
     INSERT INTO ai_bot_findings (
-        bot_id, key, org_id, rule, state, amount, first_seen_run, last_seen_run, updated_at
+        bot_id, key, org_id, rule, state, amount, detail, first_seen_run, last_seen_run, updated_at
     ) VALUES (
-        %s, %s, %s, %s, %s, %s, %s, %s, now()
+        %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, now()
     )
     ON CONFLICT (bot_id, key) DO UPDATE SET
         state = CASE
@@ -365,6 +375,7 @@ def upsert_findings(
             ELSE EXCLUDED.state
         END,
         amount = EXCLUDED.amount,
+        detail = COALESCE(EXCLUDED.detail, ai_bot_findings.detail),
         last_seen_run = EXCLUDED.last_seen_run,
         updated_at = now();
     """
@@ -376,7 +387,8 @@ def upsert_findings(
             rule = str(f.get("rule", ""))
             state = str(f.get("state", "new"))
             amount = f.get("amount")
-            cur.execute(query, (bot_id, key, org_id, rule, state, amount, run_id, run_id))
+            detail = json.dumps(f["detail"], default=str) if f.get("detail") else None
+            cur.execute(query, (bot_id, key, org_id, rule, state, amount, detail, run_id, run_id))
 
 
 def get_findings(
@@ -387,7 +399,7 @@ def get_findings(
 ) -> List[Dict[str, Any]]:
     """Return findings for a bot, optionally filtered by state ('new', 'seen', 'fixed', 'dismissed')."""
     query = """
-    SELECT bot_id, key, org_id, rule, state, amount, first_seen_run, last_seen_run, updated_at
+    SELECT bot_id, key, org_id, rule, state, amount, first_seen_run, last_seen_run, updated_at, detail
     FROM ai_bot_findings
     WHERE bot_id = %s
     """
@@ -411,6 +423,7 @@ def get_findings(
                 "first_seen_run": str(r[6]) if r[6] else None,
                 "last_seen_run": str(r[7]) if r[7] else None,
                 "updated_at": _iso(r[8]),
+                "detail": _json(r[9]),
             }
             for r in rows
         ]
@@ -637,12 +650,16 @@ def dismiss_finding(
             (bot_id, key),
         )
 
+        # In words, as the bot's memory page shows it: "Same supplier, same amount, dates within 3 days ..." for X.
+        from gemini_brain.vat_review.tool import RULE_TEXT
+        what = RULE_TEXT.get(rule, rule)
+        what = what[:1].upper() + what[1:]
         if note:
             mem_text = note
         elif supplier:
-            mem_text = f"Dismissed {rule} from {supplier}"
+            mem_text = f"{what}: {supplier}. Marked not a problem."
         else:
-            mem_text = f"Dismissed finding: {rule}"
+            mem_text = f"{what}. Marked not a problem."
 
         cur.execute(
             """
@@ -819,4 +836,46 @@ def mark_inbox_seen(
     with _get_cur(conn) as cur:
         cur.execute(query, (owner_user_id,))
         return cur.rowcount or 0
+
+
+def overviews(bot_ids: Sequence[str], *, conn: Optional[Any] = None) -> Dict[str, Dict[str, Any]]:
+    """Per bot, for the bots list and home: its last run, finding counts and run totals.
+    {bot_id: {"last_run": run or None, "open": n, "new": n, "fixed": n, "found": n, "runs": n,
+    "credits_this_month": n}}. Three queries for all the bots, whatever their number."""
+    ids = [str(b) for b in bot_ids]
+    out: Dict[str, Dict[str, Any]] = {
+        b: {"last_run": None, "open": 0, "new": 0, "fixed": 0, "found": 0, "runs": 0, "credits_this_month": 0}
+        for b in ids}
+    if not ids:
+        return out
+    with _get_cur(conn) as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT ON (bot_id) id, bot_id, trigger, status, started_at, finished_at, credits, summary, error
+            FROM ai_bot_runs WHERE bot_id = ANY(%s::uuid[]) ORDER BY bot_id, started_at DESC
+            """, (ids,))
+        for r in cur.fetchall() or []:
+            run = _run_from_row(r)
+            out[run["bot_id"]]["last_run"] = run
+        cur.execute(
+            """
+            SELECT bot_id,
+                   count(*) FILTER (WHERE state IN ('new', 'seen')),
+                   count(*) FILTER (WHERE state = 'new'),
+                   count(*) FILTER (WHERE state = 'fixed'),
+                   count(*)
+            FROM ai_bot_findings WHERE bot_id = ANY(%s::uuid[]) GROUP BY bot_id
+            """, (ids,))
+        for bot_id, open_n, new_n, fixed_n, found_n in cur.fetchall() or []:
+            out[str(bot_id)].update({"open": int(open_n), "new": int(new_n), "fixed": int(fixed_n),
+                                     "found": int(found_n)})
+        cur.execute(
+            """
+            SELECT bot_id, count(*),
+                   COALESCE(sum(credits) FILTER (WHERE started_at >= date_trunc('month', now())), 0)
+            FROM ai_bot_runs WHERE bot_id = ANY(%s::uuid[]) GROUP BY bot_id
+            """, (ids,))
+        for bot_id, runs_n, credits in cur.fetchall() or []:
+            out[str(bot_id)].update({"runs": int(runs_n), "credits_this_month": int(credits)})
+    return out
 

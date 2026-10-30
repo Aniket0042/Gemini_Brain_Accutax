@@ -162,9 +162,10 @@ def test_try_draft_invalid_preset(auth_headers):
     assert resp.status_code == 400
 
 
+@patch("gemini_brain.bots.store.overviews", return_value={})
 @patch("gemini_brain.bots.store.create")
 @patch("gemini_brain.vat_return.tool.filing_frequencies", return_value={101: "quarterly"})
-def test_create_and_list_and_delete_bot_routes(mock_freq, mock_create, auth_headers):
+def test_create_and_list_and_delete_bot_routes(mock_freq, mock_create, mock_over, auth_headers):
     mock_create.return_value = {
         "id": "bot-test-uuid",
         "owner_user_id": 18,
@@ -185,7 +186,8 @@ def test_create_and_list_and_delete_bot_routes(mock_freq, mock_create, auth_head
         },
         "status": "active",
     }
-    res = client.post("/api/v1/bots", json=create_payload, headers=auth_headers)
+    with patch("gemini_brain.bots.store.list_for_user", return_value=[]):
+        res = client.post("/api/v1/bots", json=create_payload, headers=auth_headers)
     assert res.status_code == 201
     assert res.json()["id"] == "bot-test-uuid"
 

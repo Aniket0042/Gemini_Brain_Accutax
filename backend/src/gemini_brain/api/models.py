@@ -519,6 +519,8 @@ class TemplateItem(BaseModel):
     title: str
     summary: str
     draft: BotDraft
+    #: Monthly cost estimate in credits, as on the setup card.
+    monthly_credits: Optional[int] = None
 
 
 class BotTemplatesResponse(BaseModel):

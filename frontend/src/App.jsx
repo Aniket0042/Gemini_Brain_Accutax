@@ -29,11 +29,13 @@ import BotBuilder from './components/bots/BotBuilder';
 import BotList from './components/bots/BotList';
 import InboxView from './components/bots/InboxView';
 import BotMemoryView from './components/bots/BotMemoryView';
+import BotsHome from './components/bots/BotsHome';
+import BotDetail from './components/bots/BotDetail';
 import {
   listBots, updateBot, deleteBot,
   fetchUserBots, deleteBotOnServer, pauseBotOnServer, resumeBotOnServer, migrateLocalBotsToServer,
   fetchBotInbox, markBotInboxSeen, dismissBotFinding, undismissBotFinding,
-  approveBotAction, rejectBotAction, editBotAction
+  approveBotAction, rejectBotAction, editBotAction, fetchBotsSummary
 } from './services/bots';
 
 // Minimal fallback shown only until /api/v1/tenants responds. Deliberately
@@ -274,6 +276,10 @@ export default function App() {
   const [botModalTab, setBotModalTab] = useState('bots'); // 'bots' | 'inbox'
   const [memoryBot, setMemoryBot] = useState(null);
   const [inboxLoading, setInboxLoading] = useState(false);
+  // Which page fills the main area: the chat, the Bots home, or one bot (activeBotId).
+  const [page, setPage] = useState('chat');
+  const [activeBotId, setActiveBotId] = useState(null);
+  const [botsSummary, setBotsSummary] = useState(null);
 
   const reloadInbox = async () => {
     const token = currentUser?.access_token;
@@ -297,6 +303,7 @@ export default function App() {
         const serverBots = await fetchUserBots(token);
         setBots(serverBots);
         await reloadInbox();
+        fetchBotsSummary(token).then(setBotsSummary).catch(() => null);
         return;
       } catch (e) {
         console.warn('Failed to fetch server bots:', e);
@@ -377,6 +384,16 @@ export default function App() {
 
   const handleOpenBots = () => {
     reloadBots();
+    setPage('bots');
+  };
+
+  const handleOpenBot = (id) => {
+    setActiveBotId(id);
+    setPage('bot');
+  };
+
+  const handleOpenBotInbox = () => {
+    setBotModalTab('inbox');
     setIsBotsOpen(true);
   };
 
@@ -424,7 +441,7 @@ export default function App() {
   };
 
   const handleEditBot = (bot) => {
-    setBuilderStart({ mode: 'blank', initialDraft: bot.draft, botId: bot.id });
+    setBuilderStart({ mode: 'edit', initialDraft: bot.draft, botId: bot.id });
     setIsBotsOpen(false);
     setIsBuilderOpen(true);
   };
@@ -1193,6 +1210,7 @@ export default function App() {
 
   // Handle Clear Conversation (saves current session to history first)
   const handleClearConversation = () => {
+    setPage('chat');
     persistCurrentConversation();
     setConversation([]);
     setActiveHistoryId(null);
@@ -1213,6 +1231,7 @@ export default function App() {
   // Handle selecting a saved session from the sidebar history list — saves
   // whatever is currently open first, then swaps in the stored transcript.
   const handleSelectHistory = (id) => {
+    setPage('chat');
     if (id === activeHistoryId) return;
     persistCurrentConversation();
     const entry = chatHistory.find(e => e.id === id);
@@ -1848,6 +1867,12 @@ export default function App() {
           onDeleteHistory={handleDeleteHistory}
           onRenameHistory={handleRenameHistory}
           onPinHistory={handlePinHistory}
+          bots={bots}
+          page={page}
+          activeBotId={activeBotId}
+          onOpenChats={() => setPage('chat')}
+          onOpenBots={handleOpenBots}
+          onOpenBot={handleOpenBot}
         />
       </div>
 
@@ -1873,6 +1898,37 @@ export default function App() {
           onOpenBots={handleOpenBots}
           botsUnreadCount={botInbox.unread_count || 0}
         />
+        {page !== 'chat' ? (
+          <div className="main-stage">
+            <div style={styles.chatScrollArea}>
+              {page === 'bots' ? (
+                <BotsHome
+                  bots={bots}
+                  summary={botsSummary}
+                  token={currentUser?.access_token || ''}
+                  inboxNew={botInbox.unread_count || 0}
+                  onOpenInbox={handleOpenBotInbox}
+                  onNewBot={() => handleStartNewBot({ mode: 'blank' })}
+                  onUseTemplate={(templateId) => handleStartNewBot({ mode: 'template', templateId })}
+                  onOpenBot={handleOpenBot}
+                  onToggleBot={handleToggleBot}
+                  onEditBot={handleEditBot}
+                />
+              ) : (
+                <BotDetail
+                  bot={bots.find((b) => b.id === activeBotId)}
+                  token={currentUser?.access_token || ''}
+                  onBack={() => setPage('bots')}
+                  onEdit={handleEditBot}
+                  onToggle={handleToggleBot}
+                  onDelete={async (id) => { await handleDeleteBot(id); setPage('bots'); }}
+                  onChanged={reloadBots}
+                />
+              )}
+            </div>
+          </div>
+        ) : (
+        <>
         <div className="main-stage">
         <div ref={chatScrollAreaRef} style={styles.chatScrollArea}>
           <div style={!hasStartedChat ? styles.chatContentIntro : styles.chatContent}>
@@ -1950,6 +2006,8 @@ export default function App() {
           </div>
         </div>
       </div>
+        </>
+        )}
         </div>
 
         {showFilePreview && (
@@ -2099,8 +2157,9 @@ export default function App() {
         open={isBuilderOpen}
         onClose={() => {
           setIsBuilderOpen(false);
-          setBots(listBots());
+          reloadBots();
         }}
+        onSaved={() => reloadBots()}
         token={currentUser?.access_token || ''}
         orgIds={scopeOrgIds}
         orgNames={Object.fromEntries(availableTenants.map((t) => [tenantIdOf(t), tenantNameOf(t)]))}

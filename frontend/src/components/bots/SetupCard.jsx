@@ -43,6 +43,7 @@ export default function SetupCard({
   onChange,
   onTry,
   onTurnOn,
+  turnOnLabel = 'Turn on',
   busy = false,
 }) {
   const [newNote, setNewNote] = useState('');
@@ -494,7 +495,7 @@ export default function SetupCard({
           title={hasBlockingIssues ? 'Fix blocking issues above to turn on' : 'Turn on bot'}
         >
           <Power className="w-4 h-4" />
-          <span>Turn on</span>
+          <span>{turnOnLabel}</span>
         </button>
       </div>
     </div>
