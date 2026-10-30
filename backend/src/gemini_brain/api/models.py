@@ -657,10 +657,15 @@ class CreateMemoryRequest(BaseModel):
 
 
 class BotInboxResponse(BaseModel):
+    """The Inbox page (bots/inbox.py): findings with their details, counts, per-bot counts and VAT at stake."""
     unread_count: int
     bots_count: int
+    counts: Dict[str, int] = Field(default_factory=dict)
+    bots: List[Dict[str, Any]] = Field(default_factory=list)
+    at_stake: List[Dict[str, Any]] = Field(default_factory=list)
+    fixed_this_week: List[Dict[str, Any]] = Field(default_factory=list)
     runs: List[Dict[str, Any]] = Field(default_factory=list)
-    findings: List[BotFindingItem] = Field(default_factory=list)
+    findings: List[Dict[str, Any]] = Field(default_factory=list)
     approvals: List[BotApprovalItem] = Field(default_factory=list)
 
 

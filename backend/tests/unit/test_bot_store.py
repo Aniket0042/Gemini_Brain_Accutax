@@ -163,8 +163,9 @@ class FakeCursor:
             matching = []
             for f in self.db["findings"].values():
                 b = self.db["bots"].get(str(f[0]))
-                if b and b[1] == owner_id and f[4] in ("new", "seen"):
-                    matching.append((f[0], b[3], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8]))
+                if b and b[1] == owner_id and f[4] in ("new", "seen", "dismissed", "fixed"):
+                    detail = f[9] if len(f) > 9 else None
+                    matching.append((f[0], b[3], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], detail, None))
             self._results = matching
             self.rowcount = len(matching)
 
@@ -460,10 +461,11 @@ def test_store_inbox_and_dismissal(fake_conn):
 
     # Dismiss item-1
     assert store.dismiss_finding(bot_id=bot_id, owner_user_id=42, key="item-1", note="Allowed", conn=fake_conn) is True
-    # item-1 should no longer be active in inbox
+    # item-1 is no longer open: it moves to "Not a problem"
     inbox_after = store.get_inbox(owner_user_id=42, conn=fake_conn)
-    assert len(inbox_after["findings"]) == 1
-    assert inbox_after["findings"][0]["key"] == "item-2"
+    states = {f["key"]: f["state"] for f in inbox_after["findings"]}
+    assert states == {"item-1": "dismissed", "item-2": "new"}
+    assert inbox_after["counts"]["all"] == 1 and inbox_after["counts"]["dismissed"] == 1
 
     # Memory entry should have been created
     memories = store.list_memory(bot_id=bot_id, conn=fake_conn)

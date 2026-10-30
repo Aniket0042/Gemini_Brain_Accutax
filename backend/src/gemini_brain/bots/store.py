@@ -703,66 +703,48 @@ def get_inbox(
     *,
     conn: Optional[Any] = None,
 ) -> Dict[str, Any]:
-    """Return latest run results and active findings across all bots owned by user."""
-    bots = list_for_user(owner_user_id, conn=conn)
+    """The Inbox page for one user (bots/inbox.py): open, dismissed and recently fixed findings of their bots, with
+    their details and when each was first found, plus each bot's latest run and pending approvals."""
+    from gemini_brain.bots import inbox
 
+    bots = list_for_user(owner_user_id, conn=conn)
     runs: List[Dict[str, Any]] = []
     for b in bots:
         recent = list_runs(b["id"], limit=1, conn=conn)
         if recent:
-            r = dict(recent[0])
-            r["bot_name"] = b["name"]
-            runs.append(r)
-
-    runs.sort(key=lambda r: r.get("started_at") or "", reverse=True)
+            runs.append({**recent[0], "bot_name": b["name"]})
 
     findings_query = """
     SELECT f.bot_id, b.name AS bot_name, f.key, f.org_id, f.rule, f.state,
-           f.amount, f.first_seen_run, f.last_seen_run, f.updated_at
+           f.amount, f.first_seen_run, f.last_seen_run, f.updated_at, f.detail, r.started_at
     FROM ai_bot_findings f
     JOIN ai_bots b ON b.id = f.bot_id
-    WHERE b.owner_user_id = %s AND f.state IN ('new', 'seen')
-    ORDER BY f.updated_at DESC
-    LIMIT 100;
+    LEFT JOIN ai_bot_runs r ON r.id = f.first_seen_run
+    WHERE b.owner_user_id = %s
+      AND (f.state IN ('new', 'seen', 'dismissed') OR (f.state = 'fixed' AND f.updated_at >= now() - interval '7 days'))
+    ORDER BY COALESCE(r.started_at, f.updated_at) DESC
+    LIMIT 300;
     """
-    findings: List[Dict[str, Any]] = []
-    unread_count = 0
     with _get_cur(conn) as cur:
         cur.execute(findings_query, (owner_user_id,))
         rows = cur.fetchall() or []
-        from gemini_brain.bots import watches
-        for r in rows:
-            rule_str = str(r[4])
-            state = str(r[5])
-            if state == "new":
-                unread_count += 1
-            w = watches.watch_for_rule(rule_str)
-            findings.append({
-                "bot_id": str(r[0]),
-                "bot_name": str(r[1]),
-                "key": str(r[2]),
-                "org_id": int(r[3]),
-                "rule": rule_str,
-                "watch_id": w.id if w else None,
-                "watch_label": w.label if w else None,
-                "why_text": f"Triggered by watch '{w.label}' (Rule: {rule_str})" if w else f"Triggered by rule '{rule_str}'",
-                "state": state,
-                "amount": float(r[6]) if r[6] is not None else None,
-                "first_seen_run": str(r[7]) if r[7] else None,
-                "last_seen_run": str(r[8]) if r[8] else None,
-                "updated_at": _iso(r[9]),
-            })
+    findings = [{
+        "bot_id": str(r[0]),
+        "bot_name": str(r[1]),
+        "key": str(r[2]),
+        "org_id": int(r[3]),
+        "rule": str(r[4]),
+        "state": str(r[5]),
+        "amount": float(r[6]) if r[6] is not None else None,
+        "first_seen_run": str(r[7]) if r[7] else None,
+        "last_seen_run": str(r[8]) if r[8] else None,
+        "updated_at": _iso(r[9]),
+        "detail": _json(r[10]) or {},
+        "found_at": _iso(r[11]) or _iso(r[9]),
+    } for r in rows]
 
     approvals = get_approvals_for_user(owner_user_id, status="pending", conn=conn)
-    total_unread = unread_count + len(approvals)
-
-    return {
-        "unread_count": total_unread,
-        "bots_count": len(bots),
-        "runs": runs,
-        "findings": findings,
-        "approvals": approvals,
-    }
+    return inbox.build(findings, runs, bots, approvals)
 
 
 def get_approvals_for_user(

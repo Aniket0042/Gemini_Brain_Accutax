@@ -27,16 +27,14 @@ import { dropCards } from './sensitive';
 import { useAuth0 } from '@auth0/auth0-react';
 import BotCreate from './components/bots/BotCreate';
 import BotBuilderPage from './components/bots/BotBuilderPage';
-import BotList from './components/bots/BotList';
-import InboxView from './components/bots/InboxView';
-import BotMemoryView from './components/bots/BotMemoryView';
+import BotInbox from './components/bots/BotInbox';
 import BotsHome from './components/bots/BotsHome';
 import BotDetail from './components/bots/BotDetail';
 import {
   listBots, updateBot, deleteBot,
   fetchUserBots, deleteBotOnServer, pauseBotOnServer, resumeBotOnServer, migrateLocalBotsToServer,
   fetchBotInbox, markBotInboxSeen, dismissBotFinding, undismissBotFinding,
-  approveBotAction, rejectBotAction, editBotAction, fetchBotsSummary,
+  fetchBotsSummary,
   createDraftFromTemplate, createDraftFromChat
 } from './services/bots';
 
@@ -270,16 +268,12 @@ export default function App() {
   const [multiOrg, setMultiOrg] = useState({ enabled: false, max: 1 });
 
   // Bots modal & list state (Phase 1 & Phase 2)
-  const [isBotsOpen, setIsBotsOpen] = useState(false);
   // The builder page's starting point: {initial: draft response, botId, botStatus} (botId set when editing).
   const [builderInit, setBuilderInit] = useState(null);
   const [botsNotice, setBotsNotice] = useState('');
   const [bots, setBots] = useState([]);
   const [botInbox, setBotInbox] = useState({ unread_count: 0, bots_count: 0, runs: [], findings: [] });
-  const [botModalTab, setBotModalTab] = useState('bots'); // 'bots' | 'inbox'
-  const [memoryBot, setMemoryBot] = useState(null);
-  const [inboxLoading, setInboxLoading] = useState(false);
-  // Which page fills the main area: the chat, the Bots home, or one bot (activeBotId).
+  // Which page fills the main area: 'chat', 'bots' (home), 'bot' (activeBotId), 'inbox', 'new' or 'builder'.
   const [page, setPage] = useState('chat');
   const [activeBotId, setActiveBotId] = useState(null);
   const [botsSummary, setBotsSummary] = useState(null);
@@ -288,13 +282,10 @@ export default function App() {
     const token = currentUser?.access_token;
     if (!token) return;
     try {
-      setInboxLoading(true);
       const data = await fetchBotInbox(token);
-      setBotInbox(data || { unread_count: 0, bots_count: 0, runs: [], findings: [], approvals: [] });
+      setBotInbox(data || { unread_count: 0, bots_count: 0, runs: [], findings: [] });
     } catch (e) {
       console.warn('Failed to fetch bot inbox:', e);
-    } finally {
-      setInboxLoading(false);
     }
   };
 
@@ -348,42 +339,9 @@ export default function App() {
     }
   };
 
-  const handleApproveAction = async (botId, approvalId) => {
-    const token = currentUser?.access_token;
-    if (!token) return;
-    try {
-      await approveBotAction(botId, approvalId, token);
-      await reloadInbox();
-    } catch (e) {
-      console.warn('Failed to approve bot action:', e);
-    }
-  };
-
-  const handleRejectAction = async (botId, approvalId) => {
-    const token = currentUser?.access_token;
-    if (!token) return;
-    try {
-      await rejectBotAction(botId, approvalId, token);
-      await reloadInbox();
-    } catch (e) {
-      console.warn('Failed to reject bot action:', e);
-    }
-  };
-
-  const handleEditApproveAction = async (botId, approvalId, updates) => {
-    const token = currentUser?.access_token;
-    if (!token) return;
-    try {
-      await editBotAction(botId, approvalId, updates, token);
-      await reloadInbox();
-    } catch (e) {
-      console.warn('Failed to update and approve bot action:', e);
-    }
-  };
-
   useEffect(() => {
     reloadBots();
-  }, [isBotsOpen, currentUser?.access_token]);
+  }, [currentUser?.access_token]);
 
   const handleOpenBots = () => {
     reloadBots();
@@ -396,14 +354,22 @@ export default function App() {
   };
 
   const handleOpenBotInbox = () => {
-    setBotModalTab('inbox');
-    setIsBotsOpen(true);
+    reloadInbox();
+    setPage('inbox');
+  };
+
+  // "Ask AccuTax" on an inbox finding: the VAT agent explains it in a chat, from what the bot found.
+  const handleAskAboutFinding = (f) => {
+    const bills = (f.detail?.bills || []).map((b) => [b.number, b.party, b.date].filter(Boolean).join(', ')).join('; ');
+    const question = `My bot ${f.bot_name} flagged this: ${f.rule_text || f.rule}. ${f.detail?.why || ''}`
+      + `${bills ? ` Documents: ${bills}.` : ''} Explain what it means for my VAT return and what I should do.`;
+    setPage('chat');
+    handleSubmitQuery(question, { agent: 'vat' });
   };
 
   // New bot: the Create page; a template or a chat question goes straight to the builder with its draft.
   const handleStartNewBot = async (startConfig = { mode: 'blank' }) => {
     const token = currentUser?.access_token || '';
-    setIsBotsOpen(false);
     setBotsNotice('');
     if (startConfig.mode !== 'template' && startConfig.mode !== 'chat') {
       setPage('new');
@@ -466,7 +432,6 @@ export default function App() {
   };
 
   const handleEditBot = (bot) => {
-    setIsBotsOpen(false);
     setBuilderInit({
       initial: { draft: bot.draft, issues: [], next_runs: [], monthly_credits: bot.monthly_credits || 0 },
       botId: bot.id,
@@ -1951,6 +1916,18 @@ export default function App() {
                   onBack={() => setPage(builderInit.botId ? 'bot' : 'new')}
                   onDone={handleBuilderDone}
                 />
+              ) : page === 'inbox' ? (
+                <BotInbox
+                  inbox={botInbox}
+                  orgLabel={currentScopeNames.join(', ')}
+                  onBack={() => setPage('bots')}
+                  onMarkRead={handleMarkInboxSeen}
+                  onDismiss={(f) => handleDismissFinding(f.bot_id, f.key, '', (f.detail?.bills || [])[0]?.party || '')}
+                  onRestore={(f) => handleUndismissFinding(f.bot_id, f.key)}
+                  onAsk={handleAskAboutFinding}
+                  onEditBot={(botId) => { const b = bots.find((x) => x.id === botId); if (b) handleEditBot(b); }}
+                  onOpenBot={handleOpenBot}
+                />
               ) : page === 'bots' || page === 'builder' ? (
                 <BotsHome
                   bots={bots}
@@ -2114,92 +2091,6 @@ export default function App() {
           orgNames={Object.fromEntries(availableTenants.map((t) => [tenantIdOf(t), t?.display_name || t?.name || t?.org_name]).filter(([, n]) => n))}
           onClose={() => setShowPrivacy(false)}
         />
-      )}
-
-      {/* Bots Management Modal */}
-      {isBotsOpen && (
-        <div className="bot-modal-backdrop" onClick={() => { setIsBotsOpen(false); setMemoryBot(null); }}>
-          <div className="bot-modal-container" onClick={(e) => e.stopPropagation()}>
-            <div className="bot-modal-top">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Bot size={18} color="var(--accent)" />
-                  <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--ink)' }}>VAT Bots</span>
-                </div>
-                <div className="bot-nav-tabs">
-                  <button
-                    type="button"
-                    className={`bot-nav-tab ${botModalTab === 'bots' && !memoryBot ? 'active' : ''}`}
-                    onClick={() => { setBotModalTab('bots'); setMemoryBot(null); }}
-                  >
-                    <span>Bots</span>
-                    {bots.length > 0 && <span style={{ opacity: 0.7 }}>({bots.length})</span>}
-                  </button>
-                  <button
-                    type="button"
-                    className={`bot-nav-tab ${botModalTab === 'inbox' && !memoryBot ? 'active' : ''}`}
-                    onClick={() => { setBotModalTab('inbox'); setMemoryBot(null); }}
-                  >
-                    <span>Inbox</span>
-                    {botInbox.unread_count > 0 && (
-                      <span className="bot-unread-badge">{botInbox.unread_count}</span>
-                    )}
-                  </button>
-                </div>
-              </div>
-              <button
-                type="button"
-                className="btn-icon-subtle"
-                onClick={() => { setIsBotsOpen(false); setMemoryBot(null); }}
-                aria-label="Close"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className="bot-modal-content">
-              {memoryBot ? (
-                <BotMemoryView
-                  bot={memoryBot}
-                  onBack={() => setMemoryBot(null)}
-                  onMemoryChanged={() => {
-                    reloadInbox();
-                    reloadBots();
-                  }}
-                  token={currentUser?.access_token || ''}
-                />
-              ) : botModalTab === 'bots' ? (
-                <BotList
-                  bots={bots}
-                  onNewBot={() => handleStartNewBot({ mode: 'blank' })}
-                  onEdit={handleEditBot}
-                  onToggle={handleToggleBot}
-                  onDelete={handleDeleteBot}
-                  onViewMemory={(b) => setMemoryBot(b)}
-                />
-              ) : (
-                <InboxView
-                  inbox={botInbox}
-                  onDismissFinding={handleDismissFinding}
-                  onUndismissFinding={handleUndismissFinding}
-                  onMarkSeen={handleMarkInboxSeen}
-                  onRefresh={reloadInbox}
-                  loading={inboxLoading}
-                  onApproveAction={handleApproveAction}
-                  onRejectAction={handleRejectAction}
-                  onEditApproveAction={handleEditApproveAction}
-                  onEditBot={(botId) => {
-                    const b = bots.find((x) => x.id === botId);
-                    if (b) handleEditBot(b);
-                  }}
-                  onSeeFindingsInChat={(finding) => {
-                    setIsBotsOpen(false);
-                    handleSubmitQuery(`Investigate VAT issue ${finding.key} (${finding.rule}) on organization ${finding.org_id}`, { agent: 'vat' });
-                  }}
-                />
-              )}
-            </div>
-          </div>
-        </div>
       )}
 
       </div>
