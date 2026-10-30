@@ -16,8 +16,10 @@ from gemini_brain.bots.schema import BotDraft, Rules, Schedule
 class FakeCursor:
     """In-memory fake PostgreSQL cursor supporting store.py query patterns."""
 
-    def __init__(self, db: Dict[str, Any]):
+    def __init__(self, db: Dict[str, Any], connection: Any = None):
         self.db = db
+        #: The connection the cursor belongs to, as a psycopg2 cursor has.
+        self.connection = connection
         self.last_query = ""
         self.last_params: tuple = ()
         self.rowcount = 0
@@ -285,7 +287,7 @@ class FakeConnection:
         }
 
     def cursor(self):
-        return FakeCursor(self.db)
+        return FakeCursor(self.db, self)
 
     def commit(self):
         pass

@@ -213,3 +213,14 @@ def test_no_return_position_when_the_check_did_not_run(stores):
     with patch.object(store, "get", return_value=_bot()),          patch("gemini_brain.bots.preview.try_period", return_value=_review()):
         res = run_mod.run_bot("bot-1")
     assert res["summary"]["return_position"] is None
+
+
+def test_a_new_bots_notes_are_saved_in_the_same_transaction():
+    """The bot row is not committed when its notes are saved; another connection would hit the foreign key."""
+    cur = MagicMock()
+    cur.fetchone.return_value = ("id-1", 7, "vat", "VAT Watch", [101], {}, "active", None, None, None, None, None)
+    with patch.object(store, "_get_cur") as get_cur, patch.object(store, "sync_notes_to_memory") as sync:
+        get_cur.return_value.__enter__.return_value = cur
+        store.create(7, BotDraft(org_ids=[101], notes=["Rent repeats monthly"]))
+    sync.assert_called_once()
+    assert sync.call_args.kwargs["conn"] is cur.connection

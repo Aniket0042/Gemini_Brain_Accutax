@@ -135,8 +135,11 @@ def create(
         )
         row = cur.fetchone()
         bot = _bot_from_row(row)
-        if draft.notes:
-            sync_notes_to_memory(bot["id"], draft.notes, conn=conn)
+        notes = draft.notes if isinstance(draft, BotDraft) else draft_dict.get("notes") or []
+        if notes:
+            # Same connection, same transaction: the new bot row is not committed yet, so a separate connection
+            # would not see it and ai_bot_memory's foreign key would refuse the notes.
+            sync_notes_to_memory(bot["id"], notes, conn=cur.connection)
         return bot
 
 
@@ -238,7 +241,7 @@ def update(
             new_draft = patch["draft"]
             draft_dict = new_draft.model_dump() if isinstance(new_draft, BotDraft) else dict(new_draft or {})
             if "notes" in draft_dict:
-                sync_notes_to_memory(bot_id, draft_dict.get("notes") or [], conn=conn)
+                sync_notes_to_memory(bot_id, draft_dict.get("notes") or [], conn=cur.connection)
         return bot
 
 
