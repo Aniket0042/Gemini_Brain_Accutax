@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
-import { LoginPage } from './components/LoginPage';
+import { sessionClient,tabStorage } from './auth/session';
 import { QueryInput } from './components/QueryInput';
 import { ContextWindowButton } from './components/ContextWindowMeter';
 import { ResponseView } from './components/ResponseView';
@@ -9,14 +9,14 @@ import { Header } from './components/Header';
 import { IntroSuggestions } from './components/IntroSuggestions';
 import { ModelHealthModal } from './components/ModelHealthModal';
 import { AnswerCanvas } from './components/canvas/AnswerCanvas';
-import { fetchQueryResponse, streamQueryResponse, fetchTenants, fetchModelCatalog, fetchSessionMessages, createChatSession, deleteChatSession, fetchUploadConfig, fetchPrivacyAccess } from './services/api';
+import { fetchQueryResponse, streamQueryResponse, fetchTenants, fetchModelCatalog, fetchSessionMessages, createChatSession, deleteChatSession, fetchUploadConfig, fetchPrivacyAccess, } from './services/api';
 import { PrivacySnapshotsModal } from './components/PrivacySnapshotsModal';
 import { chipsFromBlocks, kindGroup } from './services/attachments';
 import { clearUploadBlobs } from './services/uploadBlobs';
 import { FilePreviewPanel, ImageLightbox } from './components/FilePreview';
 import { Trash2 } from 'lucide-react';
 import { isSessionId, newSessionId } from './services/sessionId';
-import { useAuth0 } from '@auth0/auth0-react';
+
 
 // Minimal fallback shown only until /api/v1/tenants responds. Deliberately
 // carries no figures: the previous version described specific invoice counts
@@ -101,7 +101,7 @@ const CANVAS_WIDTH_KEY = 'accutax_canvas_width';
 const CANVAS_WIDTH_MIN = 360;
 const CANVAS_WIDTH_MAX = 920;
 const CANVAS_WIDTH_DEFAULT = 480;
-const SENSITIVE_QUERY_KEYS = ['orgId', 'sessionId', 'currentPage', 'activeYear', 'contactName', 'bankAccount'];
+const SENSITIVE_QUERY_KEYS = ['code', 'orgId', 'sessionId', 'currentPage', 'activeYear', 'contactName', 'bankAccount'];
 
 function readCanvasWidth() {
   try {
@@ -115,7 +115,7 @@ function readCanvasWidth() {
 
 function readDeletedSessions() {
   try {
-    const raw = sessionStorage.getItem(DELETED_SESSIONS_KEY);
+    const raw = tabStorage.getItem(DELETED_SESSIONS_KEY);
     const arr = raw ? JSON.parse(raw) : [];
     return new Set(Array.isArray(arr) ? arr : []);
   } catch {
@@ -128,7 +128,7 @@ function rememberDeletedSession(sessionId) {
   const next = readDeletedSessions();
   next.add(sessionId);
   try {
-    sessionStorage.setItem(DELETED_SESSIONS_KEY, JSON.stringify([...next]));
+    tabStorage.setItem(DELETED_SESSIONS_KEY, JSON.stringify([...next]));
   } catch {
     /* ignore quota */
   }
@@ -155,25 +155,29 @@ function originAliases(origin) {
   }
 }
 
-function isAllowedDashboardOrigin(origin) {
-  return originAliases(allowedDashboardOrigin()).includes(origin);
-}
-
-function pingOpenerReady() {
-  if (!window.opener) return;
-  for (const origin of originAliases(allowedDashboardOrigin())) {
-    try {
-      window.opener.postMessage({ type: 'accutax-widget-handoff-ready' }, origin);
-    } catch {
-      /* opener may be cross-origin until it posts first */
-    }
+/**
+ * Consume the context-only ticket from the dashboard before the app renders.
+ */
+function takeHandoffCode() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('context');
+    if (code === null) return null;
+    params.delete('context');
+    const query = params.toString();
+    window.history.replaceState(null, '', window.location.pathname + (query ? `?${query}` : '') + window.location.hash);
+    return /^[A-Za-z0-9_-]{43}$/.test(code) ? code : null;
+  } catch {
+    return null;
   }
 }
+const HANDOFF_CODE = takeHandoffCode();
+let handoffExchangePromise = null;
 
 function sanitizeSensitiveQueryParams({ includeHandoff = false } = {}) {
   try {
     const url = new URL(window.location.href);
-    const keys = includeHandoff ? [...SENSITIVE_QUERY_KEYS, 'handoff'] : SENSITIVE_QUERY_KEYS;
+    const keys = includeHandoff ? [...SENSITIVE_QUERY_KEYS, 'handoff','context'] : SENSITIVE_QUERY_KEYS;
     let changed = false;
     for (const key of keys) {
       if (url.searchParams.has(key)) {
@@ -209,7 +213,7 @@ const tenantNameOf = (t) =>
 
 function readSavedOrgIds() {
   try {
-    const saved = JSON.parse(localStorage.getItem('gemini_brain_active_orgs') || '[]');
+    const saved = JSON.parse(tabStorage.getItem('gemini_brain_active_orgs') || '[]');
     return Array.isArray(saved) ? saved.map(String) : [];
   } catch {
     return [];
@@ -228,9 +232,9 @@ function stripSessionIdFromUrl() {
   sanitizeSensitiveQueryParams({ includeHandoff: true });
 }
 
-export default function App() {
+export default function App({sessionProfile,onSessionLogout}) {
   // Current Authenticated User & Token State
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser] = useState(()=>({user_id:sessionProfile.user.id,email:sessionProfile.user.email,name:sessionProfile.user.name,authenticated:true}));
 
   // Active Tenant Context State
   const [activeTenant, setActiveTenant] = useState(null);
@@ -274,6 +278,7 @@ export default function App() {
   // AbortController of the query in flight, so the composer's Stop button
   // can cancel it. Null when nothing is running.
   const queryControllerRef = useRef(null);
+  useEffect(()=>()=>queryControllerRef.current?.abort(),[]);
   const [responseData, setResponseData] = useState(null);
   const [streamLogs, setStreamLogs] = useState([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -338,33 +343,23 @@ export default function App() {
       // Fresh widget handoff supplies the id via postMessage. Do not seed from
       // the URL (it is no longer a capability) and skip the last local id so
       // we do not flash the previous thread first.
-      if (new URLSearchParams(window.location.search).get('handoff') === '1') return null;
-      const id = sessionStorage.getItem(ACTIVE_SESSION_KEY);
+      if (new URLSearchParams(window.location.search).has('context')) return null;
+      const id = tabStorage.getItem(ACTIVE_SESSION_KEY);
       if (id && readDeletedSessions().has(id)) return null;
       return isSessionId(id) ? id : null;
     } catch {
       return null;
     }
   });
-  const pendingHandoffRef = useRef(null);
   const handoffAppliedRef = useRef(false);
   const lastHandoffSessionRef = useRef(null);
   const lastCanvasKeyRef = useRef(null);
-  const accutaxSsoAppliedRef = useRef(false);
-  const [wantsAccutaxHandoff] = useState(() => {
-    try {
-      if (new URLSearchParams(window.location.search).get('handoff') === '1') return true;
-      if (sessionStorage.getItem('accutax_sso_token')) return true;
-      if (window.opener) return true;
-      return false;
-    } catch {
-      return false;
-    }
-  });
+  const [wantsAccutaxHandoff] = useState(() => HANDOFF_CODE !== null);
   const [handoffTimedOut, setHandoffTimedOut] = useState(false);
+  const [handoffError, setHandoffError] = useState('');
   const [handoffSettled, setHandoffSettled] = useState(() => {
     try {
-      return new URLSearchParams(window.location.search).get('handoff') !== '1';
+      return !HANDOFF_CODE;
     } catch {
       return true;
     }
@@ -375,7 +370,7 @@ export default function App() {
   // underlying array happened to be written.
   const [chatHistory, setChatHistory] = useState(() => {
     try {
-      const saved = localStorage.getItem('accutax_chat_history');
+      const saved = tabStorage.getItem('accutax_chat_history');
       const parsed = saved ? JSON.parse(saved) : [];
       return parsed.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     } catch { return []; }
@@ -400,8 +395,8 @@ export default function App() {
 
   useEffect(() => {
     try {
-      if (widgetSessionId) sessionStorage.setItem(ACTIVE_SESSION_KEY, widgetSessionId);
-      else sessionStorage.removeItem(ACTIVE_SESSION_KEY);
+      if (widgetSessionId) tabStorage.setItem(ACTIVE_SESSION_KEY, widgetSessionId);
+      else tabStorage.removeItem(ACTIVE_SESSION_KEY);
     } catch {
       /* ignore */
     }
@@ -428,84 +423,24 @@ export default function App() {
   const chatScrollAreaRef = useRef(null);
   const isSwitchingSessionRef = useRef(false);
 
-  const { isAuthenticated, isLoading: authLoading, getAccessTokenSilently, loginWithRedirect, user: auth0User } = useAuth0();
-
-  const applyAccutaxSession = (token, extra = {}) => {
-    if (!token || accutaxSsoAppliedRef.current) return;
-    accutaxSsoAppliedRef.current = true;
-    const userObj = {
-      access_token: token,
-      email: extra.email || '',
-      name: extra.name || extra.email || 'Accutax user',
-      source: 'accutax',
-    };
-    try {
-      sessionStorage.setItem('accutax_sso_token', token);
-    } catch {
-      /* ignore quota */
+  // A context ticket transfers only the current user's authorized conversation, never login authority.
+  useEffect(()=>{
+    if(!HANDOFF_CODE)return;
+    if(!handoffExchangePromise||handoffExchangePromise.userId!==currentUser.user_id){
+      handoffExchangePromise={userId:currentUser.user_id,promise:sessionClient.json('ai/context/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticket:HANDOFF_CODE})})};
     }
-    setCurrentUser(userObj);
-    loadUserTenants(token, userObj);
-  };
-
-  // Continue-in-full-chat: reuse the Accutax JWT. Do not send the user to Auth0.
-  useEffect(() => {
-    if (!wantsAccutaxHandoff) return undefined;
-    try {
-      const cached = sessionStorage.getItem('accutax_widget_handoff');
-      const parsed = cached ? JSON.parse(cached) : null;
-      const token = parsed?.token || sessionStorage.getItem('accutax_sso_token');
-      if (token) applyAccutaxSession(token, parsed || {});
-    } catch {
-      /* ignore */
-    }
-    return undefined;
-  }, []);
-
-  useEffect(() => {
-    if (!wantsAccutaxHandoff || currentUser) return undefined;
-    const timer = window.setTimeout(() => {
-      setHandoffTimedOut(true);
-      setHandoffSettled(true);
-    }, 15000);
-    return () => window.clearTimeout(timer);
-  }, [wantsAccutaxHandoff, currentUser]);
-
-  // Auth0 Silent Authentication — skipped when arriving from the Accutax widget
-  useEffect(() => {
-    if (accutaxSsoAppliedRef.current || currentUser?.source === 'accutax') return;
-    if (wantsAccutaxHandoff && !handoffTimedOut) return;
-    if (authLoading) return;
-    if (!isAuthenticated) {
-      // Do not auto-redirect to Auth0: this client isn't registered for
-      // every deployment's callback URL, and the app has its own
-      // email/password LoginPage that hits the backend directly. Falling
-      // through here lets that render instead (see the `!currentUser`
-      // branch in the component body).
-      return;
-    }
-    const initAuth = async () => {
-      try {
-        const token = await getAccessTokenSilently();
-        if (accutaxSsoAppliedRef.current) return;
-        const userObj = { ...auth0User, access_token: token };
-        setCurrentUser(userObj);
-        loadUserTenants(token, userObj);
-      } catch (e) {
-        console.error('Failed to silently acquire Auth0 token:', e);
-        if (!accutaxSsoAppliedRef.current) loginWithRedirect();
-      }
-    };
-    initAuth();
-  }, [authLoading, isAuthenticated, getAccessTokenSilently, loginWithRedirect, auth0User, currentUser, handoffTimedOut, wantsAccutaxHandoff]);
+    let cancelled=false;
+    handoffExchangePromise.promise.then(ctx=>{
+      if(cancelled)return;
+      applyWidgetHandoff({sessionId:ctx.session_id,orgId:ctx.organization_id,currentPage:ctx.current_page,conversation:ctx.conversation||[]});
+      setHandoffSettled(true);stripSessionIdFromUrl();
+    }).catch(reason=>{if(!cancelled){setHandoffError(reason.message);setHandoffTimedOut(true);setHandoffSettled(true);stripSessionIdFromUrl();}});
+    return()=>{cancelled=true;};
+  },[currentUser.user_id]);
+  useEffect(()=>{loadUserTenants(undefined,currentUser);},[currentUser.user_id]);
 
   const notifyWidgetSessionDeleted = (sessionId) => {
     if (!sessionId) return;
-    try {
-      sessionStorage.removeItem('accutax_widget_handoff');
-    } catch {
-      /* ignore */
-    }
     const payload = { type: 'accutax-session-deleted', sessionId };
     for (const origin of originAliases(allowedDashboardOrigin())) {
       try {
@@ -518,7 +453,6 @@ export default function App() {
 
   const applyWidgetHandoff = (data) => {
     if (!data) return;
-    if (data.token) applyAccutaxSession(data.token, data);
     const incomingSessionId = data.sessionId || null;
     if (incomingSessionId && readDeletedSessions().has(incomingSessionId)) {
       handoffAppliedRef.current = true;
@@ -537,7 +471,7 @@ export default function App() {
     if (isSessionId(incomingSessionId)) setWidgetSessionId(incomingSessionId);
     lastHandoffSessionRef.current = incomingSessionId;
     if (data.orgId) {
-      localStorage.setItem('gemini_brain_active_org', String(data.orgId));
+      tabStorage.setItem('gemini_brain_active_org', String(data.orgId));
     }
     if (data.currentPage || data.activeYear || data.contactName || data.bankAccount) {
       setUiContext({
@@ -553,11 +487,6 @@ export default function App() {
     sanitizeSensitiveQueryParams({ includeHandoff: true });
     if (mapped.length === 0) {
       return;
-    }
-    try {
-      sessionStorage.removeItem('accutax_widget_handoff');
-    } catch {
-      /* ignore */
     }
     setConversation(mapped);
     setHistoryDirty(true);
@@ -584,49 +513,10 @@ export default function App() {
       const updated = withEntry
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
         .slice(0, HISTORY_LIMIT);
-      localStorage.setItem('accutax_chat_history', JSON.stringify(updated));
+      tabStorage.setItem('accutax_chat_history', JSON.stringify(updated));
       return updated;
     });
   };
-
-  useEffect(() => {
-    if (!wantsAccutaxHandoff) return undefined;
-
-    try {
-      const cached = sessionStorage.getItem('accutax_widget_handoff');
-      if (cached) applyWidgetHandoff(JSON.parse(cached));
-    } catch {
-      /* ignore */
-    }
-
-    const onMsg = (event) => {
-      if (!isAllowedDashboardOrigin(event.origin)) return;
-      if (event.data?.type !== 'accutax-widget-handoff') return;
-      pendingHandoffRef.current = event.data;
-      try {
-        sessionStorage.setItem('accutax_widget_handoff', JSON.stringify(event.data));
-      } catch {
-        /* ignore quota */
-      }
-      applyWidgetHandoff(event.data);
-      event.source?.postMessage({ type: 'accutax-widget-handoff-ack' }, event.origin);
-    };
-
-    window.addEventListener('message', onMsg);
-    pingOpenerReady();
-    const readyTimer = window.setInterval(pingOpenerReady, 250);
-    window.setTimeout(() => window.clearInterval(readyTimer), 15000);
-    return () => {
-      window.removeEventListener('message', onMsg);
-      window.clearInterval(readyTimer);
-    };
-  }, [wantsAccutaxHandoff]);
-
-  useEffect(() => {
-    if (pendingHandoffRef.current && !handoffAppliedRef.current) {
-      applyWidgetHandoff(pendingHandoffRef.current);
-    }
-  }, [currentUser]);
 
   useEffect(() => {
     if (widgetSessionId) return undefined;
@@ -639,7 +529,7 @@ export default function App() {
   // UUID before POST finishes 404s; treating that 404 as "mint another id"
   // produced an unbounded create/404 loop.
   useEffect(() => {
-    if (!widgetSessionId || !currentUser?.access_token || !activeTenant?.organization_id) {
+    if (!widgetSessionId || !currentUser?.authenticated || !activeTenant?.organization_id) {
       return undefined;
     }
     let cancelled = false;
@@ -652,11 +542,11 @@ export default function App() {
         }
         await createChatSession(
           scopeOrgIds.length > 1 ? scopeOrgIds : activeTenant.organization_id,
-          currentUser.access_token,
+          currentUser.authenticated,
           widgetSessionId,
         );
         if (cancelled) return;
-        const data = await fetchSessionMessages(widgetSessionId, currentUser.access_token);
+        const data = await fetchSessionMessages(widgetSessionId, currentUser.authenticated);
         if (cancelled) return;
         const mapped = mapApiTranscript(data.messages || [], data.context_window);
         if (mapped.length === 0) return;
@@ -682,7 +572,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [widgetSessionId, currentUser?.access_token, activeTenant?.organization_id, scopeKey]);
+  }, [widgetSessionId, currentUser?.authenticated, activeTenant?.organization_id, scopeKey]);
 
   // Older sidebar entries had no org stamp. Attach them to the org that is
   // selected when they are first seen so they do not leak across tenants.
@@ -694,7 +584,7 @@ export default function App() {
       const updated = prev.map((e) =>
         e.organizationId != null ? e : { ...e, organizationId: orgId },
       );
-      localStorage.setItem('accutax_chat_history', JSON.stringify(updated));
+      tabStorage.setItem('accutax_chat_history', JSON.stringify(updated));
       return updated;
     });
     return undefined;
@@ -742,7 +632,7 @@ export default function App() {
             return;
           }
         }
-        const savedOrgId = localStorage.getItem('gemini_brain_active_org');
+        const savedOrgId = tabStorage.getItem('gemini_brain_active_org');
         const matched = data.tenants.find((t) => String(t.id || t.organization_id) === String(savedOrgId)) || data.tenants[0];
         setActiveTenant({
           ...matched,
@@ -751,15 +641,20 @@ export default function App() {
         return;
       }
     } catch (e) {
-      console.warn('Could not load tenants from API, using default list:', e);
+      setAvailableTenants([]);
+      setActiveTenant(null);
+      setSelectedOrgIds([]);
+      return;
     }
-    initTenantFromUser(user);
+    setAvailableTenants([]);
+    setActiveTenant(null);
+    setSelectedOrgIds([]);
   };
 
   // Helper to initialize active tenant from logged in user claims
   const initTenantFromUser = (user) => {
     const allowed = user?.allowed_org_ids || [];
-    const savedOrgId = localStorage.getItem('gemini_brain_active_org');
+    const savedOrgId = tabStorage.getItem('gemini_brain_active_org');
     let selected = null;
     if (savedOrgId) {
       selected = DEFAULT_ORGANIZATIONS.find((o) => String(o.id) === String(savedOrgId));
@@ -811,14 +706,14 @@ export default function App() {
         const updated = prev.map((e) =>
           e.organizationId != null ? e : { ...e, organizationId: previousOrgId },
         );
-        localStorage.setItem('accutax_chat_history', JSON.stringify(updated));
+        tabStorage.setItem('accutax_chat_history', JSON.stringify(updated));
         return updated;
       });
     }
     setActiveTenant({ ...primary, organization_id: next[0] });
     setSelectedOrgIds(next);
-    localStorage.setItem('gemini_brain_active_org', String(next[0]));
-    localStorage.setItem('gemini_brain_active_orgs', JSON.stringify(next));
+    tabStorage.setItem('gemini_brain_active_org', String(next[0]));
+    tabStorage.setItem('gemini_brain_active_orgs', JSON.stringify(next));
     return true;
   };
 
@@ -836,56 +731,7 @@ export default function App() {
     handleSelectOrgs([tenantObj.id || tenantObj.organization_id], tenantObj);
   };
 
-  // Handle successful login
-  const handleLoginSuccess = (authResponse) => {
-    const userSession = {
-      user_id: authResponse.user_id,
-      email: authResponse.email,
-      access_token: authResponse.access_token,
-      allowed_org_ids: authResponse.allowed_org_ids || [],
-    };
-
-    localStorage.setItem('gemini_brain_user', JSON.stringify(userSession));
-    setCurrentUser(userSession);
-
-    // The login response carries no feature flags; /tenants does.
-    fetchTenants(userSession.access_token)
-      .then((data) => setMultiOrg(multiOrgFlags(data)))
-      .catch(() => setMultiOrg({ enabled: false, max: 1 }));
-
-    if (authResponse.tenants && authResponse.tenants.length > 0) {
-      setAvailableTenants(authResponse.tenants);
-      const firstT = authResponse.tenants[0];
-      const fullT = {
-        ...firstT,
-        organization_id: firstT.id || firstT.organization_id,
-        user_id: userSession.user_id,
-      };
-      setActiveTenant(fullT);
-      localStorage.setItem('gemini_brain_active_org', String(fullT.organization_id));
-    } else {
-      initTenantFromUser(userSession);
-    }
-  };
-
-  // Handle Logout
-  const handleLogout = () => {
-    localStorage.removeItem('gemini_brain_user');
-    try {
-      sessionStorage.removeItem('accutax_sso_token');
-      sessionStorage.removeItem('accutax_widget_handoff');
-    } catch {
-      /* ignore */
-    }
-    accutaxSsoAppliedRef.current = false;
-    setCurrentUser(null);
-    setActiveTenant(null);
-    setMultiOrg({ enabled: false, max: 1 });
-    setResponseData(null);
-    setStreamLogs([]);
-    setConversation([]);
-    setActiveHistoryId(null);
-  };
+  const handleLogout=()=>onSessionLogout();
 
   // Persist the current conversation into chatHistory — either updating the
   // entry it was loaded from (activeHistoryId) or creating a new one. Pulled
@@ -911,7 +757,7 @@ export default function App() {
       };
       const nextList = prev.map((e, i) => (i === idx ? updatedEntry : e));
       try {
-        localStorage.setItem('accutax_chat_history', JSON.stringify(nextList));
+        tabStorage.setItem('accutax_chat_history', JSON.stringify(nextList));
       } catch { /* ignore */ }
       return nextList;
     });
@@ -955,7 +801,7 @@ export default function App() {
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
         .slice(0, HISTORY_LIMIT);
       try {
-        localStorage.setItem('accutax_chat_history', JSON.stringify(updated));
+        tabStorage.setItem('accutax_chat_history', JSON.stringify(updated));
       } catch { /* ignore */ }
       return updated;
     });
@@ -1024,9 +870,9 @@ export default function App() {
     const sessionId =
       entry?.sessionId || (deletedIsOpen ? widgetSessionId : null);
 
-    if (sessionId && currentUser?.access_token) {
+    if (sessionId && currentUser?.authenticated) {
       try {
-        await deleteChatSession(sessionId, currentUser.access_token);
+        await deleteChatSession(sessionId, currentUser.authenticated);
       } catch (err) {
         console.warn('Could not delete chat session on server:', err);
       }
@@ -1042,7 +888,7 @@ export default function App() {
 
     setChatHistory((prev) => {
       const updated = prev.filter((e) => e.id !== id);
-      localStorage.setItem('accutax_chat_history', JSON.stringify(updated));
+      tabStorage.setItem('accutax_chat_history', JSON.stringify(updated));
       return updated;
     });
 
@@ -1063,7 +909,7 @@ export default function App() {
     setChatHistory((prev) => {
       const updated = prev.map((e) => (e.id === id ? { ...e, title: newTitle } : e));
       try {
-        localStorage.setItem('accutax_chat_history', JSON.stringify(updated));
+        tabStorage.setItem('accutax_chat_history', JSON.stringify(updated));
       } catch { /* ignore */ }
       return updated;
     });
@@ -1074,18 +920,16 @@ export default function App() {
     setChatHistory((prev) => {
       const updated = prev.map((e) => (e.id === id ? { ...e, isPinned: !e.isPinned } : e));
       try {
-        localStorage.setItem('accutax_chat_history', JSON.stringify(updated));
+        tabStorage.setItem('accutax_chat_history', JSON.stringify(updated));
       } catch { /* ignore */ }
       return updated;
     });
   };
 
   // Handle Query Submission
-  // Load the models this user may pick. This also checks the stored token: a
-  // token the service no longer accepts (most often after a restart) sends the
-  // user back to sign in.
+  // Load the models this signed-in user may pick through the shared gateway.
   useEffect(() => {
-    const token = currentUser?.access_token;
+    const token = currentUser?.authenticated;
     if (!token) return;
     let cancelled = false;
     fetchModelCatalog(token).then((catalog) => {
@@ -1096,19 +940,16 @@ export default function App() {
       setModel((prev) => (keys.includes(prev) ? prev : catalog.default_model || keys[0] || ''));
     }).catch((err) => {
       if (cancelled) return;
-      if (err.code === 'SESSION_EXPIRED') {
-        handleLogout();
-        return;
-      }
+      if (err.code === 'SESSION_EXPIRED') return; // SessionRoot receives the BFF 401.
       console.warn('Session check unavailable:', err.message);
     });
     return () => {
       cancelled = true;
     };
-  }, [currentUser?.access_token]);
+  }, [currentUser?.authenticated]);
 
   useEffect(() => {
-    const token = currentUser?.access_token;
+    const token = currentUser?.authenticated;
     if (!token) {
       setUploadConfig({ enabled: false });
       return undefined;
@@ -1120,11 +961,11 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [currentUser?.access_token]);
+  }, [currentUser?.authenticated]);
 
   // The privacy page (PII masking snapshots) is shown only to PII_SNAPSHOT_ADMINS.
   useEffect(() => {
-    const token = currentUser?.access_token;
+    const token = currentUser?.authenticated;
     if (!token) {
       setPrivacyAccess({ admin: false });
       return undefined;
@@ -1136,7 +977,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [currentUser?.access_token]);
+  }, [currentUser?.authenticated]);
 
   // A different chat: its files are not this chat's. Close any preview and forget the files fetched for it.
   useEffect(() => {
@@ -1225,7 +1066,7 @@ export default function App() {
           .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
           .slice(0, HISTORY_LIMIT);
         try {
-          localStorage.setItem('accutax_chat_history', JSON.stringify(updated));
+          tabStorage.setItem('accutax_chat_history', JSON.stringify(updated));
         } catch { /* ignore */ }
         return updated;
       });
@@ -1238,7 +1079,7 @@ export default function App() {
           i === idx ? { ...existing, conversation: nextConversation, preview: 'Thinking...' } : e
         );
         try {
-          localStorage.setItem('accutax_chat_history', JSON.stringify(updated));
+          tabStorage.setItem('accutax_chat_history', JSON.stringify(updated));
         } catch { /* ignore */ }
         return updated;
       });
@@ -1257,7 +1098,7 @@ export default function App() {
       model: (modelCatalog && !modelCatalog.picker_hidden && model) || 'auto',
     };
 
-    const token = currentUser?.access_token || '';
+    const token = currentUser?.authenticated || '';
 
     // Only the request that still owns queryControllerRef may clear loading —
     // a stopped request's late finally must not touch a newer one.
@@ -1516,17 +1357,8 @@ export default function App() {
     return scopeOrgIds.map((id) => names.get(id) || `Organization ${id}`);
   }, [availableTenants, scopeOrgIds]);
 
-  // If user is not logged in, render the production LoginPage
-  if (!currentUser) {
-    if (wantsAccutaxHandoff && !handoffTimedOut) {
-      return (
-        <div className="app-layout" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
-          <p style={{ color: 'var(--ink-muted, #64748b)', fontSize: 14 }}>Continuing from Accutax…</p>
-        </div>
-      );
-    }
-    return <LoginPage onLoginSuccess={handleLoginSuccess} />;
-  }
+  // Authentication is supplied by the shared SessionRoot.
+
 
   const hasStartedChat = conversation.length > 0;
   const userName = currentUser?.email?.split('@')[0] || 'there';
@@ -1604,7 +1436,7 @@ export default function App() {
                   streamLogs={streamLogs}
                   activeTenant={activeTenant}
                   onRegenerate={handleSubmitQuery}
-                  token={currentUser?.access_token}
+                  token={currentUser?.authenticated}
                   onPreviewFile={handlePreviewFile}
                   onOpenCanvas={(block) => {
                     if (block?.spec) setCanvasSpec(block.spec);
@@ -1635,7 +1467,7 @@ export default function App() {
             uploadConfig={uploadConfig}
             sessionId={widgetSessionId}
             orgIds={scopeOrgIds}
-            token={currentUser?.access_token || ''}
+            token={currentUser?.authenticated || ''}
             onPreviewFile={handlePreviewFile}
           />
           <div style={styles.composerFooter}>
@@ -1654,7 +1486,7 @@ export default function App() {
           <FilePreviewPanel
             key={previewFile.id || previewFile.name}
             item={previewFile}
-            token={currentUser?.access_token}
+            token={currentUser?.authenticated}
             width={canvasWidth}
             onWidthChange={setCanvasWidth}
             onClose={() => setPreviewFile(null)}
@@ -1665,19 +1497,19 @@ export default function App() {
             spec={canvasSpec}
             artifact={canvasArtifact}
             artifacts={canvasArtifacts}
-            token={currentUser?.access_token}
+            token={currentUser?.authenticated}
             width={canvasWidth}
             onWidthChange={setCanvasWidth}
             onClose={() => setCanvasOpen(false)}
           />
         )}
         {lightboxFile && (
-          <ImageLightbox item={lightboxFile} token={currentUser?.access_token} onClose={() => setLightboxFile(null)} />
+          <ImageLightbox item={lightboxFile} token={currentUser?.authenticated} onClose={() => setLightboxFile(null)} />
         )}
 
       {/* Tenant Authentication & Switcher Modal */}
       {showAuthModal && (
-        <TenantLoginModal
+        <TenantLoginModal tenants={availableTenants}
           currentTenant={activeTenant}
           onSelectTenant={(newTenant) => setActiveTenant(newTenant)}
           onClose={() => setShowAuthModal(false)}
@@ -1686,14 +1518,14 @@ export default function App() {
 
       {showHealthModal && (
         <ModelHealthModal
-          token={currentUser?.access_token || ''}
+          token={currentUser?.authenticated || ''}
           onClose={() => setShowHealthModal(false)}
         />
       )}
 
       {showPrivacy && privacyAccess.admin && (
         <PrivacySnapshotsModal
-          token={currentUser?.access_token || ''}
+          token={currentUser?.authenticated || ''}
           access={privacyAccess}
           orgIds={scopeOrgIds}
           orgNames={Object.fromEntries(availableTenants.map((t) => [tenantIdOf(t), t?.display_name || t?.name || t?.org_name]).filter(([, n]) => n))}

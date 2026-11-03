@@ -15,7 +15,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Callable
 
 from gemini_brain.config.settings import settings
 from gemini_brain.semantic import cash_forecast, list_documents, query_metrics
@@ -99,6 +99,7 @@ class ToolContext:
     user_id: Optional[int] = None
     session_id: Optional[str] = None
     document_ids: Sequence[str] = ()
+    authorize: Optional[Callable[[], None]] = None
     #: The FTA documents this request's VAT searches found, numbered once for the whole answer: url -> n, the source
     #: entries (as vat_kb.answer.sources_block makes them) and the numbers in their passages. `fta_block()` turns them
     #: into the sources block under the answer, so a [2] in the text is always the same document.
@@ -151,6 +152,10 @@ def specs(ctx: ToolContext) -> List[Dict[str, Any]]:
 
 def execute(name: str, params: Any, ctx: ToolContext) -> Tuple[Dict[str, Any], bool]:
     """Run one tool call. Returns (result, ok); never raises."""
+    # Authority failures terminate work; they must not become a recoverable
+    # model/tool error that the agent can ignore on its next call.
+    if ctx.authorize:
+        ctx.authorize()
     params = params if isinstance(params, dict) else {}
     try:
         if name in DATA_TOOLS:

@@ -1,36 +1,16 @@
+import { aiEndpoint,sessionClient } from '../auth/session';
 /**
  * api.js — API client service for communicating with the Gemini Brain FastAPI backend.
- * Handles JWT authentication, query submission, live SSE streaming, and model health diagnostics.
+ * Calls the authenticated Nest AI gateway for queries, streams and files.
  */
 
 import { uploadErrorMessage } from './attachments';
-
-export const loginUser = async (email, password) => {
-  const response = await fetch('/api/v1/auth/login-json', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    },
-    body: JSON.stringify({ username: email, password }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new Error(errorData.detail || 'Authentication failed');
-  }
-
-  return await response.json();
-};
 
 export const fetchQueryResponse = async (payload, token = '', signal = undefined) => {
   const headers = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
 
   const response = await fetch('/api/v1/query', {
     method: 'POST',
@@ -53,9 +33,6 @@ export const fetchQueryResponse = async (payload, token = '', signal = undefined
 
 export const fetchModelHealth = async (token = '') => {
   const headers = { 'Accept': 'application/json' };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
 
   const response = await fetch('/api/v1/health/models', {
     method: 'GET',
@@ -76,9 +53,6 @@ export const streamQueryResponse = (payload, onChunk, onError, onComplete, token
     'Content-Type': 'application/json',
     'Accept': 'text/event-stream',
   };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
 
   fetch('/api/v1/query/stream', {
     method: 'POST',
@@ -88,9 +62,6 @@ export const streamQueryResponse = (payload, onChunk, onError, onComplete, token
   })
     .then(async (response) => {
       if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem('gemini_brain_user');
-        }
         // Read the body once: a second read of a used body fails.
         const raw = await response.text().catch(() => '');
         let errorData = null;
@@ -104,7 +75,7 @@ export const streamQueryResponse = (payload, onChunk, onError, onComplete, token
         const detail = errorData && errorData.detail;
         if (typeof detail === 'string' && detail) throw new Error(detail);
         if (detail && typeof detail === 'object' && detail.message) throw new Error(String(detail.message));
-        throw new Error(`Streaming failed (${response.status}): ${raw || response.statusText}`);
+        throw new Error(`Streaming failed (${response.status})`);
       }
 
       const reader = response.body.getReader();
@@ -132,7 +103,7 @@ export const streamQueryResponse = (payload, onChunk, onError, onComplete, token
                 const data = JSON.parse(jsonStr);
                 onChunk(data);
               } catch (e) {
-                console.warn('Could not parse SSE chunk:', jsonStr);
+                console.warn('Could not parse an AI stream chunk');
               }
             }
           }
@@ -153,9 +124,6 @@ export const streamQueryResponse = (payload, onChunk, onError, onComplete, token
 // spot an expired session (see App.jsx).
 export const fetchModelCatalog = async (token = '') => {
   const headers = { 'Accept': 'application/json' };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
 
   const response = await fetch('/api/v1/models', {
     method: 'GET',
@@ -163,10 +131,7 @@ export const fetchModelCatalog = async (token = '') => {
   });
 
   if (response.status === 401) {
-    // The stored token is no longer valid — most often because the service was
-    // restarted. Surface it as an expired session so the app can send the user
-    // back to sign in, rather than leaving them apparently logged in with a
-    // half-working UI.
+    // The shared session was rejected; SessionRoot handles the 401.
     const err = new Error('Your session has expired. Please sign in again.');
     err.code = 'SESSION_EXPIRED';
     throw err;
@@ -181,9 +146,6 @@ export const fetchModelCatalog = async (token = '') => {
 
 export const fetchTenants = async (token = '') => {
   const headers = { 'Accept': 'application/json' };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
 
   const response = await fetch('/api/v1/tenants', {
     method: 'GET',
@@ -199,7 +161,6 @@ export const fetchTenants = async (token = '') => {
 
 export const fetchChatSessions = async (organizationId, token = '') => {
   const headers = { Accept: 'application/json' };
-  if (token) headers.Authorization = `Bearer ${token}`;
   const params = new URLSearchParams();
   if (organizationId != null && organizationId !== '') {
     params.set('organization_id', String(organizationId));
@@ -215,7 +176,6 @@ export const fetchChatSessions = async (organizationId, token = '') => {
 
 export const fetchSessionMessages = async (sessionId, token = '', limit = 50) => {
   const headers = { Accept: 'application/json' };
-  if (token) headers.Authorization = `Bearer ${token}`;
   const response = await fetch(
     `/api/v1/sessions/${encodeURIComponent(sessionId)}/messages?limit=${limit}`,
     { headers }
@@ -232,7 +192,6 @@ export const fetchSessionMessages = async (sessionId, token = '', limit = 50) =>
 // thread's lifetime.
 export const createChatSession = async (organizationId, token = '', sessionId) => {
   const headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
-  if (token) headers.Authorization = `Bearer ${token}`;
   const ids = (Array.isArray(organizationId) ? organizationId : [organizationId])
     .filter((o) => o != null && o !== '')
     .map(Number);
@@ -254,7 +213,6 @@ export const createChatSession = async (organizationId, token = '', sessionId) =
 
 export const deleteChatSession = async (sessionId, token = '') => {
   const headers = { Accept: 'application/json' };
-  if (token) headers.Authorization = `Bearer ${token}`;
   const response = await fetch(`/api/v1/sessions/${encodeURIComponent(sessionId)}`, {
     method: 'DELETE',
     headers,
@@ -266,7 +224,7 @@ export const deleteChatSession = async (sessionId, token = '') => {
 
 // ── Files attached in chat (docs/DOCUMENT_UPLOAD_PLAN.md) ────────────────────
 
-const authHeaders = (token) => (token ? { Authorization: `Bearer ${token}` } : {});
+const authHeaders = () => ({});
 
 // What the composer needs: whether this user may attach files, and the limits. A failure means "off".
 export const fetchUploadConfig = async (token = '') => {
@@ -291,8 +249,11 @@ const failure = (status, body) => {
 export const uploadFile = (file, { sessionId, organizationIds = [], token = '', onProgress } = {}) => {
   const xhr = new XMLHttpRequest();
   const promise = new Promise((resolve, reject) => {
-    xhr.open('POST', '/api/v1/uploads');
-    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.open('POST', aiEndpoint('/api/v1/uploads'));
+    xhr.withCredentials=true;
+    const csrf=sessionClient.getSnapshot()?.csrfToken;
+    if(!csrf){reject(new Error('Your session must be verified before uploading.'));return;}
+    xhr.setRequestHeader('X-CSRF-Token',csrf);
     xhr.setRequestHeader('Accept', 'application/json');
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);

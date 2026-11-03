@@ -102,6 +102,9 @@ class QueryRequest(BaseModel):
 
     @model_validator(mode="after")
     def _org_fields_agree(self) -> "QueryRequest":
+        from gemini_brain.config.settings import settings
+        if settings.ai_auth_mode == "gateway" and self.db_name:
+            raise ValueError("Database selection is not available through the authenticated gateway.")
         # An explicit empty selection is a client bug, not a request for the default org.
         if self.organization_ids is not None and not self.organization_ids:
             raise ValueError("organization_ids must name at least one organization.")
@@ -336,6 +339,22 @@ class LoginRequest(BaseModel):
     password: str = Field(..., description="Password", examples=["TestPass123!"])
 
 
+class HandoffRequest(BaseModel):
+    """One-time code issued by the dashboard for continuing a chat here."""
+
+    code: str = Field(..., min_length=20, max_length=128, pattern=r"^[A-Za-z0-9_-]+$", description="One-time handoff code.")
+
+
+class HandoffContext(BaseModel):
+    """Dashboard context carried with a handoff."""
+
+    organization_id: Optional[int] = None
+    session_id: Optional[str] = None
+    current_page: Optional[str] = None
+    name: Optional[str] = None
+    conversation: List[Dict[str, Any]] = Field(default_factory=list)
+
+
 class TokenResponse(BaseModel):
     """OAuth2 JWT access token response for Swagger and API clients."""
 
@@ -346,6 +365,7 @@ class TokenResponse(BaseModel):
     email: str = Field(..., description="Authenticated user email.")
     allowed_org_ids: List[int] = Field(default_factory=list, description="Allowed tenant organization IDs.")
     tenants: List[Dict[str, Any]] = Field(default_factory=list, description="Metadata list of accessible tenant organizations.")
+    handoff: Optional[HandoffContext] = Field(default=None, description="Dashboard context, present only on /auth/handoff.")
 
 
 class TenantInfo(BaseModel):

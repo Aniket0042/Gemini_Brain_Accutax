@@ -55,6 +55,12 @@ DESCRIPTION = """
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager: create DB tables and start background workers on startup, stop them on shutdown."""
+    import os
+    if os.getenv("NODE_ENV") == "production" and settings.ai_auth_mode != "gateway":
+        raise RuntimeError("Production AI requires the authenticated private gateway")
+    if settings.ai_auth_mode == "gateway":
+        from gemini_brain.api.gateway_authority import load_gateway_configuration
+        load_gateway_configuration(settings.ai_gateway_config_file)
     try:
         from gemini_brain.api.auth import init_auth_db
         init_auth_db()
@@ -136,6 +142,8 @@ def create_app() -> FastAPI:
     # ── Request Correlation Middleware ──────────────────────────────
     @app.middleware("http")
     async def correlation_id_middleware(request: Request, call_next):
+        if settings.ai_auth_mode == 'gateway' and request.url.path.startswith('/api/v1/auth/'):
+            return JSONResponse(status_code=401,content={"detail":"Sign in through the shared application session"})
         req_id = request.headers.get("X-Request-ID") or new_request_id()
         request.state.request_id = req_id
         response = await call_next(request)
@@ -207,13 +215,13 @@ def create_app() -> FastAPI:
         "https://accutaxai.netlify.app",
         "https://accutax-bk-testing.netlify.app",
     ]
-    origins = list(dict.fromkeys(configured_origins + default_allowed))
+    origins = [] if settings.ai_auth_mode == "gateway" else list(dict.fromkeys(configured_origins + default_allowed))
     logger.info("Configuring CORS with origins: %s", origins)
 
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
-        allow_origin_regex=r"^https://.*\.netlify\.app$",
+        allow_origin_regex=None if settings.ai_auth_mode == "gateway" else r"^https://.*\.netlify\.app$",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

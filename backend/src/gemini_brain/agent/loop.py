@@ -254,6 +254,7 @@ def run_agent(
     session_id: Optional[str] = None,
     pii_mode: Optional[str] = None,
     capture: bool = False,
+    authorize: Optional[Callable[[], None]] = None,
 ) -> AgentResult:
     """Answer one question. Never raises. `progress(tool_name, tool_input)` is called before each tool runs.
     `history`: the thread's earlier messages; `turn_specs`: what its turns queried (history.add_spec);
@@ -268,8 +269,10 @@ def run_agent(
     orgs = [int(o) for o in organization_ids]
     sentinel.note_request(session_id=session_id, organization_ids=orgs,
                           org_names=[(org_meta.get(o) or {}).get("name") for o in orgs], subject=subject)
+    if authorize:
+        authorize()
     ctx = tools.ToolContext(organization_ids=orgs, subject=subject, deadline=deadline, user_id=user_id,
-                            session_id=session_id, document_ids=tuple(document_ids))
+                            session_id=session_id, document_ids=tuple(document_ids), authorize=authorize)
     planner_id = model_id or settings.agent_model_id or SONNET5_ID
     writer_id = answer_model_id or settings.agent_answer_model_id or planner_id
     planner = BedrockAdapter(planner_id, label="agent")

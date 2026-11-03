@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Generator, Optional
 
@@ -21,11 +23,15 @@ from gemini_brain.api.auth import (
     fetch_organizations_from_db,
     get_current_user,
     get_user_allowed_orgs,
+    _live_allowed_org_ids,
+    decode_access_token,
     get_user_by_email,
     placeholder_tenants,
     verify_password,
 )
 from gemini_brain.api.models import (
+    HandoffContext,
+    HandoffRequest,
     HealthResponse,
     ModelCatalogResponse,
     ModelInfo,
@@ -105,32 +111,10 @@ def login_form(form_data: OAuth2PasswordRequestForm = Depends()) -> TokenRespons
             tenants=tenants,
         )
 
-    # 2. Fallback to local DB / seed map login
-    user = get_user_by_email(form_data.username)
-    if not user or not verify_password(form_data.password, user["password"]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    allowed_org_ids = get_user_allowed_orgs(user["id"])
-    access_token = create_access_token(
-        user_id=user["id"],
-        email=user["email"],
-        allowed_org_ids=allowed_org_ids,
-    )
-    tenants = _resolve_tenants_for_org_ids(allowed_org_ids)
-
-    return TokenResponse(
-        access_token=access_token,
-        token_type="bearer",
-        expires_in=3600,
-        user_id=user["id"],
-        email=user["email"],
-        allowed_org_ids=allowed_org_ids,
-        tenants=tenants,
-    )
+    # An upstream challenge, refusal or outage must never become local password authentication.
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Complete sign-in in Accutax, then open the AI assistant from the dashboard.",
+                        headers={"WWW-Authenticate": "Bearer"})
 
 
 @router.post(
@@ -165,31 +149,115 @@ def login_json(payload: LoginRequest) -> TokenResponse:
             tenants=tenants,
         )
 
-    # 2. Fallback to local DB / seed map login
-    user = get_user_by_email(payload.username)
-    if not user or not verify_password(payload.password, user["password"]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
-            headers={"WWW-Authenticate": "Bearer"},
+    # An upstream challenge, refusal or outage must never become local password authentication.
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Complete sign-in in Accutax, then open the AI assistant from the dashboard.",
+                        headers={"WWW-Authenticate": "Bearer"})
+
+
+_HANDOFF_EXPIRED = "Handoff link expired. Go back to the dashboard and try again."
+
+
+def _handoff_user_id(claims: dict[str, Any]) -> int | None:
+    raw = claims.get("userId") or claims.get("user_id") or claims.get("sub")
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+@router.post(
+    "/auth/handoff",
+    response_model=TokenResponse,
+    tags=["Authentication"],
+    summary="Continue from the dashboard with a one-time code",
+    description=(
+        "Exchanges the single-use code issued by the Accutax dashboard for a chat session. "
+        "The code is the credential, so no bearer token is required. Never logs the code or tokens."
+    ),
+)
+def handoff_login(payload: HandoffRequest) -> TokenResponse:
+    import httpx
+
+    url = f"{settings.accutax_base_url.rstrip('/')}/handoff/exchange"
+    headers = {}
+    if settings.handoff_service_key:
+        headers["X-Handoff-Service-Key"] = settings.handoff_service_key
+    try:
+        resp = httpx.post(
+            url,
+            json={"code": payload.code, "audience": "ai-chat"},
+            headers=headers,
+            timeout=httpx.Timeout(5.0),
         )
+    except httpx.HTTPError as e:
+        logger.warning("Handoff exchange unreachable (%s)", type(e).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Could not reach Accutax. Try again shortly.",
+        ) from e
 
-    allowed_org_ids = get_user_allowed_orgs(user["id"])
-    access_token = create_access_token(
-        user_id=user["id"],
-        email=user["email"],
+    if resp.status_code in (400, 401, 403, 404, 410):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_HANDOFF_EXPIRED)
+    if resp.status_code != 200:
+        logger.warning("Handoff exchange returned HTTP %s", resp.status_code)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Could not reach Accutax. Try again shortly.",
+        )
+    try:
+        data = resp.json()
+        upstream_token = data["access_token"]
+        returned_user_id = int(data["user_id"])
+    except (ValueError, KeyError, TypeError):
+        logger.warning("Handoff exchange returned an unusable body")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_HANDOFF_EXPIRED)
+    if not isinstance(upstream_token, str) or not upstream_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_HANDOFF_EXPIRED)
+
+    # The token must be one this service accepts, and must belong to the user named.
+    claims = decode_access_token(upstream_token)
+    if _handoff_user_id(claims) != returned_user_id:
+        logger.warning("Handoff token user does not match the exchange response")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_HANDOFF_EXPIRED)
+
+    email = str(data.get("email") or claims.get("email") or "")
+    allowed_org_ids = _live_allowed_org_ids(returned_user_id, upstream_token) or []
+    live = fetch_accutax_accessible_orgs(upstream_token, returned_user_id)
+    tenants = live if live else _resolve_tenants_for_org_ids(allowed_org_ids)
+    session_token = create_access_token(
+        user_id=returned_user_id,
+        email=email,
         allowed_org_ids=allowed_org_ids,
+        accutax_token=upstream_token,
     )
-    tenants = _resolve_tenants_for_org_ids(allowed_org_ids)
 
+    org_id = data.get("organization_id")
+    try:
+        org_id = int(org_id) if org_id is not None else None
+    except (TypeError, ValueError):
+        org_id = None
+    if org_id not in allowed_org_ids:
+        org_id = None
+    conversation = data.get("conversation")
+    page = data.get("current_page")
+    name = data.get("name")
+    session_id = data.get("session_id")
     return TokenResponse(
-        access_token=access_token,
+        access_token=session_token,
         token_type="bearer",
         expires_in=3600,
-        user_id=user["id"],
-        email=user["email"],
+        user_id=returned_user_id,
+        email=email,
         allowed_org_ids=allowed_org_ids,
         tenants=tenants,
+        handoff=HandoffContext(
+            organization_id=org_id,
+            session_id=session_id if isinstance(session_id, str) and len(session_id) <= 64 else None,
+            current_page=page if isinstance(page, str) else None,
+            name=name if isinstance(name, str) else None,
+            conversation=[t for t in conversation if isinstance(t, dict)] if isinstance(conversation, list) else [],
+        ),
     )
 
 
@@ -305,7 +373,7 @@ def _agent_events(payload: QueryRequest, current_user: CurrentUser, orgs: list[i
                 payload.query, orgs, _agent_org_meta(orgs, current_user),
                 session_id=payload.session_id, user_id=current_user.user_id, db_name=payload.db_name,
                 progress=events.put, brief=bool(payload.brief), documents=documents,
-                **_model_choice(payload, current_user),
+                **_model_choice(payload, current_user), **_current_authority(current_user,orgs),
             )
         except Exception as e:  # noqa: BLE001 - answer() never raises; this is belt and braces
             logger.warning("agent answer failed: %s", e, exc_info=True)
@@ -379,10 +447,17 @@ def _match_session_scope(
     return orgs
 
 
+def _current_authority(user: CurrentUser, orgs: list[int]) -> dict:
+    return {"authorize":lambda:user.ensure_current_scope(orgs)} if user.gateway_authority else {}
+
+
 def _agent_org_meta(orgs: list[int], current_user: CurrentUser) -> Callable[[], dict[int, dict[str, Any]]]:
     """Org names and currencies for the agent, from Cube (no Accutax endpoint). Looked up only when called."""
     from gemini_brain.semantic import org_directory
-    return lambda: org_directory.lookup(orgs, subject=f"agent-org-meta:{current_user.user_id}")
+    def lookup():
+        current_user.ensure_current_scope(orgs)
+        return org_directory.lookup(orgs, subject=f"agent-org-meta:{current_user.user_id}")
+    return lookup
 
 
 @router.get(
@@ -780,33 +855,46 @@ def health_check() -> HealthResponse:
     return HealthResponse()
 
 
-@router.get(
-    "/health/models",
-    response_model=ModelHealthResponse,
-    tags=["Health & Diagnostics"],
-    summary="Check All AI Models & Services Health",
-    description=(
-        "Pings the agent's AWS Bedrock model(s), the Cube semantic layer and PostgreSQL. "
-        "Measures latency and returns diagnostic status & sample responses."
-    ),
-)
-def check_models_get() -> ModelHealthResponse:
-    """Run diagnostics on all AI models and backend services."""
-    res = check_all_models_and_services(test_prompt="Respond with 'OK'")
-    return ModelHealthResponse(**res)
+def _diagnostic_operator(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    allowed = {v.strip().lower() for v in settings.model_diagnostic_admins.split(",") if v.strip()}
+    if str(current_user.user_id) not in allowed and current_user.email.lower() not in allowed:
+        raise HTTPException(status_code=403, detail="Model diagnostics are restricted to operators.")
+    return current_user
 
 
-@router.post(
-    "/health/models",
-    response_model=ModelHealthResponse,
-    tags=["Health & Diagnostics"],
-    summary="Check AI Models with Custom Test Prompt",
-    description="Runs model diagnostics using a custom test prompt.",
-)
-def check_models_post(payload: ModelDiagnosticRequest) -> ModelHealthResponse:
-    """Run diagnostics on all AI models using a custom test prompt."""
-    res = check_all_models_and_services(test_prompt=payload.test_prompt)
-    return ModelHealthResponse(**res)
+_diagnostic_lock = threading.Lock()
+_diagnostic_cache: tuple[float, dict] | None = None
+
+
+def _run_diagnostics() -> ModelHealthResponse:
+    global _diagnostic_cache
+    if not _diagnostic_lock.acquire(blocking=False):
+        raise HTTPException(status_code=429, detail="A diagnostic check is already running.")
+    try:
+        if _diagnostic_cache and time.monotonic() - _diagnostic_cache[0] < 30:
+            return ModelHealthResponse(**_diagnostic_cache[1])
+        result = check_all_models_and_services(test_prompt="Respond with 'OK'")
+        # Health responses must not echo connection strings, provider errors or arbitrary prompts.
+        for group in ("models", "services"):
+            for item in result.get(group, []):
+                if item.get("error"):
+                    item["error"] = "Dependency check failed"
+                item["sample_response"] = None
+        _diagnostic_cache = (time.monotonic(), result)
+        return ModelHealthResponse(**result)
+    finally:
+        _diagnostic_lock.release()
+
+
+@router.get("/health/models", response_model=ModelHealthResponse, tags=["Health & Diagnostics"])
+def check_models_get(current_user: CurrentUser = Depends(_diagnostic_operator)) -> ModelHealthResponse:
+    return _run_diagnostics()
+
+
+@router.post("/health/models", response_model=ModelHealthResponse, tags=["Health & Diagnostics"])
+def check_models_post(payload: ModelDiagnosticRequest, current_user: CurrentUser = Depends(_diagnostic_operator)) -> ModelHealthResponse:
+    # Kept for API compatibility; diagnostics use a fixed, bounded probe rather than user prompts.
+    return _run_diagnostics()
 
 
 # ── Protected AI Engine Query Endpoints ───────────────────────────────────────
@@ -833,7 +921,7 @@ async def run_query(
         result = await asyncio.to_thread(
             agent_preview.answer, payload.query, orgs, _agent_org_meta(orgs, current_user),
             session_id=payload.session_id, user_id=current_user.user_id, db_name=payload.db_name,
-            brief=bool(payload.brief), documents=documents, **_model_choice(payload, current_user),
+            brief=bool(payload.brief), documents=documents, **_model_choice(payload, current_user), **_current_authority(current_user,orgs),
         )
         return QueryResponse(**normalize_envelope(result))
     except Exception as e:

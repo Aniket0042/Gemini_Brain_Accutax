@@ -42,7 +42,8 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
            session_id: Optional[str], user_id: int, db_name: str = "",
            progress: Optional[Callable[[str], None]] = None, brief: bool = False,
            model_key: Optional[str] = None, allowed_models: Optional[Sequence[str]] = None,
-           documents: Optional[Sequence[Any]] = None) -> Dict[str, Any]:
+           documents: Optional[Sequence[Any]] = None,
+           authorize: Optional[Callable[[], None]] = None) -> Dict[str, Any]:
     """Answer with the agent and save the turn. Returns a QueryResponse-shaped dict. Never raises.
     `model_key`: the model the user picked ("auto" or None: the thread's last pick, else the default);
     `allowed_models`: the keys this user may pick (agent/models.allowed), checked here.
@@ -52,6 +53,8 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
 
     started = time.monotonic()
     orgs = [int(o) for o in organization_ids]
+    if authorize:
+        authorize()
     session_id = usable_session_id(session_id)
     thread = thread_context(session_id, orgs, user_id, db_name)
     allowed_keys = list(allowed_models or [agent_models.DEFAULT_KEY])
@@ -75,10 +78,13 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
         result = run_agent(question, orgs, meta, history=thread.messages, turn_specs=thread.specs,
                            earlier_figures=thread.figures, subject=f"agent-preview:{user_id}", progress=on_tool,
                            brief=brief, attachment=attached, documents=doc_prompt, document_ids=doc_ids,
-                           document_evidence=doc_evidence, user_id=user_id, session_id=session_id, **model_ids)
+                           document_evidence=doc_evidence, user_id=user_id, session_id=session_id,
+                           **({"authorize":authorize} if authorize else {}), **model_ids)
     finally:
         traces = _collect_traces(rid)
     data = getattr(result, "data", None) or []
+    if authorize:
+        authorize()
     answer_text = result.answer or "I could not produce an answer for that request. Please try again."
     answer_text = links.link_documents(answer_text, links.document_links(data))
     cards = _document_cards(docs)

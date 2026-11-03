@@ -9,7 +9,7 @@ import { Eye, Download } from 'lucide-react';
  */
 export async function downloadArtifact(block, token) {
   if (!block?.id) return null;
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  const headers = token ? { ...{} } : {};
   let current = block;
   let res = await fetch(`/api/v1/artifacts/${current.id}`, { headers });
   if (res.status === 410) {
