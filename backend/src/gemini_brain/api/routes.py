@@ -926,6 +926,12 @@ async def run_query(
             brief=bool(payload.brief), documents=documents, agent_key=agent_key,
             dismissed=payload.dismissed_findings, **_model_choice(payload, current_user),
         )
+        if payload.channel == "mcp":
+            from fastapi.encoders import jsonable_encoder
+            from gemini_brain.privacy import external
+            envelope = normalize_envelope(result)
+            return JSONResponse(content=jsonable_encoder(await asyncio.to_thread(
+                external.view, envelope, orgs, subject=f"mcp:{current_user.user_id}")))
         return QueryResponse(**normalize_envelope(result))
     except Exception as e:
         logger.error("Unhandled exception processing query: %s", e, exc_info=True)

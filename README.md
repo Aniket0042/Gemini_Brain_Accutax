@@ -73,6 +73,14 @@ Accutax email and password, and the host gets opaque tokens. The Accutax tokens 
 `backend/data/mcp`, encrypted. A pasted Accutax AI bearer also works while `MCP_ACCEPT_API_TOKENS` is on
 (MCP Inspector, Claude Code); turn it off in production.
 
+What reaches ChatGPT / Claude is cut to the answer, its tables and FTA sources (`channel: "mcp"` on `/query`,
+`privacy/external.py`). Supplier, customer and person names, TRNs, IBANs and emails become placeholders such as
+`[SUPPLIER_1]`; amounts, dates and the organizations' own names stay. Organizations listed in
+`MCP_FULL_DETAIL_ORGS` get real values. Every tool call is a line in `MCP_AUDIT_LOG` (user, client, tool,
+organization, argument hash, outcome; never the question), one user may make `MCP_TOOL_CALLS_PER_MINUTE` calls a
+minute, results are capped at `MCP_MAX_OUTPUT_CHARS`, and order-like text found in the data is flagged under
+the answer. The API's usage limits and credits apply to `ask_accutax` as to any question.
+
 Production needs a public HTTPS domain: see `backend/deploy/accutax-mcp.service` and
 `backend/deploy/nginx-accutax-mcp.conf`, and set `MCP_PUBLIC_URL` and `MCP_ALLOWED_HOSTS` for it.
 

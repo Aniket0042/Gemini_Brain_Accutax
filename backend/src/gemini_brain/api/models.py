@@ -59,6 +59,14 @@ class QueryRequest(BaseModel):
         default=True,
         description="Whether to attempt live REST API retrieval before DB fallback.",
     )
+    channel: Literal["app", "mcp"] = Field(
+        default="app",
+        description=(
+            "Who reads the answer. 'mcp': an outside AI host through the MCP connector; the response is cut to the "
+            "answer, its tables and FTA sources, with names and ID numbers as placeholders unless every organization "
+            "is in MCP_FULL_DETAIL_ORGS."
+        ),
+    )
     session_id: Optional[str] = Field(
         default=None,
         description="Optional chat session UUID for conversation memory and project knowledge context.",

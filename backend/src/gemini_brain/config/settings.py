@@ -523,6 +523,20 @@ class GeminiBrainSettings(BaseSettings):
         default=True,
         description="Also accept a pasted Accutax AI bearer on /mcp (MCP Inspector, Claude Code). Off: OAuth only.",
     )
+    mcp_full_detail_orgs: str = Field(
+        default="",
+        description="Comma-separated organization ids whose MCP answers keep real names and ID numbers. Every other "
+                    "organization's answers reach ChatGPT / Claude with placeholders ([SUPPLIER_1], [TRN_2]).",
+    )
+    mcp_max_output_chars: int = Field(default=24_000, ge=1_000,
+                                      description="Longest tool result returned to the host model, in characters.")
+    mcp_tool_calls_per_minute: int = Field(default=20, ge=1,
+                                           description="MCP tool calls one user may make per minute, on this server.")
+    mcp_audit_log: str = Field(
+        default="logs/mcp_audit.jsonl",
+        description="MCP audit log (JSON lines): who, which client, tool, organization, argument hash, outcome. "
+                    "Relative to backend/. Empty: off.",
+    )
 
     model_config = {
         # Anchored to the repository root rather than the process working

@@ -55,6 +55,12 @@ def _fakes(monkeypatch):
     auth._ACCUTAX_ORG_CACHE.clear()
 
 
+@pytest.fixture(autouse=True)
+def _audit_log(tmp_path, monkeypatch):
+    from gemini_brain.config.settings import settings
+    monkeypatch.setattr(settings, "mcp_audit_log", str(tmp_path / "mcp_audit.jsonl"))
+
+
 @pytest.fixture
 def setup(api_app, tmp_path):
     upstream = Upstream("http://api", transport=httpx.ASGITransport(app=api_app))

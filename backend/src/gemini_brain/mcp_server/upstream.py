@@ -96,7 +96,8 @@ class Upstream:
 
     async def ask(self, token: str, question: str, *, organization_id: Optional[int] = None,
                   agent: Optional[str] = None) -> dict[str, Any]:
-        payload: dict[str, Any] = {"query": question}
+        # channel "mcp": the API returns only what may leave for the host, masked (privacy/external.py).
+        payload: dict[str, Any] = {"query": question, "channel": "mcp"}
         if organization_id is not None:
             payload["organization_id"] = organization_id
         if agent:

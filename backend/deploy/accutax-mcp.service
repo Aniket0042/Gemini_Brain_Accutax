@@ -7,6 +7,8 @@
 #   MCP_PUBLIC_URL=https://mcp.your-domain.com/mcp
 #   MCP_ALLOWED_HOSTS=mcp.your-domain.com
 #   MCP_ACCEPT_API_TOKENS=false        # OAuth only in production
+#   MCP_FULL_DETAIL_ORGS=              # org ids that opted in to real names in answers; empty = all masked
+# The audit log goes to /opt/accutax-ai/backend/logs/mcp_audit.jsonl (MCP_AUDIT_LOG).
 # OAuth state (clients, tokens; encrypted with a key derived from JWT_SECRET) lives in
 # /opt/accutax-ai/backend/data/mcp. Changing JWT_SECRET disconnects every user.
 #
