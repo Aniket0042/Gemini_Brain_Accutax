@@ -1,6 +1,6 @@
 import { useEffect,useState } from 'react';
 import App from '../App';
-import { clearFinanceStorage,sessionClient } from './session';
+import { clearFinanceStorage,hubSignInUrl,sessionClient } from './session';
 import { watchBrowserSession } from './session-client.mjs';
 import { clearUploadBlobs } from '../services/uploadBlobs';
 
@@ -20,6 +20,20 @@ export default function SessionRoot(){
     return()=>{unsubscribe();stop();};
   },[]);
   const userId=profile?.user?.id;
+  // Not signed in: go to the shared Accutax sign-in. A single guarded attempt stops a loop if the session never sticks.
+  const goToSignIn=()=>{
+    const target=new URL(window.location.href);target.searchParams.delete('auth_error');
+    window.location.assign(hubSignInUrl(target.href));
+  };
+  useEffect(()=>{
+    if(loading||profile||error||reason)return;
+    try{
+      const last=Number(sessionStorage.getItem('accutax_ai_signin_attempt')||0);
+      if(Date.now()-last<20000)return;
+      sessionStorage.setItem('accutax_ai_signin_attempt',String(Date.now()));
+    }catch{/* storage blocked: still redirect once per load */}
+    goToSignIn();
+  },[loading,profile,error,reason]);
   useEffect(()=>{
     if(!userId){setScope(null);return;}
     let active=true,busy=false;
@@ -50,11 +64,9 @@ export default function SessionRoot(){
   const logout=async()=>{setError(null);try{await sessionClient.logout();}catch(reason){setError(reason);}};
   if(loading)return <main style={{padding:40,textAlign:'center'}} role="status">Checking your session…</main>;
   if(!profile||error||reason)return <main style={{minHeight:'100vh',display:'grid',placeItems:'center',background:'#f7faf9',color:'#102c28'}}><section style={{width:'min(420px,90vw)',padding:32,border:'1px solid #dde7e3',borderRadius:16,background:'white'}}>
-    <h1 style={{fontSize:24}}>Accutax AI</h1><p style={{lineHeight:1.6}}>Sign in once to use your Accutax companies and AI assistant.</p>
+    <h1 style={{fontSize:24,color:'#102c28',margin:'0 0 12px'}}>Accutax AI</h1><p style={{lineHeight:1.6}}>Sign in with the same Accutax account you use for Bookkeeping.</p>
     {(error||reason)&&<p role="alert" style={{color:'#805e1c'}}>{messages[reason]||error?.message||'We could not verify your session. Please try again.'}</p>}
-    {!profile&&<button style={{padding:'12px 18px',background:'#087c6c',color:'white',border:0,borderRadius:8}} onClick={()=>{
-      const target=new URL(window.location.href);target.searchParams.delete('auth_error');sessionClient.login({returnTo:target.href});
-    }}>Continue to secure sign-in</button>}
+    {!profile&&<button style={{padding:'12px 18px',background:'#087c6c',color:'white',border:0,borderRadius:8}} onClick={goToSignIn}>Sign in with your Accutax account</button>}
     {error&&<button style={{display:'block',marginTop:18}} onClick={()=>window.location.reload()}>Retry access check</button>}
     {profile&&<button style={{display:'block',marginTop:18}} onClick={logout}>Sign out</button>}
   </section></main>;

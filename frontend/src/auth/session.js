@@ -6,6 +6,14 @@ clearLegacyCredentials(localStorage,sessionStorage);
 // Old unscoped transcripts must never be displayed under a different identity.
 for(const key of ['accutax_chat_history','gemini_brain_active_org','gemini_brain_active_orgs','accutax_active_session'])localStorage.removeItem(key);
 export const sessionClient=createSessionClient({apiBase:base,fetcher:originalFetch});
+const hubBase=import.meta.env.VITE_HUB_URL||'http://localhost:5176';
+// The one sign-in page for every Accutax product (the Hub). It sets the shared session, then returns here.
+export function hubSignInUrl(returnTo=window.location.href){
+  const url=new URL('/signin',hubBase);
+  url.searchParams.set('launch','assistant');
+  url.searchParams.set('returnTo',returnTo);
+  return url.href;
+}
 export const aiEndpoint=path=>sessionClient.endpoint(`ai${path}`);
 export function installSessionTransport(){
   if(window.__accutaxAiSessionTransport)return;window.__accutaxAiSessionTransport=true;
