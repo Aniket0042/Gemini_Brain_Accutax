@@ -33,6 +33,19 @@
 .bc-understood h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 14px; font-weight: 700; color: var(--ink); }
 .bc-understood h2 svg { color: var(--success-ink); }
 .bc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+/* Which agent the sentence is for: a segmented switch, centred above the sentence box. */
+.bc-agents { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 0 auto 14px; }
+.bc-agents-label { font-size: var(--text-sm); color: var(--ink-soft); }
+.bc-agents-seg {
+  display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: var(--radius-pill);
+  background: var(--surface);
+}
+.bc-agents-seg button {
+  padding: 5px 14px; border: none; border-radius: var(--radius-pill); background: transparent; color: var(--ink-soft);
+  font-family: inherit; font-size: var(--text-sm); line-height: 1.4; cursor: pointer;
+}
+.bc-agents-seg button:hover { color: var(--ink); }
+.bc-agents-seg button.on { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
 .bc-chips.is-center { justify-content: center; }
 .bc-chip {
   display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: var(--radius-pill);

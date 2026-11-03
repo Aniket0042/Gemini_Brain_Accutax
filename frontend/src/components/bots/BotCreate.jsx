@@ -92,11 +92,14 @@ export default function BotCreate({ token = '', orgs = [], orgIds = [], orgLabel
       </div>
 
       {agentList.length > 1 && (
-        <div className="bc-chips is-center" role="group" aria-label="Agent">
-          {agentList.map((a) => (
-            <button key={a.key} type="button" className={`bc-chip is-choice${a.key === agentKey ? ' is-on' : ''}`}
-              aria-pressed={a.key === agentKey} onClick={() => { setAgentKey(a.key); setResult(null); }}>{a.name}</button>
-          ))}
+        <div className="bc-agents">
+          <span className="bc-agents-label">Agent</span>
+          <div className="bc-agents-seg" role="group" aria-label="Agent">
+            {agentList.map((a) => (
+              <button key={a.key} type="button" className={a.key === agentKey ? 'on' : ''}
+                aria-pressed={a.key === agentKey} onClick={() => { setAgentKey(a.key); setResult(null); }}>{a.name}</button>
+            ))}
+          </div>
         </div>
       )}
 
