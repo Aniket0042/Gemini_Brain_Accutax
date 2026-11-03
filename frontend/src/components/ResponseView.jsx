@@ -4,11 +4,16 @@ import remarkGfm from 'remark-gfm';
 import { NoticeCard } from './NoticeCard';
 import { AnswerProvenance } from './AnswerProvenance';
 import { BlockRenderer, hasPortedBlocks, chatFacingBlocks } from './blocks/BlockRenderer';
+import { AgentBadge } from './AgentsPanel';
+import BotIntroMessage from './bots/BotIntroMessage';
+import { allBotAgents } from './bots/botText';
+import { AgentRunCard } from './AgentRun';
 import { citationSources, linkCitations, citationLinkRenderer } from './citations';
 import { MarkdownLink } from './markdownLinks';
 import { SortableMarkdownTable } from './SortableMarkdownTable';
 import { ReportActions } from './blocks/ReportActions';
 import { PrivacyBadge } from './PrivacyBadge';
+import { SensitiveNotice } from './SensitiveNotice';
 import { CodeChrome } from './blocks/CodeBlock';
 import { SqlTraceCard } from './SqlTraceCard';
 import { ApiTraceCard } from './ApiTraceCard';
@@ -19,7 +24,7 @@ import {
   ChevronDown, ChevronUp, Copy, Check, 
   RotateCw, Clock, DollarSign, Database, Server,
   Sparkles as AssistantMark, Share, Edit2, FileText, CheckCircle2,
-  Zap, HardDrive, BarChart3, Search
+  Zap, HardDrive, BarChart3, Search, Bot
 } from 'lucide-react';
 
 /** Formats a stored timestamp for display; older saved sessions may not have one. */
@@ -185,6 +190,7 @@ const AssistantResponseCard = ({
   onOpenCanvas,
   token,
   onPreviewFile,
+  onMakeBot,
 }) => {
   const [copied, copy] = useCopied();
   const [showSql, setShowSql] = useState(false);
@@ -204,7 +210,16 @@ const AssistantResponseCard = ({
   // never as one of the answer's content blocks.
   const allBlocks = responseData?.blocks;
   const privacyBlock = Array.isArray(allBlocks) ? allBlocks.find((b) => b?.type === 'privacy') : null;
-  const blocks = Array.isArray(allBlocks) ? allBlocks.filter((b) => b?.type !== 'privacy') : allBlocks;
+  const sensitiveBlock = Array.isArray(allBlocks) ? allBlocks.find((b) => b?.type === 'sensitive_notice') : null;
+  const agentBlock = Array.isArray(allBlocks) ? allBlocks.find((b) => b?.type === 'agent_badge') : null;
+  // The answer's agent, when bots exist for it (VAT, AP): its answers get "Make this a bot".
+  const answerAgent = msg.agent || msg.agentRun?.agent_key || agentBlock?.key || responseData?.agent_key
+    || (typeof responseData?.agent === 'string' ? responseData.agent : responseData?.agent?.key);
+  const botAgentKey = allBotAgents().some((a) => a.key === answerAgent) ? answerAgent : null;
+  const sensitiveKinds = sensitiveBlock?.kinds || msg.sensitiveRemoved;
+  const blocks = Array.isArray(allBlocks)
+    ? allBlocks.filter((b) => b?.type !== 'privacy' && b?.type !== 'sensitive_notice' && b?.type !== 'agent_badge')
+    : allBlocks;
   const showBlocks = !isStreaming && hasPortedBlocks(blocks);
   const sources = isStreaming ? null : citationSources(blocks);
   const isSecurityError = Boolean(!notice && (responseData?.error || (responseData?.answer && responseData.answer.startsWith('Error:'))));
@@ -226,7 +241,12 @@ const AssistantResponseCard = ({
       </div>
       <div style={styles.assistantContentCol}>
         
+        {/* The run card names the agent while this page holds the run; a reopened chat shows the badge. */}
+        <AgentBadge block={msg.agentRun ? null : agentBlock} />
+
         <OrgChips organizations={responseData?.organizations} />
+
+        <SensitiveNotice kinds={sensitiveKinds} />
 
         {/* Notice Card for Empty / Partial / Degraded / Denied / Error states */}
         {notice && (
@@ -237,8 +257,12 @@ const AssistantResponseCard = ({
           />
         )}
 
+        {msg.agentRun && (
+          <AgentRunCard run={msg.agentRun} streaming={false} elapsedSeconds={responseData?.token_usage?.elapsed_seconds} />
+        )}
+
         {(() => {
-          const steps = (msg.agentSteps || []).filter(Boolean);
+          const steps = msg.agentRun ? [] : (msg.agentSteps || []).filter(Boolean);
           if (!steps.length) return null;
           return (
             <div style={styles.agentStepsWrapper}>
@@ -277,6 +301,7 @@ const AssistantResponseCard = ({
           {showBlocks ? (
             <div className="data-table-container" style={styles.markdownWrapper}>
               <BlockRenderer
+                onAsk={onRegenerate ? (q) => onRegenerate(q) : undefined}
                 blocks={chatFacingBlocks(blocks)}
                 verification={responseData?.verification}
                 onOpenCanvas={onOpenCanvas}
@@ -377,6 +402,18 @@ const AssistantResponseCard = ({
                   <Code2 size={14} color={showSql ? 'var(--accent-ink)' : undefined} />
                 </button>
               )}
+
+              {botAgentKey && onMakeBot && (
+                <button
+                  type="button"
+                  className="btn-make-bot"
+                  onClick={() => onMakeBot({ mode: 'chat', question: userQuery, agent: botAgentKey })}
+                  title="Create a scheduled bot from this check"
+                >
+                  <Bot size={13} />
+                  <span>Make this a bot</span>
+                </button>
+              )}
             </div>
 
             {/* Clean Subtle Token Count & Latency Metrics */}
@@ -459,7 +496,7 @@ const UserMessage = ({ msg, token, onPreviewFile }) => {
   );
 };
 
-export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant, onRegenerate, onOpenCanvas, token, onPreviewFile }) => {
+export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant, onRegenerate, onOpenCanvas, token, onPreviewFile, onMakeBot, botActions = {} }) => {
   if (!conversation || conversation.length === 0) return null;
 
   return (
@@ -469,6 +506,19 @@ export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant
 
         if (isUser) {
           return <UserMessage key={idx} msg={msg} token={token} onPreviewFile={onPreviewFile} />;
+        }
+
+        // A bot that was just turned on, introducing itself with its first run.
+        if (msg.role === 'bot_intro') {
+          return (
+            <BotIntroMessage
+              key={idx}
+              msg={msg}
+              onOpenInbox={botActions.onOpenInbox || (() => {})}
+              onEditBot={botActions.onEditBot || (() => {})}
+              onOpenBot={botActions.onOpenBot || (() => {})}
+            />
+          );
         }
 
         // Assistant Turn
@@ -481,6 +531,17 @@ export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant
         const prevUserTurn = idx > 0 && conversation[idx - 1].role === 'user' ? conversation[idx - 1].content : '';
 
         // If loading and no text accumulated yet: Show ONLY Icon + Dynamic Text + 3-dots animation
+        if (isStreaming && !hasContent && msg.agentRun) {
+          return (
+            <div key={idx} style={styles.minimalLoaderContainer}>
+              <div style={styles.loaderIconBox}>
+                <Sparkles size={18} color="var(--accent)" className="gemini-sparkle-spin" />
+              </div>
+              <AgentRunCard run={msg.agentRun} streaming />
+            </div>
+          );
+        }
+
         if (isStreaming && !hasContent) {
           const latestLog = streamLogs && streamLogs.length > 0 ? streamLogs[streamLogs.length - 1] : null;
           const statusText = msg.latestStatus || latestLog?.status || 'Understanding request';
@@ -513,6 +574,7 @@ export const ResponseView = ({ conversation, isLoading, streamLogs, activeTenant
             onOpenCanvas={onOpenCanvas}
             token={token}
             onPreviewFile={onPreviewFile}
+            onMakeBot={onMakeBot}
           />
         );
       })}

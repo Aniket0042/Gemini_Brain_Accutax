@@ -13,7 +13,7 @@ def _no_live_org_lookup(monkeypatch):
     from gemini_brain.api import auth
 
     monkeypatch.setattr(auth, "_fetch_accutax_orgs", lambda token, user_id: None)
-    monkeypatch.setattr(auth, "_query_user_allowed_orgs", lambda user_id, db_name="": None)
+    monkeypatch.setattr(auth, "_query_user_allowed_orgs", lambda user_id, db_name="", **_: None)
     auth._DB_ORG_CACHE.clear()
     auth._ACCUTAX_ORG_CACHE.clear()
 

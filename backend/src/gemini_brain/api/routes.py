@@ -16,6 +16,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 from gemini_brain.api.auth import (
     CurrentUser,
+    HandoffRedeemError,
     authenticate_with_accutax_api,
     authorize_org_scope,
     create_access_token,
@@ -27,6 +28,7 @@ from gemini_brain.api.auth import (
     decode_access_token,
     get_user_by_email,
     placeholder_tenants,
+    redeem_accutax_handoff,
     verify_password,
 )
 from gemini_brain.api.models import (
@@ -34,8 +36,12 @@ from gemini_brain.api.models import (
     HandoffRequest,
     HealthResponse,
     ModelCatalogResponse,
+    AgentInfo,
+    AgentListResponse,
     ModelInfo,
     LoginRequest,
+    HandoffRequest,
+    HandoffResponse,
     ModelDiagnosticRequest,
     ModelHealthResponse,
     QueryRequest,
@@ -54,6 +60,7 @@ from gemini_brain.api.models import (
 from gemini_brain.config.settings import settings
 from gemini_brain.health.model_health_checker import check_all_models_and_services
 from gemini_brain.agent import models as agent_models
+from gemini_brain.agent import profiles as agent_profiles
 from gemini_brain.agent import preview as agent_preview
 from gemini_brain.resilience import (
     HTTP_FOR_CODE,
@@ -261,6 +268,46 @@ def handoff_login(payload: HandoffRequest) -> TokenResponse:
     )
 
 
+@router.post(
+    "/auth/handoff",
+    response_model=HandoffResponse,
+    tags=["Authentication"],
+    summary="Continue from the Accutax Dashboard (One-Time Code)",
+    description=(
+        "Redeems the one-time code the dashboard put in the chat URL (?handoff=1&code=...) with the Accutax "
+        "backend, server to server, and issues a session for that user. The code works once and for 60 seconds."
+    ),
+)
+def login_handoff(payload: HandoffRequest) -> HandoffResponse:
+    """Sign in the dashboard user from a handoff code; the browser never holds the dashboard token."""
+    try:
+        upstream = redeem_accutax_handoff(payload.code)
+    except HandoffRedeemError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    live = fetch_accutax_accessible_orgs(upstream["access_token"], upstream["user_id"])
+    tenants = live if live else _resolve_tenants_for_org_ids(upstream["allowed_org_ids"])
+    session_token = create_access_token(
+        user_id=upstream["user_id"],
+        email=upstream["email"],
+        allowed_org_ids=upstream["allowed_org_ids"],
+        accutax_token=upstream["access_token"],
+    )
+    return HandoffResponse(
+        access_token=session_token,
+        token_type="bearer",
+        expires_in=3600,
+        user_id=upstream["user_id"],
+        email=upstream["email"],
+        allowed_org_ids=upstream["allowed_org_ids"],
+        tenants=tenants,
+        name=upstream["name"],
+        organization_id=upstream["organization_id"],
+        session_id=upstream["session_id"],
+        current_page=upstream["current_page"],
+        conversation=upstream["conversation"],
+    )
+
+
 # ── Tenant Management Endpoints ───────────────────────────────────────────────
 
 @router.get(
@@ -287,6 +334,31 @@ def _model_choice(payload: QueryRequest, current_user: CurrentUser) -> dict:
     """The model the request asks for and the keys this user may pick; agent_preview.answer resolves them."""
     return {"model_key": payload.model or payload.selected_model_key,
             "allowed_models": [m.key for m in agent_models.allowed(current_user.user_id, current_user.email)]}
+
+
+@router.get(
+    "/agents",
+    response_model=AgentListResponse,
+    tags=["Agents"],
+    summary="List the Specialist Agents",
+    description=(
+        "The agents a chat can be answered by: the general agent and the specialists (VAT, AP / Bills, Cash), "
+        "with what each does and the question its Run now button sends. Send the chosen key as `agent` on /query."
+    ),
+)
+def list_agents(current_user: CurrentUser = Depends(get_current_user)) -> AgentListResponse:
+    return AgentListResponse(agents=[AgentInfo(**p.to_public()) for p in agent_profiles.all_profiles()],
+                             default_agent=agent_profiles.DEFAULT_KEY)
+
+
+def _agent_key(payload: QueryRequest) -> Optional[str]:
+    """The agent the request names, checked before anything runs: an unknown key is a plain 400."""
+    if not payload.agent:
+        return None
+    try:
+        return agent_profiles.get(payload.agent).key
+    except agent_profiles.UnknownAgent:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown agent {payload.agent!r}.")
 
 
 
@@ -359,7 +431,7 @@ def _attachments(payload: QueryRequest, current_user: CurrentUser) -> list:
 
 
 def _agent_events(payload: QueryRequest, current_user: CurrentUser, orgs: list[int],
-                  documents: Optional[list] = None) -> Generator[str, None, None]:
+                  documents: Optional[list] = None, agent_key: Optional[str] = None) -> Generator[str, None, None]:
     """SSE for an agent answer: a status line per tool call, then the final result."""
     import queue
     import threading
@@ -372,8 +444,9 @@ def _agent_events(payload: QueryRequest, current_user: CurrentUser, orgs: list[i
             box["result"] = agent_preview.answer(
                 payload.query, orgs, _agent_org_meta(orgs, current_user),
                 session_id=payload.session_id, user_id=current_user.user_id, db_name=payload.db_name,
-                progress=events.put, brief=bool(payload.brief), documents=documents,
-                **_model_choice(payload, current_user), **_current_authority(current_user,orgs),
+                progress=events.put, brief=bool(payload.brief), documents=documents, agent_key=agent_key,
+                on_step=events.put, dismissed=payload.dismissed_findings, **_model_choice(payload, current_user),
+                **_current_authority(current_user,orgs),
             )
         except Exception as e:  # noqa: BLE001 - answer() never raises; this is belt and braces
             logger.warning("agent answer failed: %s", e, exc_info=True)
@@ -384,7 +457,10 @@ def _agent_events(payload: QueryRequest, current_user: CurrentUser, orgs: list[i
     threading.Thread(target=work, name="agent-answer", daemon=True).start()
     yield f"data: {json.dumps({'status': 'Reading your question…', 'type': 'agent'})}\n\n"
     while (message := events.get()) is not None:
-        yield f"data: {json.dumps({'status': message, 'type': 'agent'})}\n\n"
+        if isinstance(message, dict):  # a step of the live run card: a tool call started or finished
+            yield f"data: {json.dumps({'type': 'agent_step', **message}, default=str)}\n\n"
+        else:
+            yield f"data: {json.dumps({'status': message, 'type': 'agent'})}\n\n"
     if "result" in box:
         yield f"data: {json.dumps({'final_result': normalize_envelope(box['result'])}, default=str)}\n\n"
         return
@@ -762,6 +838,13 @@ def create_upload(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="organization_ids must be numbers.")
     if orgs:
         orgs = authorize_org_scope(orgs, current_user, action="uploads.create")
+    else:  # as a chat that names none: the caller's first organization, which is charged for reading the file
+        orgs = _agent_scope(current_user, [])
+    from gemini_brain.usage import limits
+    decision = limits.check(current_user.user_id, orgs, kind="document_read")
+    if decision.action == limits.BLOCK:  # reading the file would call a model the bucket cannot pay for
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                            detail={"code": decision.code, "message": decision.message})
 
     chunks, total = [], 0
     while True:  # read in pieces and stop at the limit instead of holding an oversized body
@@ -849,6 +932,13 @@ def delete_upload(upload_id: str, current_user: CurrentUser = Depends(get_curren
 
 # ── Health & Diagnostic Endpoints ─────────────────────────────────────────────
 
+def _health_check(prompt: str) -> dict:
+    """Ping every model. Its spend is Accutax's own: one usage line of kind health_check, charged to owner 0."""
+    from gemini_brain.usage import ledger
+    with ledger.scope("health_check", user_id=None, organization_ids=[]):
+        return check_all_models_and_services(test_prompt=prompt)
+
+
 @router.get("/health", response_model=HealthResponse, tags=["Health"])
 def health_check() -> HealthResponse:
     """Check API service health status."""
@@ -873,7 +963,7 @@ def _run_diagnostics() -> ModelHealthResponse:
     try:
         if _diagnostic_cache and time.monotonic() - _diagnostic_cache[0] < 30:
             return ModelHealthResponse(**_diagnostic_cache[1])
-        result = check_all_models_and_services(test_prompt="Respond with 'OK'")
+        result = _health_check("Respond with 'OK'")
         # Health responses must not echo connection strings, provider errors or arbitrary prompts.
         for group in ("models", "services"):
             for item in result.get(group, []):
@@ -917,11 +1007,14 @@ async def run_query(
     import asyncio
     orgs = _agent_scope(current_user, _query_orgs(payload, current_user, action="query"))
     documents = _attachments(payload, current_user)
+    agent_key = _agent_key(payload)
     try:
         result = await asyncio.to_thread(
             agent_preview.answer, payload.query, orgs, _agent_org_meta(orgs, current_user),
             session_id=payload.session_id, user_id=current_user.user_id, db_name=payload.db_name,
-            brief=bool(payload.brief), documents=documents, **_model_choice(payload, current_user), **_current_authority(current_user,orgs),
+            brief=bool(payload.brief), documents=documents, agent_key=agent_key,
+            dismissed=payload.dismissed_findings, **_model_choice(payload, current_user),
+            **_current_authority(current_user,orgs),
         )
         return QueryResponse(**normalize_envelope(result))
     except Exception as e:
@@ -954,8 +1047,9 @@ def stream_query(
     # event is ever emitted for it.
     orgs = _agent_scope(current_user, _query_orgs(payload, current_user, action="query.stream"))
     documents = _attachments(payload, current_user)  # a refused attachment is a plain error before the stream opens
+    agent_key = _agent_key(payload)
     return StreamingResponse(
-        _agent_events(payload, current_user, orgs, documents),
+        _agent_events(payload, current_user, orgs, documents, agent_key),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
     )

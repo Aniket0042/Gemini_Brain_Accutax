@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   Inbox, BarChart3, Lock, AlertTriangle, Zap, 
-  RotateCw, ArrowRight 
+  RotateCw, ArrowRight, Gauge 
 } from 'lucide-react';
 
 export const NoticeCard = ({ notice, onRetry, onSuggestionClick }) => {
@@ -19,6 +19,8 @@ export const NoticeCard = ({ notice, onRetry, onSuggestionClick }) => {
         return { icon: <Lock size={14} />, label: 'Restricted', color: 'var(--danger)' };
       case 'failed':
         return { icon: <AlertTriangle size={14} />, label: 'Interrupted', color: 'var(--warning-ink, #9C6B1F)' };
+      case 'limit':
+        return { icon: <Gauge size={14} />, label: 'Usage limit', color: 'var(--warning-ink, #9C6B1F)' };
       case 'degraded':
       default:
         return { icon: <Zap size={14} />, label: 'Degraded mode', color: 'var(--warning-ink, #9C6B1F)' };

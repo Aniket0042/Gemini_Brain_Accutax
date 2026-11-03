@@ -53,13 +53,13 @@ def review_blocks(data: Sequence[Dict[str, Any]], urls: Dict[str, str] | None = 
         items: List[Dict[str, Any]] = []
         for g in result.get("groups") or []:
             bills = g.get("bills") or []
-            items.append({"kind": "duplicate", "level": g.get("confidence"), "level_word": CONFIDENCE_WORDS.get(g.get("confidence"), ""),
+            items.append({"kind": "duplicate", "key": g.get("key"), "level": g.get("confidence"), "level_word": CONFIDENCE_WORDS.get(g.get("confidence"), ""),
                           "title": for_side(TITLES.get(g.get("rule"), "Possible duplicate"), side), "why": g.get("why"),
                           "organization": g.get("organization_name"), "extra_amount": g.get("extra_amount"),
                           "currency": g.get("currency"), "count": len(bills),
                           "bills": [_bill(b, urls) for b in bills[:BILLS_PER_ITEM]], "more": max(0, len(bills) - BILLS_PER_ITEM)})
         for f in result.get("findings") or []:
-            items.append({"kind": "finding", "level": f.get("severity"), "level_word": str(f.get("severity") or "").capitalize(),
+            items.append({"kind": "finding", "key": f.get("key"), "level": f.get("severity"), "level_word": str(f.get("severity") or "").capitalize(),
                           "title": for_side(TITLES.get(f.get("rule"), "Odd bill"), side), "why": f.get("why"),
                           "organization": f.get("organization_name"), "currency": f.get("currency"), "count": 1,
                           "bills": [_bill(f.get("bill") or {}, urls)], "more": 0})
@@ -71,6 +71,7 @@ def review_blocks(data: Sequence[Dict[str, Any]], urls: Dict[str, str] | None = 
                         "high": by_severity.get("high"), "medium": by_severity.get("medium"), "low": by_severity.get("low")},
             "patterns": [p.get("text") for p in result.get("patterns") or [] if p.get("text")],
             "items": items, "notes": [n for n in result.get("notes") or [] if n],
+            "dismissed": result.get("dismissed") or 0,
         })
     return out
 

@@ -8,6 +8,9 @@
 # period queries. Row keys are even for customer rows and odd for supplier rows, so the two
 # sides never share a key. Every join also matches on organization.
 #
+# v2 (EC2 accutax_db, model/globals.py): a foreign-currency payment counts at base_amount, what the bank
+# moved in the base currency; a supplier REFUND is money received (payment_type SUPPLIER_REFUND).
+#
 # No curly braces in SQL literals: Cube's YAML reads {...} as a member reference.
 cubes:
   - name: payment_lines
@@ -23,7 +26,11 @@ cubes:
              COALESCE(NULLIF(c.name, ''), NULLIF(c.organization_name, ''), 'Unknown') AS counterparty_name,
              CAST(cp.payment_type AS TEXT)                AS payment_type,
              cp.reference                                 AS reference,
+      {% if schema_v2() %}
+             COALESCE(cp.base_amount, cp.amount) - COALESCE(cp.amount_refunded, 0) AS received,
+      {% else %}
              cp.amount - COALESCE(cp.amount_refunded, 0)  AS received,
+      {% endif %}
              0                                            AS paid
       FROM   public.customer_payment cp
       LEFT   JOIN public.contacts c ON c.id = cp.customer_id AND c.organization_id = cp.organization_id
@@ -38,10 +45,17 @@ cubes:
              CASE WHEN CAST(sp.date AS TEXT) ~ '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
                   THEN CAST(LEFT(CAST(sp.date AS TEXT), 10) AS DATE) END,
              COALESCE(NULLIF(c.name, ''), NULLIF(c.organization_name, ''), 'Unknown'),
+      {% if schema_v2() %}
+             CASE WHEN sp.payment_type = 'REFUND' THEN 'SUPPLIER_REFUND' ELSE 'SUPPLIER_PAYMENT' END,
+             sp.reference,
+             CASE WHEN sp.payment_type = 'REFUND' THEN COALESCE(sp.base_amount, sp.amount) ELSE 0 END,
+             CASE WHEN sp.payment_type = 'REFUND' THEN 0 ELSE COALESCE(sp.base_amount, sp.amount) END
+      {% else %}
              'SUPPLIER_PAYMENT',
              sp.reference,
              0,
              sp.amount
+      {% endif %}
       FROM   public.supplier_payments sp
       LEFT   JOIN public.contacts c ON c.id = sp.supplier_id AND c.organization_id = sp.organization_id
       WHERE  CAST(sp.status AS TEXT) <> 'CANCELLED'

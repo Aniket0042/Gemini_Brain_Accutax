@@ -1,6 +1,7 @@
 import React from 'react';
-import { PanelLeft, Plus, Sun, Moon, MonitorSmartphone, Activity, ShieldCheck } from 'lucide-react';
+import { PanelLeft, Plus, Sun, Moon, MonitorSmartphone, Activity, ShieldCheck, Bot } from 'lucide-react';
 import { TenantSwitcher } from './TenantSwitcher';
+import { UsageMeter } from './UsageMeter';
 
 // Icon and label per theme state — cycling System → Light → Dark → System,
 // same order and single-icon-button pattern as the reference products.
@@ -25,6 +26,10 @@ export const Header = ({
   maxOrgs = 1,
   onOpenHealthModal,
   onOpenPrivacy,
+  onOpenBots,
+  botsUnreadCount = 0,
+  usage,
+  onOpenUsage,
 }) => {
   const { icon: ThemeIcon, label: themeLabel } = THEME_META[theme] || THEME_META.system;
 
@@ -52,6 +57,7 @@ export const Header = ({
       </div>
 
       <div style={styles.headerRight}>
+        <UsageMeter usage={usage} onOpen={onOpenUsage} />
         {onOpenPrivacy && (
           <button
             className="icon-btn"
@@ -71,6 +77,30 @@ export const Header = ({
             title="Check AI service health diagnostics"
           >
             <Activity size={16} color="var(--ink-soft)" />
+          </button>
+        )}
+        {onOpenBots && (
+          <button
+            className="icon-btn"
+            style={{ ...styles.iconBtn, position: 'relative' }}
+            onClick={onOpenBots}
+            title={botsUnreadCount > 0 ? `Bots: ${botsUnreadCount} new finding${botsUnreadCount > 1 ? 's' : ''}` : "Bots: autonomous assistants watching your books"}
+            aria-label="Bots"
+          >
+            <Bot size={16} color="var(--ink-soft)" />
+            {botsUnreadCount > 0 && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '5px',
+                  right: '5px',
+                  width: '7px',
+                  height: '7px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--accent)',
+                }}
+              />
+            )}
           </button>
         )}
         {onCycleTheme && (

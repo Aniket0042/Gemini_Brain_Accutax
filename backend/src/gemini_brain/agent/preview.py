@@ -7,6 +7,7 @@ thread shows it and follow-ups have context.
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
 from dataclasses import dataclass, field
@@ -25,6 +26,10 @@ _STEP = {
     "cash_forecast": "Projecting cash",
     "search_vat_kb": "Searching UAE VAT law",
     "app_guide": "Checking the Accutax guide",
+    "review_vat": "Reviewing bills",
+    "vat_return": "Working out the VAT return",
+    "vat_penalty": "Calculating the penalty",
+    "read_document": "Reading the file",
 }
 
 
@@ -42,16 +47,71 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
            session_id: Optional[str], user_id: int, db_name: str = "",
            progress: Optional[Callable[[str], None]] = None, brief: bool = False,
            model_key: Optional[str] = None, allowed_models: Optional[Sequence[str]] = None,
-           documents: Optional[Sequence[Any]] = None,
+           documents: Optional[Sequence[Any]] = None, agent_key: Optional[str] = None,
+           on_step: Optional[Callable[[Dict[str, Any]], None]] = None,
+           dismissed: Sequence[str] = (),
            authorize: Optional[Callable[[], None]] = None) -> Dict[str, Any]:
     """Answer with the agent and save the turn. Returns a QueryResponse-shaped dict. Never raises.
+    `dismissed`: keys of review findings the person marked as not a problem in this browser; the review leaves them out.
+    `on_step`: gets a step event as each tool call starts and finishes ({"phase", "tool", ...}), for the live run card.
+    `agent_key`: the specialist agent the user picked (agent/profiles.py), already checked; None: the thread's last.
     `model_key`: the model the user picked ("auto" or None: the thread's last pick, else the default);
     `allowed_models`: the keys this user may pick (agent/models.allowed), checked here.
     `documents`: the files attached to this question (uploads.context.resolve), already checked."""
+    from gemini_brain.usage import ledger, limits
+    decision = limits.check(user_id, organization_ids)
+    if decision.action == limits.BLOCK:
+        return limits.refused_response(decision)
+    speed = decision.enforce == "hard" and not decision.internal
+    # Speed limits: in the usage tables when they are on (shared by every copy of the service), else in this process.
+    in_process = speed and not ledger.db_on()
+    if in_process:
+        busy = limits.gate.enter(int(user_id))
+        if busy is not None:
+            return limits.refused_response(busy)
+    try:
+        if decision.action == limits.LITE:  # the owner's bucket is used up: a cheaper model answers
+            model_key = settings.usage_lite_model
+            allowed_models = list(dict.fromkeys(list(allowed_models or []) + [model_key]))
+        from gemini_brain.usage.store import Refused
+        with contextlib.ExitStack() as stack:
+            try:  # a refusal comes from entering the scope, before anything runs
+                spend = stack.enter_context(ledger.scope(
+                    "agent_answer", user_id=user_id, organization_ids=organization_ids, session_id=session_id,
+                    model_mode=decision.model_mode, gate=limits.speed_gate() if speed and not in_process else None))
+            except Refused as r:
+                return limits.refused_response(limits.speed_refusal(r.code))
+            response = _answer(question, organization_ids, org_meta, session_id=session_id, user_id=user_id,
+                               db_name=db_name, progress=progress, brief=brief, model_key=model_key,
+                               allowed_models=allowed_models, documents=documents,
+                               lite=decision.action == limits.LITE, agent_key=agent_key, on_step=on_step,
+                               dismissed=dismissed, authorize=authorize)
+            spend.status = str(response.get("status") or "ok")
+        response["usage"] = limits.public(decision)
+        return response
+    finally:
+        if in_process:
+            limits.gate.leave(int(user_id))
+
+
+def _answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[], Dict[int, Dict[str, Any]]], *,
+            session_id: Optional[str], user_id: int, db_name: str = "",
+            progress: Optional[Callable[[str], None]] = None, brief: bool = False,
+            model_key: Optional[str] = None, allowed_models: Optional[Sequence[str]] = None,
+            documents: Optional[Sequence[Any]] = None, lite: bool = False,
+            agent_key: Optional[str] = None, on_step: Optional[Callable[[Dict[str, Any]], None]] = None,
+            dismissed: Sequence[str] = (),
+            authorize: Optional[Callable[[], None]] = None) -> Dict[str, Any]:
+    """answer()'s work. `lite` (the owner's AI for the month is used up): UAE VAT law answers use the picked (lite)
+    model too, and the thread keeps the model it had, so it is not stuck on the lite model once the bucket renews."""
     from gemini_brain.agent import models as agent_models
+    from gemini_brain.agent import profiles
     from gemini_brain.agent.loop import run_agent
+    from gemini_brain.privacy import sensitive
 
     started = time.monotonic()
+    # A card number never goes further than this line: not to the model, the saved chat or any log.
+    question, dropped = sensitive.drop(question)
     orgs = [int(o) for o in organization_ids]
     if authorize:
         authorize()
@@ -59,9 +119,12 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
     thread = thread_context(session_id, orgs, user_id, db_name)
     allowed_keys = list(allowed_models or [agent_models.DEFAULT_KEY])
     model = agent_models.resolve(model_key, allowed_keys, thread.model_key)
+    profile = profiles.resolve(agent_key, thread.agent_key)
     # The default model keeps the agent's own settings (AGENT_MODEL_ID, AGENT_ANSWER_MODEL_ID).
     model_ids = {} if model.key == agent_models.DEFAULT_KEY else {
         "model_id": model.bedrock_id(), "answer_model_id": model.bedrock_id()}
+    if lite:
+        model_ids["law_model_id"] = model.bedrock_id()
     try:
         meta = org_meta() or {}
     except Exception as e:  # noqa: BLE001 - names only label the answer
@@ -70,15 +133,23 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
 
     docs = list(documents or [])
     doc_prompt, doc_ids, doc_evidence = _document_context(docs, thread, meta, orgs)
-    on_tool = (lambda name, params: progress(step_label(name, params))) if progress else None
+    step = _stepper(on_step)
+
+    def on_tool(name: str, params: Any) -> None:
+        if progress:
+            progress(step_label(name, params))
+        step({"phase": "start", "tool": name, "label": step_label(name, params).rstrip("…")})
     delivery = delivery_for(question, thread)
     attached = attachment(question, delivery)
     rid, traces = _start_traces()
     try:
         result = run_agent(question, orgs, meta, history=thread.messages, turn_specs=thread.specs,
                            earlier_figures=thread.figures, subject=f"agent-preview:{user_id}", progress=on_tool,
+                           tool_done=lambda name, ok, ms, rows: step(
+                               {"phase": "done", "tool": name, "ok": ok, "ms": ms, "rows": rows}),
                            brief=brief, attachment=attached, documents=doc_prompt, document_ids=doc_ids,
-                           document_evidence=doc_evidence, user_id=user_id, session_id=session_id,
+                           document_evidence=doc_evidence, user_id=user_id, session_id=session_id, profile=profile,
+                           dismissed=dismissed,
                            **({"authorize":authorize} if authorize else {}), **model_ids)
     finally:
         traces = _collect_traces(rid)
@@ -92,18 +163,29 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
     _audit(data, docs, user_id=user_id, session_id=session_id, orgs=orgs)
     if review_cards:
         answer_text = _without_tables(answer_text)
-    blocks = (cards + tiles.kpi_tiles(data) + review_cards + list(getattr(result, "blocks", None) or [])
-              + links.guide_buttons(data))
-    blocks += _files(question, result, orgs, meta, user_id=user_id, session_id=session_id, answer_text=answer_text,
-                     delivery=delivery, documents=docs)
+    answer_text = sensitive.with_answer_line(answer_text, dropped)
+    warning = sensitive.notice_block(dropped)
+    blocks = ([warning] if warning else []) + agent_badge(profile) + (
+        cards + tiles.kpi_tiles(data) + review_cards + _cash_cards(data) + list(getattr(result, "blocks", None) or [])
+        + links.guide_buttons(data))
+    wants_files = delivery is not None and getattr(delivery, "mode", "none") != "none"
+    if wants_files:
+        step({"phase": "start", "tool": FILES_STEP, "label": "Building the files"})
+    files_started = time.monotonic()
+    files = _files(question, result, orgs, meta, user_id=user_id, session_id=session_id, answer_text=answer_text,
+                   delivery=delivery, documents=docs, title=profile.title_for(question))
+    if wants_files:
+        step({"phase": "done", "tool": FILES_STEP, "ok": any(b.get("type") == "artifact" for b in files) or not delivery.wants_file,
+              "ms": int((time.monotonic() - files_started) * 1000), "rows": None})
+    blocks += files
     privacy = privacy_block(result)
     if privacy:
         blocks.append(privacy)
     if session_id:
         if _save_turn(session_id, user_id, orgs, question, answer_text, db_name, blocks,
                       user_blocks=[_chips(docs)] if docs else None):
-            record_turn(session_id, question, result.tool_calls, delivery, data, db_name, model_key=model.key,
-                        documents=docs)
+            record_turn(session_id, question, result.tool_calls, delivery, data, db_name,
+                        model_key=None if lite else model.key, documents=docs, agent_key=profile.key)
             _mark_attached(docs)
 
     usage = dict(result.usage or {})
@@ -123,7 +205,9 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
             "reason": f"{PRIMARY_LABEL}: {len(result.tool_calls)} tool call(s)",
             "bedrock_model": None if result.route == "law" else model.bedrock_id(),
         },
-        "policy": _policy(model, result.route, picker=len(allowed_keys) > 1),
+        "policy": _policy(model, result.route, picker=len(allowed_keys) > 1, profile=profile),
+        "agent": {"key": profile.key, "name": profile.name},
+        "agent_status": _agent_status(profile, result, data, blocks),
         "verification": result.verification or None,
         "blocks": blocks or None,
         "api_traces": traces.get("api", []),
@@ -139,12 +223,65 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
 UNAVAILABLE = "UPSTREAM_UNAVAILABLE"
 #: conversation_state key: the model that answered the thread's last turn, used when the next request says "auto".
 MODEL_STATE_KEY = "model_key"
+#: conversation_state key: the agent that answered the thread's last turn, used when the next request names none.
+AGENT_STATE_KEY = "agent_key"
 
 
-def _policy(model: Any, route: str, *, picker: bool) -> Dict[str, Any]:
-    """The answer strip's model chip. Without a picker it keeps the product name. With one, law answers say
-    so: they come from the knowledge base's own model whatever was picked."""
-    if not picker:
+#: The step event name for building the chart and files after the answer is written.
+FILES_STEP = "files"
+
+
+def _stepper(on_step: Optional[Callable[[Dict[str, Any]], None]]) -> Callable[[Dict[str, Any]], None]:
+    """on_step, made safe: a failing callback never breaks the answer."""
+    def step(event: Dict[str, Any]) -> None:
+        if on_step is None:
+            return
+        try:
+            on_step(event)
+        except Exception as e:  # noqa: BLE001
+            logger.debug("agent preview: step callback failed: %s", e)
+    return step
+
+
+def _agent_status(profile: Any, result: Any, data: Sequence[Dict[str, Any]],
+                  blocks: Sequence[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """The one-line status a specialist's card shows after this run. Never raises."""
+    if getattr(result, "status", "") != "ok":
+        return None
+    try:
+        from gemini_brain.agent.status import status_for
+        return status_for(profile, data, blocks)
+    except Exception as e:  # noqa: BLE001 - the card shows no status instead
+        logger.warning("agent preview: agent status not built: %s", e)
+        return None
+
+
+def agent_badge(profile: Any) -> List[Dict[str, Any]]:
+    """The line above a specialist's answer that names it; [] for the general agent. Saved with the turn, so a
+    reopened thread still shows which agent answered."""
+    from gemini_brain.agent import profiles
+    if profile is None or profile.key == profiles.DEFAULT_KEY:
+        return []
+    return [{"type": "agent_badge", "key": profile.key, "name": profile.name, "icon": profile.icon}]
+
+
+def _cash_cards(data: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The cash forecast card (tiles and weekly chart). Never raises: the answer reaches the user without it."""
+    try:
+        from gemini_brain.agent.cash_card import cash_blocks
+        return cash_blocks(data)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("agent preview: cash card not built: %s", e, exc_info=True)
+        return []
+
+
+def _policy(model: Any, route: str, *, picker: bool, profile: Any = None) -> Dict[str, Any]:
+    """The answer strip's model chip. Without a picker it keeps the product name (a specialist's name when one
+    answered). With one, law answers say so: they come from the knowledge base's own model whatever was picked."""
+    from gemini_brain.agent import profiles
+    if profile is not None and profile.key != profiles.DEFAULT_KEY:
+        label = profile.name if not picker else f"{profile.name} · {model.label}"
+    elif not picker:
         label = PRIMARY_LABEL
     elif route == "law":
         label = f"{PRIMARY_LABEL} · UAE VAT law"
@@ -266,7 +403,10 @@ def attachment(question: str, delivery: Any = None) -> Optional[str]:
     if delivery is None or delivery.mode == "none":
         return None
     if delivery.wants_file and delivery.format:
-        return f"{delivery.format.upper()} file" + (" and chart" if delivery.wants_chart else "")
+        from gemini_brain.artifacts.delivery import named_formats
+        names = list(dict.fromkeys([delivery.format] + named_formats(question)))
+        files = " and ".join(n.upper() for n in names) + (" files" if len(names) > 1 else " file")
+        return files + (" and chart" if delivery.wants_chart else "")
     return "chart" if delivery.wants_chart else "file"
 
 
@@ -284,6 +424,7 @@ def export_rows(data: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
             for row in rows:
                 if granularity in row:
                     row[granularity] = period_label(row[granularity], granularity)
+                    row.pop("transaction_date", None)  # the same date as the bucket, before it was labelled
         if rows and len(rows) >= len(best):
             best = rows
     return best
@@ -319,8 +460,9 @@ def _plain(row: Dict[str, Any]) -> Dict[str, Any]:
 
 def _files(question: str, result: Any, orgs: List[int], meta: Dict[int, Dict[str, Any]], *, user_id: int,
            session_id: Optional[str], answer_text: str, delivery: Any = None,
-           documents: Sequence[Any] = ()) -> List[Dict[str, Any]]:
-    """Chart, canvas and download blocks when the user asked for a file or a chart; [] otherwise. Never raises."""
+           documents: Sequence[Any] = (), title: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Chart, canvas and download blocks when the user asked for a file or a chart; [] otherwise. Never raises.
+    `title`: the files' title (an agent's Run now); None makes it from the question."""
     try:
         delivery = delivery if delivery is not None else delivery_for(question)
         if delivery is None or delivery.mode == "none":
@@ -334,7 +476,7 @@ def _files(question: str, result: Any, orgs: List[int], meta: Dict[int, Dict[str
         return attach_delivery(
             question, rows, [], status="ok" if rows else "empty", user_id=user_id, organization_id=single,
             session_id=session_id, org_name=(meta.get(single) or {}).get("name") if single else None,
-            answer_text=answer_text, delivery=delivery,
+            answer_text=answer_text, delivery=delivery, title=title,
         )
     except Exception as e:  # noqa: BLE001 - the answer still reaches the user without the file
         logger.warning("agent preview: file not built: %s", e, exc_info=True)
@@ -350,6 +492,7 @@ class Thread:
     delivery: Optional[Dict[str, Any]] = None
     figures: List[float] = field(default_factory=list)
     model_key: Optional[str] = None
+    agent_key: Optional[str] = None
     #: Files attached earlier in this thread that still exist: id -> short summary (uploads.context.state_entry).
     documents: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
@@ -401,12 +544,13 @@ def thread_context(session_id: Optional[str], organization_ids: Sequence[int], u
         float(e[k]) for e in remembered.values() for k in ("subtotal", "tax", "total") if isinstance(e.get(k), (int, float))]
     return Thread(messages=list(messages or []), specs=list(state.get(history.STATE_KEY) or []),
                   delivery=state.get(history.DELIVERY_KEY), figures=figures,
-                  model_key=state.get(MODEL_STATE_KEY), documents=remembered)
+                  model_key=state.get(MODEL_STATE_KEY), agent_key=state.get(AGENT_STATE_KEY), documents=remembered)
 
 
 def record_turn(session_id: str, question: str, tool_calls: Sequence[Dict[str, Any]], delivery: Any = None,
                 data: Optional[Sequence[Dict[str, Any]]] = None, db_name: str = "",
-                model_key: Optional[str] = None, documents: Optional[Sequence[Any]] = None) -> None:
+                model_key: Optional[str] = None, documents: Optional[Sequence[Any]] = None,
+                agent_key: Optional[str] = None) -> None:
     """Save what this turn queried, its chart or file request, the figures it fetched and the model that
     answered, for later turns."""
     try:
@@ -418,6 +562,8 @@ def record_turn(session_id: str, question: str, tool_calls: Sequence[Dict[str, A
         state[history.DELIVERY_KEY] = _delivery_state(delivery)
         if model_key:
             state[MODEL_STATE_KEY] = model_key
+        if agent_key:
+            state[AGENT_STATE_KEY] = agent_key
         if documents:
             from gemini_brain.uploads import context as upload_context
             state = upload_context.add_to_state(state, documents)

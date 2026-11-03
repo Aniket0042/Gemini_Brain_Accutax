@@ -112,9 +112,21 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning("PII name recognition warm-up skipped: %s", e)
 
+    # Bots: due bots on their schedule and the poll for new bills and invoices. Off unless BOT_SCHEDULER_ENABLED.
+    try:
+        from gemini_brain.bots import scheduler as bot_scheduler
+        bot_scheduler.start()
+    except Exception as e:
+        logger.warning("Bot scheduler failed to start: %s", e)
+
     yield
     if watchdog is not None:
         watchdog.stop()
+    try:
+        from gemini_brain.bots import scheduler as bot_scheduler
+        bot_scheduler.stop()
+    except Exception:
+        pass
     try:
         from gemini_brain.artifacts.store import stop_sweeper
         stop_sweeper()
@@ -231,6 +243,10 @@ def create_app() -> FastAPI:
     app.include_router(router)
     from gemini_brain.api.privacy_routes import router as privacy_router
     app.include_router(privacy_router)
+    from gemini_brain.api.usage_routes import router as usage_router
+    app.include_router(usage_router)
+    from gemini_brain.api.bot_routes import router as bot_router
+    app.include_router(bot_router)
 
     return app
 

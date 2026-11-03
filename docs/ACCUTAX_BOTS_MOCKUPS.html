@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accutax Bot Mockups</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<style>
+:root {
+  --bg: #f6f5f1; --surface: #ffffff; --surface-1: #f1efe8; --text: #1f1e1c; --text-2: #5f5e5a; --muted: #888780;
+  --border: rgba(31,30,28,.12); --border-strong: rgba(31,30,28,.24);
+  --accent: #185fa5; --accent-bg: #e6f1fb; --accent-border: #85b7eb;
+  --ok: #3b6d11; --ok-bg: #eaf3de; --warn: #854f0b; --warn-bg: #faeeda; --bad: #a32d2d; --bad-bg: #fcebeb;
+  --pro: #534ab7; --pro-bg: #eeedfe; --teal: #0f6e56; --teal-bg: #e1f5ee; --coral: #993c1d; --coral-bg: #faece7;
+  --radius: 8px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1a1a19; --surface: #262624; --surface-1: #2f2f2c; --text: #f1efe8; --text-2: #b4b2a9; --muted: #888780;
+    --border: rgba(241,239,232,.12); --border-strong: rgba(241,239,232,.24);
+    --accent: #85b7eb; --accent-bg: #0c447c; --accent-border: #378add;
+    --ok: #c0dd97; --ok-bg: #27500a; --warn: #fac775; --warn-bg: #633806; --bad: #f7c1c1; --bad-bg: #791f1f;
+    --pro: #cecbf6; --pro-bg: #3c3489; --teal: #9fe1cb; --teal-bg: #085041; --coral: #f5c4b3; --coral-bg: #712b13;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1a1a19; --surface: #262624; --surface-1: #2f2f2c; --text: #f1efe8; --text-2: #b4b2a9; --muted: #888780;
+  --border: rgba(241,239,232,.12); --border-strong: rgba(241,239,232,.24);
+  --accent: #85b7eb; --accent-bg: #0c447c; --accent-border: #378add;
+  --ok: #c0dd97; --ok-bg: #27500a; --warn: #fac775; --warn-bg: #633806; --bad: #f7c1c1; --bad-bg: #791f1f;
+  --pro: #cecbf6; --pro-bg: #3c3489; --teal: #9fe1cb; --teal-bg: #085041; --coral: #f5c4b3; --coral-bg: #712b13;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header { padding: 20px 16px 0; max-width: 1080px; margin: 0 auto; }
+h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+.sub { color: var(--text-2); margin: 0 0 16px; font-size: 13px; }
+.tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--border); scrollbar-width: thin; }
+.tab { flex: none; display: flex; align-items: center; gap: 6px; background: none; border: 0; border-bottom: 2px solid transparent;
+  color: var(--text-2); padding: 10px 12px; font: inherit; cursor: pointer; white-space: nowrap; }
+.tab:hover { color: var(--text); }
+.tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.tab i { font-size: 17px; }
+main { max-width: 1080px; margin: 0 auto; padding: 20px 16px 48px; }
+.intro { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 16px; color: var(--text-2); font-size: 13px; }
+.intro b { color: var(--text); font-weight: 600; }
+.grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 820px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.stack { display: grid; gap: 16px; }
+.label { font-size: 12px; color: var(--muted); margin: 0 0 6px; text-transform: none; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+.hd { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.av { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; flex: none; }
+.name { margin: 0; font-weight: 600; font-size: 15px; }
+.agent { margin: 0; font-size: 12px; color: var(--text-2); }
+.tag { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: var(--radius); white-space: nowrap; }
+.t-accent { background: var(--accent-bg); color: var(--accent); }
+.t-ok { background: var(--ok-bg); color: var(--ok); }
+.t-warn { background: var(--warn-bg); color: var(--warn); }
+.t-bad { background: var(--bad-bg); color: var(--bad); }
+.row { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; padding: 9px 0; border-top: 1px solid var(--border); font-size: 13px; }
+.lb { color: var(--text-2); }
+.hint { color: var(--muted); font-size: 12px; }
+.chip { display: inline-block; font-size: 12px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--border-strong); margin: 0 4px 4px 0; }
+.chip.on { background: var(--accent-bg); color: var(--accent); border-color: var(--accent-border); }
+.rule { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+.slider { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.slider input { flex: 1; accent-color: var(--accent); }
+.ft { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+button.b { font: inherit; font-size: 13px; padding: 6px 14px; border-radius: var(--radius); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
+button.b:hover { background: var(--surface-1); }
+button.b.p { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.ask { display: flex; gap: 8px; align-items: center; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 12px; padding: 10px 12px; }
+.ask span { flex: 1; color: var(--text); }
+.msg { display: flex; gap: 10px; }
+.msg .body { flex: 1; min-width: 0; }
+.msg p { margin: 0 0 6px; }
+.msg ul { margin: 4px 0 8px; padding-left: 18px; }
+.stat { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 8px 0; }
+.stat div { background: var(--surface-1); border-radius: var(--radius); padding: 8px 10px; }
+.stat b { display: block; font-size: 18px; font-weight: 600; }
+.stat span { font-size: 12px; color: var(--text-2); }
+.list { margin: 0; padding: 0; list-style: none; }
+.list li { display: flex; justify-content: space-between; gap: 8px; padding: 7px 0; border-top: 1px solid var(--border); font-size: 13px; }
+.list li:first-child { border-top: 0; }
+.file { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; margin: 4px 6px 0 0; font-size: 13px; }
+.why { font-size: 12px; color: var(--accent); cursor: pointer; }
+.note { margin-top: 24px; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Accutax AI · bot mockups</h1>
+  <p class="sub">One setup card for every agent. Same sections, same order; only the values, watches and actions change. Figures are made up.</p>
+  <nav class="tabs" role="tablist" aria-label="Agents" id="tabs"></nav>
+</header>
+<main id="panel" role="tabpanel"></main>
+
+<script>
+const R = { allow: ['allow', 't-ok'], ask: ['ask first', 't-warn'], never: ['never', 't-bad'] };
+const chips = (on, off = []) => on.map(c => `<span class="chip on">${c}</span>`).join('') + off.map(c => `<span class="chip">${c}</span>`).join('');
+const rules = list => list.map(([a, r]) => `<div class="rule"><span>${a}</span><span class="tag ${R[r][1]}">${R[r][0]}</span></div>`).join('');
+const slider = `<div class="slider"><span class="hint">Quiet</span><input type="range" min="1" max="3" step="1" value="2" aria-label="Sensitivity"><span class="hint">Chatty</span></div>`;
+const av = (icon, c) => `<div class="av" style="background:var(--${c}-bg);color:var(--${c})"><i class="ti ti-${icon}" aria-hidden="true"></i></div>`;
+const block = (label, html) => `<div><p class="label">${label}</p>${html}</div>`;
+const msg = (icon, c, name, html) => `<div class="card msg">${av(icon, c)}<div class="body"><p><b>${name}</b> <span class="hint">· just now</span></p>${html}</div></div>`;
+const ask = text => `<div class="ask"><i class="ti ti-sparkles" style="color:var(--accent)" aria-hidden="true"></i><span>${text}</span><button class="b p">Create</button></div>`;
+const stat = items => `<div class="stat">${items.map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join('')}</div>`;
+
+const AGENTS = [
+  { key: 'vat', tab: 'VAT', icon: 'receipt-tax', c: 'teal', from: 'Template "Weekly VAT digest"', bot: 'VAT Watch', type: ['Scheduled + monitor', 't-accent'],
+    job: 'Weekly VAT position, bills to fix before the return, reminder before the due date',
+    orgs: chips(['Org 25', 'Org 27']), when: 'Every Monday 08:00, and 3 days before each VAT return is due<br><span class="hint">Next: 2 Nov · 9 Nov · 25 Nov (return)</span>',
+    watches: chips(['Bill with no supplier TRN', 'VAT rate does not match item', 'Duplicate input VAT'], ['Reverse charge missing']) + slider,
+    deliver: chips(['Inbox', 'Email digest'], ['Teams']),
+    rules: rules([['Run VAT review', 'allow'], ['Mark bill as reviewed', 'ask'], ['File the VAT return', 'never']]),
+    extra: ['Notes', '<span class="hint">"Ignore bills under AED 100"</span>'],
+    side: [
+      block('First run · the bot introduces itself', msg('receipt-tax', 'teal', 'VAT Watch', `<p>Hi, I'm VAT Watch. I checked Org 25 and Org 27 for October.</p>${stat([['329', 'bills checked'], ['41', 'to fix'], ['25 Nov', 'return due']])}<p>From now on I'll send you this every Monday and remind you 3 days before the return.</p><div class="ft" style="justify-content:flex-start"><button class="b">Open the 41 bills</button><button class="b">Change schedule</button></div>`)),
+    ] },
+  { key: 'ar', tab: 'Receivables', icon: 'cash', c: 'ok', from: 'Template "Chase overdue invoices"', bot: 'Collections Nudge', type: ['Scheduled + monitor', 't-accent'],
+    job: 'List overdue invoices, draft polite reminders, flag customers getting slower to pay',
+    orgs: chips(['Org 27'], ['+ Add']), when: 'Every Tuesday 09:00<br><span class="hint">Next: 3 Nov · 10 Nov · 17 Nov</span>',
+    watches: chips(['Invoice 30+ days overdue', 'Customer pays 10+ days slower'], ['Credit limit crossed']) + slider,
+    deliver: chips(['Inbox', 'Email digest'], ['WhatsApp']),
+    rules: rules([['Draft reminder', 'allow'], ['Send reminder to customer', 'ask'], ['Change invoice', 'never']]),
+    extra: ['Notes', '<span class="hint">"Skip Al Noor Trading, they pay quarterly"</span>'],
+    side: [
+      block('Approval card · bot wants to send something', msg('cash', 'ok', 'Collections Nudge', `<p>3 reminders ready. Total overdue <b>AED 186K</b>.</p><ul class="list"><li><span>Gulf Star LLC · INV-2291</span><span>AED 92,400 · 47 days</span></li><li><span>Desert Rose Trading · INV-2310</span><span>AED 61,000 · 35 days</span></li><li><span>Marina Tech · INV-2333</span><span>AED 32,600 · 31 days</span></li></ul><div class="ft" style="justify-content:flex-start"><button class="b p">Send all 3</button><button class="b">Review drafts</button><button class="b">Not now</button></div>`)),
+    ] },
+  { key: 'ap', tab: 'Payables', icon: 'file-invoice', c: 'coral', from: 'One sentence', bot: 'Bill Guard', type: ['Scheduled + monitor', 't-accent'],
+    job: 'Catch duplicate and odd bills as they arrive; Monday summary of what to pay',
+    orgs: chips(['Org 27']), when: 'Every Monday 08:00, and each time a bill is saved<br><span class="hint">Next: 2 Nov · 9 Nov · 16 Nov</span>',
+    watches: chips(['Duplicate bill', 'New supplier', 'Amount 3× the usual'], ['Bill due in 3 days']) + slider,
+    deliver: chips(['Inbox', 'Bell'], ['Email digest']),
+    rules: rules([['Flag bill', 'allow'], ['Put bill on hold', 'ask'], ['Pay or delete bill', 'never']]),
+    extra: ['Budget', 'Up to 30 runs a week · AED 20 cap'],
+    side: [
+      block('Step 1 · describe it in one sentence', ask('Watch new bills for duplicates and tell me every Monday what to pay')),
+      block('Step 3 · try it on last month', `<div class="card">${stat([['14', 'duplicate groups'], ['AED 38K', 'at risk'], ['6', 'new suppliers']])}<p class="hint" style="margin:0">With "Chatty" you would get 22 alerts in September; with "Quiet", 9.</p></div>`),
+      block('Step 4 · first run', msg('file-invoice', 'coral', 'Bill Guard', `<p>Hi, I'm Bill Guard. I checked 1,204 bills in Org 27 and found 108 duplicate groups. I'll watch every new bill from now on.</p><div class="ft" style="justify-content:flex-start"><button class="b">Open findings</button></div>`)),
+    ] },
+  { key: 'rec', tab: 'Reconciliation', icon: 'arrows-exchange', c: 'pro', from: '"Make this a bot" under a chat answer', bot: 'Bank Matcher', type: ['Event trigger', 't-accent'],
+    job: 'Suggest matches for new bank lines; flag lines with no bill or invoice',
+    orgs: chips(['Org 25', 'Org 27']), when: 'After each bank statement import, plus Friday 17:00 summary',
+    watches: chips(['Unmatched line older than 7 days', 'Amount over AED 50K'], ['Same payee, new account']) + slider,
+    deliver: chips(['Inbox'], ['Teams']),
+    rules: rules([['Suggest match', 'allow'], ['Confirm match', 'ask'], ['Unmatch or delete', 'never']]),
+    extra: ['Budget', 'Up to 20 runs a week · AED 15 cap'],
+    side: [
+      block('Approval card', msg('arrows-exchange', 'pro', 'Bank Matcher', `<p>New import: 64 lines. I matched 58. One needs you:</p><div class="card" style="padding:10px 12px;background:var(--surface-1);border:0"><p style="margin:0"><b>AED 12,400</b> · 24 Oct · "TRF EMIRATES STEEL"</p><p class="hint" style="margin:0">Looks like bill B-1043 (same amount, supplier, 2 days apart)</p></div><div class="ft" style="justify-content:flex-start"><button class="b p">Approve match</button><button class="b">Pick another bill</button><button class="b">Reject</button></div><span class="why">Why did I get this?</span>`)),
+    ] },
+  { key: 'rep', tab: 'Reporting', icon: 'report-analytics', c: 'accent', from: 'Template "Month-end pack"', bot: 'Month-end Pack', type: ['Scheduled', 't-accent'],
+    job: 'P&L by month for the last 3 months, as PDF and Excel, with a short summary',
+    orgs: chips(['Org 27']), when: '2nd working day of each month, 09:00, or right after period close<br><span class="hint">Next: 3 Nov · 2 Dec · 5 Jan</span>',
+    watches: chips(['Gross margin drops 5 points', 'Expense category up 30%'], ['Revenue down 2 months running']),
+    deliver: chips(['Inbox', 'Email: finance@client.ae'], ['Teams']),
+    rules: rules([['Build the pack', 'allow'], ['Email pack outside Accutax', 'ask'], ['Change ledgers', 'never']]),
+    extra: ['Format', chips(['PDF', 'Excel'], ['CSV'])],
+    side: [
+      block('Delivered', msg('report-analytics', 'accent', 'Month-end Pack', `<p>October pack is ready. Margin moved more than usual, see page 2.</p><div style="display:flex;flex-wrap:wrap"><span class="file"><i class="ti ti-file-type-pdf" aria-hidden="true"></i>P&amp;L Aug–Oct 2026.pdf</span><span class="file"><i class="ti ti-file-spreadsheet" aria-hidden="true"></i>P&amp;L Aug–Oct 2026.xlsx</span></div><div class="ft" style="justify-content:flex-start"><button class="b p">Email to finance@client.ae</button><button class="b">Ask about margin</button></div>`)),
+    ] },
+  { key: 'comp', tab: 'Compliance', icon: 'shield-check', c: 'warn', from: 'Template "Never miss a deadline"', bot: 'Deadline Keeper', type: ['Scheduled', 't-accent'],
+    job: 'Track VAT, corporate tax and licence deadlines; warn early, then again',
+    orgs: chips(['All my orgs (4)']), when: 'Daily 07:00 check · alerts 14, 7 and 2 days before each deadline',
+    watches: chips(['VAT return due', 'Corporate tax return due'], ['Trade licence expiry (needs date field)']),
+    deliver: chips(['Inbox', 'Bell', 'Email digest']),
+    rules: rules([['Remind me', 'allow'], ['Remind client contact', 'ask'], ['Submit anything to FTA', 'never']]),
+    extra: ['Needs', '<span class="hint">Financial year end per org for corporate tax</span>'],
+    side: [
+      block('Upcoming', `<div class="card"><ul class="list"><li><span><i class="ti ti-receipt-tax" aria-hidden="true"></i> VAT return Q3 · Org 27</span><span class="tag t-bad">in 2 days</span></li><li><span><i class="ti ti-receipt-tax" aria-hidden="true"></i> VAT return Q3 · Org 25</span><span class="tag t-warn">in 7 days</span></li><li><span><i class="ti ti-building-bank" aria-hidden="true"></i> Corporate tax · Org 31</span><span class="tag t-accent">in 41 days</span></li><li><span><i class="ti ti-license" aria-hidden="true"></i> Trade licence · Org 25</span><span class="tag">no date set</span></li></ul></div>`),
+    ] },
+  { key: 'inv', tab: 'Invoice', icon: 'file-dollar', c: 'teal', from: 'Template "Clean sales invoices"', bot: 'Invoice Checker', type: ['Monitor', 't-warn'],
+    job: 'Check every new sales invoice and every recurring run before the customer sees a problem',
+    orgs: chips(['Org 25', 'Org 27']), when: 'Each time an invoice is saved or a recurring run fails',
+    watches: chips(['Recurring invoice failed', 'Invoice number gap', 'Customer TRN missing'], ['Discount over 20%']) + slider,
+    deliver: chips(['Inbox', 'Bell']),
+    rules: rules([['Flag invoice', 'allow'], ['Retry recurring run', 'ask'], ['Edit or void invoice', 'never']]),
+    extra: ['Notes', '<span class="hint">"Gaps in series INT- are fine, internal use"</span>'],
+    side: [
+      block('Alert', msg('file-dollar', 'teal', 'Invoice Checker', `<p><span class="tag t-bad">High</span> Recurring invoice for <b>Marina Tech</b> did not go out on 1 Nov. Error: customer email missing.</p><div class="ft" style="justify-content:flex-start"><button class="b p">Retry run</button><button class="b">Open customer</button><button class="b">Not a problem</button></div><span class="why">Why did I get this?</span><p class="hint" style="margin-top:6px">You set "Recurring invoice failed" to always alert. Change it in Settings → Watches.</p>`)),
+    ] },
+  { key: 'dc', tab: 'Delivery Challan', icon: 'truck-delivery', c: 'warn', from: 'One sentence', bot: 'Challan Chaser', type: ['Monitor', 't-warn'],
+    job: 'Find delivered goods not yet invoiced so no revenue is missed',
+    orgs: chips(['All my orgs (4)']), when: 'Checks every night 02:00 · alerts only on new findings',
+    watches: chips(['Challan not invoiced after 14 days', 'Invoice qty differs from challan'], ['Challan cancelled after delivery']) + slider,
+    deliver: chips(['Inbox', 'Bell'], ['Email digest']),
+    rules: rules([['Draft invoice from challan', 'ask'], ['Post invoice', 'never']]),
+    extra: ['Needs', '<span class="hint">Challan to invoice link (to confirm)</span>'],
+    side: [
+      block('Step 1 · one sentence', ask('Tell me when a challan is not billed in 2 weeks')),
+      block('Try it on last month', `<div class="card">${stat([['6', 'challans flagged'], ['AED 42K', 'not billed'], ['2', 'qty mismatch']])}<div class="ft"><button class="b">Edit sensitivity</button><button class="b p">Turn on</button></div></div>`),
+    ] },
+];
+
+function card(a) {
+  const row = (l, v) => `<div class="row"><span class="lb">${l}</span><span>${v}</span></div>`;
+  return `<div class="card">
+    <div class="hd">${av(a.icon, a.c)}<div style="flex:1;min-width:0"><p class="name">${a.bot}</p><p class="agent">${a.tab} agent</p></div><span class="tag ${a.type[1]}">${a.type[0]}</span></div>
+    ${row('Job', a.job)}${row('Orgs', a.orgs)}${row('When', a.when)}${row('Watches', a.watches)}${row('Deliver to', a.deliver)}${row('Rules', a.rules)}${row(a.extra[0], a.extra[1])}
+    <div class="ft"><button class="b">Try it on last month</button><button class="b p">Save bot</button></div>
+  </div>`;
+}
+
+const tabs = document.getElementById('tabs'), panel = document.getElementById('panel');
+tabs.innerHTML = AGENTS.map(a => `<button class="tab" role="tab" id="tab-${a.key}" aria-controls="panel" aria-selected="false" tabindex="-1" data-key="${a.key}"><i class="ti ti-${a.icon}" aria-hidden="true"></i>${a.tab}</button>`).join('');
+
+function show(key, focus) {
+  const a = AGENTS.find(x => x.key === key) || AGENTS[0];
+  tabs.querySelectorAll('.tab').forEach(t => { const on = t.dataset.key === a.key; t.setAttribute('aria-selected', on); t.tabIndex = on ? 0 : -1; if (on && focus) t.focus(); });
+  panel.setAttribute('aria-labelledby', 'tab-' + a.key);
+  panel.innerHTML = `<div class="intro"><span>Created from: <b>${a.from}</b></span><span>Setup card is the same for every agent</span></div>
+    <div class="grid"><div>${block('Step 2 · setup card', card(a))}</div><div class="stack">${a.side.join('')}</div></div>
+    <p class="note">Mockup only. Real build uses Accutax AI styles. Figures are invented.</p>`;
+  try { localStorage.setItem('accutax_bot_mockup_tab', a.key); } catch (e) {}
+  if (location.hash !== '#' + a.key) history.replaceState(null, '', '#' + a.key);
+}
+
+tabs.addEventListener('click', e => { const t = e.target.closest('.tab'); if (t) show(t.dataset.key); });
+tabs.addEventListener('keydown', e => {
+  const i = AGENTS.findIndex(a => a.key === document.activeElement.dataset.key);
+  if (i < 0) return;
+  const n = e.key === 'ArrowRight' ? (i + 1) % AGENTS.length : e.key === 'ArrowLeft' ? (i - 1 + AGENTS.length) % AGENTS.length : -1;
+  if (n >= 0) { e.preventDefault(); show(AGENTS[n].key, true); }
+});
+
+let start = location.hash.slice(1);
+if (!start) { try { start = localStorage.getItem('accutax_bot_mockup_tab'); } catch (e) {} }
+show(start);
+</script>
+</body>
+</html>

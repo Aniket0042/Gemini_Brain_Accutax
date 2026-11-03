@@ -146,6 +146,29 @@ class GeminiBrainSettings(BaseSettings):
             "chat widget can call /query without a second login."
         ),
     )
+    handoff_service_key: str = Field(
+        default="",
+        description=(
+            "The Accutax backend's HANDOFF_SERVICE_KEY, sent as x-handoff-service-key when this server redeems a "
+            "one-time handoff code (POST /handoff/exchange). Empty: the code is sent alone, which works only while "
+            "the Accutax backend has no key set."
+        ),
+    )
+    bot_service_token: str = Field(
+        default="",
+        description="Shared secret for backend-to-backend bot triggers (POST /api/v1/bots/tick, POST /api/v1/bots/event).",
+    )
+    bot_scheduler_enabled: bool = Field(
+        default=False,
+        description=(
+            "Run bots inside this service (bots/scheduler.py): due bots on their schedule, and a poll for new bills "
+            "and sales invoices for monitor bots. Turn on in one environment's service only."
+        ),
+    )
+    bot_scheduler_interval_seconds: int = Field(
+        default=300,
+        description="Seconds between bot scheduler cycles (at least 60).",
+    )
     jwt_algorithm: str = Field(
         default="HS256",
         description="JWT signing algorithm.",
@@ -372,6 +395,37 @@ class GeminiBrainSettings(BaseSettings):
             "Empty (the default) turns it off."
         ),
     )
+    usage_ledger: str = Field(
+        default="",
+        description=(
+            "JSON-lines file with one line per piece of AI spend (an agent answer, a file read, a model call made "
+            "outside both), relative to backend/, for example logs/ai_usage.jsonl: user, organizations, their owners "
+            "and the owner charged, models, tokens, cost and credits (1 credit = $0.001). Records only; nothing is "
+            "limited. Rotates at 50 MB, keeping 5 files. Empty (the default) turns it off."
+        ),
+    )
+    usage_db: str = Field(
+        default="off",
+        description=("on: also write each piece of AI spend to the usage tables (scripts/ops/usage_limits.sql), "
+                     "which the limits and the usage pages read. off (the default): the JSON-lines ledger only."),
+    )
+    usage_enforce: str = Field(
+        default="off",
+        description=("AI usage limits (docs/ORG_TOKEN_LIMITS_STRATEGY.md). off: no check. log: check and log what "
+                     "would happen. soft: also show usage bars and warnings, block nothing. hard: also switch to the "
+                     "lite model and block at the limits. Needs USAGE_DB=on."),
+    )
+    usage_timezone: str = Field(default="Asia/Dubai",
+                                description="Time zone of the daily cap's midnight and the monthly bucket's first day.")
+    usage_lite_model: str = Field(default="haiku-4.5",
+                                  description="Model key (agent/models.py) that answers when an owner's bucket is used up.")
+    usage_platform_alert_usd: float = Field(default=25.0, description="Platform AI spend a day (UTC) that raises an alert.")
+    usage_platform_pause_usd: float = Field(
+        default=100.0, description="Platform AI spend a day (UTC) at which AI pauses for everyone but super-admins.")
+    usage_rate_per_minute: int = Field(default=5, description="Questions a user may send in one minute (USAGE_ENFORCE=hard).")
+    usage_admins: str = Field(
+        default="", description=("Comma-separated emails or user ids who may open the AI usage admin page, besides "
+                                 "users with is_super_admin."))
 
     # ── Privacy (PII plan) ─────────────────────────────────────
     pii_mode: str = Field(
@@ -406,6 +460,13 @@ class GeminiBrainSettings(BaseSettings):
         description=(
             "on | off. on (with PII_MODE=on): every answer carries a privacy badge: how many names and IDs were "
             "hidden from the model, which ones in this question and answer, and what the model saw."
+        ),
+    )
+    pii_card_guard: str = Field(
+        default="on",
+        description=(
+            "on | off. on: a card number typed into the chat is removed from the question before the model, the "
+            "saved chat or any log sees it, never put back, and the user is warned on screen (privacy/sensitive.py)."
         ),
     )
     pii_demo_orgs: str = Field(

@@ -51,6 +51,11 @@ def _settings(organization_ids: Sequence[int], subject: str, deadline: float) ->
     return out
 
 
+def filing_frequencies(organization_ids: Sequence[int], subject: str, deadline: float) -> Dict[int, str]:
+    """Each organization's VAT filing frequency from its VAT settings; organizations with none are left out."""
+    return _settings(organization_ids, subject, deadline)
+
+
 def _figures(org: int, start: dt.date, end: dt.date, subject: str, deadline: float) -> Dict[str, float]:
     result = cube_client.load({
         "measures": ["vat.output_vat", "vat.input_vat", "vat.net_vat_payable", "vat.standard_rated_sales"],

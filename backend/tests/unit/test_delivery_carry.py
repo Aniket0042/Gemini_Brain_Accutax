@@ -58,3 +58,9 @@ def test_prompt_asks_when_unclear_and_never_fakes_a_correction():
     assert '"fix it"' in rules and "call no tools" in rules
     assert "Never say figures were corrected" in rules
     assert "Never guess it." in rules
+
+
+def test_named_formats_lists_every_format_in_priority_order():
+    from gemini_brain.artifacts.delivery import named_formats
+    assert named_formats("month-end pack as PDF and Excel") == ["xlsx", "pdf"]
+    assert named_formats("revenue this year") == []

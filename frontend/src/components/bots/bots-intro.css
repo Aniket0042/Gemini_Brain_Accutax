@@ -1,0 +1,37 @@
+/* bots-intro.css — The bot's first message in chat (BotIntroMessage). */
+
+.bim { display: flex; flex-direction: column; gap: 14px; width: 100%; }
+.bim-divider { display: flex; align-items: center; gap: 12px; color: var(--ink-faint); font-size: var(--text-sm); }
+.bim-divider::before,
+.bim-divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.bim-card {
+  padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.bim-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.bim-head strong { font-size: 14.5px; color: var(--ink); }
+.bim-head .bh-pill { gap: 4px; }
+.bim-head .bd-muted { margin: 0; }
+.bim-text { margin: 0; font-size: var(--text-body); line-height: 1.6; color: var(--ink); }
+.bim-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.bim-stats > div { padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface-2); display: flex; flex-direction: column; gap: 2px; }
+.bim-stats strong { font-size: 18px; color: var(--ink); }
+.bim-stats span { font-size: 11.5px; color: var(--ink-faint); }
+.bim-return { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.bim-return-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.bim-return-head strong { font-size: var(--text-ui); color: var(--ink); }
+.bim-return-head .bd-muted { margin: 0; }
+.bim-return dl { display: grid; grid-template-columns: repeat(3, auto minmax(0, 1fr)); gap: 4px 10px; margin: 0; font-size: var(--text-sm); }
+.bim-return dt { color: var(--ink-faint); }
+.bim-return dd { margin: 0; color: var(--ink); font-variant-numeric: tabular-nums; }
+.bim-failed {
+  display: flex; gap: 10px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--warning-soft);
+  color: var(--warning-ink); font-size: var(--text-ui);
+}
+.bim-failed p { margin: 0; line-height: 1.5; }
+.bim-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.bim-foot { margin: 0 !important; }
+
+@media (max-width: 640px) {
+  .bim-return dl { grid-template-columns: auto minmax(0, 1fr); }
+}

@@ -255,6 +255,10 @@ def run_agent(
     pii_mode: Optional[str] = None,
     capture: bool = False,
     authorize: Optional[Callable[[], None]] = None,
+    law_model_id: Optional[str] = None,
+    profile: Any = None,
+    tool_done: Optional[Callable[[str, bool, int, Optional[int]], None]] = None,
+    dismissed: Sequence[str] = (),
 ) -> AgentResult:
     """Answer one question. Never raises. `progress(tool_name, tool_input)` is called before each tool runs.
     `history`: the thread's earlier messages; `turn_specs`: what its turns queried (history.add_spec);
@@ -262,7 +266,11 @@ def run_agent(
     `documents`: the prompt block about files attached to this question and earlier in the chat; `document_ids`:
     the files read_document may serve; `document_evidence`: their fields, as evidence for the verifier.
     `pii_mode`: masking for this request instead of PII_MODE; `capture`: keep its privacy snapshot whatever
-    PII_SNAPSHOTS says (the privacy page's live demo uses both)."""
+    PII_SNAPSHOTS says (the privacy page's live demo uses both). `law_model_id`: the model of the law route
+    instead of the knowledge base's own (usage limits' lite mode). `profile`: the agent answering (agent/profiles.py):
+    it limits the tools offered and adds its instructions; None is the general agent. `tool_done(name, ok, ms, rows)`
+    is called after each tool call finishes (the live run card). `dismissed`: review findings the person marked as not a
+    problem (keys); the review leaves them out."""
     started = time.monotonic()
     deadline = started + (deadline_seconds or settings.agent_deadline_seconds)
     budget = max_tool_calls or settings.agent_max_tool_calls
@@ -272,7 +280,8 @@ def run_agent(
     if authorize:
         authorize()
     ctx = tools.ToolContext(organization_ids=orgs, subject=subject, deadline=deadline, user_id=user_id,
-                            session_id=session_id, document_ids=tuple(document_ids), authorize=authorize)
+                            session_id=session_id, document_ids=tuple(document_ids), authorize=authorize,
+                            allowed_tools=getattr(profile, "tools", None), dismissed=frozenset(dismissed or ()))
     planner_id = model_id or settings.agent_model_id or SONNET5_ID
     writer_id = answer_model_id or settings.agent_answer_model_id or planner_id
     planner = BedrockAdapter(planner_id, label="agent")
@@ -312,8 +321,10 @@ def run_agent(
             return masking.outbound(messages, asked) if masking is not None else messages
 
         # With files in the chat the law shortcut is skipped: it answers from the question alone.
-        law_answer = None if documents or document_ids else law.answer(
-            question, [dict(m) for m in (outbound() if masked else messages)], brief=brief)
+        # An agent without the law tool never takes the law shortcut either.
+        law_answer = None if documents or document_ids or not ctx.allows("search_vat_kb") else law.answer(
+            question, [dict(m) for m in (outbound() if masked else messages)], brief=brief,
+            **({"model_id": law_model_id} if law_model_id else {}))
         if law_answer is not None:
             model_text = law_answer.answer
             if masked:
@@ -335,7 +346,7 @@ def run_agent(
 
         def build_system(meta: Dict[int, Dict[str, Any]], placeholders: bool) -> str:
             return (system_prompt(meta, orgs, today, settings.report_timezone, brief=brief, attachment=attachment,
-                                  documents=bool(documents or document_ids))
+                                  documents=bool(documents or document_ids), profile=profile)
                     + (PLACEHOLDER_RULES if placeholders else "") + CANARY_RULE.format(marker=CANARY))
 
         system = build_system(masking.org_meta(org_meta) if masked else org_meta, masked)
@@ -391,6 +402,8 @@ def run_agent(
                 result, ok, ms = outcomes.get(use["toolUseId"], ({"error": BUDGET_USED}, False, 0))
                 calls.append({"name": use.get("name"), "input": use.get("input"), "ok": ok, "ms": ms,
                               "rows": result.get("row_count"), **({"error": result.get("error")} if not ok else {})})
+                if use["toolUseId"] in outcomes:
+                    _notify_done(tool_done, use.get("name", ""), ok, ms, result.get("row_count"))
                 if ok:
                     flags = injection.scan_value(result)
                     if flags:  # order-like text in the books: warn the model next to it, and log it
@@ -478,6 +491,16 @@ def _notify(progress: Optional[Callable[[str, Any], None]], use: Dict[str, Any])
         progress(use.get("name", ""), use.get("input"))
     except Exception as e:  # noqa: BLE001 - a status line must never break the answer
         logger.debug("agent progress callback failed: %s", e)
+
+
+def _notify_done(tool_done: Optional[Callable[[str, bool, int, Optional[int]], None]], name: str, ok: bool, ms: int,
+                 rows: Any) -> None:
+    if tool_done is None:
+        return
+    try:
+        tool_done(name, ok, ms, rows if isinstance(rows, int) else None)
+    except Exception as e:  # noqa: BLE001 - a status line must never break the answer
+        logger.debug("agent tool_done callback failed: %s", e)
 
 
 def _run_tools(uses: Sequence[Dict[str, Any]], ctx: tools.ToolContext) -> Dict[str, tuple]:

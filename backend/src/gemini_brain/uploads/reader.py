@@ -65,6 +65,15 @@ def read_now(upload_id: str, *, adapter: Optional[Any] = None) -> None:
     rec = store.get(upload_id)
     if rec is None:
         return
+    from gemini_brain.usage import ledger
+    with ledger.scope("document_read", user_id=rec.user_id, organization_ids=rec.organization_ids,
+                      session_id=rec.session_id) as spend:
+        spend.status = _read_and_record(rec, adapter)
+
+
+def _read_and_record(rec: store.UploadRecord, adapter: Optional[Any]) -> str:
+    """read_now's work. Returns the upload's final status, for the usage ledger."""
+    upload_id = rec.id
     t0 = time.perf_counter()
     try:
         cached = store.find_cached_extract(rec.user_id, rec.sha256, EXTRACT_VERSION, exclude_id=rec.id)
@@ -74,11 +83,11 @@ def read_now(upload_id: str, *, adapter: Optional[Any] = None) -> None:
             payload = _read(rec, store.read_bytes(rec), adapter)
     except ReadFailed as e:
         _finish_failed(rec, e.message, t0)
-        return
+        return "failed"
     except Exception as e:  # a bug or a damaged file: log it, tell the user plainly
         logger.exception("Reading upload %s failed", upload_id)
         _finish_failed(rec, "We could not read this file. Try again, or attach a clearer copy.", t0)
-        return
+        return "failed"
     payload["created_at"] = time.time()
     store.save_extract(rec.id, payload)
     ex = DocumentExtract.from_dict(payload["extract"])
@@ -91,6 +100,7 @@ def read_now(upload_id: str, *, adapter: Optional[Any] = None) -> None:
         "checks_failed": len(failed), "cost_usd": payload["usage"].get("cost_usd", 0),
         "input_tokens": payload["usage"].get("input_tokens", 0), "output_tokens": payload["usage"].get("output_tokens", 0),
         "seconds": round(time.perf_counter() - t0, 1)})
+    return "ready"
 
 
 def _finish_failed(rec: store.UploadRecord, reason: str, t0: float) -> None:
@@ -153,8 +163,12 @@ def _read_pdf_parts(content: bytes, page_count: int, adapter: Optional[Any]) -> 
     parts = text_reader.split_pdf(content, size)
     total = parts[-1][1]
 
+    from gemini_brain.usage import ledger
+    spend = ledger.current()  # the parts run in other threads; their calls count in this read
+
     def one(part: Tuple[int, int, bytes]) -> claude_reader.ClaudeRead:
-        return claude_reader.read(part[2], "pdf", adapter=adapter, part=(part[0], part[1], total))
+        with ledger.attach(spend):
+            return claude_reader.read(part[2], "pdf", adapter=adapter, part=(part[0], part[1], total))
 
     if adapter is None:  # each part has its own adapter, so its tokens and cost count once
         with ThreadPoolExecutor(max_workers=min(len(parts), 4), thread_name_prefix="upload-part") as pool:

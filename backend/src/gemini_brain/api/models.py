@@ -3,7 +3,7 @@ models.py — Pydantic request and response schemas for the Gemini Brain REST AP
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field, model_validator
 
 class UIContext(BaseModel):
@@ -90,6 +90,22 @@ class QueryRequest(BaseModel):
     brief: bool = Field(
         default=False,
         description="When true, narration stays to a few short bullets instead of a full write-up.",
+    )
+    agent: Optional[str] = Field(
+        default=None,
+        description=(
+            "Key of the specialist agent to answer, from GET /api/v1/agents (vat, ap, cash, or accutax for the "
+            "general agent). Omitted: the agent that answered the thread's last turn, else the general agent."
+        ),
+        examples=[None],
+    )
+    dismissed_findings: List[Annotated[str, Field(max_length=400)]] = Field(
+        default_factory=list,
+        max_length=1000,
+        description=(
+            "Keys of VAT review findings and duplicate groups the user marked as not a problem (the `key` of a "
+            "vat_review card item). The review leaves them out of its counts and lists."
+        ),
     )
     attachments: List[str] = Field(
         default_factory=list,
@@ -197,6 +213,9 @@ class QueryResponse(BaseModel):
     api_traces: List[Dict[str, Any]] = Field(default_factory=list, description="Accutax REST API calls (endpoint, params, status) executed during query evaluation.")
     llm_traces: List[Dict[str, Any]] = Field(default_factory=list, description="Bedrock/Claude LLM calls (model, purpose, tokens, duration) executed during query evaluation.")
     context_window: Optional[Dict[str, Any]] = Field(default=None, description="Session's cumulative token usage against a fixed budget, independent of the selected model. {used, limit, remaining, percent}.")
+    agent: Optional[Dict[str, Any]] = Field(default=None, description="The agent that answered: {key, name}.")
+    agent_status: Optional[Dict[str, Any]] = Field(default=None, description="A specialist's one-line status after this run, for its card: {headline, badge, tone}.")
+    usage: Optional[Dict[str, Any]] = Field(default=None, description="AI usage of the buckets this question charged: {mode: full|lite, banner, internal, owners: [{owner_user_id, plan_label, percent, state, resets_at, user}]}. None when limits are off.")
     results: List[Any] = Field(default_factory=list, description="Raw structured results list.")
     error: Optional[str] = Field(default=None, description="Error message if processing failed.")
     status: str = Field(default="ok", description="ok | empty | partial | degraded | failed")
@@ -368,6 +387,24 @@ class TokenResponse(BaseModel):
     handoff: Optional[HandoffContext] = Field(default=None, description="Dashboard context, present only on /auth/handoff.")
 
 
+class HandoffRequest(BaseModel):
+    """A one-time code from the Accutax dashboard (?handoff=1&code=...)."""
+
+    code: str = Field(..., pattern=r"^[A-Za-z0-9_-]{20,128}$", description="The one-time handoff code.")
+
+
+class HandoffResponse(TokenResponse):
+    """A session for the dashboard user, plus where the dashboard left off."""
+
+    name: str = Field(default="", description="Display name from the dashboard.")
+    organization_id: Optional[int] = Field(default=None, description="The organization the dashboard was on.")
+    session_id: Optional[str] = Field(default=None, description="The chat thread to open, if the widget had one.")
+    current_page: Optional[str] = Field(default=None, description="The dashboard page the user came from.")
+    conversation: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Turns to continue: role, content, optional tableMarkdown and timestamp.",
+    )
+
+
 class TenantInfo(BaseModel):
     """Metadata describing a single selectable tenant organization in the UI."""
 
@@ -466,4 +503,215 @@ class UploadConfig(BaseModel):
     daily_pages: int = 0
     pages_used_today: int = 0
     accept: List[str] = Field(default_factory=list, description="File extensions the picker offers.")
+
+
+
+class AgentInfo(BaseModel):
+    """One specialist agent, for the Agents panel."""
+
+    key: str
+    name: str
+    role: str
+    icon: str = "sparkles"
+    tools: List[str] = Field(default_factory=list)
+    run_prompt: str = ""
+    run_label: str = ""
+    suggestions: List[str] = Field(default_factory=list)
+    #: Routines the agent will run on its own once scheduling is built; shown as "coming soon".
+    routines: List[str] = Field(default_factory=list)
+    #: The steps of the live run card: {tool, label, expected}.
+    plan: List[Dict[str, Any]] = Field(default_factory=list)
+    default: bool = False
+
+
+class AgentListResponse(BaseModel):
+    agents: List[AgentInfo] = Field(default_factory=list)
+    default_agent: str = "accutax"
+
+
+# ── Bot Schemas (docs/VAT_BOT_IMPLEMENTATION_PLAN.md) ─────────────────────────
+
+from gemini_brain.bots.schema import BotDraft, BotIssue
+
+
+class TemplateItem(BaseModel):
+    id: str
+    title: str
+    summary: str
+    draft: BotDraft
+    #: Monthly cost estimate in credits, as on the setup card.
+    monthly_credits: Optional[int] = None
+
+
+class BotTemplatesResponse(BaseModel):
+    templates: List[TemplateItem] = Field(default_factory=list)
+
+
+class WatchItem(BaseModel):
+    id: str
+    label: str
+    side: str
+    default_on: bool
+
+
+class BotWatchesResponse(BaseModel):
+    watches: List[WatchItem] = Field(default_factory=list)
+
+
+class NextRunInfo(BaseModel):
+    at: str
+    reason: str
+
+
+class DraftResponse(BaseModel):
+    draft: BotDraft
+    issues: List[BotIssue] = Field(default_factory=list)
+    next_runs: List[NextRunInfo] = Field(default_factory=list)
+    monthly_credits: int = 0
+
+
+class FromTemplateRequest(BaseModel):
+    template_id: str
+    org_ids: List[int] = Field(default_factory=list)
+    agent: Optional[str] = None     # None: the agent that owns the template
+
+
+class FromSentenceRequest(BaseModel):
+    text: str
+    org_ids: List[int] = Field(default_factory=list)
+    agent: str = "vat"
+
+
+class FromChatRequest(BaseModel):
+    question: str
+    agent: str = "vat"
+    org_ids: List[int] = Field(default_factory=list)
+
+
+class CheckDraftRequest(BaseModel):
+    draft: BotDraft
+
+
+class TryDraftRequest(BaseModel):
+    draft: BotDraft
+    preset: str = "last_month"
+
+
+class CreateBotRequest(BaseModel):
+    draft: BotDraft
+    status: Literal["active", "paused"] = "active"
+
+
+class UpdateBotRequest(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=60)
+    draft: Optional[BotDraft] = None
+    #: "error" is set by the runner only, never by the user.
+    status: Optional[Literal["active", "paused"]] = None
+    status_note: Optional[str] = Field(None, max_length=200)
+
+
+class BotListResponse(BaseModel):
+    bots: List[Dict[str, Any]]
+
+
+class BotTickResult(BaseModel):
+    bot_id: str
+    name: str
+    status: str
+    summary: Optional[Dict[str, Any]] = None
+
+
+class BotTickResponse(BaseModel):
+    timestamp: str
+    ran: int
+    results: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class BotFindingItem(BaseModel):
+    bot_id: str
+    bot_name: str
+    key: str
+    org_id: int
+    rule: str
+    watch_id: Optional[str] = None
+    watch_label: Optional[str] = None
+    why_text: Optional[str] = None
+    state: str
+    amount: Optional[float] = None
+    first_seen_run: Optional[str] = None
+    last_seen_run: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class BotApprovalItem(BaseModel):
+    id: str
+    run_id: Optional[str] = None
+    bot_id: str
+    bot_name: Optional[str] = None
+    action: str = "email_outside"
+    status: str = "pending"  # "pending" | "approved" | "rejected"
+    recipient: Optional[str] = None
+    subject: Optional[str] = None
+    content: Optional[str] = None
+    created_at: Optional[str] = None
+    decided_at: Optional[str] = None
+
+
+class EditApprovalRequest(BaseModel):
+    recipient: Optional[str] = None
+    subject: Optional[str] = None
+    content: Optional[str] = None
+
+
+class BotMemoryItem(BaseModel):
+    id: int
+    bot_id: str
+    text: str
+    source: str  # "note" | "dismissal"
+    finding_key: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class CreateMemoryRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=200)
+    #: Users add notes; "dismissal" lines come only from dismissing a finding.
+    source: Literal["note"] = "note"
+
+
+class BotInboxResponse(BaseModel):
+    """The Inbox page (bots/inbox.py): findings with their details, counts, per-bot counts and VAT at stake."""
+    unread_count: int
+    bots_count: int
+    counts: Dict[str, int] = Field(default_factory=dict)
+    bots: List[Dict[str, Any]] = Field(default_factory=list)
+    at_stake: List[Dict[str, Any]] = Field(default_factory=list)
+    at_stake_by_agent: Dict[str, List[Dict[str, Any]]] = Field(default_factory=dict)
+    fixed_this_week: List[Dict[str, Any]] = Field(default_factory=list)
+    runs: List[Dict[str, Any]] = Field(default_factory=list)
+    findings: List[Dict[str, Any]] = Field(default_factory=list)
+    approvals: List[BotApprovalItem] = Field(default_factory=list)
+
+
+class DismissFindingRequest(BaseModel):
+    note: Optional[str] = Field(None, max_length=200)
+    supplier: Optional[str] = Field(None, max_length=200)
+
+
+class BotEventRequest(BaseModel):
+    event: str
+    org_id: int
+    document_id: Optional[int] = None
+    document_ids: List[int] = Field(default_factory=list)
+
+
+class BotEventResponse(BaseModel):
+    status: str
+    event: str
+    org_id: int
+    bots_checked: int = 0
+    findings_matched: int = 0
+    new_findings: int = 0
+    quiet_hours: bool = False
+    details: List[Dict[str, Any]] = Field(default_factory=list)
+
 

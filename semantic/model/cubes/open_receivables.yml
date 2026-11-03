@@ -8,6 +8,9 @@
 # organization's own time zone (Asia/Dubai for nearly all; unknown values fall back
 # to it). The UTC date was a day behind Dubai for four hours every night.
 #
+# v2 (EC2 accutax_db, model/globals.py): retention the customer still holds is not due, so it is taken
+# off; EC2 also uses the status PARTIAL_PAID. amount_paid there includes credit notes applied to the invoice.
+#
 # No curly braces in SQL literals: Cube's YAML reads {...} as a member reference.
 cubes:
   - name: open_receivables
@@ -23,7 +26,11 @@ cubes:
              CASE WHEN CAST(inc.due_date AS TEXT) ~ '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
                   THEN CAST(LEFT(CAST(inc.due_date AS TEXT), 10) AS DATE) END     AS due_date,
              COALESCE(NULLIF(c.name, ''), NULLIF(c.organization_name, ''), 'Unknown') AS customer_name,
+      {% if schema_v2() %}
+             t.total_incl_vat - rh.held - COALESCE(inc.amount_paid, 0) AS outstanding,
+      {% else %}
              t.total_incl_vat - COALESCE(inc.amount_paid, 0) AS outstanding,
+      {% endif %}
              lt.local_today                                AS local_today
       FROM   public.income inc
       JOIN   public.status_type st ON st.id = inc.status_type_id
@@ -37,10 +44,24 @@ cubes:
                FROM   public.income_items ii
                WHERE  ii.income_id = inc.id
              ) t
+      {% if schema_v2() %}
+      CROSS  JOIN LATERAL (
+               SELECT CASE WHEN inc.income_type = 'INVOICE'
+                           THEN GREATEST(COALESCE(inc.retention_amount, 0) - COALESCE(SUM(r.amount), 0), 0)
+                           ELSE 0 END AS held
+               FROM   public.retention_releases r
+               WHERE  r.document_type = 'INCOME' AND r.document_id = inc.id
+                 AND  r.organization_id = inc.organization_id
+             ) rh
+      {% endif %}
       WHERE  inc.income_type IN ('INVOICE', 'CASH_INVOICE', 'INCOME')
         AND  inc.is_draft = false
         AND  inc.voided_at IS NULL
+      {% if schema_v2() %}
+        AND  st.value IN ('PENDING', 'PARTIALLY_PAID', 'PARTIAL_PAID')
+      {% else %}
         AND  st.value IN ('PENDING', 'PARTIALLY_PAID')
+      {% endif %}
         AND  NOT (CAST(inc.invoice_date AS TEXT) ~ '^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
                   AND CAST(LEFT(CAST(inc.invoice_date AS TEXT), 10) AS DATE) > lt.local_today)
 

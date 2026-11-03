@@ -207,6 +207,18 @@ def test_the_tool_limits_the_groups_shown_and_says_so(monkeypatch):
     assert out["groups_found"] == 5 and len(out["groups"]) == 2 and any("first 2 of 5" in n for n in out["notes"])
 
 
+def test_unlimited_returns_every_group_for_bots(monkeypatch):
+    bills = []
+    for i in range(60):
+        bills += [bill(f"D{i}", vendor=f"V{i}", id_=f"a{i}"), bill(f"D{i}", vendor=f"V{i}", id_=f"b{i}", date="2026-04-01")]
+    fake_cube(monkeypatch, bills)
+    out = tool.run({"mode": "duplicates", "period": {"start": "2026-01-01", "end": "2026-12-31"}, "limit": 10},
+                   organization_ids=[7], subject="t", deadline=1e12, unlimited=True)
+    assert out["groups_found"] == 60 and len(out["groups"]) == 60
+    capped = run_tool(monkeypatch, bills, limit=500)
+    assert len(capped["groups"]) == tool.MAX_LIMIT
+
+
 def test_an_incomplete_scan_is_stated(monkeypatch):
     fake_cube(monkeypatch, [bill(f"X{i}", date="2026-03-01", net=float(i + 1)) for i in range(600)])
     out = tool.run({"mode": "duplicates", "period": {"start": "2026-03-01", "end": "2026-03-01"}},
@@ -239,3 +251,32 @@ def test_bill_numbers_in_groups_become_links(monkeypatch):
         {"document_number": "B-100", "document_id": "42"}]}]}}
     found = links.document_links([item])
     assert list(found) == ["B-100"] and found["B-100"].startswith("https://app.example/")
+
+
+# --- dismissed findings (the findings inbox) ----------------------------------------------------------------------
+
+def test_a_group_keeps_its_key_across_reviews_and_the_key_names_no_rule(monkeypatch):
+    bills = [bill("B-1", id_="11"), bill("B-1", id_="12", date="2026-03-20")]
+    first = run_tool(monkeypatch, bills)["groups"][0]["key"]
+    again = run_tool(monkeypatch, list(reversed(bills)))["groups"][0]["key"]
+    assert first == again and "same_number" not in first and len(first) == 24
+
+
+def test_dismissed_groups_are_left_out_and_counted(monkeypatch):
+    bills = [bill("B-1", id_="11"), bill("B-1", id_="12", date="2026-03-20")]
+    key = run_tool(monkeypatch, bills)["groups"][0]["key"]
+    fake_cube(monkeypatch, bills)
+    out = tool.run({"mode": "duplicates", "period": {"start": "2026-01-01", "end": "2026-12-31"}},
+                   organization_ids=[7], subject="t", deadline=1e12, exclude={key})
+    assert out["groups_found"] == 0 and out["groups"] == [] and out["dismissed"] == 1
+    assert any("marked as not a problem" in n for n in out["notes"])
+
+
+def test_the_agent_passes_dismissed_keys_only_to_the_review(monkeypatch):
+    bills = [bill("B-1", id_="11"), bill("B-1", id_="12", date="2026-03-20")]
+    key = run_tool(monkeypatch, bills)["groups"][0]["key"]
+    fake_cube(monkeypatch, bills)
+    ctx = tools.ToolContext(organization_ids=[7], subject="t", deadline=1e12, dismissed=frozenset({key}))
+    result, ok = tools.execute(
+        "review_vat", {"mode": "duplicates", "period": {"start": "2026-01-01", "end": "2026-12-31"}}, ctx)
+    assert ok and result["groups_found"] == 0 and result["dismissed"] == 1

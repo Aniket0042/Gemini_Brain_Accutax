@@ -6,7 +6,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 from gemini_brain.artifacts import theme
-from gemini_brain.artifacts.delivery import Delivery, detect_delivery
+from gemini_brain.artifacts.delivery import Delivery, detect_delivery, named_formats
 from gemini_brain.artifacts.insights import add_takeaways
 from gemini_brain.artifacts.integrity import verify_document
 from gemini_brain.artifacts.narrator import write_narrative
@@ -173,16 +173,21 @@ def attach_delivery(
     formats: List[str] = []
     if delivery.wants_file and delivery.format:
         formats.append(delivery.format)
+    # Every other format the query names too ("as PDF and Excel"); each is primary, so each gets its button.
+    named = named_formats(query) if delivery.wants_file else []
+    for fmt in named:
+        if fmt not in formats:
+            formats.append(fmt)
     if delivery.wants_chart or delivery.wants_file:
         for extra in ("pdf", "csv"):
             if extra not in formats:
                 formats.append(extra)
 
-    # The format the user actually named (if any) — marked so the chat card
-    # can show just that one button instead of the full pdf/csv bonus bundle.
+    # The formats the user actually named (if any) — marked so the chat card
+    # shows just those buttons instead of the full pdf/csv bonus bundle.
     # A pure chart request (no format word) has no primary; every format
     # stays a bonus there, and the chat card falls back to showing both.
-    primary_fmt = delivery.format if (delivery.wants_file and delivery.format) else None
+    primary_fmts = ({delivery.format, *named} if (delivery.wants_file and delivery.format) else set())
 
     # All formats render in parallel, each bounded by the render timeout.
     from gemini_brain.artifacts.generate import render_formats
@@ -194,7 +199,7 @@ def attach_delivery(
     for fmt in formats:
         artifact = rendered.get(fmt)
         if artifact:
-            artifact["primary"] = fmt == primary_fmt
+            artifact["primary"] = fmt in primary_fmts
             out.append(artifact)
             minted = True
     if delivery.wants_file and delivery.format and not minted:

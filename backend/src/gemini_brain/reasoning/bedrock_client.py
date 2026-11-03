@@ -297,7 +297,8 @@ class BedrockAdapter:
             self._record_trace(purpose, call_usage, t0)
 
     def _record_trace(self, purpose: str, usage: Dict[str, Any], t0: float) -> None:
-        """Best-effort LLM trace write — never lets tracing break a real call."""
+        """Best-effort LLM trace write — never lets tracing break a real call. Also meters the call (usage ledger)."""
+        _meter(self.model_id, self.label, purpose, usage)
         try:
             from gemini_brain.observability.llm_tracer import record_llm_trace
             record_llm_trace(
@@ -502,9 +503,19 @@ def get_request_token_usage() -> Dict[str, Any]:
 get_token_usage = get_request_token_usage
 
 
+def _meter(model_id: str, label: str, purpose: str, usage: Dict[str, Any]) -> None:
+    """Add one model call to the usage ledger (who pays is the caller's scope). Never raises."""
+    try:
+        from gemini_brain.usage import ledger
+        ledger.add_call(model_id, label, purpose, usage)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("usage ledger: call not metered for %s: %s", model_id, e)
+
+
 def _record_module_trace(model_id: str, purpose: str, usage: Dict[str, Any], t0: float) -> None:
     """Same best-effort LLM trace write as BedrockAdapter._record_trace, for the
     module-level agents/ helpers below (no adapter instance to hang it off)."""
+    _meter(model_id, model_id, purpose, usage)
     try:
         from gemini_brain.observability.llm_tracer import record_llm_trace
         record_llm_trace(
@@ -564,6 +575,7 @@ def converse_tools(
     max_tokens: int = settings.bedrock_max_tokens,
     model_id: Optional[str] = None,
     purpose: str = "sql_agent",
+    tool_choice: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Module-level tool-calling Converse (agents / coordinator)."""
     _model = model_id or MODEL_ID
@@ -580,6 +592,8 @@ def converse_tools(
         )
         if tools:
             kwargs["toolConfig"] = {"tools": tools}
+            if tool_choice:
+                kwargs["toolConfig"]["toolChoice"] = {"tool": {"name": tool_choice}}
         resp = client.converse(**kwargs)
         usage = resp.get("usage", {})
         call_usage.update(usage)

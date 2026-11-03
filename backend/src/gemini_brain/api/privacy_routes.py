@@ -149,9 +149,13 @@ def demo(body: DemoRequest, current_user: CurrentUser = Depends(get_current_user
     except Exception as e:  # noqa: BLE001 - names only label the answer
         logger.warning("privacy demo: organization names unavailable: %s", e)
         meta = {o: {"name": f"Organization {o}"} for o in orgs}
-    result = run_agent(body.question, orgs, meta, subject=f"privacy-demo:{current_user.user_id}",
-                       user_id=current_user.user_id, pii_mode="on", capture=True,
-                       **({"authorize":lambda:current_user.ensure_current_scope(orgs)} if current_user.gateway_authority else {}))
+    from gemini_brain.privacy import sensitive
+    from gemini_brain.usage import ledger
+    with ledger.scope("privacy_demo", user_id=current_user.user_id, organization_ids=orgs) as spend:
+        result = run_agent(sensitive.drop(body.question)[0], orgs, meta, subject=f"privacy-demo:{current_user.user_id}",
+                           user_id=current_user.user_id, pii_mode="on", capture=True,
+                           **({"authorize":lambda:current_user.ensure_current_scope(orgs)} if current_user.gateway_authority else {}))
+        spend.status = str(result.status or "ok")
     current_user.ensure_current_scope(orgs)
     capture = result.capture
     _audit(current_user, "demo", getattr(capture, "id", ""))

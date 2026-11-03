@@ -9,14 +9,33 @@ import { Header } from './components/Header';
 import { IntroSuggestions } from './components/IntroSuggestions';
 import { ModelHealthModal } from './components/ModelHealthModal';
 import { AnswerCanvas } from './components/canvas/AnswerCanvas';
-import { fetchQueryResponse, streamQueryResponse, fetchTenants, fetchModelCatalog, fetchSessionMessages, createChatSession, deleteChatSession, fetchUploadConfig, fetchPrivacyAccess, } from './services/api';
+import { fetchQueryResponse, streamQueryResponse, fetchTenants, fetchModelCatalog, fetchSessionMessages, createChatSession, deleteChatSession, fetchUploadConfig, fetchPrivacyAccess, fetchUsage, fetchAgents } from './services/api';
+import { parseMention } from './components/AgentsPanel';
+import { newAgentRun, applyAgentStep } from './components/AgentRun';
+import { readAgentRuns, recordAgentRun } from './services/agentRuns';
+import { dismissedKeys } from './services/findings';
+import { UsageModal } from './components/UsageModal';
+import { worstOwner, CreditStrip } from './components/UsageMeter';
 import { PrivacySnapshotsModal } from './components/PrivacySnapshotsModal';
 import { chipsFromBlocks, kindGroup } from './services/attachments';
 import { clearUploadBlobs } from './services/uploadBlobs';
 import { FilePreviewPanel, ImageLightbox } from './components/FilePreview';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Bot, X } from 'lucide-react';
 import { isSessionId, newSessionId } from './services/sessionId';
-
+import { dropCards } from './sensitive';
+import BotCreate from './components/bots/BotCreate';
+import BotBuilderPage from './components/bots/BotBuilderPage';
+import BotInbox from './components/bots/BotInbox';
+import BotsHome from './components/bots/BotsHome';
+import BotDetail from './components/bots/BotDetail';
+import {
+  listBots, updateBot, deleteBot,
+  fetchUserBots, deleteBotOnServer, pauseBotOnServer, resumeBotOnServer, migrateLocalBotsToServer,
+  fetchBotInbox, markBotInboxSeen, dismissBotFinding, undismissBotFinding,
+  fetchBotsSummary, fetchBotAgents,
+  createDraftFromTemplate, createDraftFromChat
+} from './services/bots';
+import { setBotAgents } from './components/bots/botText';
 
 // Minimal fallback shown only until /api/v1/tenants responds. Deliberately
 // carries no figures: the previous version described specific invoice counts
@@ -244,6 +263,196 @@ export default function App({sessionProfile,onSessionLogout}) {
   const [selectedOrgIds, setSelectedOrgIds] = useState([]);
   const [multiOrg, setMultiOrg] = useState({ enabled: false, max: 1 });
 
+  // Bots modal & list state (Phase 1 & Phase 2)
+  // The builder page's starting point: {initial: draft response, botId, botStatus} (botId set when editing).
+  const [builderInit, setBuilderInit] = useState(null);
+  const [botsNotice, setBotsNotice] = useState('');
+  const [bots, setBots] = useState([]);
+  const [botInbox, setBotInbox] = useState({ unread_count: 0, bots_count: 0, runs: [], findings: [] });
+  // Which page fills the main area: 'chat', 'bots' (home), 'bot' (activeBotId), 'inbox', 'new' or 'builder'.
+  const [page, setPage] = useState('chat');
+  const [activeBotId, setActiveBotId] = useState(null);
+  const [botsSummary, setBotsSummary] = useState(null);
+  // Bumped when the bot agents load, so the bot pages re-render with their words (botText keeps them).
+  const [, setBotAgentsLoaded] = useState(0);
+
+  const reloadInbox = async () => {
+    const token = currentUser?.access_token;
+    if (!token) return;
+    try {
+      const data = await fetchBotInbox(token);
+      setBotInbox(data || { unread_count: 0, bots_count: 0, runs: [], findings: [] });
+    } catch (e) {
+      console.warn('Failed to fetch bot inbox:', e);
+    }
+  };
+
+  const reloadBots = async () => {
+    const token = currentUser?.access_token;
+    if (token) {
+      // The agents' words load on their own, so the bot pages have them even when the bot list does not load.
+      fetchBotAgents(token).then((r) => { setBotAgents(r.agents); setBotAgentsLoaded((n) => n + 1); }).catch(() => null);
+      try {
+        await migrateLocalBotsToServer(token);
+        const serverBots = await fetchUserBots(token);
+        setBots(serverBots);
+        await reloadInbox();
+        fetchBotsSummary(token).then(setBotsSummary).catch(() => null);
+        return;
+      } catch (e) {
+        console.warn('Failed to fetch server bots:', e);
+      }
+    }
+    setBots(listBots());
+  };
+
+  const handleDismissFinding = async (botId, key, note = '', supplier = '') => {
+    const token = currentUser?.access_token;
+    if (!token) return;
+    try {
+      await dismissBotFinding(botId, key, note, supplier, token);
+      await reloadInbox();
+    } catch (e) {
+      console.warn('Failed to dismiss finding:', e);
+    }
+  };
+
+  const handleUndismissFinding = async (botId, key) => {
+    const token = currentUser?.access_token;
+    if (!token) return;
+    try {
+      await undismissBotFinding(botId, key, token);
+      await reloadInbox();
+    } catch (e) {
+      console.warn('Failed to restore finding:', e);
+    }
+  };
+
+  const handleMarkInboxSeen = async () => {
+    const token = currentUser?.access_token;
+    if (!token) return;
+    try {
+      await markBotInboxSeen(token);
+      await reloadInbox();
+    } catch (e) {
+      console.warn('Failed to mark inbox read:', e);
+    }
+  };
+
+  useEffect(() => {
+    reloadBots();
+  }, [currentUser?.access_token]);
+
+  const handleOpenBots = () => {
+    reloadBots();
+    setPage('bots');
+  };
+
+  const handleOpenBot = (id) => {
+    setActiveBotId(id);
+    setPage('bot');
+  };
+
+  const handleOpenBotInbox = () => {
+    reloadInbox();
+    setPage('inbox');
+  };
+
+  // "Ask AccuTax" on an inbox finding: the bot's own agent (VAT, AP) explains it in a chat, from what the bot found.
+  const handleAskAboutFinding = (f) => {
+    const bills = (f.detail?.bills || []).map((b) => [b.number, b.party, b.date].filter(Boolean).join(', ')).join('; ');
+    const ap = f.agent === 'ap';
+    const question = `My bot ${f.bot_name} flagged this: ${f.rule_text || f.rule}. ${f.detail?.why || ''}`
+      + `${bills ? ` Documents: ${bills}.` : ''} Explain what it means for ${ap ? 'my payables' : 'my VAT return'} and what I should do.`;
+    setPage('chat');
+    handleSubmitQuery(question, { agent: ap ? 'ap' : 'vat' });
+  };
+
+  // New bot: the Create page; a template or a chat question goes straight to the builder with its draft.
+  const handleStartNewBot = async (startConfig = { mode: 'blank' }) => {
+    const token = currentUser?.access_token || '';
+    setBotsNotice('');
+    if (startConfig.mode !== 'template' && startConfig.mode !== 'chat') {
+      setPage('new');
+      return;
+    }
+    try {
+      const res = startConfig.mode === 'template'
+        ? await createDraftFromTemplate(startConfig.templateId, scopeOrgIds, token)
+        : await createDraftFromChat(startConfig.question, startConfig.agent || 'vat', scopeOrgIds, token);
+      setBuilderInit({ initial: res, botId: null, botStatus: null, fromChat: startConfig.mode === 'chat' });
+      setPage('builder');
+    } catch (e) {
+      setBotsNotice(e.message || 'Could not start the bot. Describe it in one sentence instead.');
+      setPage('new');
+    }
+  };
+
+  // Saved: an edited bot opens its page; a new bot introduces itself in chat with its first run. Made from a chat
+  // answer, it joins that chat; otherwise it starts a new one.
+  const handleBuilderDone = (botId, info = {}) => {
+    const fromChat = builderInit?.fromChat;
+    // Go to where the user lands first; the bots list reloads in the background.
+    if (!info.created) {
+      setActiveBotId(botId);
+      setPage('bot');
+    } else {
+      const intro = { role: 'bot_intro', bot: info.bot, run: info.run || {}, timestamp: Date.now() };
+      if (!fromChat) handleClearConversation();
+      setConversation((prev) => [...(fromChat ? prev : []), intro]);
+      setHistoryDirty(true);
+      setPage('chat');
+    }
+    setBuilderInit(null);
+    reloadBots();
+  };
+
+  const handleToggleBot = async (id) => {
+    const target = bots.find((b) => b.id === id);
+    if (!target) return;
+    const token = currentUser?.access_token;
+    if (token) {
+      try {
+        if (target.status === 'active') {
+          await pauseBotOnServer(id, token);
+        } else {
+          await resumeBotOnServer(id, token);
+        }
+        await reloadBots();
+        return;
+      } catch (e) {
+        console.warn('Server toggle failed, falling back to local:', e);
+      }
+    }
+    const newStatus = target.status === 'active' ? 'paused' : 'active';
+    updateBot(id, { status: newStatus });
+    setBots(listBots());
+  };
+
+  const handleDeleteBot = async (id) => {
+    const token = currentUser?.access_token;
+    if (token) {
+      try {
+        await deleteBotOnServer(id, token);
+        await reloadBots();
+        return;
+      } catch (e) {
+        console.warn('Server delete failed, falling back to local:', e);
+      }
+    }
+    deleteBot(id);
+    setBots(listBots());
+  };
+
+  const handleEditBot = (bot) => {
+    setBuilderInit({
+      initial: { draft: bot.draft, issues: [], next_runs: [], monthly_credits: bot.monthly_credits || 0 },
+      botId: bot.id,
+      botStatus: bot.status,
+    });
+    setPage('builder');
+  };
+
   const activeOrgId = activeTenant?.organization_id ?? activeTenant?.id ?? null;
   const scopeOrgIds = useMemo(() => {
     const ids = selectedOrgIds.length
@@ -252,6 +461,9 @@ export default function App({sessionProfile,onSessionLogout}) {
     return [...new Set(ids.map(Number))].sort((a, b) => a - b);
   }, [selectedOrgIds, activeOrgId]);
   const scopeKey = scopeOrgIds.join(',');
+  useEffect(() => {
+    setAgentRuns(readAgentRuns(scopeKey));
+  }, [scopeKey]);
 
   // activeTenant is also set outside the switcher (login, handoff, the tenant
   // modal). Any org chosen that way replaces a multi-org selection it is not
@@ -271,6 +483,9 @@ export default function App({sessionProfile,onSessionLogout}) {
   const [showHealthModal, setShowHealthModal] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [privacyAccess, setPrivacyAccess] = useState({ admin: false });
+  // AI usage of the chosen organizations' buckets (null when usage tracking is off).
+  const [usage, setUsage] = useState(null);
+  const [showUsage, setShowUsage] = useState(false);
 
   // Execution & Streaming State
   const [isLoading, setIsLoading] = useState(false);
@@ -310,6 +525,12 @@ export default function App({sessionProfile,onSessionLogout}) {
   // only one model is offered. Effort is not user-selectable.
   const [brief, setBrief] = useState(() => localStorage.getItem('accutax_brief') === '1');
   const [modelCatalog, setModelCatalog] = useState(null);
+  // Specialist agents (GET /agents) and the one that answers the next question.
+  const [agents, setAgents] = useState([]);
+  const [activeAgent, setActiveAgent] = useState('accutax');
+  // Each specialist's last run in this organization scope (this browser only), and the one working now.
+  const [agentRuns, setAgentRuns] = useState({});
+  const [runningAgent, setRunningAgent] = useState(null);
   // Whether this user may attach files, and the limits (GET /uploads/config). Off until the server says on.
   const [uploadConfig, setUploadConfig] = useState({ enabled: false });
   const [model, setModel] = useState(() => {
@@ -811,6 +1032,7 @@ export default function App({sessionProfile,onSessionLogout}) {
 
   // Handle Clear Conversation (saves current session to history first)
   const handleClearConversation = () => {
+    setPage('chat');
     persistCurrentConversation();
     setConversation([]);
     setActiveHistoryId(null);
@@ -831,6 +1053,7 @@ export default function App({sessionProfile,onSessionLogout}) {
   // Handle selecting a saved session from the sidebar history list — saves
   // whatever is currently open first, then swaps in the stored transcript.
   const handleSelectHistory = (id) => {
+    setPage('chat');
     if (id === activeHistoryId) return;
     persistCurrentConversation();
     const entry = chatHistory.find(e => e.id === id);
@@ -950,6 +1173,22 @@ export default function App({sessionProfile,onSessionLogout}) {
 
   useEffect(() => {
     const token = currentUser?.authenticated;
+    if (!token) return undefined;
+    let cancelled = false;
+    fetchAgents(token).then((data) => {
+      if (cancelled || !data) return;
+      setAgents(data.agents || []);
+      setActiveAgent((prev) => ((data.agents || []).some((a) => a.key === prev) ? prev : data.default_agent || 'accutax'));
+    }).catch((err) => {
+      if (!cancelled) console.warn('Agents unavailable:', err.message);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.authenticated]);
+
+  useEffect(() => {
+    const token = currentUser?.authenticated;
     if (!token) {
       setUploadConfig({ enabled: false });
       return undefined;
@@ -979,6 +1218,15 @@ export default function App({sessionProfile,onSessionLogout}) {
     };
   }, [currentUser?.authenticated]);
 
+  // AI usage: on sign-in, on a new organization selection, and after each answer (isLoading turns false).
+  useEffect(() => {
+    const token = currentUser?.access_token;
+    if (!token || isLoading) return undefined;
+    let cancelled = false;
+    fetchUsage(scopeOrgIds, token).then((u) => { if (!cancelled) setUsage(u); });
+    return () => { cancelled = true; };
+  }, [currentUser?.access_token, scopeKey, isLoading]);
+
   // A different chat: its files are not this chat's. Close any preview and forget the files fetched for it.
   useEffect(() => {
     setPreviewFile(null);
@@ -998,7 +1246,15 @@ export default function App({sessionProfile,onSessionLogout}) {
     } catch { /* ignore */ }
   };
 
-  const handleSubmitQuery = async (queryText, overrides = {}) => {
+  const handleSubmitQuery = async (typedText, overrides = {}) => {
+    // A card number is removed here, so it is never shown in the chat, kept in this browser or sent.
+    const { text: cleanText, cards: cardsRemoved } = dropCards(typedText);
+    // "@vat ..." picks the agent for this question only: there is no agent bar to show a sticky choice.
+    const mention = parseMention(cleanText, agents);
+    if (mention.agentKey && !mention.text.trim()) return;
+    const queryText = mention.agentKey ? mention.text : cleanText;
+    const agentKey = overrides.agent || mention.agentKey || activeAgent;
+    const specialist = agents.find((a) => a.key === agentKey && !a.default);
     if (activeHistoryId) {
       const openEntry = chatHistory.find((e) => e.id === activeHistoryId);
       const openKey = entryScopeKey(openEntry);
@@ -1031,7 +1287,10 @@ export default function App({sessionProfile,onSessionLogout}) {
       latestStatus: 'Understanding request',
       responseData: null,
       timestamp: Date.now(),
+      ...(cardsRemoved ? { sensitiveRemoved: ['CARD'] } : {}),
+      ...(specialist ? { agentRun: newAgentRun(specialist, currentScopeNames.join(', ')) } : {}),
     };
+    setRunningAgent(specialist ? specialist.key : null);
     const nextConversation = [...conversation, userTurn, assistantTurn];
     setConversation(nextConversation);
 
@@ -1096,6 +1355,9 @@ export default function App({sessionProfile,onSessionLogout}) {
       ...(overrides.attachments?.length ? { attachments: overrides.attachments } : {}),
       // Without a picker, "auto": the server uses the default model.
       model: (modelCatalog && !modelCatalog.picker_hidden && model) || 'auto',
+      ...(agents.length ? { agent: agentKey } : {}),
+      // Review findings marked "not a problem" in this browser: the next review leaves them out.
+      dismissed_findings: dismissedKeys(),
     };
 
     const token = currentUser?.authenticated || '';
@@ -1106,6 +1368,7 @@ export default function App({sessionProfile,onSessionLogout}) {
       if (queryControllerRef.current !== controller) return;
       queryControllerRef.current = null;
       setIsLoading(false);
+      setRunningAgent(null);
     };
 
     if (isStreaming) {
@@ -1155,7 +1418,22 @@ export default function App({sessionProfile,onSessionLogout}) {
               }
               return updated;
             });
+          } else if (chunk.type === 'agent_step') {
+            setConversation((prev) => {
+              const updated = [...prev];
+              const lastIdx = updated.length - 1;
+              if (lastIdx >= 0 && updated[lastIdx].role === 'assistant' && updated[lastIdx].agentRun) {
+                updated[lastIdx] = { ...updated[lastIdx], agentRun: applyAgentStep(updated[lastIdx].agentRun, chunk) };
+              }
+              return updated;
+            });
           } else if (chunk.final_result) {
+            const ranAgent = chunk.final_result.agent?.key;
+            if (ranAgent && chunk.final_result.agent_status && agents.some((a) => a.key === ranAgent && !a.default)) {
+              setAgentRuns(recordAgentRun(scopeKey, ranAgent, {
+                at: Date.now(), status: chunk.final_result.agent_status, historyId: currentHistoryId, question: queryText,
+              }));
+            }
             setConversation((prev) => {
               const updated = [...prev];
               const lastIdx = updated.length - 1;
@@ -1167,6 +1445,7 @@ export default function App({sessionProfile,onSessionLogout}) {
                   tableData: chunk.final_result.table_markdown || updated[lastIdx].tableData,
                   streamingText: chunk.final_result.answer || updated[lastIdx].streamingText,
                   isStreaming: false,
+                  ...(updated[lastIdx].agentRun ? { agentRun: { ...updated[lastIdx].agentRun, finishedAt: Date.now() } } : {}),
                 };
               }
               updateActiveHistoryEntry(updated, chunk.final_result.answer);
@@ -1396,13 +1675,19 @@ export default function App({sessionProfile,onSessionLogout}) {
           onDeleteHistory={handleDeleteHistory}
           onRenameHistory={handleRenameHistory}
           onPinHistory={handlePinHistory}
+          bots={bots}
+          page={page}
+          activeBotId={activeBotId}
+          onOpenChats={() => setPage('chat')}
+          onOpenBots={handleOpenBots}
+          onOpenBot={handleOpenBot}
         />
       </div>
 
       <div className={`main-content${showCanvas || showFilePreview ? ' has-canvas' : ''}`}>
         <div className="chat-column">
         <Header
-          sessionTitle={hasStartedChat ? conversation[0].content : ''}
+          sessionTitle={hasStartedChat ? (conversation[0].content || (conversation[0].bot ? `${conversation[0].bot.name} turned on` : '')) : ''}
           onNewSession={handleClearConversation}
           onToggleSidebar={() => setSidebarCollapsed(prev => !prev)}
           theme={theme}
@@ -1416,7 +1701,75 @@ export default function App({sessionProfile,onSessionLogout}) {
           maxOrgs={multiOrg.max}
           onOpenHealthModal={() => setShowHealthModal(true)}
           onOpenPrivacy={privacyAccess.admin ? () => setShowPrivacy(true) : undefined}
+          usage={usage}
+          onOpenUsage={() => setShowUsage(true)}
+          onOpenBots={handleOpenBots}
+          botsUnreadCount={botInbox.unread_count || 0}
         />
+        {page !== 'chat' ? (
+          <div className="main-stage">
+            <div style={styles.chatScrollArea}>
+              {page === 'new' ? (
+                <BotCreate
+                  token={currentUser?.access_token || ''}
+                  orgs={availableTenants.map((t) => ({ id: tenantIdOf(t), name: tenantNameOf(t) }))}
+                  orgIds={scopeOrgIds}
+                  orgLabel={currentScopeNames.join(', ')}
+                  notice={botsNotice}
+                  onBack={() => setPage('bots')}
+                  onDraft={(res) => { setBuilderInit({ initial: res, botId: null, botStatus: null }); setPage('builder'); }}
+                />
+              ) : page === 'builder' && builderInit ? (
+                <BotBuilderPage
+                  key={builderInit.botId || 'new'}
+                  initial={builderInit.initial}
+                  botId={builderInit.botId}
+                  botStatus={builderInit.botStatus}
+                  token={currentUser?.access_token || ''}
+                  orgs={availableTenants.map((t) => ({ id: tenantIdOf(t), name: tenantNameOf(t) }))}
+                  onBack={() => setPage(builderInit.botId ? 'bot' : 'new')}
+                  onDone={handleBuilderDone}
+                />
+              ) : page === 'inbox' ? (
+                <BotInbox
+                  inbox={botInbox}
+                  orgLabel={currentScopeNames.join(', ')}
+                  onBack={() => setPage('bots')}
+                  onMarkRead={handleMarkInboxSeen}
+                  onDismiss={(f) => handleDismissFinding(f.bot_id, f.key, '', (f.detail?.bills || [])[0]?.party || '')}
+                  onRestore={(f) => handleUndismissFinding(f.bot_id, f.key)}
+                  onAsk={handleAskAboutFinding}
+                  onEditBot={(botId) => { const b = bots.find((x) => x.id === botId); if (b) handleEditBot(b); }}
+                  onOpenBot={handleOpenBot}
+                />
+              ) : page === 'bots' || page === 'builder' ? (
+                <BotsHome
+                  bots={bots}
+                  summary={botsSummary}
+                  token={currentUser?.access_token || ''}
+                  inboxNew={botInbox.unread_count || 0}
+                  onOpenInbox={handleOpenBotInbox}
+                  onNewBot={() => handleStartNewBot({ mode: 'blank' })}
+                  onUseTemplate={(templateId) => handleStartNewBot({ mode: 'template', templateId })}
+                  onOpenBot={handleOpenBot}
+                  onToggleBot={handleToggleBot}
+                  onEditBot={handleEditBot}
+                />
+              ) : (
+                <BotDetail
+                  bot={bots.find((b) => b.id === activeBotId)}
+                  token={currentUser?.access_token || ''}
+                  onBack={() => setPage('bots')}
+                  onEdit={handleEditBot}
+                  onToggle={handleToggleBot}
+                  onDelete={async (id) => { await handleDeleteBot(id); setPage('bots'); }}
+                  onChanged={reloadBots}
+                />
+              )}
+            </div>
+          </div>
+        ) : (
+        <>
         <div className="main-stage">
         <div ref={chatScrollAreaRef} style={styles.chatScrollArea}>
           <div style={!hasStartedChat ? styles.chatContentIntro : styles.chatContent}>
@@ -1426,7 +1779,19 @@ export default function App({sessionProfile,onSessionLogout}) {
                   onSelectPrompt={handleSubmitQuery}
                   activeTenant={activeTenant}
                   userName={userName}
-                />
+                >
+                  <div className="bot-home-banner">
+                    <Bot size={13} color="var(--accent)" />
+                    <span>Let a bot watch your VAT</span>
+                    <button
+                      type="button"
+                      className="bot-home-banner-btn"
+                      onClick={() => handleStartNewBot({ mode: 'blank' })}
+                    >
+                      New bot
+                    </button>
+                  </div>
+                </IntroSuggestions>
               </>
             ) : (
               <div style={styles.activeConvoWrapper}>
@@ -1442,6 +1807,12 @@ export default function App({sessionProfile,onSessionLogout}) {
                     if (block?.spec) setCanvasSpec(block.spec);
                     setCanvasOpen(true);
                   }}
+                  onMakeBot={handleStartNewBot}
+                  botActions={{
+                    onOpenInbox: handleOpenBotInbox,
+                    onEditBot: (id) => { const b = bots.find((x) => x.id === id); if (b) handleEditBot(b); },
+                    onOpenBot: handleOpenBot,
+                  }}
                 />
               </div>
             )}
@@ -1452,6 +1823,10 @@ export default function App({sessionProfile,onSessionLogout}) {
 
       <div style={styles.stickyBottomBar}>
         <div style={styles.inputInnerWrapper}>
+          <UsageBanner usage={usage} />
+          <div style={styles.composerTopMeter}>
+            <CreditStrip usage={usage} />
+          </div>
           <QueryInput
             onSubmitQuery={handleSubmitQuery}
             onStop={handleStopQuery}
@@ -1471,15 +1846,14 @@ export default function App({sessionProfile,onSessionLogout}) {
             onPreviewFile={handlePreviewFile}
           />
           <div style={styles.composerFooter}>
-            <p style={styles.composerFooterText}>
-              AccuTax AI · AccuTax Pro · Data is processed securely
-            </p>
             <div style={styles.composerFooterMeter}>
               <ContextWindowButton contextWindow={latestContextWindow} />
             </div>
           </div>
         </div>
       </div>
+        </>
+        )}
         </div>
 
         {showFilePreview && (
@@ -1523,6 +1897,11 @@ export default function App({sessionProfile,onSessionLogout}) {
         />
       )}
 
+      {showUsage && usage && (
+        <UsageModal token={currentUser?.access_token || ''} usage={usage}
+          orgNames={Object.fromEntries(availableTenants.map((t) => [tenantIdOf(t), tenantNameOf(t)]))} onClose={() => { setShowUsage(false); fetchUsage(scopeOrgIds, currentUser?.access_token || '').then(setUsage); }} />
+      )}
+
       {showPrivacy && privacyAccess.admin && (
         <PrivacySnapshotsModal
           token={currentUser?.authenticated || ''}
@@ -1537,6 +1916,29 @@ export default function App({sessionProfile,onSessionLogout}) {
     </div>
   );
 }
+
+// A line above the question box when this month's AI is running low, on the lite model, or used up.
+const UsageBanner = ({ usage }) => {
+  const owner = worstOwner(usage);
+  if (!usage || usage.internal || !owner || usage.enforce === 'off' || usage.enforce === 'log') return null;
+  const renews = owner.resets_at ? new Date(owner.resets_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '';
+  const mine = owner.user;
+  let text = '';
+  if (owner.state === 'blocked') text = `This month's AI is used up for ${usage.owners.length > 1 ? 'one of these organizations' : 'this organization'}. It renews on ${renews}.`;
+  else if (owner.state === 'lite') text = `This month's AI is used up, so answers come from a faster, lighter model until ${renews}.`;
+  else if (mine?.disabled) text = 'The account owner has turned AI off for you for this organization.';
+  else if (mine?.percent != null && mine.percent >= 100) text = "You have used today's AI. It is available again at midnight.";
+  else if (owner.state === 'warn') text = `${owner.percent}% of this month's AI is used. It renews on ${renews}.`;
+  else if (mine?.percent != null && mine.percent >= 80) text = `You have used ${mine.percent}% of your AI for today.`;
+  if (!text) return null;
+  const strong = owner.state === 'blocked' || mine?.disabled || (mine?.percent ?? 0) >= 100;
+  return (
+    <div role="status" style={{ fontSize: 12.5, padding: '6px 12px', marginBottom: 6, borderRadius: 8,
+      background: strong ? 'var(--danger-soft)' : 'var(--warning-soft)', color: strong ? 'var(--danger-ink)' : 'var(--warning-ink)' }}>
+      {text}
+    </div>
+  );
+};
 
 const styles = {
   chatScrollArea: {
@@ -1644,13 +2046,19 @@ const styles = {
     width: '100%',
     margin: '6px auto 0',
   },
-  composerFooterText: {
-    textAlign: 'center',
-    fontSize: '0.65rem',
-    color: 'var(--ink-faint)',
-    margin: 0,
+  // Just above the chat box's top right corner: the person's AI for today.
+  composerTopMeter: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    maxWidth: 'var(--content-width)',
+    margin: '0 auto 6px',
+    padding: '0 6px',
   },
+  // Right of the footer line: the context meter.
   composerFooterMeter: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
     position: 'absolute',
     right: '6px',
     top: '50%',

@@ -149,13 +149,13 @@ def test_upstream_login_without_user_id_is_refused():
 # ── get_current_user: live organization access ───────────────────────────────
 
 def test_revoked_org_is_dropped_before_token_expires(monkeypatch):
-    monkeypatch.setattr(auth, "_query_user_allowed_orgs", lambda user_id, db_name="": [5])
+    monkeypatch.setattr(auth, "_query_user_allowed_orgs", lambda user_id, db_name="", **_: [5])
     token = create_access_token(user_id=7, email="u@example.com", allowed_org_ids=[5, 6])
     assert get_current_user(token).allowed_org_ids == [5]
 
 
 def test_live_empty_list_is_final_not_replaced_by_token_claim(monkeypatch):
-    monkeypatch.setattr(auth, "_query_user_allowed_orgs", lambda user_id, db_name="": [])
+    monkeypatch.setattr(auth, "_query_user_allowed_orgs", lambda user_id, db_name="", **_: [])
     token = create_access_token(user_id=7, email="u@example.com", allowed_org_ids=[5, 6])
     assert get_current_user(token).allowed_org_ids == []
 
@@ -184,15 +184,61 @@ def test_accutax_list_is_preferred_over_database(monkeypatch):
 
 
 def test_database_used_when_accutax_unreachable(monkeypatch):
-    monkeypatch.setattr(auth, "_query_user_allowed_orgs", lambda user_id, db_name="": [4])
+    monkeypatch.setattr(auth, "_query_user_allowed_orgs", lambda user_id, db_name="", **_: [4])
     token = create_access_token(user_id=7, email="u@example.com", allowed_org_ids=[5], accutax_token="up")
     assert get_current_user(token).allowed_org_ids == [4]
+
+
+def test_accutax_user_fallback_skips_local_grants(monkeypatch):
+    calls = []
+    monkeypatch.setattr(auth, "_query_user_allowed_orgs",
+                        lambda user_id, db_name="", **kw: calls.append(kw) or [4])
+    token = create_access_token(user_id=7, email="u@example.com", allowed_org_ids=[5], accutax_token="up")
+    get_current_user(token)
+    assert calls == [{"local_grants": False}]
+
+
+def test_local_token_gets_local_grants(monkeypatch):
+    calls = []
+    monkeypatch.setattr(auth, "_query_user_allowed_orgs",
+                        lambda user_id, db_name="", **kw: calls.append(kw) or [4])
+    token = create_access_token(user_id=7, email="u@example.com", allowed_org_ids=[4])
+    get_current_user(token)
+    assert calls == [{"local_grants": True}]
+
+
+# Taken at import, before conftest replaces it with a stub for every test.
+_REAL_QUERY = auth._query_user_allowed_orgs
+
+
+def _sql_run(local_grants):
+    cur = MagicMock()
+    cur.fetchall.return_value = [(3,), (9,)]
+    conn = MagicMock()
+    conn.cursor.return_value = cur
+    with patch.object(auth, "get_connection", return_value=conn):
+        orgs = _REAL_QUERY(7, local_grants=local_grants)
+    sql, params = cur.execute.call_args[0]
+    return orgs, sql, params
+
+
+def test_database_rule_matches_accutax_owner_and_collaborators():
+    orgs, sql, params = _sql_run(False)
+    assert orgs == [3, 9] and params == {"uid": 7}
+    assert "public.organizations WHERE user_id" in sql
+    assert "public.collaborators" in sql and "'ACTIVE', 'INVITED'" in sql and "accepted_by_user_id" in sql
+    assert "user_organizations" not in sql
+
+
+def test_local_grants_add_user_organizations():
+    _, sql, _ = _sql_run(True)
+    assert "public.collaborators" in sql and "public.user_organizations" in sql
 
 
 def test_local_token_never_calls_accutax(monkeypatch):
     fetch = MagicMock(return_value=[_tenant(8)])
     monkeypatch.setattr(auth, "_fetch_accutax_orgs", fetch)
-    monkeypatch.setattr(auth, "_query_user_allowed_orgs", lambda user_id, db_name="": [4])
+    monkeypatch.setattr(auth, "_query_user_allowed_orgs", lambda user_id, db_name="", **_: [4])
     token = create_access_token(user_id=7, email="u@example.com", allowed_org_ids=[4])
     assert get_current_user(token).allowed_org_ids == [4]
     fetch.assert_not_called()
