@@ -10,7 +10,7 @@ from typing import Annotated, Any, Literal, Optional
 from urllib.parse import urlsplit
 
 from mcp.server.auth.middleware.auth_context import get_access_token
-from mcp.server.auth.settings import AuthSettings
+from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
@@ -18,8 +18,9 @@ from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from gemini_brain.config.settings import settings
+from gemini_brain.mcp_server.oauth import AccutaxOAuthProvider, register_login_routes
 from gemini_brain.mcp_server.upstream import Upstream, UpstreamError
-from gemini_brain.mcp_server.verifier import SCOPE, AccutaxTokenVerifier
+from gemini_brain.mcp_server.verifier import SCOPE
 
 logger = logging.getLogger("gemini_brain.mcp_server")
 
@@ -104,10 +105,11 @@ def render_organizations(tenants: list[dict[str, Any]]) -> str:
 # ── The server ──────────────────────────────────────────────────────────────
 
 def _bearer() -> str:
+    """The Accutax AI token to call the API with: the one behind an OAuth token, else the pasted bearer itself."""
     access = get_access_token()
     if access is None or not access.token:
         raise ToolError("Not signed in to Accutax. Reconnect the Accutax connector.")
-    return access.token
+    return (access.claims or {}).get("upstream") or access.token
 
 
 def _issuer_url() -> str:
@@ -124,22 +126,27 @@ def transport_security() -> TransportSecuritySettings:
     return TransportSecuritySettings(enable_dns_rebinding_protection=True, allowed_hosts=hosts)
 
 
-def build_server(upstream: Upstream | None = None) -> MCPServer:
+def build_server(upstream: Upstream | None = None, provider: AccutaxOAuthProvider | None = None) -> MCPServer:
     api = upstream or Upstream()
+    oauth = provider or AccutaxOAuthProvider(api, issuer_url=_issuer_url())
     server = MCPServer(
         name="accutax",
         title="Accutax",
         instructions=INSTRUCTIONS,
         website_url="https://accutax.ai",
-        token_verifier=AccutaxTokenVerifier(),
+        auth_server_provider=oauth,
         auth=AuthSettings(
             issuer_url=_issuer_url(),
             resource_server_url=settings.mcp_public_url,
+            client_registration_options=ClientRegistrationOptions(enabled=True, valid_scopes=[SCOPE],
+                                                                  default_scopes=[SCOPE]),
+            revocation_options=RevocationOptions(enabled=True),
             required_scopes=[SCOPE],
-            # The verifier checks the token itself; Accutax tokens carry no RFC 8707 resource yet.
+            # Our tokens are opaque and only ever issued for this one server.
             validate_token_resource=False,
         ),
     )
+    register_login_routes(server, oauth)
 
     @server.tool(title="List organizations", annotations=READ_ONLY)
     async def list_organizations() -> str:

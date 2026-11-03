@@ -508,6 +508,21 @@ class GeminiBrainSettings(BaseSettings):
     mcp_answer_timeout_seconds: float = Field(default=240.0, gt=0,
                                               description="How long ask_accutax waits for the agent's answer.")
     mcp_max_table_rows: int = Field(default=50, ge=1, description="Rows per table returned to the host model.")
+    mcp_state_dir: str = Field(
+        default="data/mcp",
+        description="OAuth clients and tokens of the MCP server (encrypted), relative to backend/. Keep it off git.",
+    )
+    mcp_redirect_hosts: str = Field(
+        default="claude.ai,claude.com,chatgpt.com,chat.openai.com,localhost,127.0.0.1",
+        description="Comma-separated hosts an OAuth client may register as redirect_uri. Anything else is refused.",
+    )
+    mcp_access_token_minutes: int = Field(default=60, ge=5, description="MCP OAuth access token lifetime.")
+    mcp_refresh_token_days: int = Field(default=30, ge=1,
+                                        description="MCP OAuth refresh token lifetime; the user signs in again after.")
+    mcp_accept_api_tokens: bool = Field(
+        default=True,
+        description="Also accept a pasted Accutax AI bearer on /mcp (MCP Inspector, Claude Code). Off: OAuth only.",
+    )
 
     model_config = {
         # Anchored to the repository root rather than the process working

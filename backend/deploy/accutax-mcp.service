@@ -1,0 +1,34 @@
+# MCP connector for ChatGPT / Claude (gemini_brain.mcp_server). Bound to 127.0.0.1:8012 only -- nginx
+# terminates HTTPS for the public MCP domain and proxies here (nginx-accutax-mcp.conf).
+# It calls the AI API on this box (accutax-ai-api, 127.0.0.1:8011) with each user's own token.
+#
+# Needs in /opt/accutax-ai/.env (replace mcp.your-domain.com with the real domain):
+#   MCP_UPSTREAM_URL=http://127.0.0.1:8011
+#   MCP_PUBLIC_URL=https://mcp.your-domain.com/mcp
+#   MCP_ALLOWED_HOSTS=mcp.your-domain.com
+#   MCP_ACCEPT_API_TOKENS=false        # OAuth only in production
+# OAuth state (clients, tokens; encrypted with a key derived from JWT_SECRET) lives in
+# /opt/accutax-ai/backend/data/mcp. Changing JWT_SECRET disconnects every user.
+#
+# Install:
+#   pip install -e "backend[mcp]"   (in the same venv as accutax-ai-api)
+#   sudo cp accutax-mcp.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now accutax-mcp
+
+[Unit]
+Description=Accutax MCP connector
+After=network.target accutax-ai-api.service
+
+[Service]
+Type=simple
+User=geminibrain
+WorkingDirectory=/opt/accutax-ai/backend
+EnvironmentFile=/opt/accutax-ai/.env
+Environment=MCP_HOST=127.0.0.1 MCP_PORT=8012
+ExecStart=/opt/accutax-ai/venv/bin/python -m gemini_brain.mcp_server
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

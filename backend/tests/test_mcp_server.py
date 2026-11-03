@@ -18,9 +18,19 @@ from starlette.testclient import TestClient
 
 from gemini_brain.api.app import create_app
 from gemini_brain.api.auth import create_access_token
+from gemini_brain.mcp_server.oauth import AccutaxOAuthProvider
 from gemini_brain.mcp_server.server import build_server, render_answer, render_table
 from gemini_brain.mcp_server.upstream import Upstream
 from gemini_brain.mcp_server.verifier import AccutaxTokenVerifier
+
+ISSUER = "http://localhost:8012"
+
+
+@pytest.fixture(autouse=True)
+def _state_dir(tmp_path, monkeypatch):
+    """OAuth clients and tokens go to a temp dir, never backend/data/mcp."""
+    from gemini_brain.config.settings import settings
+    monkeypatch.setattr(settings, "mcp_state_dir", str(tmp_path / "mcp"))
 
 
 @pytest.fixture(scope="module")

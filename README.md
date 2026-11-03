@@ -67,9 +67,14 @@ pip install -e ".[mcp]"
 MCP_UPSTREAM_URL=http://127.0.0.1:8000 python -m gemini_brain.mcp_server   # serves http://127.0.0.1:8012/mcp
 ```
 
-Phase 1 auth is a pasted Accutax AI bearer (`Authorization: Bearer <token>`), enough for MCP Inspector and
-Claude Code. ChatGPT and claude.ai need OAuth and a public HTTPS URL (Phase 2): set `MCP_PUBLIC_URL`,
-`MCP_ISSUER_URL` and `MCP_ALLOWED_HOSTS` for the domain.
+Sign-in is OAuth 2.1 run by the MCP server itself: ChatGPT / Claude register (dynamic client
+registration; redirect hosts limited by `MCP_REDIRECT_HOSTS`), the user signs in on `/login` with their
+Accutax email and password, and the host gets opaque tokens. The Accutax tokens behind them stay in
+`backend/data/mcp`, encrypted. A pasted Accutax AI bearer also works while `MCP_ACCEPT_API_TOKENS` is on
+(MCP Inspector, Claude Code); turn it off in production.
+
+Production needs a public HTTPS domain: see `backend/deploy/accutax-mcp.service` and
+`backend/deploy/nginx-accutax-mcp.conf`, and set `MCP_PUBLIC_URL` and `MCP_ALLOWED_HOSTS` for it.
 
 ## Tests
 

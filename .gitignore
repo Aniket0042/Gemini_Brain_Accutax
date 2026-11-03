@@ -48,3 +48,4 @@ backend/scripts/eval/multi_org_eval_*.json
 
 # Multi-org plan log (gemini_brain/orchestrator/multi_org_log.py)
 backend/logs/
+backend/data/mcp/

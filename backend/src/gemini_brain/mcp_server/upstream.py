@@ -76,6 +76,20 @@ class Upstream:
             raise _error(resp)
         return resp.json()
 
+    async def login(self, email: str, password: str) -> Optional[dict[str, Any]]:
+        """The API's own email/password login. Its token response, or None when the credentials are wrong."""
+        try:
+            resp = await self._client.post("/auth/login-json", json={"username": email, "password": password})
+        except httpx.HTTPError as e:
+            logger.warning("MCP upstream login failed: %s", type(e).__name__)
+            raise UpstreamError(_FIXED[503]) from None
+        if resp.status_code == 401:
+            return None
+        if resp.status_code >= 400:
+            logger.info("MCP upstream login -> %s", resp.status_code)
+            raise UpstreamError(_FIXED.get(resp.status_code, "Accutax sign-in failed. Try again."))
+        return resp.json()
+
     async def organizations(self, token: str) -> list[dict[str, Any]]:
         body = await self._call("GET", "/tenants", token)
         return list(body.get("tenants") or [])
