@@ -3,7 +3,7 @@ import {
   AlertCircle, ArrowLeft, Bot, Building2, Check, CheckCheck, ChevronDown, ChevronUp, Copy, ExternalLink, FileText,
   MessageSquare, Percent, RotateCcw,
 } from 'lucide-react';
-import { RULE_LABEL, runTime, shortDay, TRIGGER_LABEL } from './botText';
+import { agentMeta, ruleTitle, runTime, shortDay, TRIGGER_LABEL } from './botText';
 import './bots.css';
 import './bots-pages.css';
 import './bots-builder.css';
@@ -42,22 +42,13 @@ function when(iso) {
   return shortDay(iso);
 }
 
-// The same rules check sales invoices on the sales side, so their titles name the invoice.
-const SALES_TITLE = {
-  vat_zero: 'Sales invoice with no VAT',
-  vat_rate_not_standard: 'Sales invoice VAT is not 0% or 5%',
-  vat_wrong_sign: 'Sales invoice VAT and amount have opposite signs',
-  vat_without_amount: 'Sales invoice with VAT but no amount',
-};
+// The agent's words name the finding; on the sales side the titles name the invoice.
+const title = (f) => ruleTitle(f);
 
-function title(f) {
-  if (f.side === 'sales' && SALES_TITLE[f.rule]) return SALES_TITLE[f.rule];
-  return RULE_LABEL[f.rule] || f.rule_text || f.rule;
-}
-
-/** What "Not a problem" is called for this finding: a sales invoice with no VAT is usually zero-rated. */
+/** What "Not a problem" is called for this finding, in the agent's words (VAT: a sales invoice with no VAT is
+ *  usually zero-rated). */
 function dismissLabel(f) {
-  return f.rule === 'vat_zero' && f.side === 'sales' ? "It's zero-rated" : 'Not a problem';
+  return agentMeta(f.agent).copy?.dismiss_labels?.[f.side || 'purchases']?.[f.rule] || 'Not a problem';
 }
 
 function openLabel(f) {
@@ -67,21 +58,27 @@ function openLabel(f) {
   return n === 2 ? `Open both ${noun}s` : `Open ${n} ${noun}s`;
 }
 
+/** One bill's cell: its number links to the bill; dates and amounts are formatted; the rest as stored. */
+function cell(b, c) {
+  if (c.key === 'number') return b.url ? <a href={b.url} target="_blank" rel="noreferrer">{b.number || b.id}</a> : (b.number || b.id);
+  if (c.key === 'date' || c.key === 'due_date') return b[c.key] ? shortDay(b[c.key]) : '';
+  if (c.num) return plain(b[c.key]);
+  return b[c.key] || '';
+}
+
 function BillsTable({ f }) {
   const bills = f.detail?.bills || [];
   if (bills.length < 2) return null;
-  const party = f.side === 'sales' ? 'Customer' : 'Supplier';
+  const columns = agentMeta(f.agent).columns || [];
   return (
     <table className="bi-table">
-      <thead><tr><th>{f.side === 'sales' ? 'Invoice' : 'Bill'}</th><th>Date</th><th>{party}</th><th className="is-num">Amount</th><th className="is-num">VAT</th></tr></thead>
+      <thead><tr>{columns.map((c) => (
+        <th key={c.key} className={c.num ? 'is-num' : undefined}>{(f.side === 'sales' && c.sales_label) || c.label}</th>
+      ))}</tr></thead>
       <tbody>
         {bills.map((b, i) => (
           <tr key={`${b.id}-${i}`}>
-            <td>{b.url ? <a href={b.url} target="_blank" rel="noreferrer">{b.number || b.id}</a> : (b.number || b.id)}</td>
-            <td>{b.date ? shortDay(b.date) : ''}</td>
-            <td>{b.party || ''}</td>
-            <td className="is-num">{plain(b.amount)}</td>
-            <td className="is-num">{plain(b.vat)}</td>
+            {columns.map((c) => <td key={c.key} className={c.num ? 'is-num' : undefined}>{cell(b, c)}</td>)}
           </tr>
         ))}
       </tbody>
@@ -178,7 +175,7 @@ function RunBanner({ run, onOpenBot }) {
     runTime(run.started_at),
     (s.bills_checked || s.invoices_checked) ? `${(s.bills_checked || 0) + (s.invoices_checked || 0)} documents checked` : '',
     s.groups_found ? `${s.groups_found} duplicate group${s.groups_found === 1 ? '' : 's'}` : '',
-    s.findings_found ? `${s.findings_found} VAT problem${s.findings_found === 1 ? '' : 's'}` : '',
+    s.findings_found ? `${s.findings_found} ${agentMeta(run.agent).copy?.problem_word || 'problem'}${s.findings_found === 1 ? '' : 's'}` : '',
   ].filter(Boolean);
   return (
     <div className={`bi-banner${run.status === 'failed' ? ' is-failed' : ''}`}>
@@ -201,6 +198,8 @@ export default function BotInbox({ inbox, orgLabel = '', onBack, onMarkRead, onD
   const [botFilter, setBotFilter] = useState(null);
   const counts = inbox?.counts || {};
   const findings = inbox?.findings || [];
+  // The stake card speaks for the bots' agent (one card for now; per agent once a second agent exists).
+  const stakeCopy = agentMeta(findings[0]?.agent).copy || {};
 
   const shown = useMemo(() => findings.filter((f) => {
     if (botFilter && f.bot_id !== botFilter) return false;
@@ -286,11 +285,11 @@ export default function BotInbox({ inbox, orgLabel = '', onBack, onMarkRead, onD
           </section>
 
           <section className="bd-side-card">
-            <span className="bb-eyebrow">At stake this quarter</span>
+            <span className="bb-eyebrow">{stakeCopy.stake_label}</span>
             {(inbox?.at_stake || []).length === 0
               ? <p className="bi-stake">AED 0.00</p>
               : inbox.at_stake.map((s) => <p key={s.currency} className="bi-stake">{money(s.amount, s.currency)}</p>)}
-            <p className="bd-muted">VAT that could be wrong on your return if these stay unfixed: copies claimed twice, missing output VAT and wrong rates.</p>
+            <p className="bd-muted">{stakeCopy.stake_note}</p>
           </section>
 
           <section className="bd-side-card">

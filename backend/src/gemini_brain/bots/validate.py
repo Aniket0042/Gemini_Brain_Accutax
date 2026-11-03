@@ -6,8 +6,13 @@ from __future__ import annotations
 
 from typing import List, Sequence, Tuple
 
+from gemini_brain.bots import agents
 from gemini_brain.bots.schema import BotDraft, BotIssue, Schedule
 from gemini_brain.bots.watches import all_watches, default_ids
+
+#: How the builder names each schedule kind, for "This bot cannot run ..." messages.
+_KIND_WORDS = {"weekly": "every week", "monthly": "every month", "daily": "every day",
+               "before_deadline": "before the VAT return", "after_period_end": "after a VAT period ends"}
 
 #: Email delivery needs an email service (not chosen yet). Turn on when it exists.
 EMAIL_AVAILABLE = False
@@ -26,6 +31,7 @@ def validate(
     """
     issues: List[BotIssue] = []
     questions: List[str] = list(draft.questions)
+    agent = agents.get(draft.agent)
 
     # 1. Organization IDs emptiness
     if not draft.org_ids:
@@ -75,7 +81,7 @@ def validate(
         )
 
     # 3 & 4. Watches check
-    known_watch_ids = {w.id for w in all_watches()}
+    known_watch_ids = {w.id for w in all_watches(draft.agent)}
     valid_watches: List[str] = []
     for wid in draft.watches:
         if wid in known_watch_ids:
@@ -90,7 +96,7 @@ def validate(
             )
 
     if not valid_watches:
-        valid_watches = default_ids()
+        valid_watches = default_ids(draft.agent)
         issues.append(
             BotIssue(
                 field="watches",
@@ -117,7 +123,17 @@ def validate(
             s_dict = s.model_dump()
             has_error = False
 
-            if s.kind == "weekly" and not s.day:
+            if s.kind not in agent.schedule_kinds:
+                issues.append(
+                    BotIssue(
+                        field=f"schedules[{i}].kind",
+                        message=f"This bot cannot run {_KIND_WORDS.get(s.kind, s.kind)!r}",
+                        fixed=False,
+                    )
+                )
+                has_error = True
+
+            elif s.kind == "weekly" and not s.day:
                 issues.append(
                     BotIssue(
                         field=f"schedules[{i}].day",
@@ -208,17 +224,17 @@ def validate(
     # 10. Name check
     name_str = draft.name.strip() if draft.name else ""
     if not name_str:
-        name_str = "VAT Watch"
+        name_str = agent.copy.get("default_name") or "My bot"
         issues.append(
             BotIssue(
                 field="name",
-                message="Name was empty; set to VAT Watch",
+                message=f"Name was empty; set to {name_str}",
                 fixed=True,
             )
         )
 
     new_draft = BotDraft(
-        agent="vat",
+        agent=draft.agent,
         name=name_str,
         org_ids=org_ids,
         schedules=valid_schedules,

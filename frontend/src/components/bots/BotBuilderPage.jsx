@@ -4,15 +4,15 @@ import {
   ShieldCheck, Trash2, X,
 } from 'lucide-react';
 import { checkBotDraft, createBotOnServer, runBotNow, tryBotDraft, updateBotOnServer } from '../../services/bots';
-import { credits, inShort, RULE_LABEL, runTime, shortDay, WATCH_BAR, WATCH_INFO } from './botText';
+import { agentMeta, credits, inShort, ruleTitle, runTime, shortDay } from './botText';
 import './bots.css';
 import './bots-pages.css';
 import './bots-builder.css';
 
 const DAYS = [['mon', 'Monday'], ['tue', 'Tuesday'], ['wed', 'Wednesday'], ['thu', 'Thursday'], ['fri', 'Friday'],
   ['sat', 'Saturday'], ['sun', 'Sunday']];
-const KINDS = [['weekly', 'Every week'], ['monthly', 'Every month'], ['before_deadline', 'Before the VAT return'],
-  ['after_period_end', 'After a period ends']];
+const KINDS = [['weekly', 'Every week'], ['monthly', 'Every month'], ['daily', 'Every day'],
+  ['before_deadline', 'Before the VAT return'], ['after_period_end', 'After a period ends']];
 const DEFAULT_BEFORE = [14, 7, 1];
 const MAX_SCHEDULES = 6;
 
@@ -20,6 +20,7 @@ function newSchedule(kind) {
   if (kind === 'monthly') return { kind, day_of_month: 1, time: '08:00' };
   if (kind === 'before_deadline') return { kind, days_before: [...DEFAULT_BEFORE], time: '09:00' };
   if (kind === 'after_period_end') return { kind, days_after: 3, time: '09:00' };
+  if (kind === 'daily') return { kind, time: '08:00' };
   return { kind: 'weekly', day: 'mon', time: '08:00' };
 }
 
@@ -44,7 +45,7 @@ function Toggle({ on, onChange, label, disabled }) {
   );
 }
 
-function ScheduleRow({ s, index, onChange, onRemove, canRemove }) {
+function ScheduleRow({ s, index, kinds, onChange, onRemove, canRemove }) {
   const set = (patch) => onChange({ ...s, ...patch });
   const toggleDay = (d) => {
     const has = (s.days_before || []).includes(d);
@@ -61,7 +62,7 @@ function ScheduleRow({ s, index, onChange, onRemove, canRemove }) {
     <div className="bb-schedule">
       <select className="bb-select" aria-label={`Schedule ${index + 1} type`} value={s.kind}
         onChange={(e) => onChange(newSchedule(e.target.value))}>
-        {KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+        {KINDS.filter(([k]) => kinds.includes(k) || k === s.kind).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
       </select>
       {s.kind === 'weekly' && (
         <>
@@ -108,16 +109,16 @@ function ScheduleRow({ s, index, onChange, onRemove, canRemove }) {
 }
 
 /** The preview's list of what last month's check found: duplicate groups and other findings, first 20. */
-function PreviewFindings({ result }) {
+function PreviewFindings({ result, agent }) {
   const items = [];
   for (const rev of result?.reviews || []) {
     for (const g of rev.groups || []) {
       const b = (g.bills || [])[0] || {};
-      items.push({ key: g.key, label: RULE_LABEL[g.rule] || g.rule, who: b.vendor_name, amount: g.extra_amount, when: b.document_date });
+      items.push({ key: g.key, label: ruleTitle({ rule: g.rule }, agent), who: b.vendor_name, amount: g.extra_amount, when: b.document_date });
     }
     for (const f of rev.findings || []) {
       const b = f.bill || {};
-      items.push({ key: f.key, label: RULE_LABEL[f.rule] || f.rule, who: b.vendor_name, amount: b.net_purchases, when: b.document_date });
+      items.push({ key: f.key, label: ruleTitle({ rule: f.rule }, agent), who: b.vendor_name, amount: b.net_purchases, when: b.document_date });
     }
   }
   if (!items.length) return null;
@@ -212,7 +213,7 @@ export default function BotBuilderPage({ initial, botId = null, botStatus = null
 
   const setSchedule = (i, s) => change({ schedules: draft.schedules.map((x, j) => (j === i ? s : x)) });
   const removeSchedule = (i) => change({ schedules: draft.schedules.filter((_, j) => j !== i) });
-  const addSchedule = () => change({ schedules: [...(draft.schedules || []), newSchedule(draft.schedules?.length ? 'before_deadline' : 'weekly')] });
+  const addSchedule = () => change({ schedules: [...(draft.schedules || []), newSchedule(draft.schedules?.length && kinds.includes('before_deadline') ? 'before_deadline' : kinds[0] || 'weekly')] });
   const toggleWatch = (id, on) => change({ watches: on ? [...(draft.watches || []), id] : (draft.watches || []).filter((w) => w !== id) });
   const toggleDeliver = (d, on) => change({ deliver: on ? [...(draft.deliver || ['inbox']), d] : (draft.deliver || []).filter((x) => x !== d) });
   const removeOrg = (id) => change({ org_ids: (draft.org_ids || []).filter((o) => o !== id) });
@@ -252,6 +253,10 @@ export default function BotBuilderPage({ initial, botId = null, botStatus = null
   const alerts = preview?.would_send?.alerts ?? 0;
   const otherOrgs = orgs.filter((o) => !(draft.org_ids || []).includes(o.id));
   const watchesOn = (draft.watches || []).length;
+  const agent = agentMeta(draft.agent);
+  const kinds = agent.schedule_kinds || [];
+  const watchBar = Object.fromEntries((agent.watches || []).map((w) => [w.id, w.bar]));
+  const sides = ['purchases', 'sales'].filter((side) => agent.watches.some((w) => w.side === side));
 
   return (
     <div className="bots-page bb-page">
@@ -261,7 +266,7 @@ export default function BotBuilderPage({ initial, botId = null, botStatus = null
         <span className={`bh-badge ${editing && botStatus === 'active' ? 'is-active' : 'is-paused'}`}>
           <span className="bh-badge-dot" />{editing ? (botStatus === 'paused' ? 'Paused' : 'Active') : 'Draft'}
         </span>
-        <span className="bh-pill">VAT agent</span>
+        <span className="bh-pill">{agent.copy?.label}</span>
         <span className="bb-top-status bd-muted">{editing ? 'Changes are saved when you press Save' : 'Not turned on yet · nothing runs until you turn it on'}</span>
         <button type="button" className="bh-btn" onClick={() => runPreview()} disabled={previewBusy}>
           {previewBusy ? <Loader2 size={14} className="bd-spin" /> : <Play size={14} />} Try it on last month
@@ -314,7 +319,7 @@ export default function BotBuilderPage({ initial, botId = null, botStatus = null
           <Section icon={Clock} title="When it runs">
             <div className="bb-schedules">
               {(draft.schedules || []).map((s, i) => (
-                <ScheduleRow key={i} s={s} index={i} onChange={(v) => setSchedule(i, v)} onRemove={() => removeSchedule(i)}
+                <ScheduleRow key={i} s={s} index={i} kinds={kinds} onChange={(v) => setSchedule(i, v)} onRemove={() => removeSchedule(i)}
                   canRemove={(draft.schedules || []).length > 1} />
               ))}
             </div>
@@ -328,7 +333,7 @@ export default function BotBuilderPage({ initial, botId = null, botStatus = null
 
           <Section
             icon={ShieldCheck}
-            title={<>What it checks <span className="bh-pill">{watchesOn} of {WATCH_INFO.length} on</span></>}
+            title={<>What it checks <span className="bh-pill">{watchesOn} of {agent.watches.length} on</span></>}
             aside={(
               <div className="bb-seg" role="group" aria-label="Sensitivity">
                 <span className="bd-muted">Sensitivity</span>
@@ -340,10 +345,10 @@ export default function BotBuilderPage({ initial, botId = null, botStatus = null
             )}
           >
             <p className="bd-muted">Balanced flags what is likely wrong. "Fewer" drops the least certain checks; "Catch more" also flags round-number bills.</p>
-            {[['purchases', 'Bills you received'], ['sales', 'Invoices you sent']].map(([side, title]) => (
+            {sides.map((side) => (
               <div key={side} className="bb-watch-group">
-                <h3>{title}</h3>
-                {WATCH_INFO.filter((w) => w.side === side).map((w) => {
+                <h3>{agent.copy?.side_titles?.[side] || side}</h3>
+                {agent.watches.filter((w) => w.side === side).map((w) => {
                   const on = (draft.watches || []).includes(w.id);
                   return (
                     <div key={w.id} className="bb-watch">
@@ -380,7 +385,7 @@ export default function BotBuilderPage({ initial, botId = null, botStatus = null
                   <option value="never">Never</option>
                 </select>
               </div>
-              <div className="bb-rule"><span>Change bills, invoices or file a VAT return</span><span className="bd-tag is-danger">Never · read-only</span></div>
+              <div className="bb-rule"><span>{agent.copy?.readonly_rule}</span><span className="bd-tag is-danger">Never · read-only</span></div>
             </div>
           </Section>
 
@@ -396,7 +401,7 @@ export default function BotBuilderPage({ initial, botId = null, botStatus = null
             </ul>
             <form className="bd-teach" onSubmit={addNote}>
               <input className="input-text-clean" value={note} maxLength={200} onChange={(e) => setNote(e.target.value)}
-                placeholder="Rent from Al Noor Properties is billed in two parts; don't flag those as duplicates" />
+                placeholder={agent.copy?.notes_placeholder || ''} />
               <button type="submit" className="bh-btn" disabled={!note.trim()}>Add</button>
             </form>
           </Section>
@@ -421,7 +426,7 @@ export default function BotBuilderPage({ initial, botId = null, botStatus = null
                 <ul className="bb-bars">
                   {(draft.watches || []).map((w) => (
                     <li key={w}>
-                      <span>{WATCH_BAR[w] || w}</span>
+                      <span>{watchBar[w] || w}</span>
                       <span className="bb-bar"><span style={{ width: `${(100 * (byWatch[w] || 0)) / maxBar}%` }} /></span>
                       <strong>{byWatch[w] || 0}</strong>
                     </li>
@@ -432,7 +437,7 @@ export default function BotBuilderPage({ initial, botId = null, botStatus = null
                     {showFindings ? 'Hide findings' : `See these ${alerts} findings`}
                   </button>
                 )}
-                {showFindings && <PreviewFindings result={preview} />}
+                {showFindings && <PreviewFindings result={preview} agent={draft.agent} />}
               </>
             )}
           </section>

@@ -12,12 +12,9 @@ from collections import defaultdict
 from typing import Any, Dict, List, Optional, Sequence
 
 from gemini_brain.agent import links
-from gemini_brain.bots import watches
+from gemini_brain.bots import agents, watches
 from gemini_brain.vat_review.tool import RULE_TEXT
 
-#: UAE standard rate, for "VAT missing" on a sales invoice with no output VAT.
-STANDARD_RATE = 0.05
-DUPLICATE_RULES = frozenset(watches.get("duplicate_bill").rules)
 OPEN_STATES = ("new", "seen")
 
 
@@ -38,41 +35,25 @@ def bill_url(side: str, document_id: Any) -> Optional[str]:
 
 
 def vat_at_stake(rule: str, detail: Dict[str, Any]) -> float:
-    """VAT the finding could put wrong on the return, from its bills:
-    a duplicate: the VAT of every copy after the first (claimed twice);
-    a sales invoice with no VAT: 5% of its amount (missing output VAT);
-    a rate that is not 0% or 5%: the gap between its VAT and 5% of the amount;
-    VAT with no amount, or opposite signs: the VAT itself. Other checks: 0 (they are not VAT amounts)."""
-    bills = detail.get("bills") or []
-    if not bills:
-        return 0.0
-    if rule in DUPLICATE_RULES:
-        return round(sum(abs(_num(b.get("vat")) or 0.0) for b in bills[1:]), 2)
-    b = bills[0]
-    amount, vat = _num(b.get("amount")) or 0.0, _num(b.get("vat")) or 0.0
-    if rule == "vat_zero":
-        return round(abs(amount) * STANDARD_RATE, 2)
-    if rule == "vat_rate_not_standard":
-        return round(abs(vat - amount * STANDARD_RATE), 2)
-    if rule in ("vat_without_amount", "vat_wrong_sign"):
-        return round(abs(vat), 2)
-    return 0.0
+    """Forward to the VAT agent (moved to bots/agents_vat.py)."""
+    return agents.get("vat").engine.stake(rule, detail)
 
 
-def enrich(f: Dict[str, Any]) -> Dict[str, Any]:
-    """One stored finding, as the inbox card shows it."""
+def enrich(f: Dict[str, Any], agent: str = "vat") -> Dict[str, Any]:
+    """One stored finding, as the inbox card shows it. Titles come from the agent's words in the browser."""
     detail = dict(f.get("detail") or {})
     side = detail.get("side") or "purchases"
     detail["bills"] = [{**b, "url": bill_url(side, b.get("id"))} for b in detail.get("bills") or []]
-    w = watches.watch_for_rule(f["rule"], side=side)
+    w = watches.watch_for_rule(f["rule"], side=side, agent=agent)
     return {
         **f,
+        "agent": agent,
         "detail": detail,
         "side": side,
         "watch_id": w.id if w else None,
         "watch_label": w.label if w else None,
         "rule_text": RULE_TEXT.get(f["rule"], f["rule"]),
-        "at_stake": vat_at_stake(f["rule"], detail),
+        "at_stake": agents.get(agent).engine.stake(f["rule"], detail),
         "currency": detail.get("currency") or "AED",
     }
 
@@ -82,7 +63,8 @@ def build(findings: Sequence[Dict[str, Any]], runs: Sequence[Dict[str, Any]], bo
     """The whole inbox: findings (enriched, newest first), counts, per-bot counts, VAT at stake, fixed this week,
     the latest run of each bot."""
     now = now or dt.datetime.now(dt.timezone.utc)
-    items = [enrich(f) for f in findings]
+    agent_of = {b["id"]: b.get("agent") or "vat" for b in bots}
+    items = [enrich(f, agent_of.get(f.get("bot_id"), "vat")) for f in findings]
     counts = {"all": 0, "new": 0, "seen": 0, "fixed": 0, "dismissed": 0}
     by_bot: Dict[str, int] = defaultdict(int)
     stake: Dict[str, float] = defaultdict(float)

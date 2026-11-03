@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, Bot, Calendar, Clock, Inbox, Layers, Pause, Play, Plus, ShieldCheck, Sparkles } from 'lucide-react';
 import { fetchBotTemplates } from '../../services/bots';
-import { botStatus, botSummary, credits, longDate, periodLabel, runText, runTime, shortDay } from './botText';
+import { agentMeta, allBotAgents, botStatus, botSummary, credits, longDate, periodLabel, runText, runTime, shortDay } from './botText';
 import './bots.css';
 import './bots-pages.css';
 
@@ -115,9 +115,12 @@ export default function BotsHome({ bots = [], summary, token = '', inboxNew = 0,
   onOpenBot, onToggleBot, onEditBot }) {
   const [templates, setTemplates] = useState([]);
 
+  // Every agent's templates, in agent order.
+  const agentKeys = allBotAgents().map((a) => a.key).join(',');
   useEffect(() => {
-    fetchBotTemplates('vat', token).then((r) => setTemplates(r.templates || [])).catch(() => setTemplates([]));
-  }, [token]);
+    Promise.all(agentKeys.split(',').map((k) => fetchBotTemplates(k, token).then((r) => r.templates || []).catch(() => [])))
+      .then((lists) => setTemplates(lists.flat()));
+  }, [token, agentKeys]);
 
   const open = summary?.open_problems;
   const ret = summary?.next_return;
@@ -154,7 +157,7 @@ export default function BotsHome({ bots = [], summary, token = '', inboxNew = 0,
         <Stat
           label="Open problems"
           value={open ? <>{open.total}{open.new > 0 && <span className="bh-stat-new"> · {open.new} new</span>}</> : '—'}
-          note={open ? `${open.duplicates} possible duplicate${open.duplicates === 1 ? '' : 's'} · ${open.other} other VAT problem${open.other === 1 ? '' : 's'}` : ''}
+          note={open ? `${open.duplicates} possible duplicate${open.duplicates === 1 ? '' : 's'} · ${open.other} other ${agentMeta('vat').copy?.problem_word || 'problem'}${open.other === 1 ? '' : 's'}` : ''}
           tone={open?.new ? 'warning' : undefined}
         />
         <Stat

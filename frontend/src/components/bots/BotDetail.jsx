@@ -5,7 +5,7 @@ import {
   undismissBotFinding,
 } from '../../services/bots';
 import BotMemoryView from './BotMemoryView';
-import { botStatus, botSummary, credits, RULE_LABEL, runText, runTime, scheduleLine, shortDay, TRIGGER_LABEL } from './botText';
+import { agentMeta, botStatus, botSummary, credits, ruleTitle, runText, runTime, scheduleLine, shortDay, TRIGGER_LABEL } from './botText';
 import './bots.css';
 import './bots-pages.css';
 
@@ -57,7 +57,7 @@ function FindingItem({ f, onDismiss, onRestore }) {
     <li className={`bd-finding is-${f.state}`}>
       <div className="bd-finding-head">
         <div>
-          <strong>{RULE_LABEL[f.rule] || f.rule}</strong>
+          <strong>{ruleTitle({ rule: f.rule }, f.agent)}</strong>
           <span className={`bd-tag is-${f.state === 'new' ? 'warning' : f.state === 'fixed' ? 'ok' : 'muted'}`}>
             {f.state === 'dismissed' ? 'Not a problem' : f.state[0].toUpperCase() + f.state.slice(1)}
           </span>
@@ -219,7 +219,7 @@ export default function BotDetail({ bot, token = '', onBack, onEdit, onToggle, o
           <div className="bh-card-name-row">
             <h1 className="bots-title">{bot.name}</h1>
             <span className={`bh-badge is-${status.tone}`}><span className="bh-badge-dot" />{status.label}</span>
-            <span className="bh-pill">VAT agent</span>
+            <span className="bh-pill">{agentMeta(bot.agent).copy?.label}</span>
           </div>
           <p className="bots-lede">
             {botSummary(bot.draft)}. Tells you in your inbox{(bot.draft?.deliver || []).includes('bell') ? ' and bell' : ''}.
@@ -297,7 +297,7 @@ export default function BotDetail({ bot, token = '', onBack, onEdit, onToggle, o
       {tab === 'findings' && (
         ordered.length === 0
           ? <p className="bd-muted">This bot has not found anything yet.</p>
-          : <ul className="bd-findings">{ordered.map((f) => <FindingItem key={f.key} f={f} onDismiss={dismiss} onRestore={restore} />)}</ul>
+          : <ul className="bd-findings">{ordered.map((f) => <FindingItem key={f.key} f={{ agent: bot.agent, ...f }} onDismiss={dismiss} onRestore={restore} />)}</ul>
       )}
 
       {tab === 'learned' && (

@@ -1,20 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, Bot, Building2, Calendar, Check, Clock, Layers, Loader2, Sparkles, Wand2 } from 'lucide-react';
 import { createDraftFromSentence, createDraftFromTemplate, fetchBotTemplates } from '../../services/bots';
-import { credits, DELIVER_LABEL, scheduleChip, TEMPLATE_META, WATCH_INFO } from './botText';
+import { agentMeta, allBotAgents, credits, DELIVER_LABEL, scheduleChip } from './botText';
 import './bots.css';
 import './bots-pages.css';
 import './bots-builder.css';
 
 const MAX_TEXT = 500;
 
-const EXAMPLES = [
-  'Every Monday at 9am, check my bills for duplicates',
-  'Remind me 7 days before each VAT return',
-  'Check sales invoices for wrong VAT on the 1st of each month',
-];
-
 const TEMPLATE_ICONS = { vat_weekly_digest: Calendar, vat_return_reminder: Clock, vat_full_watch: Layers };
+
+/** The tip with its button name in bold, as the chat shows it. */
+function boldButton(text, name = 'Make this a bot') {
+  const i = text.indexOf(name);
+  if (i < 0) return text;
+  return <>{text.slice(0, i)}<strong>{name}</strong>{text.slice(i + name.length)}</>;
+}
 
 const isOrgQuestion = (q) => /organi[sz]ation/i.test(q);
 
@@ -29,10 +30,14 @@ export default function BotCreate({ token = '', orgs = [], orgIds = [], orgLabel
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
   const [templates, setTemplates] = useState([]);
+  const [agentKey, setAgentKey] = useState('vat');
+  const agent = agentMeta(agentKey);
+  const agentList = allBotAgents();
+  const templateMeta = Object.fromEntries((agent.templates || []).map((t) => [t.id, t]));
 
   useEffect(() => {
-    fetchBotTemplates('vat', token).then((r) => setTemplates(r.templates || [])).catch(() => setTemplates([]));
-  }, [token]);
+    fetchBotTemplates(agentKey, token).then((r) => setTemplates(r.templates || [])).catch(() => setTemplates([]));
+  }, [token, agentKey]);
 
   const build = async (e) => {
     e?.preventDefault();
@@ -40,7 +45,7 @@ export default function BotCreate({ token = '', orgs = [], orgIds = [], orgLabel
     setBusy(true);
     setError('');
     try {
-      setResult(await createDraftFromSentence(text.trim(), orgIds, token));
+      setResult(await createDraftFromSentence(text.trim(), orgIds, token, agentKey));
     } catch (err) {
       setError(err.message || 'Could not read that. Try saying when it runs and what it checks.');
     } finally {
@@ -69,7 +74,7 @@ export default function BotCreate({ token = '', orgs = [], orgIds = [], orgLabel
 
   const draft = result?.draft;
   const questions = draft?.questions || [];
-  const watchLabels = (draft?.watches || []).map((w) => WATCH_INFO.find((x) => x.id === w)?.label).filter(Boolean);
+  const watchLabels = (draft?.watches || []).map((w) => agentMeta(draft.agent).watches.find((x) => x.id === w)?.label).filter(Boolean);
 
   return (
     <div className="bots-page bc-page">
@@ -85,6 +90,15 @@ export default function BotCreate({ token = '', orgs = [], orgIds = [], orgLabel
         <p>Say when it runs, what it checks and how to tell you. We'll fill in the rest, and you can change anything on the next screen.</p>
       </div>
 
+      {agentList.length > 1 && (
+        <div className="bc-chips is-center" role="group" aria-label="Agent">
+          {agentList.map((a) => (
+            <button key={a.key} type="button" className={`bc-chip is-choice${a.key === agentKey ? ' is-on' : ''}`}
+              aria-pressed={a.key === agentKey} onClick={() => { setAgentKey(a.key); setResult(null); }}>{a.name}</button>
+          ))}
+        </div>
+      )}
+
       <form className="bc-box" onSubmit={build}>
         <label htmlFor="bc-text" className="sr-only">Describe your bot</label>
         <textarea
@@ -93,7 +107,7 @@ export default function BotCreate({ token = '', orgs = [], orgIds = [], orgLabel
           value={text}
           maxLength={MAX_TEXT}
           rows={3}
-          placeholder="Every Monday at 9am check my bills for duplicates and wrong VAT, and alert me"
+          placeholder={agent.copy?.create_hint || ''}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) build(e); }}
           disabled={busy}
@@ -148,7 +162,7 @@ export default function BotCreate({ token = '', orgs = [], orgIds = [], orgLabel
       <div className="bc-examples">
         <span className="bd-muted">Try one of these</span>
         <div className="bc-chips is-center">
-          {EXAMPLES.map((ex) => (
+          {(agent.copy?.examples || []).map((ex) => (
             <button key={ex} type="button" className="bc-chip is-choice" onClick={() => { setText(ex); setResult(null); }}>{ex}</button>
           ))}
         </div>
@@ -159,7 +173,7 @@ export default function BotCreate({ token = '', orgs = [], orgIds = [], orgLabel
       <div className="bc-templates">
         {templates.map((t) => {
           const Icon = TEMPLATE_ICONS[t.id] || Sparkles;
-          const meta = TEMPLATE_META[t.id] || {};
+          const meta = templateMeta[t.id] || {};
           return (
             <div key={t.id} className="bc-template">
               <div className="bc-template-head">
@@ -172,7 +186,7 @@ export default function BotCreate({ token = '', orgs = [], orgIds = [], orgLabel
               <p className="bh-template-sub">{t.summary}</p>
               <dl className="bc-template-facts">
                 <dt>Runs</dt><dd>{meta.runs || ''}</dd>
-                <dt>Checks</dt><dd>{(t.draft?.watches || []).length} of {WATCH_INFO.length}</dd>
+                <dt>Checks</dt><dd>{(t.draft?.watches || []).length} of {agent.watches.length}</dd>
                 <dt>Cost</dt><dd>{t.monthly_credits != null ? `≈ ${credits(t.monthly_credits)} credits / mo` : ''}</dd>
               </dl>
               <button type="button" className="bh-btn bc-template-btn" onClick={() => useTemplate(t.id)} disabled={busy}>
@@ -183,7 +197,7 @@ export default function BotCreate({ token = '', orgs = [], orgIds = [], orgLabel
         })}
       </div>
 
-      <p className="bd-muted bc-tip">Tip: under any VAT answer in chat, press <strong>Make this a bot</strong> to repeat it on a schedule.</p>
+      {agent.copy?.tip && <p className="bd-muted bc-tip">Tip: {boldButton(agent.copy.tip)}</p>}
     </div>
   );
 }

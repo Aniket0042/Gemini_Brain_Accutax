@@ -7,10 +7,8 @@ from __future__ import annotations
 import time
 from typing import AbstractSet, Any, Dict, List, Optional
 
-from gemini_brain.bots import cost, watches
+from gemini_brain.bots import agents, cost, watches
 from gemini_brain.bots.schema import BotDraft
-from gemini_brain.vat_return import tool as vat_return_tool
-from gemini_brain.vat_review import tool as vat_review_tool
 
 
 def try_period(
@@ -31,7 +29,8 @@ def try_period(
     problems went away; "Try it on last month" only shows a sample, so it leaves this off.
     `complete` in the result is False when any scan stopped early: then a missing finding does not mean it was fixed."""
     deadline = time.monotonic() + deadline_seconds
-    review_calls = watches.review_calls(draft.watches, draft.sensitivity)
+    engine = agents.get(draft.agent).engine
+    review_calls = engine.calls(draft.watches, draft.sensitivity)
 
     reviews: List[Dict[str, Any]] = []
     bills_checked = 0
@@ -46,14 +45,10 @@ def try_period(
 
     for call_params in review_calls:
         side = call_params.get("side", "purchases")
-        req = {
-            **call_params,
-            "period": period or {"preset": preset},
-            "limit": 50,
-        }
-        res = vat_review_tool.run(
-            req,
-            organization_ids=draft.org_ids,
+        res = engine.run(
+            call_params,
+            org_ids=draft.org_ids,
+            period=period or {"preset": preset},
             subject=subject,
             deadline=deadline,
             exclude=exclude,
@@ -82,7 +77,7 @@ def try_period(
 
         for wid in draft.watches:
             try:
-                w = watches.get(wid)
+                w = watches.get(wid, draft.agent)
             except KeyError:
                 continue
             if w.side != side:
@@ -93,18 +88,8 @@ def try_period(
                 w_total += int(findings_by_rule.get(r) or 0)
             by_watch[wid] += w_total
 
-    # VAT Return check (next_due)
-    return_res: Dict[str, Any] = {}
-    try:
-        ret_out = vat_return_tool.run(
-            {"which": "next_due"},
-            organization_ids=draft.org_ids,
-            subject=subject,
-            deadline=deadline,
-        )
-        return_res = ret_out.get("organizations") or ret_out
-    except Exception:
-        return_res = {}
+    # The agent's position (for VAT: the return due next, per organization)
+    return_res = engine.position(draft.org_ids, subject, deadline)
 
     freqs = frequencies if frequencies is not None else {}
     digests_count = cost.runs_per_month(draft, freqs)
@@ -122,6 +107,7 @@ def try_period(
             "digests": digests_count,
         },
         "return": return_res,
+        "position": engine.summarize_position(return_res, reviews),
         "reviews": reviews,
         "complete": complete,
     }

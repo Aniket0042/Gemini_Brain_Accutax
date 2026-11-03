@@ -14,11 +14,9 @@ from typing import Any, Dict, List, Optional, Sequence, Set
 from zoneinfo import ZoneInfo
 
 from gemini_brain.api.auth import get_user_allowed_orgs
-from gemini_brain.bots import store, watches
-from gemini_brain.bots.run import finding_detail
+from gemini_brain.bots import agents, store, watches
 from gemini_brain.bots.schema import BotDraft
 from gemini_brain.config.settings import settings
-from gemini_brain.vat_review import tool as vat_review_tool
 
 logger = logging.getLogger("gemini_brain.bots.monitor")
 
@@ -162,9 +160,12 @@ def handle_document_event(
             logger.warning("Bot %s owner %s no longer has access to org %s", bot_id, owner_id, org_id)
             continue
 
-        # 2. Check if bot has watches for this side
+        # 2. Check if bot has watches for this side. Only document watches: a state watch (overdue, due soon)
+        #    depends on today's date, so only scheduled runs check it.
         draft = BotDraft(**bot["draft"])
-        calls = watches.review_calls(draft.watches, draft.sensitivity)
+        agent = agents.get(draft.agent)
+        doc_watches = [w.id for w in agent.watches if w.id in draft.watches and w.kind == "document"]
+        calls = agent.engine.calls(doc_watches, draft.sensitivity) if doc_watches else []
         side_calls = [c for c in calls if c.get("side") == side]
         if not side_calls:
             continue
@@ -173,17 +174,14 @@ def handle_document_event(
         dismissed = store.get_findings(bot_id, state="dismissed")
         exclude_keys = {f["key"] for f in dismissed}
 
-        # 4. Run review_vat for that org and side
+        # 4. Run the agent's checks for that org and side
         matched_items: List[Dict[str, Any]] = []
         for call_params in side_calls:
             try:
-                rev = vat_review_tool.run(
-                    {
-                        **call_params,
-                        "period": {"preset": "this_quarter"},
-                        "limit": 50,
-                    },
-                    organization_ids=[org_id],
+                rev = agent.engine.run(
+                    call_params,
+                    org_ids=[org_id],
+                    period={"preset": "this_quarter"},
                     subject=f"bot-monitor:{bot_id}",
                     deadline=time.monotonic() + 15.0,
                     exclude=exclude_keys,
@@ -202,7 +200,7 @@ def handle_document_event(
                 }
                 if group_docs.intersection(doc_ids_set):
                     rule = g.get("rule", "duplicate")
-                    w = watches.watch_for_rule(rule, side=side)
+                    w = watches.watch_for_rule(rule, side=side, agent=draft.agent)
                     first_b = (g.get("bills") or [{}])[0]
                     matched_items.append({
                         "key": g.get("key") or g.get("item_key"),
@@ -215,7 +213,7 @@ def handle_document_event(
                         "why": g.get("why") or g.get("reason", ""),
                         "supplier": first_b.get("vendor_name") or first_b.get("supplier"),
                         "document_number": first_b.get("document_number") or first_b.get("bill_number"),
-                        "detail": finding_detail(g, side),
+                        "detail": agent.engine.detail(g, side),
                     })
 
             # Check single anomaly findings containing document_ids
@@ -224,7 +222,7 @@ def handle_document_event(
                 bill_doc_id = bill.get("document_id") if bill.get("document_id") is not None else bill.get("id")
                 if bill_doc_id is not None and int(bill_doc_id) in doc_ids_set:
                     rule = f.get("rule", "anomaly")
-                    w = watches.watch_for_rule(rule, side=side)
+                    w = watches.watch_for_rule(rule, side=side, agent=draft.agent)
                     matched_items.append({
                         "key": f.get("key") or f.get("item_key"),
                         "org_id": org_id,
@@ -236,7 +234,7 @@ def handle_document_event(
                         "why": f.get("why") or f.get("reason", ""),
                         "supplier": bill.get("vendor_name") or bill.get("supplier"),
                         "document_number": bill.get("document_number") or bill.get("bill_number") or bill.get("invoice_number"),
-                        "detail": finding_detail(f, side),
+                        "detail": agent.engine.detail(f, side),
                     })
 
         total_matched += len(matched_items)

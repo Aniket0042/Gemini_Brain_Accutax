@@ -34,9 +34,10 @@ import {
   listBots, updateBot, deleteBot,
   fetchUserBots, deleteBotOnServer, pauseBotOnServer, resumeBotOnServer, migrateLocalBotsToServer,
   fetchBotInbox, markBotInboxSeen, dismissBotFinding, undismissBotFinding,
-  fetchBotsSummary,
+  fetchBotsSummary, fetchBotAgents,
   createDraftFromTemplate, createDraftFromChat
 } from './services/bots';
+import { setBotAgents } from './components/bots/botText';
 
 // Minimal fallback shown only until /api/v1/tenants responds. Deliberately
 // carries no figures: the previous version described specific invoice counts
@@ -277,6 +278,8 @@ export default function App() {
   const [page, setPage] = useState('chat');
   const [activeBotId, setActiveBotId] = useState(null);
   const [botsSummary, setBotsSummary] = useState(null);
+  // Bumped when the bot agents load, so the bot pages re-render with their words (botText keeps them).
+  const [, setBotAgentsLoaded] = useState(0);
 
   const reloadInbox = async () => {
     const token = currentUser?.access_token;
@@ -298,6 +301,7 @@ export default function App() {
         setBots(serverBots);
         await reloadInbox();
         fetchBotsSummary(token).then(setBotsSummary).catch(() => null);
+        fetchBotAgents(token).then((r) => { setBotAgents(r.agents); setBotAgentsLoaded((n) => n + 1); }).catch(() => null);
         return;
       } catch (e) {
         console.warn('Failed to fetch server bots:', e);

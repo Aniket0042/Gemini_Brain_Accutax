@@ -7,90 +7,79 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
+from gemini_brain.bots import agents
 from gemini_brain.bots.schema import BotDraft, BotIssue, Schedule
 from gemini_brain.bots.templates import get as get_template
 from gemini_brain.bots.validate import validate
-from gemini_brain.bots.watches import all_watches
 from gemini_brain.config.settings import settings
 from gemini_brain.pii.redactor import redact_pii
 from gemini_brain.reasoning import bedrock_client
 from gemini_brain.semantic import periods
 
-_WATCH_IDS = [w.id for w in all_watches()]
 
-MAKE_BOT_DRAFT_TOOL = {
-    "toolSpec": {
-        "name": "make_bot_draft",
-        "description": "Fills the settings of a VAT bot from a user's sentence.",
-        "inputSchema": {
-            "json": {
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string", "description": "Name for the bot"},
-                    "org_names": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Organization names the user mentioned, exactly as written",
-                    },
-                    "schedules": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "kind": {
-                                    "type": "string",
-                                    "enum": ["weekly", "monthly", "before_deadline", "after_period_end"],
+def make_bot_draft_tool(agent: agents.BotAgent) -> Dict[str, Any]:
+    """The make_bot_draft tool for this agent: its schedule kinds and its watch ids."""
+    return {
+        "toolSpec": {
+            "name": "make_bot_draft",
+            "description": f"Fills the settings of a {agent.name} bot from a user's sentence.",
+            "inputSchema": {
+                "json": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Name for the bot"},
+                        "org_names": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Organization names the user mentioned, exactly as written",
+                        },
+                        "schedules": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "kind": {
+                                        "type": "string",
+                                        "enum": list(agent.schedule_kinds),
+                                    },
+                                    "day": {
+                                        "type": "string",
+                                        "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+                                    },
+                                    "day_of_month": {"type": "integer"},
+                                    "time": {"type": "string"},
+                                    "days_before": {"type": "array", "items": {"type": "integer"}},
+                                    "days_after": {"type": "integer"},
                                 },
-                                "day": {
-                                    "type": "string",
-                                    "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
-                                },
-                                "day_of_month": {"type": "integer"},
-                                "time": {"type": "string"},
-                                "days_before": {"type": "array", "items": {"type": "integer"}},
-                                "days_after": {"type": "integer"},
+                                "required": ["kind"],
                             },
-                            "required": ["kind"],
+                        },
+                        "watches": {
+                            "type": "array",
+                            "items": {"type": "string", "enum": [w.id for w in agent.watches]},
+                        },
+                        "sensitivity": {
+                            "type": "string",
+                            "enum": ["fewer", "balanced", "more"],
+                        },
+                        "deliver": {
+                            "type": "array",
+                            "items": {"type": "string", "enum": ["inbox", "email", "bell"]},
+                        },
+                        "notes": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "unclear": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Short questions when something was unclear (max 3)",
                         },
                     },
-                    "watches": {
-                        "type": "array",
-                        "items": {"type": "string", "enum": _WATCH_IDS},
-                    },
-                    "sensitivity": {
-                        "type": "string",
-                        "enum": ["fewer", "balanced", "more"],
-                    },
-                    "deliver": {
-                        "type": "array",
-                        "items": {"type": "string", "enum": ["inbox", "email", "bell"]},
-                    },
-                    "notes": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                    },
-                    "unclear": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Short questions when something was unclear (max 3)",
-                    },
-                },
-            }
-        },
+                }
+            },
+        }
     }
-}
-
-_SYSTEM_PROMPT = """You turn one sentence into the settings of a VAT bot for Accutax. Call make_bot_draft once.
-Fill only what the sentence says or clearly means. Leave the rest out: code fills defaults.
-"every Monday" is a weekly schedule on mon. "before the return", "before VAT is due" is before_deadline.
-"after the quarter ends" is after_period_end. A time like "9am" is "09:00". No time given: leave time out.
-"email me" adds email to deliver. "alert me", "notify me right away" adds bell.
-Pick watches only from the list. "duplicates" is duplicate_bill. "wrong VAT", "VAT not 5%" is vat_rate_wrong.
-"sales", "invoices I send" is sales_vat_wrong.
-Organization names the user wrote go in org_names, exactly as written. Never invent an organization.
-Anything you are not sure about goes in unclear as a short question. Never ask more than 3.
-Never put figures, amounts or dates of transactions in any field.
-Today's date is {today} in time zone {tz}."""
 
 
 def from_sentence(
@@ -99,8 +88,11 @@ def from_sentence(
     allowed_orgs: Dict[int, str],
     current_org_ids: Sequence[int],
     call_model: Callable[..., Dict[str, Any]] = bedrock_client.converse_tools,
+    agent: str = "vat",
 ) -> Tuple[BotDraft, List[BotIssue]]:
-    """Turn a natural language sentence into a validated BotDraft."""
+    """Turn a natural language sentence into a validated BotDraft for this agent (the prompt, watch list and
+    fallback template are the agent's)."""
+    bot_agent = agents.get(agent)
     stripped = text.strip()
     if not stripped or len(text) > 500:
         raise ValueError("Text must be non-empty and at most 500 characters")
@@ -109,14 +101,14 @@ def from_sentence(
     masked_text, _ = redact_pii(text)
 
     today_str = periods.today_in(settings.report_timezone).isoformat()
-    system = _SYSTEM_PROMPT.format(today=today_str, tz=settings.report_timezone)
+    system = bot_agent.draft_prompt.format(today=today_str, tz=settings.report_timezone)
 
     messages = [{"role": "user", "content": [{"text": masked_text}]}]
 
     resp = call_model(
         system_prompt=system,
         messages=messages,
-        tools=[MAKE_BOT_DRAFT_TOOL],
+        tools=[make_bot_draft_tool(bot_agent)],
         tool_choice="make_bot_draft",
         temperature=0.0,
         purpose="bot_draft",
@@ -134,7 +126,7 @@ def from_sentence(
                 break
 
     if not tool_use or not isinstance(tool_use.get("input"), dict):
-        fallback_draft = get_template("vat_weekly_digest").draft.model_copy(deep=True)
+        fallback_draft = get_template(bot_agent.fallback_template, agent).draft.model_copy(deep=True)
         fallback_draft.source = "sentence"
         return validate(
             fallback_draft,
@@ -161,7 +153,7 @@ def from_sentence(
 
     # Step 5: Build BotDraft field by field
     draft_kwargs: Dict[str, Any] = {
-        "agent": "vat",
+        "agent": agent,
         "source": "sentence",
         "org_ids": resolved_org_ids,
     }

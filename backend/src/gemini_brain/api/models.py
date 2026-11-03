@@ -553,11 +553,13 @@ class DraftResponse(BaseModel):
 class FromTemplateRequest(BaseModel):
     template_id: str
     org_ids: List[int] = Field(default_factory=list)
+    agent: Optional[str] = None     # None: the agent that owns the template
 
 
 class FromSentenceRequest(BaseModel):
     text: str
     org_ids: List[int] = Field(default_factory=list)
+    agent: str = "vat"
 
 
 class FromChatRequest(BaseModel):

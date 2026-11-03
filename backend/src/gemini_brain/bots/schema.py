@@ -18,7 +18,7 @@ _TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 class Schedule(BaseModel):
     """One time the bot runs. Exactly the fields for its kind are used; the others stay None."""
-    kind: Literal["weekly", "monthly", "before_deadline", "after_period_end"]
+    kind: Literal["weekly", "monthly", "daily", "before_deadline", "after_period_end"]   # daily: time only
     day: Optional[Weekday] = None                 # weekly
     day_of_month: Optional[int] = Field(None, ge=1, le=28)   # monthly (max 28 so every month has it)
     time: str = "08:00"                           # "HH:MM", 24 hours, in settings.report_timezone
@@ -37,11 +37,11 @@ class Rules(BaseModel):
     run_review: RuleLevel = "allow"
     export_findings: RuleLevel = "allow"
     email_outside: RuleLevel = "ask"
-    change_records: Literal["never"] = "never"    # fixed: a VAT bot never changes Accutax data
+    change_records: Literal["never"] = "never"    # fixed: a bot never changes Accutax data
 
 
 class BotDraft(BaseModel):
-    agent: Literal["vat"] = "vat"
+    agent: str = "vat"                            # a key of bots/agents.py
     name: str = Field("VAT Watch", min_length=1, max_length=60)
     org_ids: List[int] = Field(default_factory=list, max_length=10)
     schedules: List[Schedule] = Field(default_factory=list, max_length=6)
@@ -54,6 +54,14 @@ class BotDraft(BaseModel):
     questions: List[str] = Field(default_factory=list)
     #: Where the draft came from: "template:<id>", "sentence", "chat".
     source: str = "blank"
+
+    @field_validator("agent")
+    @classmethod
+    def validate_agent(cls, v: str) -> str:
+        from gemini_brain.bots import agents
+        if v not in agents.keys():
+            raise ValueError(f"unknown agent {v!r}")
+        return v
 
     @field_validator("notes", mode="before")
     @classmethod

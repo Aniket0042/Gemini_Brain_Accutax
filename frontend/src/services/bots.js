@@ -29,6 +29,12 @@ async function handleResponse(response, defaultMsg) {
 
 // ── API Calls ──────────────────────────────────────────────────────────────
 
+/** The bot agents: their checks, templates, schedule kinds and words for the screens. */
+export async function fetchBotAgents(token = '') {
+  const res = await fetch('/api/v1/bots/agents', { headers: authHeaders(token) });
+  return handleResponse(res, 'Failed to load the bot agents');
+}
+
 export async function fetchBotTemplates(agent = 'vat', token = '') {
   const res = await fetch(`/api/v1/bots/templates?agent=${encodeURIComponent(agent)}`, {
     headers: authHeaders(token),
@@ -52,11 +58,11 @@ export async function createDraftFromTemplate(templateId, orgIds = [], token = '
   return handleResponse(res, 'Failed to create draft from template');
 }
 
-export async function createDraftFromSentence(text, orgIds = [], token = '') {
+export async function createDraftFromSentence(text, orgIds = [], token = '', agent = 'vat') {
   const res = await fetch('/api/v1/bots/draft/from-sentence', {
     method: 'POST',
     headers: authHeaders(token),
-    body: JSON.stringify({ text, org_ids: orgIds }),
+    body: JSON.stringify({ text, org_ids: orgIds, agent }),
   });
   return handleResponse(res, 'Failed to create draft from sentence');
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { AlertTriangle, Bot, Inbox, Settings2, ShieldCheck } from 'lucide-react';
-import { credits, longDate, periodLabel, runTime, scheduleLine, shortDay } from './botText';
+import { agentMeta, credits, longDate, periodLabel, runTime, scheduleLine, shortDay } from './botText';
 import './bots-pages.css';
 import './bots-intro.css';
 
@@ -55,6 +55,7 @@ export default function BotIntroMessage({ msg, onOpenInbox, onEditBot, onOpenBot
   const groups = s.groups_found || 0;
   const problems = s.findings_found || 0;
   const rp = s.return_position;
+  const word = agentMeta(bot.agent || bot.draft?.agent).copy?.problem_word || 'problem';
   const total = groups + problems;
   const schedules = (bot.draft?.schedules || []).map((x) => scheduleLine(x).replace(/^Every /, 'every ')).filter(Boolean);
   const where = (bot.draft?.deliver || ['inbox']).includes('bell') ? 'inbox and bell' : 'inbox';
@@ -86,12 +87,12 @@ export default function BotIntroMessage({ msg, onOpenInbox, onEditBot, onOpenBot
               {s.period?.start ? ` for ${periodWords(s.period)}` : ''}.{' '}
               {total === 0
                 ? 'Everything looks right.'
-                : `I found ${groups ? plural(groups, 'likely duplicate group', 'likely duplicate groups') : ''}${groups && problems ? ' and ' : ''}${problems ? plural(problems, groups ? 'other VAT problem' : 'VAT problem', groups ? 'other VAT problems' : 'VAT problems') : ''}.`}
+                : `I found ${groups ? plural(groups, 'likely duplicate group', 'likely duplicate groups') : ''}${groups && problems ? ' and ' : ''}${problems ? plural(problems, groups ? `other ${word}` : word, groups ? `other ${word}s` : `${word}s`) : ''}.`}
             </p>
             <div className="bim-stats">
               <div><strong>{bills + invoices}</strong><span>documents checked</span></div>
               <div><strong>{groups}</strong><span>duplicate groups</span></div>
-              <div><strong>{problems}</strong><span>VAT problems</span></div>
+              <div><strong>{problems}</strong><span>{word}s</span></div>
               {rp && <div><strong>{money(rp.net_vat_payable, rp.currency)}</strong><span>net VAT so far</span></div>}
             </div>
             {rp && (

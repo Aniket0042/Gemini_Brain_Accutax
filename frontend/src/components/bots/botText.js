@@ -6,15 +6,112 @@
 
 const DAY_NAMES = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };
 
-const WATCH_SHORT = {
-  duplicate_bill: 'duplicates',
-  vat_rate_wrong: 'wrong VAT rates',
-  bill_missing_details: 'missing details',
-  unusual_bill: 'unusual amounts',
-  sales_vat_wrong: 'sales VAT',
+/**
+ * The VAT agent as GET /api/v1/bots/agents describes it (bots/agents_vat.py). The pages use it until the agents
+ * load, so they never render empty; keep it in step with the server.
+ */
+export const DEFAULT_AGENT = {
+  key: 'vat',
+  name: 'VAT',
+  watches: [
+    { id: 'duplicate_bill', side: 'purchases', kind: 'document', default_on: true, label: 'A bill looks recorded twice',
+      desc: 'Same number, or same total from the same supplier a few days apart.', bar: 'Recorded twice' },
+    { id: 'vat_rate_wrong', side: 'purchases', kind: 'document', default_on: true, label: 'VAT on a bill is not 0% or 5%',
+      desc: 'Wrong rate, negative VAT, or VAT with no amount.', bar: 'VAT not 0% or 5%' },
+    { id: 'bill_missing_details', side: 'purchases', kind: 'document', default_on: false,
+      label: 'A bill is missing its supplier or number, or is dated in the future',
+      desc: "These bills can't support a VAT claim.", bar: 'Missing details' },
+    { id: 'unusual_bill', side: 'purchases', kind: 'document', default_on: false, label: "A bill far above the supplier's usual amount",
+      desc: "Compared with that supplier's past bills.", bar: 'Unusually large' },
+    { id: 'sales_vat_wrong', side: 'sales', kind: 'document', default_on: true, label: 'A sales invoice with wrong or no output VAT',
+      desc: "Zero VAT where 5% is expected, or a rate that isn't 0% or 5%.", bar: 'Sales VAT wrong' },
+  ],
+  templates: [
+    { id: 'vat_weekly_digest', tag: 'Most popular', runs: 'Mondays, 08:00' },
+    { id: 'vat_return_reminder', tag: 'Never miss a deadline', runs: 'Before each return, 09:00' },
+    { id: 'vat_full_watch', tag: 'Everything on', runs: 'Mondays + before returns' },
+  ],
+  schedule_kinds: ['weekly', 'monthly', 'before_deadline', 'after_period_end'],
+  credits_per_run: 90,
+  copy: {
+    label: 'VAT agent',
+    default_name: 'VAT Watch',
+    create_hint: 'Every Monday at 9am check my bills for duplicates and wrong VAT, and alert me',
+    examples: [
+      'Every Monday at 9am, check my bills for duplicates',
+      'Remind me 7 days before each VAT return',
+      'Check sales invoices for wrong VAT on the 1st of each month',
+    ],
+    tip: 'under any VAT answer in chat, press Make this a bot to repeat it on a schedule.',
+    stake_label: 'At stake this quarter',
+    stake_note: 'VAT that could be wrong on your return if these stay unfixed: copies claimed twice, missing output VAT and wrong rates.',
+    problem_word: 'VAT problem',
+    readonly_rule: 'Change bills, invoices or file a VAT return',
+    notes_placeholder: "Rent from Al Noor Properties is billed in two parts; don't flag those as duplicates",
+    watch_short: {
+      duplicate_bill: 'duplicates',
+      vat_rate_wrong: 'wrong VAT rates',
+      bill_missing_details: 'missing details',
+      unusual_bill: 'unusual amounts',
+      sales_vat_wrong: 'sales VAT',
+    },
+    rule_titles: {
+      same_number: 'Bill may be recorded twice',
+      same_total_near_date: 'Bill may be recorded twice',
+      similar_vendor_same_day: 'Bill may be recorded twice',
+      vat_rate_not_standard: 'VAT is not 0% or 5%',
+      vat_wrong_sign: 'VAT and amount have opposite signs',
+      vat_without_amount: 'VAT with no amount',
+      missing_supplier: 'Bill with no supplier',
+      missing_number: 'Bill with no number',
+      future_date: 'Bill dated in the future',
+      large_for_supplier: "Far above the supplier's usual bill",
+      large_one_off_supplier: "A supplier's only bill, and a large one",
+      vat_zero: 'No VAT on an amount',
+      round_amount: 'Round amount',
+      supplier_trn_invalid: "Supplier's TRN missing or wrong",
+    },
+    sales_rule_titles: {
+      vat_zero: 'Sales invoice with no VAT',
+      vat_rate_not_standard: 'Sales invoice VAT is not 0% or 5%',
+      vat_wrong_sign: 'Sales invoice VAT and amount have opposite signs',
+      vat_without_amount: 'Sales invoice with VAT but no amount',
+    },
+    dismiss_labels: { sales: { vat_zero: "It's zero-rated" } },
+    side_titles: { purchases: 'Bills you received', sales: 'Invoices you sent' },
+  },
+  columns: [
+    { key: 'number', label: 'Bill', sales_label: 'Invoice' },
+    { key: 'date', label: 'Date' },
+    { key: 'party', label: 'Supplier', sales_label: 'Customer' },
+    { key: 'amount', label: 'Amount', num: true },
+    { key: 'vat', label: 'VAT', num: true },
+  ],
 };
 
-export const ALL_WATCHES = Object.keys(WATCH_SHORT);
+let AGENTS = { vat: DEFAULT_AGENT };
+
+/** Keep the agents from GET /bots/agents; the VAT fallback stays until they load. */
+export function setBotAgents(list = []) {
+  if (!Array.isArray(list) || !list.length) return;
+  AGENTS = Object.fromEntries(list.map((a) => [a.key, a]));
+}
+
+/** One agent's checks, templates and words; VAT for a bot saved before agents existed. */
+export function agentMeta(key = 'vat') {
+  return AGENTS[key || 'vat'] || AGENTS.vat || DEFAULT_AGENT;
+}
+
+export function allBotAgents() {
+  return Object.values(AGENTS);
+}
+
+/** A finding's title: the agent's words for its rule (the sales side has its own), else the server's text. */
+export function ruleTitle(f, agentKey) {
+  const copy = agentMeta(agentKey || f?.agent).copy || {};
+  if (f?.side === 'sales' && copy.sales_rule_titles?.[f.rule]) return copy.sales_rule_titles[f.rule];
+  return copy.rule_titles?.[f?.rule] || f?.rule_text || f?.rule;
+}
 
 function ordinal(n) {
   const s = ['th', 'st', 'nd', 'rd'];
@@ -36,6 +133,8 @@ export function scheduleLine(schedule) {
       return `Every ${DAY_NAMES[schedule.day] || 'week'} at ${at}`;
     case 'monthly':
       return `${ordinal(schedule.day_of_month || 1)} of each month at ${at}`;
+    case 'daily':
+      return `Every day at ${at}`;
     case 'before_deadline':
       return `${listWords((schedule.days_before || []).map(String))} days before each VAT return, at ${at}`;
     case 'after_period_end':
@@ -47,11 +146,12 @@ export function scheduleLine(schedule) {
 
 /** The bot card's subtitle: its schedules, then what it checks. */
 export function botSummary(draft = {}) {
+  const agent = agentMeta(draft.agent);
   const when = (draft.schedules || []).map(scheduleLine).filter(Boolean);
   const watches = draft.watches || [];
-  const what = watches.length >= ALL_WATCHES.length
+  const what = watches.length >= agent.watches.length
     ? 'every check on'
-    : listWords(watches.map((w) => WATCH_SHORT[w]).filter(Boolean));
+    : listWords(watches.map((w) => agent.copy?.watch_short?.[w]).filter(Boolean));
   const orgs = (draft.org_ids || []).length;
   return [when.join(' + ') || 'No schedule yet', what, orgs > 1 ? `${orgs} organizations` : '']
     .filter(Boolean).join(' · ');
@@ -125,52 +225,7 @@ export function runText(run) {
   return run.summary?.headline || '';
 }
 
-/** review_vat rule names in words, for findings lists. */
-export const RULE_LABEL = {
-  same_number: 'Bill may be recorded twice',
-  same_total_near_date: 'Bill may be recorded twice',
-  similar_vendor_same_day: 'Bill may be recorded twice',
-  vat_rate_not_standard: 'VAT is not 0% or 5%',
-  vat_wrong_sign: 'VAT and amount have opposite signs',
-  vat_without_amount: 'VAT with no amount',
-  missing_supplier: 'Bill with no supplier',
-  missing_number: 'Bill with no number',
-  future_date: 'Bill dated in the future',
-  large_for_supplier: "Far above the supplier's usual bill",
-  large_one_off_supplier: "A supplier's only bill, and a large one",
-  vat_zero: 'No VAT on an amount',
-  round_amount: 'Round amount',
-  supplier_trn_invalid: "Supplier's TRN missing or wrong",
-};
-
 export const TRIGGER_LABEL ={ schedule: 'Scheduled', first_run: 'First run', manual: 'Run now', event: 'New document' };
-
-/** The checks a VAT bot can run, grouped as the builder shows them. Ids match bots/watches.py. */
-export const WATCH_INFO = [
-  { id: 'duplicate_bill', side: 'purchases', label: 'A bill looks recorded twice',
-    desc: 'Same number, or same total from the same supplier a few days apart.' },
-  { id: 'vat_rate_wrong', side: 'purchases', label: 'VAT on a bill is not 0% or 5%',
-    desc: 'Wrong rate, negative VAT, or VAT with no amount.' },
-  { id: 'bill_missing_details', side: 'purchases', label: 'A bill is missing its supplier or number, or is dated in the future',
-    desc: "These bills can't support a VAT claim." },
-  { id: 'unusual_bill', side: 'purchases', label: "A bill far above the supplier's usual amount",
-    desc: "Compared with that supplier's past bills." },
-  { id: 'sales_vat_wrong', side: 'sales', label: 'A sales invoice with wrong or no output VAT',
-    desc: "Zero VAT where 5% is expected, or a rate that isn't 0% or 5%." },
-];
-
-/** Short names for the preview's per-check bars. */
-export const WATCH_BAR = {
-  duplicate_bill: 'Recorded twice', vat_rate_wrong: 'VAT not 0% or 5%', bill_missing_details: 'Missing details',
-  unusual_bill: 'Unusually large', sales_vat_wrong: 'Sales VAT wrong',
-};
-
-/** The tag and the "Runs" line on each template card. */
-export const TEMPLATE_META = {
-  vat_weekly_digest: { tag: 'Most popular', runs: 'Mondays, 08:00' },
-  vat_return_reminder: { tag: 'Never miss a deadline', runs: 'Before each return, 09:00' },
-  vat_full_watch: { tag: 'Everything on', runs: 'Mondays + before returns' },
-};
 
 /** "Weekly · Monday 09:00", for the chips under "Here's what we understood". */
 export function scheduleChip(schedule) {
@@ -178,6 +233,7 @@ export function scheduleChip(schedule) {
   const at = schedule.time || '08:00';
   if (schedule.kind === 'weekly') return `Weekly · ${DAY_NAMES[schedule.day] || ''} ${at}`.replace('  ', ' ');
   if (schedule.kind === 'monthly') return `Monthly · ${ordinal(schedule.day_of_month || 1)}, ${at}`;
+  if (schedule.kind === 'daily') return `Daily · ${at}`;
   if (schedule.kind === 'before_deadline') return `${listWords((schedule.days_before || []).map(String))} days before each return`;
   if (schedule.kind === 'after_period_end') return `${schedule.days_after || 0} days after each period`;
   return '';

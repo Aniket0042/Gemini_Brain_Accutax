@@ -114,6 +114,13 @@ def next_runs(
                     if found >= count + 1:
                         break
 
+        elif s.kind == "daily":
+            for day_offset in range(count + 2):
+                cand_date = now.date() + dt.timedelta(days=day_offset)
+                cand_dt = dt.datetime(cand_date.year, cand_date.month, cand_date.day, shour, smin, tzinfo=tz)
+                if cand_dt > now:
+                    candidates.append(RunTime(at=cand_dt, schedule_index=s_idx, reason="daily"))
+
         elif s.kind == "before_deadline":
             if not s.days_before:
                 continue

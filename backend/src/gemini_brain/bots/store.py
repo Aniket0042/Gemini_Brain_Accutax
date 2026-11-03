@@ -377,6 +377,7 @@ def upsert_findings(
             WHEN ai_bot_findings.state = 'dismissed' THEN 'dismissed'
             ELSE EXCLUDED.state
         END,
+        rule = EXCLUDED.rule,
         amount = EXCLUDED.amount,
         detail = COALESCE(EXCLUDED.detail, ai_bot_findings.detail),
         last_seen_run = EXCLUDED.last_seen_run,

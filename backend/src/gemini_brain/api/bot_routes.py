@@ -1,4 +1,5 @@
-"""bot_routes.py — FastAPI routes for the VAT bot (Phase 1 of docs/VAT_BOT_IMPLEMENTATION_PLAN.md).
+"""bot_routes.py — FastAPI routes for bots (docs/VAT_BOT_IMPLEMENTATION_PLAN.md; per agent since
+docs/BOT_AGENTS_AND_AP_PLAN.md task A5).
 """
 from __future__ import annotations
 
@@ -45,7 +46,7 @@ from gemini_brain.api.models import (
     UpdateBotRequest,
     WatchItem,
 )
-from gemini_brain.bots import cost, draft as bot_draft, monitor, preview, schedule, store, templates, validate, watches
+from gemini_brain.bots import agents as bot_agents, cost, draft as bot_draft, monitor, preview, schedule, store, templates, validate, watches
 from gemini_brain.bots import scheduler as bot_scheduler
 from gemini_brain.bots.schema import BotDraft, BotIssue
 from gemini_brain.config.settings import settings
@@ -86,6 +87,18 @@ def _enrich_draft(draft: BotDraft, issues: List[BotIssue], user_id: int) -> Draf
     )
 
 
+def _agent_or_404(agent: str) -> bot_agents.BotAgent:
+    try:
+        return bot_agents.get(agent)
+    except KeyError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown agent {agent!r}")
+
+
+@router.get("/agents", summary="The bot agents: their checks, templates, schedule kinds and words for the screens")
+def get_bot_agents(current_user: CurrentUser = Depends(get_current_user)) -> Any:
+    return JSONResponse(content={"agents": [bot_agents.public(a) for a in bot_agents.all_agents()]})
+
+
 @router.get(
     "/templates",
     response_model=BotTemplatesResponse,
@@ -95,6 +108,7 @@ def get_templates(
     agent: str = Query(default="vat"),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> BotTemplatesResponse:
+    _agent_or_404(agent)
     tmpl_list = templates.all_templates(agent=agent)
     return BotTemplatesResponse(
         templates=[
@@ -108,15 +122,14 @@ def get_templates(
 @router.get(
     "/watches",
     response_model=BotWatchesResponse,
-    summary="List VAT checks (watches) available for a bot",
+    summary="List the checks (watches) available for a bot of this agent",
 )
 def get_watches(
     agent: str = Query(default="vat"),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> BotWatchesResponse:
-    if agent != "vat":
-        return BotWatchesResponse(watches=[])
-    all_w = watches.all_watches()
+    _agent_or_404(agent)
+    all_w = watches.all_watches(agent)
     return BotWatchesResponse(
         watches=[
             WatchItem(id=w.id, label=w.label, side=w.side, default_on=w.default_on)
@@ -135,7 +148,7 @@ def draft_from_template(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> DraftResponse:
     try:
-        tmpl = templates.get(payload.template_id)
+        tmpl = templates.get(payload.template_id, payload.agent)
     except KeyError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -167,6 +180,8 @@ def draft_from_sentence(
     payload: FromSentenceRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> DraftResponse:
+    if payload.agent not in bot_agents.keys():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown agent {payload.agent!r}")
     if payload.org_ids:
         authorize_org_scope(payload.org_ids, current_user, action="bots.from_sentence")
 
@@ -188,6 +203,7 @@ def draft_from_sentence(
                 payload.text,
                 allowed_orgs=allowed_orgs,
                 current_org_ids=current_orgs,
+                agent=payload.agent,
             )
         except ValueError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -204,13 +220,13 @@ def draft_from_chat(
     payload: FromChatRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> DraftResponse:
-    if payload.agent != "vat":
+    if payload.agent not in bot_agents.keys():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="agent must be 'vat'",
+            detail=f"Unknown agent {payload.agent!r}",
         )
     sentence = "A bot that regularly does this: " + payload.question.strip()
-    sub_payload = FromSentenceRequest(text=sentence, org_ids=payload.org_ids)
+    sub_payload = FromSentenceRequest(text=sentence, org_ids=payload.org_ids, agent=payload.agent)
     return draft_from_sentence(sub_payload, current_user)
 
 
@@ -419,7 +435,7 @@ def mark_inbox_read(
 
 
 # Fixed paths go before /{bot_id}, or FastAPI reads "approvals" as a bot id.
-@router.get("/summary", summary="Numbers for the bots home: next run, open problems, next VAT return, usage")
+@router.get("/summary", summary="Numbers for the bots home: next run, usage, and each agent's own cards")
 def bots_summary(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> Any:
@@ -429,37 +445,31 @@ def bots_summary(
     upcoming = sorted((b for b in active if b.get("next_run_at")), key=lambda b: b["next_run_at"])
     next_run = {"at": upcoming[0]["next_run_at"], "bot_id": upcoming[0]["id"], "bot_name": upcoming[0]["name"]}         if upcoming else None
 
-    # Open problems across the user's bots, split as the home card shows them.
-    duplicate_rules = set(watches.get("duplicate_bill").rules)
-    open_total = new_total = duplicates = 0
+    # Each agent's own cards, for the agents the user has bots of (VAT when there are none yet).
+    findings_by_agent: Dict[str, List[Dict[str, Any]]] = {}
     for b in bots:
-        for f in store.get_findings(b["id"]):
-            if f["state"] not in ("new", "seen"):
-                continue
-            open_total += 1
-            new_total += f["state"] == "new"
-            duplicates += f["rule"] in duplicate_rules
-
-    # The next VAT return of the organization the bots cover first (else the user's first), from the books.
-    orgs = [o for b in bots for o in b["org_ids"]] or list(current_user.allowed_org_ids or [])[:1]
-    next_return = None
-    if orgs:
+        findings_by_agent.setdefault(b.get("agent") or "vat", []).extend(store.get_findings(b["id"]))
+    cards: Dict[str, List[Dict[str, Any]]] = {}
+    for key in (sorted(findings_by_agent) or ["vat"]):
         try:
-            res = vat_return_tool.run({"which": "next_due"}, organization_ids=[orgs[0]],
-                                      subject=f"bot-home:{current_user.user_id}", deadline=time.monotonic() + 10)
-            o = (res.get("organizations") or [None])[0]
-            if o:
-                next_return = {"organization_id": o["organization_id"], "period": o["period"],
-                               "due_date": o["due_date"], "days_to_due": o["days_to_due"]}
-        except Exception:
-            logger.warning("Next VAT return for the bots home failed", exc_info=True)
+            agent = bot_agents.get(key)
+        except KeyError:
+            continue
+        if agent.summary_cards:
+            agent_bots = [b for b in bots if (b.get("agent") or "vat") == key]
+            cards[key] = agent.summary_cards(agent_bots, findings_by_agent.get(key, []),
+                                             list(current_user.allowed_org_ids or []),
+                                             f"bot-home:{current_user.user_id}")
+    vat_cards = {c["kind"]: c for c in cards.get("vat", [])}
+    open_problems = {k: v for k, v in (vat_cards.get("open_problems") or {}).items() if k != "kind"} or         {"total": 0, "new": 0, "duplicates": 0, "other": 0}
+    next_return = (vat_cards.get("vat_return") or {}).get("next_return")
 
     return JSONResponse(content={
         "bots": len(bots), "active": len(active), "max_bots": MAX_BOTS,
         "next_run": next_run,
-        "open_problems": {"total": open_total, "new": new_total, "duplicates": duplicates,
-                          "other": open_total - duplicates},
+        "open_problems": open_problems,
         "next_return": next_return,
+        "cards": cards,
         "credits": {"estimate_per_month": sum(b["monthly_credits"] or 0 for b in active),
                     "this_month": sum((b["overview"] or {}).get("credits_this_month", 0) for b in bots)},
     })

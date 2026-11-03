@@ -31,5 +31,6 @@ def test_get_template():
         get("non_existent_template")
 
 
-def test_templates_non_vat():
-    assert all_templates("ap") == []
+def test_templates_of_an_unknown_agent():
+    with pytest.raises(KeyError):
+        all_templates("nope")

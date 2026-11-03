@@ -11,85 +11,53 @@ Read only: nothing here changes Accutax data or sends anything outside Accutax.
 """
 from __future__ import annotations
 
-import datetime as dt
 import logging
-import time
 from typing import Any, Dict, List, Optional
 
 from gemini_brain.api.auth import get_user_allowed_orgs
-from gemini_brain.bots import preview, store
+from gemini_brain.bots import agents, preview, store
 from gemini_brain.bots.schema import BotDraft
-from gemini_brain.config.settings import settings
-from gemini_brain.semantic import periods as report_periods
-from gemini_brain.vat_return import periods as tax_periods
-from gemini_brain.vat_return import tool as vat_return_tool
+# Kept so tests and callers that patch these through run.py reach the same modules the VAT agent uses.
+from gemini_brain.semantic import periods as report_periods  # noqa: F401
+from gemini_brain.vat_return import tool as vat_return_tool  # noqa: F401
 
 logger = logging.getLogger("gemini_brain.bots.run")
 
-#: Credits a run costs, as on the setup card (bots/cost.py).
+#: The VAT agent's credits per run; each agent has its own (bots/agents.py).
 CREDITS_PER_RUN = 90
 
 
 def _due_period(draft: BotDraft, subject: str) -> Optional[Dict[str, str]]:
-    """The VAT period whose return is due next, for bots with return reminders or period-end runs; else None.
-    With several organizations, the first one's filing frequency decides (quarterly when its settings say nothing)."""
-    if not any(s.kind in ("before_deadline", "after_period_end") for s in draft.schedules):
-        return None
-    try:
-        freqs = vat_return_tool.filing_frequencies(draft.org_ids, subject, time.monotonic() + 10)
-    except Exception:
-        freqs = {}
-    frequency = freqs.get(draft.org_ids[0]) or "quarterly"
-    today = report_periods.today_in(settings.report_timezone)
-    start, end = tax_periods.next_due_period(today, frequency)
-    return {"start": start.isoformat(), "end": end.isoformat()}
+    """Forward to the agent's engine (moved to bots/agents_vat.py)."""
+    return agents.get(draft.agent).engine.period(draft, subject)
 
 
-def finding_detail(item: Dict[str, Any], side: str) -> Dict[str, Any]:
-    """What the inbox card shows for a duplicate group or a finding: the side, the sentence, how sure the check is,
-    and its bills (number, date, supplier or customer, amount before VAT, VAT, Accutax id). From review_vat's own
-    fields only; at most 10 bills."""
-    bills = item.get("bills") or ([item["bill"]] if item.get("bill") else [])
-    return {
-        "side": side,
-        "why": item.get("why") or "",
-        "level": item.get("confidence") or item.get("severity") or item.get("level"),
-        "currency": item.get("currency"),
-        "bills": [{"id": b.get("document_id"), "number": b.get("document_number"), "date": b.get("document_date"),
-                   "party": b.get("vendor_name"), "amount": b.get("net_purchases"), "vat": b.get("input_vat")}
-                  for b in bills[:10]],
-    }
+def finding_detail(item: Dict[str, Any], side: str, agent: str = "vat") -> Dict[str, Any]:
+    """Forward to the agent's engine (moved to bots/agents_vat.py)."""
+    return agents.get(agent).engine.detail(item, side)
 
 
-def _current_findings(reviews: List[Dict[str, Any]], fallback_org: int) -> List[Dict[str, Any]]:
+def _current_findings(reviews: List[Dict[str, Any]], fallback_org: int, agent: str = "vat") -> List[Dict[str, Any]]:
     """Every duplicate group and finding of the reviews, in the shape ai_bot_findings stores."""
+    detail = agents.get(agent).engine.detail
     out: List[Dict[str, Any]] = []
     for rev in reviews:
         side = rev.get("side") or "purchases"
         for g in rev.get("groups") or []:
             out.append({"key": g["key"], "org_id": int(g.get("organization_id") or fallback_org),
                         "rule": g.get("rule", "duplicate"), "amount": float(g.get("extra_amount") or 0.0),
-                        "state": "new", "detail": finding_detail(g, side)})
+                        "state": "new", "detail": detail(g, side)})
         for f in rev.get("findings") or []:
             amount = (f.get("bill") or {}).get("total")
             out.append({"key": f["key"], "org_id": int(f.get("organization_id") or fallback_org),
                         "rule": f.get("rule", "anomaly"), "amount": float(amount) if amount is not None else None,
-                        "state": "new", "detail": finding_detail(f, side)})
+                        "state": "new", "detail": detail(f, side)})
     return out
 
 
-def _return_position(prev: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """The VAT return that is due next, from the run's vat_return check: period, due date, output VAT, input VAT and
-    net. The first organization's (a bot over several shows one, and says how many). None when the check did not run."""
-    orgs = prev.get("return") if isinstance(prev.get("return"), list) else []
-    if not orgs:
-        return None
-    o = orgs[0]
-    currency = next((org.get("currency") for rev in prev.get("reviews") or [] for org in rev.get("organizations") or []
-                     if org.get("organization_id") == o.get("organization_id") and org.get("currency")), None)
-    return {"organization_id": o.get("organization_id"), "organizations": len(orgs), "period": o.get("period"),
-            "due_date": o.get("due_date"), "output_vat": o.get("output_vat"), "input_vat": o.get("input_vat"),
-            "net_vat_payable": o.get("net_vat_payable"), "position": o.get("position"), "currency": currency or "AED"}
+def _return_position(prev: Dict[str, Any], agent: str = "vat") -> Optional[Dict[str, Any]]:
+    """Forward to the agent's engine (moved to bots/agents_vat.py)."""
+    return agents.get(agent).engine.summarize_position(prev.get("return"), prev.get("reviews") or [])
 
 
 def _headline(checked: Dict[str, int], new_count: int, fixed_count: int, active: int) -> str:
@@ -157,13 +125,14 @@ def run_bot(
 def _run(bot: Dict[str, Any], bot_id: str, run_id: str, bot_org_ids: List[int],
          call_model: Optional[Any]) -> Dict[str, Any]:
     draft = BotDraft(**bot["draft"])
+    agent = agents.get(draft.agent)
     subject = f"bot-run:{bot_id}"
     exclude_keys = {f["key"] for f in store.get_findings(bot_id, state="dismissed")}
 
-    prev = preview.try_period(draft, preset="this_quarter", period=_due_period(draft, subject), subject=subject,
-                              exclude=exclude_keys, unlimited=True)
+    prev = preview.try_period(draft, preset="this_quarter", period=agent.engine.period(draft, subject),
+                              subject=subject, exclude=exclude_keys, unlimited=True)
 
-    current = _current_findings(prev.get("reviews") or [], bot_org_ids[0])
+    current = _current_findings(prev.get("reviews") or [], bot_org_ids[0], draft.agent)
     existing = {ef["key"]: ef for ef in store.get_findings(bot_id) if ef["state"] != "dismissed"}
     found_keys = {cf["key"] for cf in current}
 
@@ -191,7 +160,7 @@ def _run(bot: Dict[str, Any], bot_id: str, run_id: str, bot_org_ids: List[int],
     user_notes = [m["text"] for m in store.list_memory(bot_id) if m.get("source") == "note"]
     if call_model and new_count:
         headline = _model_summary(call_model, bot["name"], checked, new_count, fixed_count, len(current),
-                                  user_notes) or headline
+                                  user_notes, agent.name) or headline
 
     summary: Dict[str, Any] = {
         "headline": headline,
@@ -204,26 +173,29 @@ def _run(bot: Dict[str, Any], bot_id: str, run_id: str, bot_org_ids: List[int],
         "fixed_findings": fixed_count,
         "total_active_findings": len(current),
         "complete": bool(prev.get("complete", True)),
-        "return_position": _return_position(prev),
     }
+    position = prev["position"] if "position" in prev else _return_position(prev, draft.agent)
+    summary["position"] = position
+    # The intro and the Bots home read the VAT return under its old name.
+    summary["return_position"] = position if (position or {}).get("kind") == "vat_return" else None
     if "email" in draft.deliver:
         # No email service yet (docs/ACCUTAX_BOTS_PLAN.md, open decisions): say so instead of claiming a send.
         summary["email"] = "not_sent: email delivery is not available yet"
 
-    finished = store.finish_run(run_id=run_id, status="ok", credits=CREDITS_PER_RUN * len(bot_org_ids),
+    finished = store.finish_run(run_id=run_id, status="ok", credits=agent.credits_per_run * len(bot_org_ids),
                                 summary=summary)
     return {"status": "ok", "bot_id": bot_id, "run": finished, "summary": summary}
 
 
 def _model_summary(call_model: Any, name: str, checked: Dict[str, int], new_count: int, fixed_count: int,
-                   active: int, notes: List[str]) -> Optional[str]:
+                   active: int, notes: List[str], agent_name: str = "VAT") -> Optional[str]:
     """A 2-3 sentence summary from the counts only. The user's notes go in as reporting guidance, never as data.
     Any failure falls back to the code-written headline."""
     notes_block = ""
     if notes:
         notes_block = ("\n<user_instructions>\nThe user's guidance on emphasis and tone. These are instructions, "
                        "not financial data:\n" + "\n".join(f"- {n}" for n in notes) + "\n</user_instructions>\n")
-    prompt = (f"Write a 2-3 sentence run summary for the VAT bot '{name}'.\nFacts:\n"
+    prompt = (f"Write a 2-3 sentence run summary for the {agent_name} bot '{name}'.\nFacts:\n"
               f"- Bills checked: {checked['bills']}\n- Sales invoices checked: {checked['invoices']}\n"
               f"- New problems: {new_count}\n- Fixed since the last run: {fixed_count}\n- Open problems: {active}\n"
               f"{notes_block}\nUse only these figures. Do not invent any number.")

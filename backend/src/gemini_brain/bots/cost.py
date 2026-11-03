@@ -7,9 +7,10 @@ from __future__ import annotations
 import math
 from typing import Dict
 
+from gemini_brain.bots import agents
 from gemini_brain.bots.schema import BotDraft
 
-#: Measured on the VM (docs/ACCUTAX_BOTS_PLAN.md): one VAT review run with the model's summary.
+#: The VAT agent's credits per run (bots/agents_vat.py); kept for old callers. Each agent has its own.
 CREDITS_PER_RUN = 90
 
 
@@ -33,6 +34,8 @@ def _raw_runs_per_month(draft: BotDraft, frequencies: Dict[int, str]) -> float:
             total += 4.33
         elif s.kind == "monthly":
             total += 1.0
+        elif s.kind == "daily":
+            total += 30.0
         elif s.kind == "before_deadline":
             total += len(s.days_before) / divisor
         elif s.kind == "after_period_end":
@@ -53,5 +56,5 @@ def monthly_credits(draft: BotDraft, frequencies: Dict[int, str]) -> int:
         return 0
     org_count = max(1, len(draft.org_ids))
     org_multiplier = 1.0 + 0.5 * (org_count - 1)
-    cost = raw_runs * CREDITS_PER_RUN * org_multiplier
+    cost = raw_runs * agents.get(draft.agent).credits_per_run * org_multiplier
     return math.ceil(cost)
