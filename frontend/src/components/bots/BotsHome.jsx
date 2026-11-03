@@ -5,7 +5,8 @@ import { agentMeta, allBotAgents, botStatus, botSummary, credits, longDate, peri
 import './bots.css';
 import './bots-pages.css';
 
-const TEMPLATE_ICONS = { vat_weekly_digest: Calendar, vat_return_reminder: Clock, vat_full_watch: Layers };
+const TEMPLATE_ICONS = { vat_weekly_digest: Calendar, vat_return_reminder: Clock, vat_full_watch: Layers,
+  ap_weekly_check: Calendar, ap_pay_run_prep: Clock, ap_daily_watch: Layers };
 
 /** The bot card's icon: a calendar for reminder-only bots, a shield for the rest. */
 function BotIcon({ bot }) {
@@ -97,6 +98,10 @@ function BotCard({ bot, onOpen, onToggle, onEdit }) {
   );
 }
 
+function money(n, currency = 'AED') {
+  return `${currency} ${Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+}
+
 function Stat({ label, value, note, tone }) {
   return (
     <div className="bh-stat">
@@ -122,8 +127,18 @@ export default function BotsHome({ bots = [], summary, token = '', inboxNew = 0,
       .then((lists) => setTemplates(lists.flat()));
   }, [token, agentKeys]);
 
-  const open = summary?.open_problems;
+  // Each agent's cards from the summary; the old VAT-only fields are the fallback.
+  const cards = summary?.cards || {};
+  const cardOf = (agent, kind) => (cards[agent] || []).find((c) => c.kind === kind);
+  const openCards = Object.keys(cards).map((a) => cardOf(a, 'open_problems')).filter(Boolean);
+  const open = openCards.length
+    ? openCards.reduce((t, c) => ({ total: t.total + c.total, new: t.new + c.new, duplicates: t.duplicates + c.duplicates,
+      other: t.other + c.other }), { total: 0, new: 0, duplicates: 0, other: 0 })
+    : summary?.open_problems;
+  const problemWord = Object.keys(cards).length > 1 ? 'problem' : (agentMeta(Object.keys(cards)[0] || 'vat').copy?.problem_word || 'problem');
   const ret = summary?.next_return;
+  const payables = cardOf('ap', 'payables')?.position;
+  const showReturn = Boolean(cards.vat) || !cards.ap;
   const reminder = bots.find((b) => b.status === 'active' && (b.draft?.schedules || []).some((s) => s.kind === 'before_deadline'));
   const max = summary?.max_bots || 10;
 
@@ -157,14 +172,24 @@ export default function BotsHome({ bots = [], summary, token = '', inboxNew = 0,
         <Stat
           label="Open problems"
           value={open ? <>{open.total}{open.new > 0 && <span className="bh-stat-new"> · {open.new} new</span>}</> : '—'}
-          note={open ? `${open.duplicates} possible duplicate${open.duplicates === 1 ? '' : 's'} · ${open.other} other ${agentMeta('vat').copy?.problem_word || 'problem'}${open.other === 1 ? '' : 's'}` : ''}
+          note={open ? `${open.duplicates} possible duplicate${open.duplicates === 1 ? '' : 's'} · ${open.other} other ${problemWord}${open.other === 1 ? '' : 's'}` : ''}
           tone={open?.new ? 'warning' : undefined}
         />
-        <Stat
-          label="Next VAT return"
-          value={ret ? `${periodLabel(ret.period)} · due ${longDate(ret.due_date)}` : '—'}
-          note={reminder?.next_run_at ? `First reminder ${shortDay(reminder.next_run_at)}` : ret ? `${ret.days_to_due} days to go` : ''}
-        />
+        {showReturn && (
+          <Stat
+            label="Next VAT return"
+            value={ret ? `${periodLabel(ret.period)} · due ${longDate(ret.due_date)}` : '—'}
+            note={reminder?.next_run_at ? `First reminder ${shortDay(reminder.next_run_at)}` : ret ? `${ret.days_to_due} days to go` : ''}
+          />
+        )}
+        {cards.ap && (
+          <Stat
+            label="Bills due in 7 days"
+            value={payables ? `${money(payables.due_next_7_days, payables.currency)} · ${payables.due_next_7_days_count}` : '—'}
+            note={payables ? `${money(payables.overdue, payables.currency)} overdue · ${payables.overdue_count} bill${payables.overdue_count === 1 ? '' : 's'}` : ''}
+            tone={payables?.overdue_count ? 'warning' : undefined}
+          />
+        )}
         <Stat
           label="Bot usage"
           value={summary ? `≈ ${credits(summary.credits.estimate_per_month)} credits / month` : '—'}
@@ -209,7 +234,7 @@ export default function BotsHome({ bots = [], summary, token = '', inboxNew = 0,
         <div className="bh-template is-soon">
           <span className="bh-template-icon"><Bot size={16} /></span>
           <span className="bh-template-title">More agents <span className="bh-pill">Soon</span></span>
-          <span className="bh-template-sub">Payables, collections and cash bots will appear here.</span>
+          <span className="bh-template-sub">Collections and cash bots will appear here.</span>
         </div>
       </div>
     </div>

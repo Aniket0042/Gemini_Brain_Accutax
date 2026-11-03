@@ -111,6 +111,12 @@ def generate_finding_sentence(
     if rule in ("unusual_bill", "large_for_supplier", "large_one_off_supplier"):
         return f"Bill #{doc_num} from {supplier} ({amount_str}) is unusually large or unfamiliar."
 
+    if rule == "new_supplier_large":
+        return finding.get("why") or f"Bill #{doc_num} is the first from {supplier}, a new supplier ({amount_str})."
+
+    if rule in ("bill_overdue", "bill_due_soon"):
+        return finding.get("why") or f"Bill #{doc_num} from {supplier} is {'overdue' if rule == 'bill_overdue' else 'due soon'}."
+
     if rule in ("sales_vat_wrong", "vat_zero"):
         return f"Sales invoice #{doc_num} has incorrect or zero output VAT ({amount_str})."
 

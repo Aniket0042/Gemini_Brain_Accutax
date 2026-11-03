@@ -665,6 +665,7 @@ class BotInboxResponse(BaseModel):
     counts: Dict[str, int] = Field(default_factory=dict)
     bots: List[Dict[str, Any]] = Field(default_factory=list)
     at_stake: List[Dict[str, Any]] = Field(default_factory=list)
+    at_stake_by_agent: Dict[str, List[Dict[str, Any]]] = Field(default_factory=dict)
     fixed_this_week: List[Dict[str, Any]] = Field(default_factory=list)
     runs: List[Dict[str, Any]] = Field(default_factory=list)
     findings: List[Dict[str, Any]] = Field(default_factory=list)

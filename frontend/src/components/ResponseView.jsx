@@ -6,6 +6,7 @@ import { AnswerProvenance } from './AnswerProvenance';
 import { BlockRenderer, hasPortedBlocks, chatFacingBlocks } from './blocks/BlockRenderer';
 import { AgentBadge } from './AgentsPanel';
 import BotIntroMessage from './bots/BotIntroMessage';
+import { allBotAgents } from './bots/botText';
 import { AgentRunCard } from './AgentRun';
 import { citationSources, linkCitations, citationLinkRenderer } from './citations';
 import { MarkdownLink } from './markdownLinks';
@@ -211,13 +212,10 @@ const AssistantResponseCard = ({
   const privacyBlock = Array.isArray(allBlocks) ? allBlocks.find((b) => b?.type === 'privacy') : null;
   const sensitiveBlock = Array.isArray(allBlocks) ? allBlocks.find((b) => b?.type === 'sensitive_notice') : null;
   const agentBlock = Array.isArray(allBlocks) ? allBlocks.find((b) => b?.type === 'agent_badge') : null;
-  const isVatAgent = Boolean(
-    msg.agent === 'vat' ||
-    msg.agentRun?.agent_key === 'vat' ||
-    agentBlock?.key === 'vat' ||
-    responseData?.agent_key === 'vat' ||
-    responseData?.agent === 'vat'
-  );
+  // The answer's agent, when bots exist for it (VAT, AP): its answers get "Make this a bot".
+  const answerAgent = msg.agent || msg.agentRun?.agent_key || agentBlock?.key || responseData?.agent_key
+    || (typeof responseData?.agent === 'string' ? responseData.agent : responseData?.agent?.key);
+  const botAgentKey = allBotAgents().some((a) => a.key === answerAgent) ? answerAgent : null;
   const sensitiveKinds = sensitiveBlock?.kinds || msg.sensitiveRemoved;
   const blocks = Array.isArray(allBlocks)
     ? allBlocks.filter((b) => b?.type !== 'privacy' && b?.type !== 'sensitive_notice' && b?.type !== 'agent_badge')
@@ -405,11 +403,11 @@ const AssistantResponseCard = ({
                 </button>
               )}
 
-              {isVatAgent && onMakeBot && (
+              {botAgentKey && onMakeBot && (
                 <button
                   type="button"
                   className="btn-make-bot"
-                  onClick={() => onMakeBot({ mode: 'chat', question: userQuery })}
+                  onClick={() => onMakeBot({ mode: 'chat', question: userQuery, agent: botAgentKey })}
                   title="Create a scheduled bot from this check"
                 >
                   <Bot size={13} />

@@ -1,0 +1,380 @@
+[
+  {
+    "id": "ap01",
+    "category": "overdue",
+    "sentence": "Tell me every morning about bills that are overdue",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "daily",
+      "watches": [
+        "bill_overdue"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ap02",
+    "category": "due_soon",
+    "sentence": "Every Thursday at 9am, show me the bills due next week",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "thu",
+      "time": "09:00",
+      "watches": [
+        "bill_due_soon"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ap03",
+    "category": "duplicates",
+    "sentence": "Every Monday, check my bills for duplicates so we don't pay twice",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "mon",
+      "watches": [
+        "duplicate_bill"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ap04",
+    "category": "new_supplier",
+    "sentence": "Warn me every day about a large bill from a new supplier",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "daily",
+      "watches": [
+        "new_supplier"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ap05",
+    "category": "daily",
+    "sentence": "Every day at 7am check for late bills and alert me",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "daily",
+      "time": "07:00",
+      "watches": [
+        "bill_overdue"
+      ],
+      "deliver_contains": "bell",
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ap06",
+    "category": "weekly",
+    "sentence": "Each Friday at 16:00 tell me what bills are coming due",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "fri",
+      "time": "16:00",
+      "watches": [
+        "bill_due_soon"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ap07",
+    "category": "monthly",
+    "sentence": "On the 1st of each month list unpaid bills that are overdue",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "monthly",
+      "watches": [
+        "bill_overdue"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ap08",
+    "category": "two_watches",
+    "sentence": "Every Monday at 8am, check for duplicate bills and anything overdue",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "mon",
+      "time": "08:00",
+      "watches": [
+        "duplicate_bill",
+        "bill_overdue"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ap09",
+    "category": "two_watches",
+    "sentence": "Daily: overdue bills and bills due in the next few days",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "daily",
+      "watches": [
+        "bill_overdue",
+        "bill_due_soon"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ap10",
+    "category": "unusual",
+    "sentence": "Every Wednesday flag bills that are much bigger than usual",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "wed",
+      "watches": [
+        "unusual_bill"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ap11",
+    "category": "new_vendor",
+    "sentence": "Each Monday tell me about new vendors that sent big bills",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "mon",
+      "watches": [
+        "new_supplier"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ap12",
+    "category": "org_named",
+    "sentence": "For Apex Holdings, every morning tell me which bills are overdue",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "daily",
+      "watches": [
+        "bill_overdue"
+      ],
+      "org_ids": [
+        2
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ap13",
+    "category": "org_unknown",
+    "sentence": "For Zenith Trading, check overdue bills every Monday",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "weekly",
+      "has_question_or_issue_for_org": true,
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ap14",
+    "category": "email",
+    "sentence": "Email me every Tuesday a list of bills due this week",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "tue",
+      "watches": [
+        "bill_due_soon"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ap15",
+    "category": "pay_run",
+    "sentence": "Help me prepare the pay run every Thursday",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "thu",
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ap16",
+    "category": "missing",
+    "sentence": "Every Sunday check bills with missing supplier or number",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "sun",
+      "watches": [
+        "bill_missing_details"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ap17",
+    "category": "vague",
+    "sentence": "Keep an eye on my bills",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ap18",
+    "category": "not_bot",
+    "sentence": "What is my total payables balance right now?",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "is_bot": false
+    }
+  },
+  {
+    "id": "ap19",
+    "category": "not_bot",
+    "sentence": "Which supplier did we pay the most last quarter?",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "is_bot": false
+    }
+  },
+  {
+    "id": "ap20",
+    "category": "not_bot",
+    "sentence": "How do I record a supplier credit note?",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "is_bot": false
+    }
+  }
+]

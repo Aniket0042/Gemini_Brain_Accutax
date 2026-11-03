@@ -55,6 +55,9 @@ export default function BotIntroMessage({ msg, onOpenInbox, onEditBot, onOpenBot
   const groups = s.groups_found || 0;
   const problems = s.findings_found || 0;
   const rp = s.return_position;
+  // The AP bot's box: what is overdue and what falls due in the next 7 days (position.kind "payables").
+  const pay = s.position?.kind === 'payables' ? s.position : null;
+  const ap = (bot.agent || bot.draft?.agent) === 'ap';
   const word = agentMeta(bot.agent || bot.draft?.agent).copy?.problem_word || 'problem';
   const total = groups + problems;
   const schedules = (bot.draft?.schedules || []).map((x) => scheduleLine(x).replace(/^Every /, 'every ')).filter(Boolean);
@@ -84,7 +87,7 @@ export default function BotIntroMessage({ msg, onOpenInbox, onEditBot, onOpenBot
             <p className="bim-text">
               Hi, I'm {bot.name}. I checked {plural(bills, 'bill', 'bills')}
               {invoices ? ` and ${plural(invoices, 'sales invoice', 'sales invoices')}` : ''}
-              {s.period?.start ? ` for ${periodWords(s.period)}` : ''}.{' '}
+              {ap ? ' from the last 90 days' : s.period?.start ? ` for ${periodWords(s.period)}` : ''}.{' '}
               {total === 0
                 ? 'Everything looks right.'
                 : `I found ${groups ? plural(groups, 'likely duplicate group', 'likely duplicate groups') : ''}${groups && problems ? ' and ' : ''}${problems ? plural(problems, groups ? `other ${word}` : word, groups ? `other ${word}s` : `${word}s`) : ''}.`}
@@ -92,9 +95,33 @@ export default function BotIntroMessage({ msg, onOpenInbox, onEditBot, onOpenBot
             <div className="bim-stats">
               <div><strong>{bills + invoices}</strong><span>documents checked</span></div>
               <div><strong>{groups}</strong><span>duplicate groups</span></div>
-              <div><strong>{problems}</strong><span>{word}s</span></div>
+              <div><strong>{problems}</strong><span>{ap ? 'to review' : `${word}s`}</span></div>
               {rp && <div><strong>{money(rp.net_vat_payable, rp.currency)}</strong><span>net VAT so far</span></div>}
+              {pay && <div><strong>{money(pay.due_next_7_days, pay.currency)}</strong><span>due in 7 days</span></div>}
             </div>
+            {pay && (
+              <div className="bim-return">
+                <div className="bim-return-head">
+                  <strong>Payables · due in the next 7 days</strong>
+                  <span className="bd-muted">As of {longDate(pay.as_of)}{pay.organizations > 1 ? ` · ${pay.organizations} organizations` : ''}</span>
+                </div>
+                <dl>
+                  <dt>Due in 7 days</dt>
+                  <dd>{money(pay.due_next_7_days, pay.currency)} · {plural(pay.due_next_7_days_count || 0, 'bill', 'bills')}</dd>
+                  <dt>Overdue</dt>
+                  <dd><strong>{money(pay.overdue, pay.currency)}</strong> · {plural(pay.overdue_count || 0, 'bill', 'bills')}</dd>
+                  {pay.no_due_date_count > 0 && (
+                    <>
+                      <dt>No due date</dt>
+                      <dd>{money(pay.no_due_date, pay.currency)} · {plural(pay.no_due_date_count, 'bill', 'bills')}</dd>
+                    </>
+                  )}
+                </dl>
+                {pay.no_due_date_count > 0 && (
+                  <p className="bd-muted">Bills with no due date can't be overdue or due soon, so I can't warn you about them. Add due dates in Accutax to have them checked.</p>
+                )}
+              </div>
+            )}
             {rp && (
               <div className="bim-return">
                 <div className="bim-return-head">
@@ -114,7 +141,7 @@ export default function BotIntroMessage({ msg, onOpenInbox, onEditBot, onOpenBot
 
         <p className="bim-text">
           From now on I'll run {schedules.length ? listWords(schedules) : 'when you run me'}, and send results to your {where}.
-          I only read your books; I never change a bill or file anything.
+          {ap ? 'I only read your books; I never pay or change a bill.' : 'I only read your books; I never change a bill or file anything.'}
         </p>
 
         <div className="bim-actions">

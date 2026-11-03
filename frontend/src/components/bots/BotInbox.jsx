@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   AlertCircle, ArrowLeft, Bot, Building2, Check, CheckCheck, ChevronDown, ChevronUp, Copy, ExternalLink, FileText,
-  MessageSquare, Percent, RotateCcw,
+  Clock, MessageSquare, Percent, RotateCcw, UserPlus,
 } from 'lucide-react';
 import { agentMeta, ruleTitle, runTime, shortDay, TRIGGER_LABEL } from './botText';
 import './bots.css';
@@ -25,6 +25,8 @@ function plain(n) {
 
 function iconFor(f) {
   if (DUPLICATE_RULES.has(f.rule)) return Copy;
+  if (f.rule === 'bill_overdue' || f.rule === 'bill_due_soon') return Clock;
+  if (f.rule === 'new_supplier_large') return UserPlus;
   if (f.side === 'sales') return FileText;
   if (/vat/.test(f.rule)) return Percent;
   return AlertCircle;
@@ -49,6 +51,15 @@ const title = (f) => ruleTitle(f);
  *  usually zero-rated). */
 function dismissLabel(f) {
   return agentMeta(f.agent).copy?.dismiss_labels?.[f.side || 'purchases']?.[f.rule] || 'Not a problem';
+}
+
+/** A fixed finding in the side panel. VAT: "Bill may be recorded twice B-1 from X no longer found"; agents with
+ *  their own words (AP): "Bill B-1 from X is no longer open". */
+function fixedLine(f, first) {
+  const text = agentMeta(f.agent).copy?.fixed_text;
+  const num = first.number ? ` ${first.number}` : '';
+  const from = first.party ? ` from ${first.party}` : '';
+  return text ? `Bill${num}${from} ${text}` : `${title(f)}${num}${from} no longer found`;
 }
 
 function openLabel(f) {
@@ -198,8 +209,9 @@ export default function BotInbox({ inbox, orgLabel = '', onBack, onMarkRead, onD
   const [botFilter, setBotFilter] = useState(null);
   const counts = inbox?.counts || {};
   const findings = inbox?.findings || [];
-  // The stake card speaks for the bots' agent (one card for now; per agent once a second agent exists).
-  const stakeCopy = agentMeta(findings[0]?.agent).copy || {};
+  // One stake card per agent the inbox has findings from: each agent's stake means something different.
+  const stakeAgents = [...new Set(findings.map((f) => f.agent || 'vat'))];
+  if (!stakeAgents.length) stakeAgents.push('vat');
 
   const shown = useMemo(() => findings.filter((f) => {
     if (botFilter && f.bot_id !== botFilter) return false;
@@ -284,13 +296,20 @@ export default function BotInbox({ inbox, orgLabel = '', onBack, onMarkRead, onD
             </ul>
           </section>
 
-          <section className="bd-side-card">
-            <span className="bb-eyebrow">{stakeCopy.stake_label}</span>
-            {(inbox?.at_stake || []).length === 0
-              ? <p className="bi-stake">AED 0.00</p>
-              : inbox.at_stake.map((s) => <p key={s.currency} className="bi-stake">{money(s.amount, s.currency)}</p>)}
-            <p className="bd-muted">{stakeCopy.stake_note}</p>
-          </section>
+          {stakeAgents.map((ag) => {
+            const copy = agentMeta(ag).copy || {};
+            // Older answers have no per-agent stake: then the one total belongs to VAT.
+            const stake = inbox?.at_stake_by_agent ? (inbox.at_stake_by_agent[ag] || []) : (inbox?.at_stake || []);
+            return (
+              <section key={ag} className="bd-side-card">
+                <span className="bb-eyebrow">{copy.stake_label}</span>
+                {stake.length === 0
+                  ? <p className="bi-stake">AED 0.00</p>
+                  : stake.map((s) => <p key={s.currency} className="bi-stake">{money(s.amount, s.currency)}</p>)}
+                <p className="bd-muted">{copy.stake_note}</p>
+              </section>
+            );
+          })}
 
           <section className="bd-side-card">
             <span className="bb-eyebrow">Fixed this week</span>
@@ -301,7 +320,7 @@ export default function BotInbox({ inbox, orgLabel = '', onBack, onMarkRead, onD
                   return (
                     <li key={`${f.bot_id}-${f.key}`}>
                       <Check size={13} />
-                      <span>{title(f)}{first.number ? ` ${first.number}` : ''}{first.party ? ` from ${first.party}` : ''} no longer found ({shortDay(f.updated_at)})</span>
+                      <span>{fixedLine(f, first)} ({shortDay(f.updated_at)})</span>
                     </li>
                   );
                 })}

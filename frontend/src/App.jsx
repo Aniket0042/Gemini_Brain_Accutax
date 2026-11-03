@@ -295,13 +295,14 @@ export default function App() {
   const reloadBots = async () => {
     const token = currentUser?.access_token;
     if (token) {
+      // The agents' words load on their own, so the bot pages have them even when the bot list does not load.
+      fetchBotAgents(token).then((r) => { setBotAgents(r.agents); setBotAgentsLoaded((n) => n + 1); }).catch(() => null);
       try {
         await migrateLocalBotsToServer(token);
         const serverBots = await fetchUserBots(token);
         setBots(serverBots);
         await reloadInbox();
         fetchBotsSummary(token).then(setBotsSummary).catch(() => null);
-        fetchBotAgents(token).then((r) => { setBotAgents(r.agents); setBotAgentsLoaded((n) => n + 1); }).catch(() => null);
         return;
       } catch (e) {
         console.warn('Failed to fetch server bots:', e);
@@ -362,13 +363,14 @@ export default function App() {
     setPage('inbox');
   };
 
-  // "Ask AccuTax" on an inbox finding: the VAT agent explains it in a chat, from what the bot found.
+  // "Ask AccuTax" on an inbox finding: the bot's own agent (VAT, AP) explains it in a chat, from what the bot found.
   const handleAskAboutFinding = (f) => {
     const bills = (f.detail?.bills || []).map((b) => [b.number, b.party, b.date].filter(Boolean).join(', ')).join('; ');
+    const ap = f.agent === 'ap';
     const question = `My bot ${f.bot_name} flagged this: ${f.rule_text || f.rule}. ${f.detail?.why || ''}`
-      + `${bills ? ` Documents: ${bills}.` : ''} Explain what it means for my VAT return and what I should do.`;
+      + `${bills ? ` Documents: ${bills}.` : ''} Explain what it means for ${ap ? 'my payables' : 'my VAT return'} and what I should do.`;
     setPage('chat');
-    handleSubmitQuery(question, { agent: 'vat' });
+    handleSubmitQuery(question, { agent: ap ? 'ap' : 'vat' });
   };
 
   // New bot: the Create page; a template or a chat question goes straight to the builder with its draft.
@@ -382,7 +384,7 @@ export default function App() {
     try {
       const res = startConfig.mode === 'template'
         ? await createDraftFromTemplate(startConfig.templateId, scopeOrgIds, token)
-        : await createDraftFromChat(startConfig.question, 'vat', scopeOrgIds, token);
+        : await createDraftFromChat(startConfig.question, startConfig.agent || 'vat', scopeOrgIds, token);
       setBuilderInit({ initial: res, botId: null, botStatus: null, fromChat: startConfig.mode === 'chat' });
       setPage('builder');
     } catch (e) {

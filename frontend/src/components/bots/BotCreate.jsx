@@ -8,7 +8,8 @@ import './bots-builder.css';
 
 const MAX_TEXT = 500;
 
-const TEMPLATE_ICONS = { vat_weekly_digest: Calendar, vat_return_reminder: Clock, vat_full_watch: Layers };
+const TEMPLATE_ICONS = { vat_weekly_digest: Calendar, vat_return_reminder: Clock, vat_full_watch: Layers,
+  ap_weekly_check: Calendar, ap_pay_run_prep: Clock, ap_daily_watch: Layers };
 
 /** The tip with its button name in bold, as the chat shows it. */
 function boldButton(text, name = 'Make this a bot') {

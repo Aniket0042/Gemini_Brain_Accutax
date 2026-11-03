@@ -1,6 +1,6 @@
 # Bots for more agents: make bots agent-agnostic, then build the AP bot
 
-Status: Part A built 2026-11-03 (not committed or deployed; VM acceptance check A10.2 still to do). Part B not built.
+Status: Part A built and deployed 2026-11-03 (658c026; org 27 September counts unchanged). Part B built 2026-11-03, not yet committed or deployed.
 Written 2026-11-02.
 
 Part A as built differs from the text below in three small ways: the engine's position is split into `position`
@@ -507,7 +507,29 @@ The summary stores both `position` and, for VAT, the old `return_position`; the 
 
 ### B12. Results
 
-(Fill in after B11.)
+Run 2026-11-03 on the VM, in process and read only, from the uncommitted Part B code.
+
+**Real data, org 27** (the three templates; the last 90 days, 5 Aug to 3 Nov 2026):
+
+| Template | Bills checked | Duplicate groups | Overdue | Due soon | New supplier | Unusual | Complete |
+|---|---|---|---|---|---|---|---|
+| `ap_weekly_check` | 171 | 41 | 0 | 0 | 0 | 0 | yes |
+| `ap_pay_run_prep` | 0 | 0 | 0 | 0 | | | yes |
+| `ap_daily_watch` | 171 | 41 | 0 | 0 | 0 | 0 | yes |
+
+Overdue and due soon are 0 because of the data, not the code: all 897 open bills of org 27 (AED 2,325,040) have **no
+due date**, and every test org (24 to 33) shows 0 overdue bills. The payables box therefore also reports open bills
+with no due date (`no_due_date`, `no_due_date_count`), and the intro says those cannot be checked until they get due
+dates. Overdue and due soon are covered by unit tests only until a book with due dates is available. The duplicate
+groups were looked at by eye (e.g. "The same supplier has 5 bills for 3,900.00, dated within 3 days").
+
+**Sentence to draft, one paid run** (`scripts/eval/bot_sentences.py --agent ap`, 20 sentences in
+`tests/data/bot_sentences_ap.json`): **20 of 20** right on schedule and checks, **0** invented organizations
+(target: 18 of 20, 0).
+
+Built differently from the text above: the stake card in the inbox is per agent (`at_stake_by_agent`), because a
+VAT amount and a "could be paid twice" amount must not be added up; and the preview counts bills per side as the
+largest count of its calls, since the AP calls read overlapping bills.
 
 ---
 

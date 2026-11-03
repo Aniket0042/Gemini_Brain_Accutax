@@ -62,9 +62,11 @@ def try_period(
             period_info = res["period"]
 
         if side == "sales":
-            invoices_checked += int(res.get("bills_checked") or 0)
+            invoices_checked = max(invoices_checked, int(res.get("bills_checked") or 0))
         else:
-            bills_checked += int(res.get("bills_checked") or 0)
+            # Several calls on one side (AP: the review, open bills, new suppliers) read overlapping bills, so the
+            # largest count stands for the side; VAT has one call per side, where this is the same as adding up.
+            bills_checked = max(bills_checked, int(res.get("bills_checked") or 0))
 
         gf = int(res.get("groups_found") or 0)
         ff = int(res.get("findings_found") or 0)

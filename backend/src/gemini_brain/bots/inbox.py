@@ -68,6 +68,7 @@ def build(findings: Sequence[Dict[str, Any]], runs: Sequence[Dict[str, Any]], bo
     counts = {"all": 0, "new": 0, "seen": 0, "fixed": 0, "dismissed": 0}
     by_bot: Dict[str, int] = defaultdict(int)
     stake: Dict[str, float] = defaultdict(float)
+    stake_by_agent: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
     fixed_week: List[Dict[str, Any]] = []
     week_ago = (now - dt.timedelta(days=7)).isoformat()
     for f in items:
@@ -78,6 +79,7 @@ def build(findings: Sequence[Dict[str, Any]], runs: Sequence[Dict[str, Any]], bo
             counts["all"] += 1
             by_bot[f["bot_id"]] += 1
             stake[f["currency"]] += f["at_stake"]
+            stake_by_agent[f["agent"]][f["currency"]] += f["at_stake"]
         elif state == "fixed" and (f.get("updated_at") or "") >= week_ago:
             fixed_week.append(f)
     return {
@@ -86,6 +88,9 @@ def build(findings: Sequence[Dict[str, Any]], runs: Sequence[Dict[str, Any]], bo
         "counts": counts,
         "bots": [{"id": b["id"], "name": b["name"], "open": by_bot.get(b["id"], 0)} for b in bots],
         "at_stake": [{"currency": c, "amount": round(a, 2)} for c, a in sorted(stake.items()) if a],
+        # Each agent's stake means something different (VAT wrong on the return, a bill paid twice): one card each.
+        "at_stake_by_agent": {ag: [{"currency": c, "amount": round(a, 2)} for c, a in sorted(cur.items()) if a]
+                              for ag, cur in stake_by_agent.items()},
         "fixed_this_week": fixed_week[:10],
         "runs": sorted(runs, key=lambda r: r.get("started_at") or "", reverse=True),
         "findings": items,

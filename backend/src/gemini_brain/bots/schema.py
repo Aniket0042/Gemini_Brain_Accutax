@@ -59,7 +59,7 @@ class BotDraft(BaseModel):
     @classmethod
     def validate_agent(cls, v: str) -> str:
         from gemini_brain.bots import agents
-        if v not in agents.keys():
+        if not agents.known(v):
             raise ValueError(f"unknown agent {v!r}")
         return v
 

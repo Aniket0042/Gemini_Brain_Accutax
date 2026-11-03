@@ -62,6 +62,9 @@ class BotAgent:
 
 _AGENTS: Dict[str, BotAgent] = {}
 _loaded = False
+_loading = False
+#: Every agent module; each registers itself on import.
+_MODULES = ("agents_vat", "agents_ap")
 
 
 def register(agent: BotAgent) -> None:
@@ -69,10 +72,21 @@ def register(agent: BotAgent) -> None:
 
 
 def _load() -> None:
-    global _loaded
+    global _loaded, _loading
     if not _loaded:
-        _loaded = True
-        from gemini_brain.bots import agents_vat  # noqa: F401  (registers itself)
+        _loaded = _loading = True
+        try:
+            import importlib
+            for name in _MODULES:
+                importlib.import_module(f"gemini_brain.bots.{name}")
+        finally:
+            _loading = False
+
+
+def known(key: str) -> bool:
+    """Whether a draft may name this agent. While the agent modules load, their own templates' drafts are allowed."""
+    _load()
+    return key in _AGENTS or _loading
 
 
 def get(key: str) -> BotAgent:

@@ -97,7 +97,7 @@ def test_draft_from_chat_success(mock_from_sent, mock_freq, auth_headers):
 def test_draft_from_chat_invalid_agent(auth_headers):
     resp = client.post(
         "/api/v1/bots/draft/from-chat",
-        json={"question": "Check bills", "agent": "ap", "org_ids": [101]},
+        json={"question": "Check bills", "agent": "nope", "org_ids": [101]},
         headers=auth_headers,
     )
     assert resp.status_code == 400

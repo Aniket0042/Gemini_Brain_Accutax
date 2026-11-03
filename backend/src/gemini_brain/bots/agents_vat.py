@@ -237,9 +237,16 @@ def finding_detail(item: Dict[str, Any], side: str) -> Dict[str, Any]:
         "level": item.get("confidence") or item.get("severity") or item.get("level"),
         "currency": item.get("currency"),
         "bills": [{"id": b.get("document_id"), "number": b.get("document_number"), "date": b.get("document_date"),
-                   "party": b.get("vendor_name"), "amount": b.get("net_purchases"), "vat": b.get("input_vat")}
+                   "party": b.get("vendor_name"), "amount": b.get("net_purchases"), "vat": b.get("input_vat"),
+                   # Payables fields (the AP bot), only when the item has them.
+                   **{out: b[src] for src, out in _PAYABLE_FIELDS if b.get(src) is not None}}
                   for b in bills[:10]],
     }
+
+
+#: Bill fields an AP finding carries beyond review_vat's, and their names on the inbox card.
+_PAYABLE_FIELDS = (("due_date", "due_date"), ("outstanding", "outstanding"), ("days_overdue", "days_overdue"),
+                   ("total", "total"))
 
 
 def due_period(draft: BotDraft, subject: str) -> Optional[Dict[str, str]]:

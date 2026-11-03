@@ -162,8 +162,10 @@ def _mock_call_model(system_prompt: str, messages: list, tools: list, **kwargs) 
     }
 
 
-def evaluate(mock: bool = False) -> Dict[str, Any]:
-    dataset_path = ROOT / "tests" / "data" / "bot_sentences.json"
+def evaluate(mock: bool = False, agent: str = "vat") -> Dict[str, Any]:
+    """`agent`: whose sentences and prompt; "ap" reads tests/data/bot_sentences_ap.json (BOT_AGENTS_AND_AP_PLAN B11)."""
+    name = "bot_sentences.json" if agent == "vat" else f"bot_sentences_{agent}.json"
+    dataset_path = ROOT / "tests" / "data" / name
     with open(dataset_path, "r", encoding="utf-8") as f:
         cases = json.load(f)
 
@@ -185,6 +187,7 @@ def evaluate(mock: bool = False) -> Dict[str, Any]:
             "text": case["sentence"],
             "allowed_orgs": allowed_orgs,
             "current_org_ids": current_org_ids,
+            "agent": agent,
         }
         if call_model is not None:
             kwargs["call_model"] = call_model
@@ -287,7 +290,8 @@ def evaluate(mock: bool = False) -> Dict[str, Any]:
     summary_table = "\n".join(table_lines)
     print(summary_table)
     print("\n" + "=" * 50)
-    print(f"Total: {passed_count}/{len(cases)} passed (target >= 22/25)")
+    target = "22/25" if agent == "vat" else "18/20"
+    print(f"Total: {passed_count}/{len(cases)} passed (target >= {target})")
     print(f"Invented organizations: {invented_orgs_count} (target: 0)")
     print("=" * 50)
 
@@ -303,8 +307,9 @@ def evaluate(mock: bool = False) -> Dict[str, Any]:
 def main():
     parser = argparse.ArgumentParser(description="Evaluate bot sentence parser")
     parser.add_argument("--mock", action="store_true", help="Use deterministic mock model")
+    parser.add_argument("--agent", default="vat", choices=["vat", "ap"], help="Which bot agent's sentences")
     args = parser.parse_args()
-    evaluate(mock=args.mock)
+    evaluate(mock=args.mock, agent=args.agent)
 
 
 if __name__ == "__main__":
