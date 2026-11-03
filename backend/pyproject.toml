@@ -47,6 +47,11 @@ vat_kb = [
     "beautifulsoup4>=4.12",
     "numpy>=1.26",
 ]
+# MCP connector for ChatGPT / Claude (python -m gemini_brain.mcp_server). Official SDK, MIT.
+# Install with: pip install -e "backend[mcp]"
+mcp = [
+    "mcp>=2.3,<3",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",

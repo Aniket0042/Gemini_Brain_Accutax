@@ -485,6 +485,30 @@ class GeminiBrainSettings(BaseSettings):
         description="JSON-lines file for PII_SENTINEL, relative to backend/. Rotates at 50 MB, keeping 5 files.",
     )
 
+    # MCP connector for ChatGPT / Claude (python -m gemini_brain.mcp_server). It runs as its own process and
+    # calls this API with the caller's own bearer, so org scoping, usage limits and audit stay in one place.
+    mcp_host: str = Field(default="127.0.0.1", description="MCP server bind host. Public traffic comes via nginx.")
+    mcp_port: int = Field(default=8012, description="MCP server port.")
+    mcp_upstream_url: str = Field(
+        default="http://127.0.0.1:8000",
+        description="Base URL of this API as the MCP server reaches it (no /api/v1). On the VM: http://127.0.0.1:8010.",
+    )
+    mcp_public_url: str = Field(
+        default="http://localhost:8012/mcp",
+        description="The MCP endpoint as clients see it, e.g. https://mcp.accutax.ai/mcp. The OAuth resource id.",
+    )
+    mcp_issuer_url: str = Field(
+        default="",
+        description="OAuth authorization server that issues tokens for the MCP server. Empty: the public URL's origin.",
+    )
+    mcp_allowed_hosts: str = Field(
+        default="",
+        description="Comma-separated Host headers the MCP server accepts (DNS-rebinding guard). Empty: localhost only.",
+    )
+    mcp_answer_timeout_seconds: float = Field(default=240.0, gt=0,
+                                              description="How long ask_accutax waits for the agent's answer.")
+    mcp_max_table_rows: int = Field(default=50, ge=1, description="Rows per table returned to the host model.")
+
     model_config = {
         # Anchored to the repository root rather than the process working
         # directory. A relative ".env" silently falls back to the defaults

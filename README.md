@@ -55,6 +55,22 @@ UI: `http://localhost:5174` (Vite proxies `/api` → backend; 5174 avoids clashi
 See `backend/deploy/provision.sh` and systemd unit `backend/deploy/gemini-brain-api.service`.
 Nginx serves `frontend/dist` and proxies `/api` to uvicorn on port 8010.
 
+## MCP connector (ChatGPT / Claude)
+
+`gemini_brain.mcp_server` exposes Accutax AI as read-only MCP tools (`list_organizations`, `ask_accutax`) over
+Streamable HTTP. It runs as its own process and calls this API with the caller's own bearer, so tenant
+isolation, usage limits and the org-access audit log are the API's.
+
+```bash
+cd backend
+pip install -e ".[mcp]"
+MCP_UPSTREAM_URL=http://127.0.0.1:8000 python -m gemini_brain.mcp_server   # serves http://127.0.0.1:8012/mcp
+```
+
+Phase 1 auth is a pasted Accutax AI bearer (`Authorization: Bearer <token>`), enough for MCP Inspector and
+Claude Code. ChatGPT and claude.ai need OAuth and a public HTTPS URL (Phase 2): set `MCP_PUBLIC_URL`,
+`MCP_ISSUER_URL` and `MCP_ALLOWED_HOSTS` for the domain.
+
 ## Tests
 
 ```bash
