@@ -1,3 +1,4 @@
+import { renderSheetText } from '../services/safeSheetPreview.mjs';
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Download, File, FileImage, FileSpreadsheet, FileText, X } from 'lucide-react';
@@ -69,10 +70,10 @@ function DocxBody({ blob }) {
     (async () => {
       try {
         const mod = await import('mammoth');
-        const convert = mod.convertToHtml || mod.default?.convertToHtml;
+        const convert = mod.extractRawText || mod.default?.extractRawText;
         const { value } = await convert({ arrayBuffer: await blob.arrayBuffer() });
         if (!cancelled && hostRef.current) {
-          hostRef.current.innerHTML = value;
+          hostRef.current.textContent = value;
           setStatus('');
         }
       } catch (err) {
@@ -85,7 +86,7 @@ function DocxBody({ blob }) {
   return (
     <div>
       {status && <p className="answer-canvas-empty">{status}</p>}
-      <div ref={hostRef} className="answer-canvas-docx markdown-body" />
+      <div ref={hostRef} className="answer-canvas-docx markdown-body" style={{ whiteSpace: 'pre-wrap' }} />
     </div>
   );
 }
@@ -102,8 +103,8 @@ function SheetBody({ blob, csv }) {
       try {
         const XLSX = await import('xlsx');
         const workbook = csv
-          ? XLSX.read(await blob.text(), { type: 'string' })
-          : XLSX.read(await blob.arrayBuffer(), { type: 'array' });
+          ? XLSX.read(await blob.text(), { type: 'string', sheetRows: 100, cellHTML: false })
+          : XLSX.read(await blob.arrayBuffer(), { type: 'array', sheetRows: 100, cellHTML: false });
         if (!cancelled) {
           setBook({ XLSX, workbook });
           setStatus('');
@@ -118,7 +119,7 @@ function SheetBody({ blob, csv }) {
   useEffect(() => {
     if (!book || !hostRef.current) return;
     const name = book.workbook.SheetNames[sheet];
-    hostRef.current.innerHTML = book.XLSX.utils.sheet_to_html(book.workbook.Sheets[name], { editable: false });
+    renderSheetText(hostRef.current, book.XLSX, book.workbook.Sheets[name]);
   }, [book, sheet]);
 
   const names = book?.workbook.SheetNames || [];

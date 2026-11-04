@@ -1,3 +1,4 @@
+import { renderSheetText } from '../../services/safeSheetPreview.mjs';
 import React, { useEffect, useRef, useState } from 'react';
 
 /**
@@ -20,7 +21,7 @@ export function SheetPreview({ artifact, token, format }) {
       try {
         const XLSX = await import('xlsx');
         const res = await fetch(`/api/v1/artifacts/${artifact.id}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          headers: token ? { ...{} } : {},
         });
         if (res.status === 410) {
           if (!cancelled) setStatus('This file expired. Ask again to regenerate it.');
@@ -31,12 +32,11 @@ export function SheetPreview({ artifact, token, format }) {
           return;
         }
         const workbook = format === 'csv'
-          ? XLSX.read(await res.text(), { type: 'string' })
-          : XLSX.read(await res.arrayBuffer(), { type: 'array' });
+          ? XLSX.read(await res.text(), { type: 'string', sheetRows: 100, cellHTML: false })
+          : XLSX.read(await res.arrayBuffer(), { type: 'array', sheetRows: 100, cellHTML: false });
         if (cancelled) return;
         const firstSheet = workbook.SheetNames[0];
-        const html = XLSX.utils.sheet_to_html(workbook.Sheets[firstSheet], { editable: false });
-        if (hostRef.current) hostRef.current.innerHTML = html;
+        if (hostRef.current) renderSheetText(hostRef.current, XLSX, workbook.Sheets[firstSheet]);
         setSheetNames(workbook.SheetNames);
         setStatus('');
       } catch (err) {

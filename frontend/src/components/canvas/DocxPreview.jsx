@@ -17,9 +17,9 @@ export function DocxPreview({ artifact, token }) {
     (async () => {
       try {
         const mod = await import('mammoth');
-        const convertToHtml = mod.convertToHtml || mod.default?.convertToHtml;
+        const extractText = mod.extractRawText || mod.default?.extractRawText;
         const res = await fetch(`/api/v1/artifacts/${artifact.id}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          headers: token ? { ...{} } : {},
         });
         if (res.status === 410) {
           if (!cancelled) setStatus('This file expired. Ask again to regenerate it.');
@@ -30,9 +30,9 @@ export function DocxPreview({ artifact, token }) {
           return;
         }
         const arrayBuffer = await res.arrayBuffer();
-        const { value: html } = await convertToHtml({ arrayBuffer });
+        const { value: text } = await extractText({ arrayBuffer });
         if (!cancelled && hostRef.current) {
-          hostRef.current.innerHTML = html;
+          hostRef.current.textContent = text;
           setStatus('');
         }
       } catch (err) {
@@ -45,7 +45,7 @@ export function DocxPreview({ artifact, token }) {
   return (
     <div>
       {status && <p className="answer-canvas-empty">{status}</p>}
-      <div ref={hostRef} className="answer-canvas-docx markdown-body" />
+      <div ref={hostRef} className="answer-canvas-docx markdown-body" style={{ whiteSpace: 'pre-wrap' }} />
     </div>
   );
 }

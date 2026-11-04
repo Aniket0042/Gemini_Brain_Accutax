@@ -12,7 +12,7 @@ const cache = new Map();
 export function getUploadBlob(id, token = '') {
   if (!cache.has(id)) {
     const promise = fetch(`/api/v1/uploads/${encodeURIComponent(id)}/file`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: token ? { ...{} } : {},
     }).then(async (response) => {
       if (!response.ok) {
         const body = await response.json().catch(() => null);

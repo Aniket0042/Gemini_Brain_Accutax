@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 import bcrypt
 
@@ -78,6 +78,8 @@ def create_access_token(
     rejected by another. The client already held this value, so nothing new is
     disclosed by embedding it.
     """
+    if settings.ai_auth_mode == "gateway":
+        raise RuntimeError("AI-issued browser tokens are disabled in gateway mode")
     now = datetime.now(timezone.utc)
     if expires_delta:
         expire = now + expires_delta
@@ -206,7 +208,7 @@ def authenticate_with_accutax_api(email: str, password: str) -> dict[str, Any] |
         if resp.status_code in (200, 201):
             data = resp.json()
             if isinstance(data, dict) and data.get("error") is True:
-                logger.info("Upstream Accutax login returned error (%s) — falling back to local credentials", data.get("message"))
+                logger.info("Upstream Accutax login returned error (%s) — refusing authentication", data.get("message"))
                 return None
 
             token = (
@@ -335,6 +337,8 @@ def decode_access_token(token: str) -> dict[str, Any]:
     either signed with our own JWT_SECRET, or one we ourselves saw returned by
     a successful upstream Accutax login (see _TRUSTED_UPSTREAM_TOKENS).
     """
+    if settings.ai_auth_mode == "gateway":
+        raise HTTPException(status_code=401, detail="AI browser JWTs are disabled in gateway mode")
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing access token")
 
@@ -493,6 +497,8 @@ def init_auth_db(db_name: str = "") -> None:
     Does nothing when SEED_TEST_USERS is empty, so a database whose users and
     organizations belong to the Accutax backend is never written to at startup.
     """
+    if settings.ai_auth_mode == "gateway":
+        return
     seed_users = _load_seed_users()
     if not seed_users:
         logger.info("SEED_TEST_USERS is empty; skipping auth DB initialization.")
@@ -727,6 +733,7 @@ def authorize_org_scope(
 
     Every decision is written to the org-access audit log.
     """
+    user.ensure_current_scope()
     try:
         orgs = list(dict.fromkeys(int(o) for o in (requested or []) if o is not None))
     except (TypeError, ValueError) as e:
@@ -781,11 +788,29 @@ class CurrentUser:
         # Set only when the caller holds a genuine Accutax bearer; raw_token
         # falls back to our own JWT, which Accutax does not accept.
         self.accutax_token = accutax_token
+        self.gateway_authority = None
+
+    def ensure_current_scope(self, required: Iterable[int] | None = None) -> None:
+        if self.gateway_authority is None:
+            return
+        resolved = self.gateway_authority.resolve()
+        self.allowed_org_ids = resolved["allowed_org_ids"]
+        if required is not None and not set(required).issubset(set(self.allowed_org_ids)):
+            raise HTTPException(403, "Company finance permission is no longer available")
 
 
-def get_current_user(token: str | None = Depends(oauth2_scheme)) -> CurrentUser:
+def get_current_user(token: str | None = Depends(oauth2_scheme), request: Request = None) -> CurrentUser:
     """FastAPI Dependency: Validates the bearer JWT. Requires authentication -- no
     unauthenticated request may access tenant financial data."""
+    if settings.ai_auth_mode == "gateway":
+        if request is None:
+            raise HTTPException(401, "Authenticated AI gateway required")
+        from gemini_brain.api.gateway_authority import GatewayAuthority
+        authority = GatewayAuthority(request)
+        resolved = authority.resolve()
+        user = CurrentUser(resolved["user_id"], resolved.get("email", ""), resolved["allowed_org_ids"])
+        user.gateway_authority = authority
+        return user
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

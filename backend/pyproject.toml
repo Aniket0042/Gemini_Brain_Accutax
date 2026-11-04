@@ -27,6 +27,7 @@ dependencies = [
     "spacy>=3.7.0",
     "httpx>=0.24.0",
     "python-multipart>=0.0.9",
+    "pypdf>=6.0",  # PDF upload validation and text extraction
     "reportlab>=4.0.0",
     "matplotlib>=3.8.0",
     "python-docx>=1.1.0",
@@ -41,7 +42,6 @@ dependencies = [
 # pypdf BSD-3, rank_bm25 Apache-2.0, fastembed Apache-2.0 (onnxruntime MIT), beautifulsoup4 MIT.
 # Install with: pip install -e "backend[vat_kb]"
 vat_kb = [
-    "pypdf>=6.0",
     "rank_bm25>=0.2.2",
     "fastembed>=0.8.0",
     "beautifulsoup4>=4.12",

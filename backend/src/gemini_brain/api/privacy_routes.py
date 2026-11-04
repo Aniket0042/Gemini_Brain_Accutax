@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
-from gemini_brain.api.auth import CurrentUser, get_current_user
+from gemini_brain.api.auth import CurrentUser, get_current_user, authorize_org_scope
 from gemini_brain.config.settings import settings
 from gemini_brain.privacy import snapshot_html, snapshot_story, snapshots
 
@@ -23,6 +23,7 @@ router = APIRouter(prefix="/api/v1/privacy", tags=["Privacy"])
 
 
 def _admin(user: CurrentUser) -> None:
+    user.ensure_current_scope()
     if not snapshots.is_admin(user.user_id, user.email):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed to view privacy snapshots")
 
@@ -80,8 +81,11 @@ def list_snapshots(limit: int = Query(50, ge=1, le=500), user_id: int | None = Q
                    current_user: CurrentUser = Depends(get_current_user)) -> Dict[str, Any]:
     _admin(current_user)
     _audit(current_user, "list")
-    return {"snapshots": _labels(snapshots.recent(limit=limit, user_id=user_id, include_test=include_test),
-                                 current_user)}
+    rows=snapshots.recent(limit=limit, user_id=user_id, include_test=include_test)
+    if current_user.gateway_authority:
+        allowed=set(current_user.allowed_org_ids)
+        rows=[row for row in rows if row.get('organization_ids') and set(row['organization_ids']).issubset(allowed)]
+    return {"snapshots": _labels(rows,current_user)}
 
 
 @router.get("/snapshots/{snapshot_id}", summary="One snapshot, both sides")
@@ -90,6 +94,7 @@ def get_snapshot(snapshot_id: str, current_user: CurrentUser = Depends(get_curre
     snap = snapshots.load(snapshot_id)
     if snap is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Snapshot not found")
+    _snapshot_scope(snap,current_user)
     _audit(current_user, "view", snapshot_id)
     return snapshot_story.attach(_labels([snap], current_user)[0])
 
@@ -100,10 +105,18 @@ def export_snapshot(snapshot_id: str, current_user: CurrentUser = Depends(get_cu
     snap = snapshots.load(snapshot_id)
     if snap is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Snapshot not found")
+    _snapshot_scope(snap,current_user)
     _audit(current_user, "export", snapshot_id)
     return HTMLResponse(snapshot_html.render(snapshot_story.attach(_labels([snap], current_user)[0])), headers={
         "Content-Disposition": f'attachment; filename="privacy-snapshot-{snapshot_id}.html"',
         "Cache-Control": "no-store"})
+
+
+def _snapshot_scope(snap:dict,user:CurrentUser)->None:
+    if user.gateway_authority:
+        if not snap.get('organization_ids'):
+            raise HTTPException(403,'Snapshot has no authorized company scope')
+        authorize_org_scope(snap['organization_ids'],user,action='privacy.snapshot')
 
 
 class DemoRequest(BaseModel):
@@ -125,6 +138,7 @@ def demo(body: DemoRequest, current_user: CurrentUser = Depends(get_current_user
     the user saw. Admins only, on PII_DEMO_ORGS. Costs a normal answer's model calls."""
     _admin(current_user)
     orgs = _demo_orgs(current_user, body.organization_ids)
+    current_user.ensure_current_scope(orgs)
     if not orgs:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                             detail="Pick an organization you can open that is allowed for the demo (PII_DEMO_ORGS)")
@@ -139,8 +153,10 @@ def demo(body: DemoRequest, current_user: CurrentUser = Depends(get_current_user
     from gemini_brain.usage import ledger
     with ledger.scope("privacy_demo", user_id=current_user.user_id, organization_ids=orgs) as spend:
         result = run_agent(sensitive.drop(body.question)[0], orgs, meta, subject=f"privacy-demo:{current_user.user_id}",
-                           user_id=current_user.user_id, pii_mode="on", capture=True)
+                           user_id=current_user.user_id, pii_mode="on", capture=True,
+                           **({"authorize":lambda:current_user.ensure_current_scope(orgs)} if current_user.gateway_authority else {}))
         spend.status = str(result.status or "ok")
+    current_user.ensure_current_scope(orgs)
     capture = result.capture
     _audit(current_user, "demo", getattr(capture, "id", ""))
     vault = getattr(getattr(capture, "vault", None), "_value_of", {}) or {}

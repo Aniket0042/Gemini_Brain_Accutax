@@ -20,7 +20,7 @@ export function PdfPreview({ artifact, token }) {
         const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
         pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
         const res = await fetch(`/api/v1/artifacts/${artifact.id}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          headers: token ? { ...{} } : {},
         });
         if (res.status === 410) {
           if (!cancelled) setStatus('This file expired. Ask again to regenerate it.');

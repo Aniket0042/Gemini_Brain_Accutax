@@ -3,15 +3,13 @@
   command = "npm run build"
   publish = "dist"
 
-# Proxy /api/* calls directly to the live EC2 backend via HTTPS
-[[redirects]]
-  from = "/api/*"
-  to = "https://13-205-100-89.sslip.io/api/:splat"
-  status = 200
-  force = true
-
 # Single Page Application (SPA) routing fallback
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Referrer-Policy = "no-referrer"

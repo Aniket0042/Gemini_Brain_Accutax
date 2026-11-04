@@ -67,15 +67,31 @@ def test_cube_meta_with_views_is_ok(monkeypatch):
 
 
 @patch("gemini_brain.api.routes.check_all_models_and_services")
-def test_get_health_models_endpoint(mock_check):
+def test_get_health_models_endpoint(mock_check, monkeypatch):
+    from gemini_brain.api import routes
+    from gemini_brain.api.auth import CurrentUser, get_current_user
+    monkeypatch.setattr(routes, "_diagnostic_cache", None)
+    monkeypatch.setattr(routes.settings, "model_diagnostic_admins", "operator@example.com")
     mock_check.return_value = {
         "overall_status": "ok",
         "summary": {"models_tested": 1, "models_healthy": 1, "services_tested": 2, "services_healthy": 2},
         "models": [MODEL_OK],
         "services": [CUBE_OK, DB_OK],
     }
-    response = client.get("/api/v1/health/models")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["overall_status"] == "ok"
-    assert len(data["models"]) == 1 and len(data["services"]) == 2
+    assert client.get("/api/v1/health/models").status_code == 401
+    mock_check.assert_not_called()
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(10, "member@example.com", [1])
+    try:
+        assert client.get("/api/v1/health/models").status_code == 403
+        mock_check.assert_not_called()
+        app.dependency_overrides[get_current_user] = lambda: CurrentUser(10, "operator@example.com", [1])
+        response = client.get("/api/v1/health/models")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["overall_status"] == "ok"
+        assert len(data["models"]) == 1 and len(data["services"]) == 2
+        assert data["models"][0]["sample_response"] is None
+        assert client.get("/api/v1/health/models").status_code == 200
+        mock_check.assert_called_once()
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)

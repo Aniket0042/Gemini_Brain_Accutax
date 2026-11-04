@@ -13,6 +13,7 @@ Original locations:
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Annotated, Optional
 from dotenv import load_dotenv
@@ -59,6 +60,15 @@ class GeminiBrainSettings(BaseSettings):
 
     # ── Accutax Backend API ────────────────────────────────────
     accutax_base_url: str = Field(default="http://13.127.157.108:8081")
+    ai_auth_mode: str = Field(default="legacy", pattern="^(legacy|gateway)$")
+    ai_gateway_config_file: str = Field(default="", description="Private server configuration for gateway-only authentication; never a frontend variable.")
+    handoff_service_key: str | None = Field(
+        default=None,
+        description=(
+            "Optional shared secret sent as X-Handoff-Service-Key when exchanging a "
+            "dashboard handoff code (env HANDOFF_SERVICE_KEY). Omitted when unset."
+        ),
+    )
     accutax_app_url: str = Field(
         default="https://accutax-bk-testing.netlify.app",
         description=(
@@ -470,6 +480,9 @@ class GeminiBrainSettings(BaseSettings):
         default="", description="Comma-separated user ids: keep snapshots only of their requests. Empty: everyone.")
     pii_snapshot_sample_pct: int = Field(default=100, ge=0, le=100,
                                          description="Share of selected requests that get a snapshot, in percent.")
+    model_diagnostic_admins: str = Field(
+        default="", description="Comma-separated user IDs or emails allowed to run paid model diagnostics. Empty disables access.")
+
     pii_snapshot_admins: str = Field(
         default="", description="Comma-separated emails or user ids that may open the privacy page. Empty: nobody.")
     pii_snapshot_key: str = Field(
@@ -553,6 +566,16 @@ class GeminiBrainSettings(BaseSettings):
 
 # Module-level singleton — import this wherever config is needed.
 settings = GeminiBrainSettings()
+
+if settings.ai_auth_mode == "gateway":
+    # Gateway mode has two independent service keys in its private JSON. Old
+    # browser JWT and handoff credentials must not survive .env loading.
+    for old_key in ("JWT_SECRET", "ACCUTAX_JWT_SECRET", "JWT_SECRET_KEY", "HANDOFF_SERVICE_KEY",
+                    "ACCUTAX_AUTH_TOKEN", "ACCUTAX_SERVICE_EMAIL", "ACCUTAX_SERVICE_PASSWORD"):
+        os.environ.pop(old_key, None)
+    settings.jwt_secret = ""
+    settings.accutax_jwt_secret = ""
+    settings.handoff_service_key = None
 
 
 if not _ENV_FILE.exists():
