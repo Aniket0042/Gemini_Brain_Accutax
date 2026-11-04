@@ -251,7 +251,7 @@ function stripSessionIdFromUrl() {
   sanitizeSensitiveQueryParams({ includeHandoff: true });
 }
 
-export default function App({sessionProfile,onSessionLogout}) {
+export default function App({sessionProfile,onSessionLogout,initialHandoff=null}) {
   // Current Authenticated User & Token State
   const [currentUser] = useState(()=>({user_id:sessionProfile.user.id,email:sessionProfile.user.email,name:sessionProfile.user.name,authenticated:true}));
 
@@ -565,7 +565,7 @@ export default function App({sessionProfile,onSessionLogout}) {
       // Fresh widget handoff supplies the id via postMessage. Do not seed from
       // the URL (it is no longer a capability) and skip the last local id so
       // we do not flash the previous thread first.
-      if (new URLSearchParams(window.location.search).has('context')) return null;
+      if (initialHandoff || new URLSearchParams(window.location.search).has('context')) return null;
       const id = tabStorage.getItem(ACTIVE_SESSION_KEY);
       if (id && readDeletedSessions().has(id)) return null;
       return isSessionId(id) ? id : null;
@@ -581,7 +581,7 @@ export default function App({sessionProfile,onSessionLogout}) {
   const [handoffError, setHandoffError] = useState('');
   const [handoffSettled, setHandoffSettled] = useState(() => {
     try {
-      return !HANDOFF_CODE;
+      return !HANDOFF_CODE && !initialHandoff;
     } catch {
       return true;
     }
@@ -739,6 +739,14 @@ export default function App({sessionProfile,onSessionLogout}) {
       return updated;
     });
   };
+
+  // Legacy sign-in (VM): the dashboard widget's postMessage handoff, received by LegacySessionRoot.
+  useEffect(() => {
+    if (!initialHandoff) return;
+    applyWidgetHandoff(initialHandoff);
+    setHandoffSettled(true);
+    stripSessionIdFromUrl();
+  }, [initialHandoff]);
 
   useEffect(() => {
     if (widgetSessionId) return undefined;

@@ -3,8 +3,10 @@ import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig(({command,mode})=>{
-  if(command==='build'&&mode==='production'){
-    const env=loadEnv(mode,process.cwd(),'');
+  const env=loadEnv(mode,process.cwd(),'');
+  // VITE_AUTH_MODE=legacy (the VM): no BFF; the browser calls this origin's /api with the AI backend's own token.
+  const legacy=env.VITE_AUTH_MODE==='legacy';
+  if(command==='build'&&mode==='production'&&!legacy){
     if(env.ALLOW_INSECURE_BFF!=='1'){
       let url;
       try{url=new URL(env.VITE_BFF_API_URL);}
@@ -28,6 +30,7 @@ export default defineConfig(({command,mode})=>{
     port: 5174,
     strictPort: true,
     host: true,
+    ...(legacy?{proxy:{'/api':{target:'http://127.0.0.1:8000',changeOrigin:true,secure:false}}}:{}),
   },
   };
 })

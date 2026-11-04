@@ -1,4 +1,4 @@
-import { aiEndpoint,sessionClient } from '../auth/session';
+import { aiEndpoint,xhrAuthHeaders } from '../auth/session';
 /**
  * api.js — API client service for communicating with the Gemini Brain FastAPI backend.
  * Calls the authenticated Nest AI gateway for queries, streams and files.
@@ -264,9 +264,9 @@ export const uploadFile = (file, { sessionId, organizationIds = [], token = '', 
   const promise = new Promise((resolve, reject) => {
     xhr.open('POST', aiEndpoint('/api/v1/uploads'));
     xhr.withCredentials=true;
-    const csrf=sessionClient.getSnapshot()?.csrfToken;
-    if(!csrf){reject(new Error('Your session must be verified before uploading.'));return;}
-    xhr.setRequestHeader('X-CSRF-Token',csrf);
+    const auth=xhrAuthHeaders();
+    if(!auth){reject(new Error('Your session must be verified before uploading.'));return;}
+    for(const [key,value] of Object.entries(auth))xhr.setRequestHeader(key,value);
     xhr.setRequestHeader('Accept', 'application/json');
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);

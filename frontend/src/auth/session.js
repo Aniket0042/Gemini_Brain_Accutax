@@ -1,11 +1,25 @@
 import { createSessionClient,clearLegacyCredentials } from './session-client.mjs';
+import { createLegacyClient } from './legacy-client.mjs';
 
+// 'bff' (default): the shared Accutax sign-in through the Nest BFF and AI gateway (EC2 / zereco.ai).
+// 'legacy': the AI backend's own login and the dashboard widget handoff, for deployments without the BFF (the VM).
+export const AUTH_MODE=import.meta.env.VITE_AUTH_MODE==='legacy'?'legacy':'bff';
 const base=import.meta.env.VITE_BFF_API_URL||'http://localhost:8081';
 const originalFetch=window.fetch.bind(window);
-clearLegacyCredentials(localStorage,sessionStorage);
-// Old unscoped transcripts must never be displayed under a different identity.
-for(const key of ['accutax_chat_history','gemini_brain_active_org','gemini_brain_active_orgs','accutax_active_session'])localStorage.removeItem(key);
-export const sessionClient=createSessionClient({apiBase:base,fetcher:originalFetch});
+if(AUTH_MODE==='bff'){
+  clearLegacyCredentials(localStorage,sessionStorage);
+  // Old unscoped transcripts must never be displayed under a different identity.
+  for(const key of ['accutax_chat_history','gemini_brain_active_org','gemini_brain_active_orgs','accutax_active_session'])localStorage.removeItem(key);
+}
+export const sessionClient=AUTH_MODE==='legacy'
+  ?createLegacyClient({fetcher:originalFetch,storage:localStorage})
+  :createSessionClient({apiBase:base,fetcher:originalFetch});
+/** Headers an XMLHttpRequest to the AI API needs (fetch gets them from the transport below); null: not signed in. */
+export function xhrAuthHeaders(){
+  if(AUTH_MODE==='legacy')return sessionClient.getSnapshot()?sessionClient.authHeaders():null;
+  const csrf=sessionClient.getSnapshot()?.csrfToken;
+  return csrf?{'X-CSRF-Token':csrf}:null;
+}
 const hubBase=import.meta.env.VITE_HUB_URL||'http://localhost:5176';
 // The one sign-in page for every Accutax product (the Hub). It sets the shared session, then returns here.
 export function hubSignInUrl(returnTo=window.location.href){

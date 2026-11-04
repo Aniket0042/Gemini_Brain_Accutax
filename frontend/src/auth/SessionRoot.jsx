@@ -1,11 +1,12 @@
 import { useEffect,useState } from 'react';
 import App from '../App';
-import { clearFinanceStorage,hubSignInUrl,sessionClient } from './session';
+import { AUTH_MODE,clearFinanceStorage,hubSignInUrl,sessionClient } from './session';
+import LegacySessionRoot from './LegacySessionRoot';
 import { watchBrowserSession } from './session-client.mjs';
 import { clearUploadBlobs } from '../services/uploadBlobs';
 
 const messages={identity_link_required:'Your verified identity needs an approved Accutax account link or onboarding. Contact your account administrator.',unavailable:'Sign-in is temporarily unavailable. Try again.',login_failed:'Sign-in could not be completed. Start again.'};
-export default function SessionRoot(){
+function BffSessionRoot(){
   const [profile,setProfile]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(null);
   const [scope,setScope]=useState(null);
   const reason=new URLSearchParams(window.location.search).get('auth_error');
@@ -73,3 +74,6 @@ export default function SessionRoot(){
   if(!scope||scope.userId!==userId)return <main style={{padding:40,textAlign:'center'}} role="status">Checking AI company access…</main>;
   return <App key={`${userId}:${scope.key}`} sessionProfile={profile} onSessionLogout={logout}/>;
 }
+
+// VITE_AUTH_MODE=legacy (the VM): the AI backend's own sign-in instead of the shared Accutax session.
+export default function SessionRoot(){return AUTH_MODE==='legacy'?<LegacySessionRoot/>:<BffSessionRoot/>;}

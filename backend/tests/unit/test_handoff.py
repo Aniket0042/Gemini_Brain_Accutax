@@ -1,16 +1,13 @@
-"""Continue from the Accutax dashboard with a one-time code (POST /api/v1/auth/handoff)."""
+"""Redeeming the Accutax dashboard's one-time code (auth.redeem_accutax_handoff). The route is in test_auth_handoff.py."""
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
 import httpx
-import jwt
 import pytest
-from fastapi.testclient import TestClient
 
-from gemini_brain.api import auth, routes
-from gemini_brain.api.app import app
-from gemini_brain.api.auth import HandoffRedeemError, get_jwt_secret, redeem_accutax_handoff
+from gemini_brain.api import auth
+from gemini_brain.api.auth import HandoffRedeemError, redeem_accutax_handoff
 from gemini_brain.config.settings import settings
 
 CODE = "A" * 43
@@ -92,40 +89,3 @@ def test_answer_without_user_id_is_refused(live_orgs):
         with pytest.raises(HandoffRedeemError) as exc:
             redeem_accutax_handoff(CODE)
     assert exc.value.status_code == 502
-
-
-# ── The route ────────────────────────────────────────────────────────────────
-
-@pytest.fixture
-def client():
-    return TestClient(app)
-
-
-def test_route_issues_our_own_session_token(client, live_orgs, monkeypatch):
-    monkeypatch.setattr(routes, "fetch_accutax_accessible_orgs", lambda token, user_id: [{"id": 1}, {"id": 2}])
-    with patch("httpx.post", return_value=_resp(200, UPSTREAM)):
-        r = client.post("/api/v1/auth/handoff", json={"code": CODE})
-    assert r.status_code == 200
-    body = r.json()
-    claims = jwt.decode(body["access_token"], get_jwt_secret(), algorithms=[settings.jwt_algorithm])
-    assert claims["sub"] == "11" and claims["allowed_org_ids"] == [1, 2]
-    assert claims["accutax_token"] == "nest.jwt.token"
-    assert body["access_token"] != "nest.jwt.token"  # the dashboard token is never handed to the browser as-is
-    assert body["session_id"] == UPSTREAM["session_id"] and body["organization_id"] == 2
-    assert body["name"] == "U Ser" and len(body["conversation"]) == 2
-    assert [t["id"] for t in body["tenants"]] == [1, 2]
-
-
-def test_route_returns_410_for_expired_code(client, live_orgs):
-    with patch("httpx.post", return_value=_resp(410)):
-        r = client.post("/api/v1/auth/handoff", json={"code": CODE})
-    assert r.status_code == 410
-    assert "expired" in r.json()["detail"]
-
-
-@pytest.mark.parametrize("bad", ["short", "A" * 129, "has space" + "A" * 20, "../../" + "A" * 20])
-def test_route_rejects_malformed_code_before_calling_upstream(client, live_orgs, bad):
-    with patch("httpx.post") as post:
-        r = client.post("/api/v1/auth/handoff", json={"code": bad})
-    assert r.status_code == 422
-    post.assert_not_called()
