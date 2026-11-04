@@ -12,6 +12,7 @@ Read only: nothing here changes Accutax data or sends anything outside Accutax.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 from gemini_brain.api.auth import get_user_allowed_orgs
@@ -62,7 +63,10 @@ def _return_position(prev: Dict[str, Any], agent: str = "vat") -> Optional[Dict[
 
 def _headline(checked: Dict[str, int], new_count: int, fixed_count: int, active: int) -> str:
     bills, invoices = checked["bills"], checked["invoices"]
-    text = f"Checked {bills} bills" + (f" and {invoices} sales invoices" if invoices else "") + "."
+    if invoices and not bills:  # the AR bot reads sales invoices only
+        text = f"Checked {invoices} sales invoices."
+    else:
+        text = f"Checked {bills} bills" + (f" and {invoices} sales invoices" if invoices else "") + "."
     if not active and not fixed_count:
         return text + " Everything looks right."
     if new_count:
@@ -140,10 +144,15 @@ def _run(bot: Dict[str, Any], bot_id: str, run_id: str, bot_org_ids: List[int],
     # may simply not have reached it.
     fixed_count = 0
     if prev.get("complete", True):
-        for key, ef in existing.items():
-            if key not in found_keys and ef["state"] in ("new", "seen"):
-                store.update_finding_state(bot_id, key, "fixed")
-                fixed_count += 1
+        missing = [ef for key, ef in existing.items() if key not in found_keys and ef["state"] in ("new", "seen")]
+        # An engine can say which of them are really fixed (AR: an invoice that aged out of the scan is still open).
+        confirm = getattr(agent.engine, "confirm_fixed", None)
+        if missing and confirm:
+            really = confirm(missing, org_ids=bot_org_ids, subject=subject, deadline=time.monotonic() + 20)
+            missing = [ef for ef in missing if ef["key"] in really]
+        for ef in missing:
+            store.update_finding_state(bot_id, ef["key"], "fixed")
+            fixed_count += 1
 
     new_count = 0
     for cf in current:

@@ -94,6 +94,14 @@ def generate_finding_sentence(
         except Exception:
             pass
 
+    sales = (finding.get("detail") or {}).get("side") == "sales"
+    if rule == "new_customer_large":
+        return finding.get("why") or f"Invoice #{doc_num} is the first to {supplier}, a new customer ({amount_str})."
+    if rule in ("invoice_overdue", "invoice_due_soon", "customer_overdue"):
+        return finding.get("why") or f"Invoice #{doc_num} to {supplier} needs chasing ({amount_str})."
+    if sales and rule in ("same_number", "same_total_near_date", "similar_vendor_same_day"):
+        return f"Invoice #{doc_num} to {supplier} may have been issued twice ({amount_str})."
+
     if rule in ("duplicate_bill", "same_number", "same_total_near_date", "similar_vendor_same_day"):
         if len(bills_nums) >= 2:
             return f"Duplicate bill detected between {bills_nums[0]} and {bills_nums[1]} ({supplier})."

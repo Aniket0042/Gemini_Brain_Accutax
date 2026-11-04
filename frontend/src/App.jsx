@@ -364,13 +364,14 @@ export default function App() {
   };
 
   // "Ask AccuTax" on an inbox finding: the bot's own agent (VAT, AP) explains it in a chat, from what the bot found.
+  // AR has no chat agent of its own yet, so the general one answers.
   const handleAskAboutFinding = (f) => {
     const bills = (f.detail?.bills || []).map((b) => [b.number, b.party, b.date].filter(Boolean).join(', ')).join('; ');
-    const ap = f.agent === 'ap';
+    const about = { ap: 'my payables', ar: 'my receivables and collections' }[f.agent] || 'my VAT return';
     const question = `My bot ${f.bot_name} flagged this: ${f.rule_text || f.rule}. ${f.detail?.why || ''}`
-      + `${bills ? ` Documents: ${bills}.` : ''} Explain what it means for ${ap ? 'my payables' : 'my VAT return'} and what I should do.`;
+      + `${bills ? ` Documents: ${bills}.` : ''} Explain what it means for ${about} and what I should do.`;
     setPage('chat');
-    handleSubmitQuery(question, { agent: ap ? 'ap' : 'vat' });
+    handleSubmitQuery(question, f.agent === 'ar' ? {} : { agent: f.agent === 'ap' ? 'ap' : 'vat' });
   };
 
   // New bot: the Create page; a template or a chat question goes straight to the builder with its draft.

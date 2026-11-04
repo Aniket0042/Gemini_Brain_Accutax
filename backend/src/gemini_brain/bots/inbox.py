@@ -82,6 +82,19 @@ def build(findings: Sequence[Dict[str, Any]], runs: Sequence[Dict[str, Any]], bo
             stake_by_agent[f["agent"]][f["currency"]] += f["at_stake"]
         elif state == "fixed" and (f.get("updated_at") or "") >= week_ago:
             fixed_week.append(f)
+    # AR: what is overdue comes from the latest run's receivables box, once per set of organizations, so a customer
+    # finding and the invoice findings under it are not added up twice.
+    latest: Dict[str, Dict[str, Any]] = {}
+    for r in sorted(runs, key=lambda r: r.get("started_at") or ""):
+        latest[r.get("bot_id")] = r
+    seen_orgs = set()
+    for b in bots:
+        pos = ((latest.get(b["id"]) or {}).get("summary") or {}).get("position") or {}
+        orgs = tuple(sorted(b.get("org_ids") or []))
+        if (b.get("agent") == "ar" and pos.get("kind") == "receivables" and pos.get("overdue")
+                and orgs not in seen_orgs):
+            seen_orgs.add(orgs)
+            stake_by_agent["ar"][pos.get("currency") or "AED"] += float(pos["overdue"])
     return {
         "unread_count": counts["new"] + len(approvals),
         "bots_count": len(bots),

@@ -53,10 +53,10 @@ def _resolve(period: Optional[Dict[str, str]]) -> tuple[dt.date, dt.date]:
 
 
 def _result(items: List[Dict[str, Any]], *, start: dt.date, end: dt.date, checked: int,
-            per_org: List[Dict[str, Any]], exclude: AbstractSet[str]) -> Dict[str, Any]:
+            per_org: List[Dict[str, Any]], exclude: AbstractSet[str], side: str = "purchases") -> Dict[str, Any]:
     kept = [i for i in items if i["key"] not in exclude]
     return {
-        "side": "purchases", "period": {"start": start.isoformat(), "end": end.isoformat()},
+        "side": side, "period": {"start": start.isoformat(), "end": end.isoformat()},
         "bills_checked": checked, "organizations": per_org, "groups": [], "groups_found": 0, "groups_by_rule": {},
         "findings": kept, "findings_found": len(kept), "findings_by_rule": dict(Counter(i["rule"] for i in kept)),
         "dismissed": len(items) - len(kept),

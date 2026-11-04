@@ -138,7 +138,8 @@ export default function BotsHome({ bots = [], summary, token = '', inboxNew = 0,
   const problemWord = Object.keys(cards).length > 1 ? 'problem' : (agentMeta(Object.keys(cards)[0] || 'vat').copy?.problem_word || 'problem');
   const ret = summary?.next_return;
   const payables = cardOf('ap', 'payables')?.position;
-  const showReturn = Boolean(cards.vat) || !cards.ap;
+  const receivables = cardOf('ar', 'receivables')?.position;
+  const showReturn = Boolean(cards.vat) || (!cards.ap && !cards.ar);
   const reminder = bots.find((b) => b.status === 'active' && (b.draft?.schedules || []).some((s) => s.kind === 'before_deadline'));
   const max = summary?.max_bots || 10;
 
@@ -188,6 +189,14 @@ export default function BotsHome({ bots = [], summary, token = '', inboxNew = 0,
             value={payables ? `${money(payables.due_next_7_days, payables.currency)} · ${payables.due_next_7_days_count}` : '—'}
             note={payables ? `${money(payables.overdue, payables.currency)} overdue · ${payables.overdue_count} bill${payables.overdue_count === 1 ? '' : 's'}` : ''}
             tone={payables?.overdue_count ? 'warning' : undefined}
+          />
+        )}
+        {cards.ar && (
+          <Stat
+            label="Overdue to collect"
+            value={receivables ? `${money(receivables.overdue, receivables.currency)} · ${receivables.overdue_count}` : '—'}
+            note={receivables ? `${money(receivables.due_next_7_days, receivables.currency)} due in 7 days · ${receivables.due_next_7_days_count} invoice${receivables.due_next_7_days_count === 1 ? '' : 's'}` : ''}
+            tone={receivables?.overdue_count ? 'warning' : undefined}
           />
         )}
         <Stat

@@ -58,6 +58,9 @@ export default function BotIntroMessage({ msg, onOpenInbox, onEditBot, onOpenBot
   // The AP bot's box: what is overdue and what falls due in the next 7 days (position.kind "payables").
   const pay = s.position?.kind === 'payables' ? s.position : null;
   const ap = (bot.agent || bot.draft?.agent) === 'ap';
+  // The AR bot's box: receivables overdue, due in the next 7 days and over 90 days (position.kind "receivables").
+  const rec = s.position?.kind === 'receivables' ? s.position : null;
+  const ar = (bot.agent || bot.draft?.agent) === 'ar';
   const word = agentMeta(bot.agent || bot.draft?.agent).copy?.problem_word || 'problem';
   const total = groups + problems;
   const schedules = (bot.draft?.schedules || []).map((x) => scheduleLine(x).replace(/^Every /, 'every ')).filter(Boolean);
@@ -85,9 +88,9 @@ export default function BotIntroMessage({ msg, onOpenInbox, onEditBot, onOpenBot
         ) : (
           <>
             <p className="bim-text">
-              Hi, I'm {bot.name}. I checked {plural(bills, 'bill', 'bills')}
-              {invoices ? ` and ${plural(invoices, 'sales invoice', 'sales invoices')}` : ''}
-              {ap ? ' from the last 90 days' : s.period?.start ? ` for ${periodWords(s.period)}` : ''}.{' '}
+              Hi, I'm {bot.name}. I checked {ar ? plural(invoices, 'sales invoice', 'sales invoices') : plural(bills, 'bill', 'bills')}
+              {invoices && !ar ? ` and ${plural(invoices, 'sales invoice', 'sales invoices')}` : ''}
+              {ap ? ' from the last 90 days' : ar ? '' : s.period?.start ? ` for ${periodWords(s.period)}` : ''}.{' '}
               {total === 0
                 ? 'Everything looks right.'
                 : `I found ${groups ? plural(groups, 'likely duplicate group', 'likely duplicate groups') : ''}${groups && problems ? ' and ' : ''}${problems ? plural(problems, groups ? `other ${word}` : word, groups ? `other ${word}s` : `${word}s`) : ''}.`}
@@ -95,10 +98,38 @@ export default function BotIntroMessage({ msg, onOpenInbox, onEditBot, onOpenBot
             <div className="bim-stats">
               <div><strong>{bills + invoices}</strong><span>documents checked</span></div>
               <div><strong>{groups}</strong><span>duplicate groups</span></div>
-              <div><strong>{problems}</strong><span>{ap ? 'to review' : `${word}s`}</span></div>
+              <div><strong>{problems}</strong><span>{ap || ar ? 'to review' : `${word}s`}</span></div>
               {rp && <div><strong>{money(rp.net_vat_payable, rp.currency)}</strong><span>net VAT so far</span></div>}
               {pay && <div><strong>{money(pay.due_next_7_days, pay.currency)}</strong><span>due in 7 days</span></div>}
+              {rec && <div><strong>{money(rec.overdue, rec.currency)}</strong><span>overdue to collect</span></div>}
             </div>
+            {rec && (
+              <div className="bim-return">
+                <div className="bim-return-head">
+                  <strong>Receivables</strong>
+                  <span className="bd-muted">As of {longDate(rec.as_of)}{rec.organizations > 1 ? ` · ${rec.organizations} organizations` : ''}</span>
+                </div>
+                <dl>
+                  <dt>Due in 7 days</dt>
+                  <dd>{money(rec.due_next_7_days, rec.currency)} · {plural(rec.due_next_7_days_count || 0, 'invoice', 'invoices')}</dd>
+                  <dt>Overdue</dt>
+                  <dd><strong>{money(rec.overdue, rec.currency)}</strong> · {plural(rec.overdue_count || 0, 'invoice', 'invoices')}</dd>
+                  {rec.over_90_days_count > 0 && (
+                    <>
+                      <dt>Of which over 90 days</dt>
+                      <dd>{money(rec.over_90_days, rec.currency)} · {plural(rec.over_90_days_count, 'invoice', 'invoices')}</dd>
+                    </>
+                  )}
+                  {rec.no_due_date_count > 0 && (
+                    <>
+                      <dt>No due date</dt>
+                      <dd>{money(rec.no_due_date, rec.currency)} · {plural(rec.no_due_date_count, 'invoice', 'invoices')}</dd>
+                    </>
+                  )}
+                </dl>
+                <p className="bd-muted">Invoices more than 30 days overdue are grouped by customer, so you get one line per customer instead of one per invoice.</p>
+              </div>
+            )}
             {pay && (
               <div className="bim-return">
                 <div className="bim-return-head">
@@ -141,7 +172,7 @@ export default function BotIntroMessage({ msg, onOpenInbox, onEditBot, onOpenBot
 
         <p className="bim-text">
           From now on I'll run {schedules.length ? listWords(schedules) : 'when you run me'}, and send results to your {where}.
-          {ap ? 'I only read your books; I never pay or change a bill.' : 'I only read your books; I never change a bill or file anything.'}
+          {ap ? 'I only read your books; I never pay or change a bill.' : ar ? 'I only read your books; I never send reminders or change an invoice.' : 'I only read your books; I never change a bill or file anything.'}
         </p>
 
         <div className="bim-actions">

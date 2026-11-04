@@ -56,10 +56,14 @@ function dismissLabel(f) {
 /** A fixed finding in the side panel. VAT: "Bill may be recorded twice B-1 from X no longer found"; agents with
  *  their own words (AP): "Bill B-1 from X is no longer open". */
 function fixedLine(f, first) {
-  const text = agentMeta(f.agent).copy?.fixed_text;
+  const copy = agentMeta(f.agent).copy || {};
+  const text = copy.fixed_text;
+  // AR: a customer with old debt has no invoice of its own ("Arjun has nothing overdue now").
+  if (f.detail?.buckets && copy.fixed_party_text) return `${f.detail.party || 'A customer'} ${copy.fixed_party_text}`;
   const num = first.number ? ` ${first.number}` : '';
-  const from = first.party ? ` from ${first.party}` : '';
-  return text ? `Bill${num}${from} ${text}` : `${title(f)}${num}${from} no longer found`;
+  const sales = f.side === 'sales';
+  const from = first.party ? ` ${sales ? 'to' : 'from'} ${first.party}` : '';
+  return text ? `${sales ? 'Invoice' : 'Bill'}${num}${from} ${text}` : `${title(f)}${num}${from} no longer found`;
 }
 
 function openLabel(f) {
@@ -90,6 +94,26 @@ function BillsTable({ f }) {
         {bills.map((b, i) => (
           <tr key={`${b.id}-${i}`}>
             {columns.map((c) => <td key={c.key} className={c.num ? 'is-num' : undefined}>{cell(b, c)}</td>)}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+/** AR: a customer's overdue amount per aging bucket, instead of a table of invoices. */
+function AgingTable({ f }) {
+  const buckets = f.detail?.buckets || [];
+  if (!buckets.length) return null;
+  return (
+    <table className="bi-table">
+      <thead><tr><th>Overdue</th><th className="is-num">Invoices</th><th className="is-num">Amount</th></tr></thead>
+      <tbody>
+        {buckets.map((b) => (
+          <tr key={b.bucket}>
+            <td>{b.bucket}</td>
+            <td className="is-num">{b.count}</td>
+            <td className="is-num">{plain(b.amount)}</td>
           </tr>
         ))}
       </tbody>
@@ -142,6 +166,7 @@ function FindingCard({ f, onDismiss, onRestore, onAsk, onEditBot }) {
         </div>
       </div>
       <BillsTable f={f} />
+      <AgingTable f={f} />
       <div className="bi-actions">
         {urls.length > 0 && (
           <button type="button" className="bh-btn is-primary" onClick={() => urls.forEach((u) => window.open(u, '_blank', 'noopener'))}>
@@ -170,7 +195,7 @@ function FindingRow({ f, ...actions }) {
   return (
     <button type="button" className={`bi-row is-${f.state}`} onClick={() => setOpen(true)}>
       <span className="bi-row-text">
-        {[title(f), first.party || first.number, amount ? money(amount, f.currency) : ''].filter(Boolean).join(' · ')}
+        {[title(f), first.party || first.number || f.detail?.party, amount ? money(amount, f.currency) : ''].filter(Boolean).join(' · ')}
       </span>
       <span className="bd-muted">{f.bot_name} · {when(f.found_at)}</span>
     </button>

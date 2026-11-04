@@ -64,7 +64,7 @@ _AGENTS: Dict[str, BotAgent] = {}
 _loaded = False
 _loading = False
 #: Every agent module; each registers itself on import.
-_MODULES = ("agents_vat", "agents_ap")
+_MODULES = ("agents_vat", "agents_ap", "agents_ar")
 
 
 def register(agent: BotAgent) -> None:

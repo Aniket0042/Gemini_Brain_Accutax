@@ -46,6 +46,11 @@
 }
 .bc-agents-seg button:hover { color: var(--ink); }
 .bc-agents-seg button.on { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+/* Three agents fit on a phone without the label and with tighter buttons. */
+@media (max-width: 480px) {
+  .bc-agents-label { display: none; }
+  .bc-agents-seg button { padding: 5px 9px; }
+}
 .bc-chips.is-center { justify-content: center; }
 .bc-chip {
   display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: var(--radius-pill);

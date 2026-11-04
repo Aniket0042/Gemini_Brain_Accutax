@@ -1,0 +1,380 @@
+[
+  {
+    "id": "ar01",
+    "category": "overdue",
+    "sentence": "Every morning, tell me about invoices that just went overdue",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "daily",
+      "watches": [
+        "invoice_overdue"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ar02",
+    "category": "due_soon",
+    "sentence": "Every Monday at 8am, show me the invoices due this week so I can send reminders",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "mon",
+      "time": "08:00",
+      "watches": [
+        "invoice_due_soon"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ar03",
+    "category": "aging",
+    "sentence": "On the 1st of each month, show me customers with old debt",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "monthly",
+      "watches": [
+        "customer_overdue"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ar04",
+    "category": "who_owes",
+    "sentence": "Every Friday, tell me which customers owe us the most overdue money",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "fri",
+      "watches": [
+        "customer_overdue"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ar05",
+    "category": "new_customer",
+    "sentence": "Warn me every day about a large invoice to a new customer",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "daily",
+      "watches": [
+        "new_customer"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ar06",
+    "category": "duplicates",
+    "sentence": "Every Monday, check my sales invoices for duplicates so we don't bill a customer twice",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "mon",
+      "watches": [
+        "duplicate_invoice"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ar07",
+    "category": "two_watches",
+    "sentence": "Every Wednesday at 10am, tell me about overdue invoices and invoices due soon",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "wed",
+      "time": "10:00",
+      "watches": [
+        "invoice_overdue",
+        "invoice_due_soon"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ar08",
+    "category": "daily_time",
+    "sentence": "Every day at 7am, list invoices due in the next few days",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "daily",
+      "time": "07:00",
+      "watches": [
+        "invoice_due_soon"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ar09",
+    "category": "unpaid",
+    "sentence": "Each Monday tell me who hasn't paid",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "mon",
+      "watches": [
+        "customer_overdue"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ar10",
+    "category": "credit_risk",
+    "sentence": "Every week on Tuesday flag credit risk from new customers",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "tue",
+      "watches": [
+        "new_customer"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ar11",
+    "category": "month_end",
+    "sentence": "At month end, give me the receivables aging",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "monthly",
+      "watches": [
+        "customer_overdue"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ar12",
+    "category": "org_named",
+    "sentence": "For Apex Holdings, every morning tell me which invoices are overdue",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "daily",
+      "watches": [
+        "invoice_overdue"
+      ],
+      "org_ids": [
+        2
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ar13",
+    "category": "org_unknown",
+    "sentence": "For Zenith Trading, check overdue invoices every Monday",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "weekly",
+      "has_question_or_issue_for_org": true,
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ar14",
+    "category": "email",
+    "sentence": "Email me every Thursday a list of invoices due next week",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "thu",
+      "watches": [
+        "invoice_due_soon"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ar15",
+    "category": "missing",
+    "sentence": "Every Sunday check sales invoices with a missing customer or number",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "sun",
+      "watches": [
+        "invoice_missing_details"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ar16",
+    "category": "unusual",
+    "sentence": "Every Monday flag invoices much bigger than the customer usually gets",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "schedule_kind": "weekly",
+      "day": "mon",
+      "watches": [
+        "unusual_invoice"
+      ],
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ar17",
+    "category": "vague",
+    "sentence": "Keep an eye on what customers owe me",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "is_bot": true
+    }
+  },
+  {
+    "id": "ar18",
+    "category": "not_bot",
+    "sentence": "What is my total receivables balance right now?",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "is_bot": false
+    }
+  },
+  {
+    "id": "ar19",
+    "category": "not_bot",
+    "sentence": "Which customer bought the most last quarter?",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "is_bot": false
+    }
+  },
+  {
+    "id": "ar20",
+    "category": "not_bot",
+    "sentence": "How do I record a customer payment?",
+    "allowed_orgs": {
+      "1": "Al Futtaim LLC",
+      "2": "Apex Holdings"
+    },
+    "current_org_ids": [
+      1
+    ],
+    "expected": {
+      "is_bot": false
+    }
+  }
+]
