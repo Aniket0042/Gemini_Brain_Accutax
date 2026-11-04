@@ -1,0 +1,10 @@
+{
+  "widgetId": "outstanding-balance",
+  "organizationId": 5,
+  "dateRange": { "start": "2026-04-01", "end": "2026-04-30", "granularity": "month" },
+  "data": {
+    "value": 18400,
+    "change": -8.2,
+    "sparkline": [24100, 22300, 20500, 18400]
+  }
+}

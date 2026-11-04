@@ -1,0 +1,10 @@
+{
+  "widgetId": "revenue-vs-expenses",
+  "organizationId": 5,
+  "dateRange": { "start": "2026-01-01", "end": "2026-04-30", "granularity": "month" },
+  "data": {
+    "labels": ["Jan", "Feb", "Mar", "Apr"],
+    "revenue": [4200, 5800, 7100, 9200],
+    "expenses": [2600, 3400, 3900, 4100]
+  }
+}

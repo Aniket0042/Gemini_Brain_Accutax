@@ -1,0 +1,16 @@
+{
+  "widgetId": "profit-loss",
+  "organizationId": 5,
+  "dateRange": { "start": "2026-01-01", "end": "2026-04-30", "granularity": "month" },
+  "data": {
+    "totalIncome": 9200,
+    "totalExpenses": 4100,
+    "netProfit": 5100,
+    "profitMargin": 55.4,
+    "monthlyTrend": {
+      "categories": ["Jan", "Feb", "Mar", "Apr"],
+      "income": [4200, 5800, 7100, 9200],
+      "expense": [2600, 3400, 3900, 4100]
+    }
+  }
+}

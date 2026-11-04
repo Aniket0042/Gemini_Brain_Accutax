@@ -1,0 +1,10 @@
+{
+  "widgetId": "total-expenses",
+  "organizationId": 5,
+  "dateRange": { "start": "2026-04-01", "end": "2026-04-30", "granularity": "month" },
+  "data": {
+    "value": 4100,
+    "change": 5.1,
+    "sparkline": [2600, 3400, 3900, 4100]
+  }
+}

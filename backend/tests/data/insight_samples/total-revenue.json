@@ -1,0 +1,10 @@
+{
+  "widgetId": "total-revenue",
+  "organizationId": 5,
+  "dateRange": { "start": "2026-04-01", "end": "2026-04-30", "granularity": "month" },
+  "data": {
+    "value": 9200,
+    "change": 29.6,
+    "sparkline": [4200, 5800, 7100, 9200]
+  }
+}

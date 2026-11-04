@@ -1,0 +1,10 @@
+{
+  "widgetId": "net-profit",
+  "organizationId": 5,
+  "dateRange": { "start": "2026-04-01", "end": "2026-04-30", "granularity": "month" },
+  "data": {
+    "value": 5100,
+    "change": 59.4,
+    "sparkline": [1600, 2400, 3200, 5100]
+  }
+}

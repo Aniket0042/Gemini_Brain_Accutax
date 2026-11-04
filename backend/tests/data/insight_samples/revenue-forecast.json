@@ -1,0 +1,10 @@
+{
+  "widgetId": "revenue-forecast",
+  "organizationId": 5,
+  "dateRange": { "start": "2026-02-01", "end": "2026-07-31", "granularity": "month" },
+  "data": {
+    "labels": ["Feb", "Mar", "Apr", "May", "Jun", "Jul"],
+    "actual": [5800, 7100, 9200, null, null, null],
+    "forecast": [null, null, 9200, 9800, 10500, 11200]
+  }
+}
