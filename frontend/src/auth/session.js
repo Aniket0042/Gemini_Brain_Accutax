@@ -40,12 +40,22 @@ export function installSessionTransport(){
     return sessionClient.observe(await originalFetch(requestInput,await sessionClient.prepare(requestInput,init)));
   };
 }
-export const tabStorage={
+const bffStorage={
   key:key=>`accutax:${sessionClient.getSnapshot()?.user?.id||'anonymous'}:${key}`,
   getItem(key){return sessionStorage.getItem(this.key(key));},
   setItem(key,value){sessionStorage.setItem(this.key(key),value);},
   removeItem(key){sessionStorage.removeItem(this.key(key));},
 };
+// Legacy (the VM): chats and the chosen organizations stay where the app always kept them, in the browser's
+// local storage under their plain names, so the sidebar still lists earlier chats. Everything else is per tab.
+const LEGACY_LOCAL_KEYS=new Set(['accutax_chat_history','gemini_brain_active_org','gemini_brain_active_orgs']);
+const legacyArea=key=>LEGACY_LOCAL_KEYS.has(key)?localStorage:sessionStorage;
+const legacyStorage={
+  getItem:key=>legacyArea(key).getItem(key),
+  setItem:(key,value)=>legacyArea(key).setItem(key,value),
+  removeItem:key=>legacyArea(key).removeItem(key),
+};
+export const tabStorage=AUTH_MODE==='legacy'?legacyStorage:bffStorage;
 export function clearFinanceStorage(){
   for(let i=sessionStorage.length-1;i>=0;i--){const key=sessionStorage.key(i);if(key?.startsWith('accutax:')||key?.startsWith('accutax_')||key?.startsWith('gemini_brain_'))sessionStorage.removeItem(key);}
 }
