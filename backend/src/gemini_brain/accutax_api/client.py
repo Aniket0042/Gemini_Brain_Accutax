@@ -14,6 +14,8 @@ confirm run at most once).
 """
 from __future__ import annotations
 
+import base64
+import json
 import logging
 import time
 from dataclasses import dataclass, field
@@ -50,6 +52,18 @@ class AccutaxCredential:
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return "AccutaxCredential(***)"
+
+    def organization_id(self) -> Optional[int]:
+        """The organization_id claim of the token, or None when it cannot be read. Not verified here (Accutax
+        verifies the token on every call). Accutax runs some actions in the organization of the token, whatever
+        organization the request names, so a caller must compare this with the organization it means."""
+        try:
+            part = self.token.split(".")[1]
+            claims = json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
+            value = claims.get("organization_id")
+            return int(value) if value not in (None, "") else None
+        except (IndexError, ValueError, TypeError, AttributeError):
+            return None
 
     @classmethod
     def of(cls, token: Optional[str]) -> Optional["AccutaxCredential"]:
@@ -115,6 +129,7 @@ class AccutaxClient:
         if not credential:
             raise AccutaxApiError("auth")
         self.organization_id = int(organization_id)
+        self.token_organization_id = credential.organization_id()
         self._http = httpx.Client(
             base_url=(base_url or settings.accutax_base_url).rstrip("/"),
             timeout=timeout or settings.accutax_api_timeout_seconds,

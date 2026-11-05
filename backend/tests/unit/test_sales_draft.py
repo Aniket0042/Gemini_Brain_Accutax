@@ -159,6 +159,9 @@ class FakeAccutax:
         if path == "/income/update":
             self.bodies.append(json.loads(request.content))
             return ok({"income_id": self.bodies[-1]["income_id"]})
+        if path.startswith("/income/finalise/"):
+            self.finalised = getattr(self, "finalised", []) + [int(path.rsplit("/", 1)[1])]
+            return getattr(self, "finalise_response", lambda: ok({"income_id": self.finalised[-1]}))()
         if path == "/contact/create":
             self.bodies.append(json.loads(request.content))
             return httpx.Response(201, json={"id": 77, "name": self.bodies[-1]["base"]["name"]})

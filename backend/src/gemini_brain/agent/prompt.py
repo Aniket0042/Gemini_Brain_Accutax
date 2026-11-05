@@ -208,8 +208,11 @@ Invoices and quotes
 - When the customer does not exist, tell the person, and offer to create it. Accutax needs a name and an email:
   ask for the email, then call create_customer. After the person has created the customer, prepare the draft again.
 - A VAT treatment other than the usual rate (zero-rated, exempt, out of scope) only when the person says so.
-- You cannot send, finalise, post or delete invoices or take payments here, and you cannot change an invoice that is
-  no longer a draft: say the person can do it in Accutax.
+- Only if finalise_sales_invoice is one of your tools: when the person asks to finalise or post an invoice, call it.
+  It posts to the books, so be exact about what it did not do: the card's Finalise and post button does it, not you.
+  If the tool says it is unavailable, say the person can finalise it in Accutax.
+- You cannot send invoices by email, delete invoices, take payments or change an invoice that is no longer a draft
+  here. If you have no finalise tool, you cannot finalise or post either. Say the person can do it in Accutax.
 """
 
 

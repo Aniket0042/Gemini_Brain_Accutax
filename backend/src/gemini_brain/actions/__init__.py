@@ -14,7 +14,10 @@ from typing import Any, FrozenSet, Optional
 from gemini_brain.config.settings import settings
 
 #: Every write tool the assistant has. A tool not listed here is never treated as a write tool.
-WRITE_TOOLS: FrozenSet[str] = frozenset({"draft_sales_document", "copy_sales_document", "create_customer"})
+WRITE_TOOLS: FrozenSet[str] = frozenset({"draft_sales_document", "copy_sales_document", "create_customer",
+                                         "finalise_sales_invoice"})
+#: Tools that change the books. Never on by default: AI_WRITE_TOOLS must name them.
+OPT_IN_TOOLS: FrozenSet[str] = frozenset({"finalise_sales_invoice"})
 
 
 def _listed(raw: str) -> set:
@@ -37,4 +40,7 @@ def tool_enabled(name: str) -> bool:
     if not settings.ai_write_actions_enabled or name not in WRITE_TOOLS:
         return False
     chosen = _listed(settings.ai_write_tools)
-    return not chosen or name.lower() in chosen
+    if name in OPT_IN_TOOLS:
+        return name.lower() in chosen
+    standard = chosen - OPT_IN_TOOLS    # naming only an opt-in tool does not switch the others off
+    return not standard or name.lower() in standard

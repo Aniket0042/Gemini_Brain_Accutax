@@ -42,7 +42,8 @@ DATA_TOOLS = {"query_metrics": query_metrics, "list_documents": list_documents, 
 #: Write tool -> the module whose run(params, ctx) executes it.
 WRITE_RUNNERS = {"draft_sales_document": "gemini_brain.invoicing.draft",
                  "copy_sales_document": "gemini_brain.invoicing.duplicate",
-                 "create_customer": "gemini_brain.invoicing.customer"}
+                 "create_customer": "gemini_brain.invoicing.customer",
+                 "finalise_sales_invoice": "gemini_brain.invoicing.finalise"}
 
 _SCOPE_PROPERTY = {
     "type": "array", "items": {"type": "integer"},
@@ -170,7 +171,8 @@ def specs(ctx: ToolContext) -> List[Dict[str, Any]]:
         from gemini_brain.invoicing import customer as sales_customer
         from gemini_brain.invoicing import draft as sales_draft
         from gemini_brain.invoicing import duplicate as sales_copy
-        out += [sales_draft.SPEC, sales_copy.SPEC, sales_customer.SPEC]
+        from gemini_brain.invoicing import finalise as sales_finalise
+        out += [sales_draft.SPEC, sales_copy.SPEC, sales_customer.SPEC, sales_finalise.SPEC]
     return [s for s in out if ctx.allows(s["toolSpec"]["name"]) and _write_allowed(s["toolSpec"]["name"], ctx)]
 
 

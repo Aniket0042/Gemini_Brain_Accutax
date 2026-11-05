@@ -76,7 +76,7 @@ class GeminiBrainSettings(BaseSettings):
     )
     ai_write_tools: str = Field(
         default="",
-        description="Comma-separated write tools to offer while AI_WRITE_ACTIONS_ENABLED is on. Empty = all of them.",
+        description="Comma-separated write tools to offer while AI_WRITE_ACTIONS_ENABLED is on. Empty = all of them except the ones that change the books (finalise_sales_invoice), which must be named here.",
     )
     ai_write_users: str = Field(
         default="",

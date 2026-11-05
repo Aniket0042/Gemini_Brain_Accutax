@@ -5,6 +5,7 @@ many times the button is pressed. What runs depends on the action's kind:
   sales_document         POST income/create?sync=1      a new draft invoice or quote
   sales_document_update  PUT income/update              a change to a draft saved earlier (after re-checking it)
   customer               POST contact/create            a new customer
+  sales_document_finalise PUT income/finalise/{id}      posts a draft invoice to the books (finalise.py)
 
 Outcomes:
   saved                 -> done, with the Accutax id (and number)
@@ -21,7 +22,7 @@ from typing import Any, Callable, Dict, Optional
 from gemini_brain.accutax_api.client import AccutaxApiError, AccutaxClient, AccutaxCredential, client_for
 from gemini_brain.actions import audit as action_audit
 from gemini_brain.actions import pending
-from gemini_brain.invoicing import blocks, customer, draft, existing, lookups
+from gemini_brain.invoicing import blocks, customer, draft, existing, finalise, lookups
 
 logger = logging.getLogger("gemini_brain.invoicing.confirm")
 
@@ -91,6 +92,7 @@ _RUNNERS: Dict[str, Callable[[AccutaxClient, pending.PendingAction], Dict[str, A
     draft.KIND: _create_document,
     draft.UPDATE_KIND: _update_document,
     customer.KIND: _create_customer,
+    finalise.KIND: finalise.finalise_document,
 }
 
 
