@@ -77,6 +77,7 @@ export function SalesDocumentDraftBlock({ block, token }) {
       )}
 
       <dl className="sd-meta">
+        {v.organization?.name && <div><dt>Organization</dt><dd>{v.organization.name}</dd></div>}
         <div><dt>Customer</dt><dd>{v.customer?.name}{v.customer?.trn ? <span className="sd-faint"> · TRN {v.customer.trn}</span> : null}</dd></div>
         <div><dt>Date</dt><dd>{formatDay(v.date)}</dd></div>
         <div><dt>{v.due_label || 'Due'}</dt><dd>{formatDay(v.due_date)}</dd></div>

@@ -50,6 +50,7 @@ export function FinaliseDraftBlock({ block, token }) {
         {label && <span className={`sd-badge sd-badge-${status}`}>{status === 'done' && <Check size={12} aria-hidden="true" />}{label}</span>}
       </header>
       <dl className="sd-meta">
+        {v.organization?.name && <div><dt>Organization</dt><dd>{v.organization.name}</dd></div>}
         <div><dt>Customer</dt><dd>{v.customer || '—'}</dd></div>
         <div><dt>Date</dt><dd>{formatDay(v.date)}</dd></div>
         <div><dt>Due</dt><dd>{formatDay(v.due_date)}</dd></div>

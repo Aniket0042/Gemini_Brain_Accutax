@@ -95,3 +95,17 @@ def test_the_slow_document_list_is_tried_once_and_briefly():
     assert len(seen) == 1                                               # no retry
     assert seen[0]["read"] == existing.LIST_TIMEOUT_SECONDS
     assert time.monotonic() - started < 2
+
+
+# ── which organization a card is for ────────────────────────
+
+def test_cards_name_their_organization(accutax):
+    ctx = _ctx(orgs=(24, 25))
+    ctx.org_names = {24: "Agriculture & Forestry_User1_Org1", 25: "Construction & Real Estate_User1_Org2"}
+    out, _ = tools.execute("draft_sales_document", {**ASK, "organization_id": 25}, ctx)
+    assert ctx.cards[-1]["view"]["organization"] == {"id": 25, "name": "Construction & Real Estate_User1_Org2"}
+    out, _ = tools.execute("create_customer", {"name": "Zenith Labs", "email": "a@zenith.ae", "organization_id": 24}, ctx)
+    assert ctx.cards[-1]["view"]["organization"]["name"] == "Agriculture & Forestry_User1_Org1"
+    bare = _ctx()                                                       # no names known: falls back to the id
+    tools.execute("draft_sales_document", ASK, bare)
+    assert bare.cards[-1]["view"]["organization"] == {"id": 24, "name": "Organization 24"}

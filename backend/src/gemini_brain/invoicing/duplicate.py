@@ -134,6 +134,7 @@ def run(params: Dict[str, Any], ctx: Any) -> Dict[str, Any]:
                        link)
     view = draft._view_from(target, customer, invoice_date, due_date, numbers.suggested, doc.notes, lines, docs,
                             warnings)
+    view["organization"] = draft.org_info(ctx, org)
     view["copied_from"] = {"number": doc.number, "type": draft.LABELS.get(doc.income_type, doc.income_type),
                            "linked": link}
     action = pending.create(draft.KIND, user_id=ctx.user_id, organization_id=org, session_id=ctx.session_id,

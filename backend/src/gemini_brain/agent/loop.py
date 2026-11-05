@@ -284,6 +284,7 @@ def run_agent(
     ctx = tools.ToolContext(organization_ids=orgs, subject=subject, deadline=deadline, user_id=user_id,
                             session_id=session_id, document_ids=tuple(document_ids), authorize=authorize,
                             allowed_tools=getattr(profile, "tools", None), dismissed=frozenset(dismissed or ()),
+                            org_names={o: str((org_meta.get(o) or {}).get("name") or "") for o in orgs},
                             accutax=accutax_credential, write_actions=bool(write_actions and accutax_credential))
     planner_id = model_id or settings.agent_model_id or SONNET5_ID
     writer_id = answer_model_id or settings.agent_answer_model_id or planner_id

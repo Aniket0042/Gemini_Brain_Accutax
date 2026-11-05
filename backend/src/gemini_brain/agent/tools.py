@@ -121,6 +121,8 @@ class ToolContext:
     accutax: Optional[AccutaxCredential] = field(default=None, repr=False)
     #: Whether this person may use write actions now (actions.enabled_for), decided by the route.
     write_actions: bool = False
+    #: Names of the selected organizations, for the cards (organization id -> name).
+    org_names: Dict[int, str] = field(default_factory=dict)
     #: Cards built by write tools this request (invoicing/blocks.py); shown under the answer.
     cards: List[Dict[str, Any]] = field(default_factory=list)
 

@@ -49,6 +49,7 @@ export function CustomerDraftBlock({ block, token }) {
         {label && <span className={`sd-badge sd-badge-${status}`}>{status === 'done' && <Check size={12} aria-hidden="true" />}{label}</span>}
       </header>
       <dl className="sd-meta">
+        {v.organization?.name && <div><dt>Organization</dt><dd>{v.organization.name}</dd></div>}
         <div><dt>Name</dt><dd>{v.name}</dd></div>
         <div><dt>Email</dt><dd>{v.email}</dd></div>
         <div><dt>TRN</dt><dd>{v.trn || '—'}</dd></div>

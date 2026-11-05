@@ -108,7 +108,7 @@ def run(params: Dict[str, Any], ctx: Any) -> Dict[str, Any]:
     net = totals.round2(sum(l["line_amount"] for l in doc.lines))
     vat = totals.round2(sum(l["tax_amount"] for l in doc.lines))
     view = {
-        "kind": "finalise", "number": doc.number, "customer": customer.label if customer else "",
+        "kind": "finalise", "organization": draft.org_info(ctx, org), "number": doc.number, "customer": customer.label if customer else "",
         "currency": (customer.currency if customer else "") or "AED", "date": doc.date, "due_date": doc.due_date,
         "lines": len(doc.lines), "subtotal": totals.money(net), "vat": totals.money(vat),
         "total": totals.money(totals.round2(net + vat)),

@@ -88,7 +88,7 @@ def run(params: Dict[str, Any], ctx: Any) -> Dict[str, Any]:
                  "contact_type_id": CUSTOMER_TYPE_ID},
         "personal": {"currency": "AED", "portal_access": False, "trn_number": trn or "N/A", "website": "N/A"},
     }
-    view = {"kind": "customer", "name": name, "email": email, "trn": trn, "phone": phone, "currency": "AED",
+    view = {"kind": "customer", "organization": draft.org_info(ctx, org), "name": name, "email": email, "trn": trn, "phone": phone, "currency": "AED",
             "warnings": ["The address, country and bank details are left empty; add them in Accutax."]
             + ([] if trn else ["No TRN was given; add it in Accutax if the customer has one."])}
     action = pending.create(KIND, user_id=ctx.user_id, organization_id=org, session_id=ctx.session_id,

@@ -120,6 +120,11 @@ def _organization(params: Dict[str, Any], ctx: Any) -> int:
     return orgs[0]
 
 
+def org_info(ctx: Any, org: int) -> Dict[str, Any]:
+    """The organization a card is for, so that with several organizations selected the person sees which."""
+    return {"id": int(org), "name": (getattr(ctx, "org_names", None) or {}).get(int(org)) or f"Organization {org}"}
+
+
 def _today() -> dt.date:
     from gemini_brain.semantic import periods
     return periods.today_in(settings.report_timezone)
@@ -200,6 +205,7 @@ def run(params: Dict[str, Any], ctx: Any) -> Dict[str, Any]:
     view = _view(income_type, customer, invoice_date, due_date, number, notes, lines, per_line, doc, warnings)
     if saved:
         view["mode"] = "update"
+    view["organization"] = org_info(ctx, org)
     action = pending.create(UPDATE_KIND if saved else KIND, user_id=ctx.user_id, organization_id=org,
                             session_id=ctx.session_id, payload=payload, view=view)
     action_audit.step("prepared", action_id=action.id, kind=action.kind, user_id=ctx.user_id, organization_id=org,
