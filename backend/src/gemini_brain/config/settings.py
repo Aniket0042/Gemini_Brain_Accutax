@@ -60,6 +60,40 @@ class GeminiBrainSettings(BaseSettings):
 
     # ── Accutax Backend API ────────────────────────────────────
     accutax_base_url: str = Field(default="http://13.127.157.108:8081")
+    accutax_api_timeout_seconds: float = Field(
+        default=15.0,
+        gt=0,
+        description="Longest one Accutax REST call from the assistant may take (the write actions' client).",
+    )
+
+    # ── Write actions (invoices and quotes by chat) ────────────
+    ai_write_actions_enabled: bool = Field(
+        default=False,
+        description=(
+            "Lets the assistant prepare records in Accutax (draft invoices and quotes) that the person then confirms "
+            "with a click. Off: no write tool is offered and every confirm is refused."
+        ),
+    )
+    ai_write_tools: str = Field(
+        default="",
+        description="Comma-separated write tools to offer while AI_WRITE_ACTIONS_ENABLED is on. Empty = all of them.",
+    )
+    ai_write_users: str = Field(
+        default="",
+        description="Comma-separated emails or user ids who may use write actions. Empty = everyone.",
+    )
+    pending_action_dir: str = Field(
+        default="",
+        description=(
+            "Directory for drafts the assistant prepared and the person has not confirmed yet, one JSON file each. "
+            "Empty = <system temp>/accutax-pending-actions."
+        ),
+    )
+    pending_action_ttl_hours: int = Field(
+        default=24,
+        ge=1,
+        description="Hours a prepared draft can still be confirmed; after that it expires and is swept.",
+    )
     ai_auth_mode: str = Field(default="legacy", pattern="^(legacy|gateway)$")
     ai_gateway_config_file: str = Field(default="", description="Private server configuration for gateway-only authentication; never a frontend variable.")
     handoff_service_key: str | None = Field(

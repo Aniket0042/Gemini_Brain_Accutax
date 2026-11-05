@@ -259,6 +259,8 @@ def run_agent(
     profile: Any = None,
     tool_done: Optional[Callable[[str, bool, int, Optional[int]], None]] = None,
     dismissed: Sequence[str] = (),
+    accutax_credential: Any = None,
+    write_actions: bool = False,
 ) -> AgentResult:
     """Answer one question. Never raises. `progress(tool_name, tool_input)` is called before each tool runs.
     `history`: the thread's earlier messages; `turn_specs`: what its turns queried (history.add_spec);
@@ -281,7 +283,8 @@ def run_agent(
         authorize()
     ctx = tools.ToolContext(organization_ids=orgs, subject=subject, deadline=deadline, user_id=user_id,
                             session_id=session_id, document_ids=tuple(document_ids), authorize=authorize,
-                            allowed_tools=getattr(profile, "tools", None), dismissed=frozenset(dismissed or ()))
+                            allowed_tools=getattr(profile, "tools", None), dismissed=frozenset(dismissed or ()),
+                            accutax=accutax_credential, write_actions=bool(write_actions and accutax_credential))
     planner_id = model_id or settings.agent_model_id or SONNET5_ID
     writer_id = answer_model_id or settings.agent_answer_model_id or planner_id
     planner = BedrockAdapter(planner_id, label="agent")

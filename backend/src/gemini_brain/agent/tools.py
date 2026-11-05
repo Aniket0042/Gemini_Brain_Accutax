@@ -17,6 +17,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, FrozenSet, List, Optional, Sequence, Tuple
 
+from gemini_brain.accutax_api.client import AccutaxCredential
 from gemini_brain.config.settings import settings
 from gemini_brain.semantic import cash_forecast, list_documents, query_metrics
 from gemini_brain.semantic.catalog import ToolInputError, get_catalog
@@ -110,6 +111,10 @@ class ToolContext:
     allowed_tools: Optional[FrozenSet[str]] = None
     #: Keys of review findings the person marked as not a problem (vat_review.tool.item_key); review_vat leaves them out.
     dismissed: FrozenSet[str] = frozenset()
+    #: The person's Accutax bearer, for write actions only (accutax_api). Hidden from repr; never sent to the model.
+    accutax: Optional[AccutaxCredential] = field(default=None, repr=False)
+    #: Whether this person may use write actions now (actions.enabled_for), decided by the route.
+    write_actions: bool = False
 
     def allows(self, name: str) -> bool:
         return self.allowed_tools is None or name in self.allowed_tools
@@ -154,7 +159,16 @@ def specs(ctx: ToolContext) -> List[Dict[str, Any]]:
     out += [VAT_KB_SPEC, APP_GUIDE_SPEC, vat_return.PENALTY_SPEC]
     if ctx.document_ids:
         out.append(READ_DOCUMENT_SPEC)
-    return [s for s in out if ctx.allows(s["toolSpec"]["name"])]
+    return [s for s in out if ctx.allows(s["toolSpec"]["name"]) and _write_allowed(s["toolSpec"]["name"], ctx)]
+
+
+def _write_allowed(name: str, ctx: ToolContext) -> bool:
+    """A write tool only when it is switched on and this request may write (the person's own Accutax bearer and
+    the AI_WRITE_USERS list). Any other tool: always."""
+    from gemini_brain import actions
+    if name not in actions.WRITE_TOOLS:
+        return True
+    return ctx.write_actions and bool(ctx.accutax) and actions.tool_enabled(name)
 
 
 def execute(name: str, params: Any, ctx: ToolContext) -> Tuple[Dict[str, Any], bool]:
@@ -166,6 +180,8 @@ def execute(name: str, params: Any, ctx: ToolContext) -> Tuple[Dict[str, Any], b
     params = params if isinstance(params, dict) else {}
     if not ctx.allows(name):  # the model named a tool its agent was not offered
         return {"error": f"The tool {name!r} is not available to this agent."}, False
+    if not _write_allowed(name, ctx):  # a write tool that was not offered to this request
+        return {"error": f"The tool {name!r} is not available in this chat."}, False
     try:
         if name in DATA_TOOLS:
             orgs = ctx.scope(params.get("organization_ids"))

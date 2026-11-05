@@ -403,7 +403,7 @@ def _agent_events(payload: QueryRequest, current_user: CurrentUser, orgs: list[i
                 session_id=payload.session_id, user_id=current_user.user_id, db_name=payload.db_name,
                 progress=events.put, brief=bool(payload.brief), documents=documents, agent_key=agent_key,
                 on_step=events.put, dismissed=payload.dismissed_findings, **_model_choice(payload, current_user),
-                **_current_authority(current_user,orgs),
+                **_current_authority(current_user,orgs), **_write_identity(current_user),
             )
         except Exception as e:  # noqa: BLE001 - answer() never raises; this is belt and braces
             logger.warning("agent answer failed: %s", e, exc_info=True)
@@ -482,6 +482,12 @@ def _match_session_scope(
 
 def _current_authority(user: CurrentUser, orgs: list[int]) -> dict:
     return {"authorize":lambda:user.ensure_current_scope(orgs)} if user.gateway_authority else {}
+
+
+def _write_identity(user: CurrentUser, *, external: bool = False) -> dict:
+    """The person's own Accutax bearer (never our JWT, which Accutax refuses) and email, for write actions.
+    `external` (the MCP connector): no bearer, so no write action, until the connector has its own approval step."""
+    return {"accutax_token": "" if external else (user.accutax_token or ""), "user_email": user.email or ""}
 
 
 def _agent_org_meta(orgs: list[int], current_user: CurrentUser) -> Callable[[], dict[int, dict[str, Any]]]:
@@ -972,6 +978,7 @@ async def run_query(
             brief=bool(payload.brief), documents=documents, agent_key=agent_key,
             dismissed=payload.dismissed_findings, **_model_choice(payload, current_user),
             **_current_authority(current_user,orgs),
+            **_write_identity(current_user, external=payload.channel == "mcp"),
         )
         if payload.channel == "mcp":
             from fastapi.encoders import jsonable_encoder

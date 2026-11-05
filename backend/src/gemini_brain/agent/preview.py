@@ -50,14 +50,17 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
            documents: Optional[Sequence[Any]] = None, agent_key: Optional[str] = None,
            on_step: Optional[Callable[[Dict[str, Any]], None]] = None,
            dismissed: Sequence[str] = (),
-           authorize: Optional[Callable[[], None]] = None) -> Dict[str, Any]:
+           authorize: Optional[Callable[[], None]] = None,
+           accutax_token: str = "", user_email: str = "") -> Dict[str, Any]:
     """Answer with the agent and save the turn. Returns a QueryResponse-shaped dict. Never raises.
     `dismissed`: keys of review findings the person marked as not a problem in this browser; the review leaves them out.
     `on_step`: gets a step event as each tool call starts and finishes ({"phase", "tool", ...}), for the live run card.
     `agent_key`: the specialist agent the user picked (agent/profiles.py), already checked; None: the thread's last.
     `model_key`: the model the user picked ("auto" or None: the thread's last pick, else the default);
     `allowed_models`: the keys this user may pick (agent/models.allowed), checked here.
-    `documents`: the files attached to this question (uploads.context.resolve), already checked."""
+    `documents`: the files attached to this question (uploads.context.resolve), already checked.
+    `accutax_token`: the person's own Accutax bearer, only for write actions (draft invoices and quotes they then
+    confirm); never shown to the model or logged. `user_email`: for the AI_WRITE_USERS allow-list."""
     from gemini_brain.usage import ledger, limits
     decision = limits.check(user_id, organization_ids)
     if decision.action == limits.BLOCK:
@@ -85,7 +88,8 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
                                db_name=db_name, progress=progress, brief=brief, model_key=model_key,
                                allowed_models=allowed_models, documents=documents,
                                lite=decision.action == limits.LITE, agent_key=agent_key, on_step=on_step,
-                               dismissed=dismissed, authorize=authorize)
+                               dismissed=dismissed, authorize=authorize,
+                               accutax_token=accutax_token, user_email=user_email)
             spend.status = str(response.get("status") or "ok")
         response["usage"] = limits.public(decision)
         return response
@@ -101,7 +105,8 @@ def _answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[
             documents: Optional[Sequence[Any]] = None, lite: bool = False,
             agent_key: Optional[str] = None, on_step: Optional[Callable[[Dict[str, Any]], None]] = None,
             dismissed: Sequence[str] = (),
-            authorize: Optional[Callable[[], None]] = None) -> Dict[str, Any]:
+            authorize: Optional[Callable[[], None]] = None,
+            accutax_token: str = "", user_email: str = "") -> Dict[str, Any]:
     """answer()'s work. `lite` (the owner's AI for the month is used up): UAE VAT law answers use the picked (lite)
     model too, and the thread keeps the model it had, so it is not stuck on the lite model once the bucket renews."""
     from gemini_brain.agent import models as agent_models
@@ -149,7 +154,7 @@ def _answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[
                                {"phase": "done", "tool": name, "ok": ok, "ms": ms, "rows": rows}),
                            brief=brief, attachment=attached, documents=doc_prompt, document_ids=doc_ids,
                            document_evidence=doc_evidence, user_id=user_id, session_id=session_id, profile=profile,
-                           dismissed=dismissed,
+                           dismissed=dismissed, **_write_access(accutax_token, user_id, user_email),
                            **({"authorize":authorize} if authorize else {}), **model_ids)
     finally:
         traces = _collect_traces(rid)
@@ -229,6 +234,15 @@ AGENT_STATE_KEY = "agent_key"
 
 #: The step event name for building the chart and files after the answer is written.
 FILES_STEP = "files"
+
+
+def _write_access(accutax_token: str, user_id: Any, user_email: str) -> Dict[str, Any]:
+    """run_agent's write-action arguments: the person's Accutax bearer, and whether they may use write actions."""
+    from gemini_brain import actions
+    from gemini_brain.accutax_api.client import AccutaxCredential
+    credential = AccutaxCredential.of(accutax_token)
+    return {"accutax_credential": credential,
+            "write_actions": bool(credential) and actions.enabled_for(user_id, user_email)}
 
 
 def _stepper(on_step: Optional[Callable[[Dict[str, Any]], None]]) -> Callable[[Dict[str, Any]], None]:
