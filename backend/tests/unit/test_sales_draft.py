@@ -194,6 +194,8 @@ class FakeAccutax:
 
 @pytest.fixture
 def accutax(monkeypatch, tmp_path):
+    from gemini_brain.invoicing import lookups
+    lookups.reset_cache()
     fake = FakeAccutax()
     monkeypatch.setattr(draft, "client_for", fake.client)
     monkeypatch.setattr(confirm, "client_for", fake.client)

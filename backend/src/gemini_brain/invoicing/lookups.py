@@ -14,6 +14,8 @@ into AccutaxApiError like a real HTTP error.
 from __future__ import annotations
 
 import re
+import threading
+import time
 import unicodedata
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence
@@ -96,11 +98,33 @@ def _customer(row: Dict[str, Any]) -> Optional[Customer]:
                     payment_terms=str(row.get("payment_terms") or "").strip())
 
 
+_customer_cache: Dict[tuple, tuple] = {}
+_customer_lock = threading.Lock()
+CUSTOMER_CACHE_SECONDS = 120.0
+
+
+def reset_cache(organization_id: Optional[int] = None) -> None:
+    """Forget the cached customer lists (all, or one organization's). Called after a customer is created."""
+    with _customer_lock:
+        for key in [k for k in _customer_cache if organization_id is None or k[0] == int(organization_id)]:
+            del _customer_cache[key]
+
+
 def customers(client: AccutaxClient, user_id: int) -> List[Customer]:
+    """The organization's customers. Kept for two minutes: the list takes about ten seconds on a big organization
+    and every draft, copy and change asks for it."""
+    key = (client.organization_id, int(user_id))
+    with _customer_lock:
+        hit = _customer_cache.get(key)
+    if hit and time.monotonic() - hit[0] < CUSTOMER_CACHE_SECONDS:
+        return list(hit[1])
     data = unwrap(client.get("contact/list_filter", {
         "contact_type_id": str(CUSTOMER_TYPE_ID), "page": 1, "pageSize": MAX_CUSTOMERS,
         "organization_id": client.organization_id, "user_id": str(user_id)}))
-    return [c for c in (_customer(r) for r in _rows(data)) if c is not None]
+    found = [c for c in (_customer(r) for r in _rows(data)) if c is not None]
+    with _customer_lock:
+        _customer_cache[key] = (time.monotonic(), found)
+    return list(found)
 
 
 @dataclass(frozen=True)

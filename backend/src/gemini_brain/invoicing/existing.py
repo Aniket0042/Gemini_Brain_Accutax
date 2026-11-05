@@ -20,6 +20,7 @@ from gemini_brain.accutax_api.client import AccutaxApiError, AccutaxClient
 from gemini_brain.invoicing.lookups import _num, _rows, unwrap
 
 LIST_PAGE = 50
+LIST_TIMEOUT_SECONDS = 8.0
 
 
 class DocumentError(Exception):
@@ -78,7 +79,9 @@ def list_documents(client: AccutaxClient, user_id: int, income_type: str, *, num
         params["number"] = number
     if contact_name:
         params["contact_name"] = contact_name
-    data = unwrap(client.get("income/list_filter", params))
+    # Accutax's list takes longer than any request may on big organizations (the Invoices page is empty there): one
+    # short try, never a retry, so a turn is not spent waiting for it.
+    data = unwrap(client.get("income/list_filter", params, retries=0, timeout=LIST_TIMEOUT_SECONDS))
     return [r for r in (_row(x) for x in _rows(data)) if r is not None]
 
 

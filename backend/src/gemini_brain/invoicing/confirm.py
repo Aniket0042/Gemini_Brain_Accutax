@@ -84,6 +84,7 @@ def _update_document(client: AccutaxClient, action: pending.PendingAction) -> Di
 
 def _create_customer(client: AccutaxClient, action: pending.PendingAction) -> Dict[str, Any]:
     record = lookups.unwrap(client.post("contact/create", action.payload))
+    lookups.reset_cache(client.organization_id)
     record = record if isinstance(record, dict) else {}
     return {"customer_id": record.get("id"), "name": action.payload["base"]["name"]}
 

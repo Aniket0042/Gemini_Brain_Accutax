@@ -150,8 +150,10 @@ class AccutaxClient:
     def close(self) -> None:
         self._http.close()
 
-    def get(self, path: str, params: Optional[Mapping[str, Any]] = None) -> Any:
-        return self._call("GET", path, params=params, retries=1)
+    def get(self, path: str, params: Optional[Mapping[str, Any]] = None, *, retries: int = 1,
+            timeout: Optional[float] = None) -> Any:
+        extra = {"timeout": timeout} if timeout else {}
+        return self._call("GET", path, params=params, retries=retries, **extra)
 
     def post(self, path: str, body: Any = None, params: Optional[Mapping[str, Any]] = None) -> Any:
         return self._call("POST", path, json=body, params=params)

@@ -210,6 +210,11 @@ Invoices and quotes
 - When the customer does not exist, tell the person, and offer to create it. Accutax needs a name and an email:
   ask for the email, then call create_customer. After the person has created the customer, prepare the draft again.
 - A VAT treatment other than the usual rate (zero-rated, exempt, out of scope) only when the person says so.
+- VAT rates are the organization's own. When the person names a rate (for example "use 18%"), call draft_sales_document
+  again with vat_percent set; the tool says if no such rate is set up. You may add one short note if it is not the UAE
+  rate of 5%, but never refuse, never say you cannot save it, and do not search the law for it.
+- The list "Cards of this chat" below is the truth about what was saved. Never ask the person to save something it
+  lists as saved. Never say something is saved, created or posted unless it lists it that way.
 - Only if finalise_sales_invoice is one of your tools: when the person asks to finalise or post an invoice, call it.
   It posts to the books, so be exact about what it did not do: the card's Finalise and post button does it, not you.
   If the tool says it is unavailable, say the person can finalise it in Accutax.
@@ -231,7 +236,8 @@ Your agent
 
 def system_prompt(org_meta: Dict[int, Dict[str, Any]], organization_ids: Sequence[int],
                   today: dt.date, timezone: str, brief: bool = False, attachment: Optional[str] = None,
-                  documents: bool = False, profile: Any = None, writes: bool = False) -> str:
+                  documents: bool = False, profile: Any = None, writes: bool = False,
+                  write_state: str = "") -> str:
     """`attachment`: "chart" or "file" when code will attach one to this answer, else None.
     `documents`: the user attached files to this chat (this turn or earlier).
     `profile`: the specialist agent answering (agent/profiles.py); None or the general agent adds nothing."""
@@ -251,7 +257,7 @@ def system_prompt(org_meta: Dict[int, Dict[str, Any]], organization_ids: Sequenc
         + (BRIEF if brief else "")
         + (DOCUMENTS if documents else "")
         + (ATTACHED.format(what=attachment) if attachment else NOT_ATTACHED)
-        + (WRITES if writes else "")
+        + (WRITES + write_state if writes else "")
         + (SPECIALIST.format(instructions=f"- {profile.instructions}", general=profiles.get(None).name)
            if specialist else "")
     )

@@ -350,7 +350,8 @@ def run_agent(
         def build_system(meta: Dict[int, Dict[str, Any]], placeholders: bool) -> str:
             return (system_prompt(meta, orgs, today, settings.report_timezone, brief=brief, attachment=attachment,
                                   documents=bool(documents or document_ids), profile=profile,
-                                  writes=tools.writes_offered(ctx))
+                                  writes=tools.writes_offered(ctx),
+                                  write_state=_write_state(ctx))
                     + (PLACEHOLDER_RULES if placeholders else "") + CANARY_RULE.format(marker=CANARY))
 
         system = build_system(masking.org_meta(org_meta) if masked else org_meta, masked)
@@ -505,6 +506,18 @@ def _notify_done(tool_done: Optional[Callable[[str, bool, int, Optional[int]], N
         tool_done(name, ok, ms, rows if isinstance(rows, int) else None)
     except Exception as e:  # noqa: BLE001 - a status line must never break the answer
         logger.debug("agent tool_done callback failed: %s", e)
+
+
+def _write_state(ctx: "tools.ToolContext") -> str:
+    """The state of this chat's write cards for the prompt; empty when no write tool is offered."""
+    if not tools.writes_offered(ctx):
+        return ""
+    try:
+        from gemini_brain.invoicing import state
+        return state.describe(ctx)
+    except Exception as e:  # noqa: BLE001 - a missing hint must never stop an answer
+        logger.warning("agent: card state not built: %s", e)
+        return ""
 
 
 def _run_tools(uses: Sequence[Dict[str, Any]], ctx: tools.ToolContext) -> Dict[str, tuple]:
