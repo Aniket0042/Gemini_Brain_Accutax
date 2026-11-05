@@ -164,14 +164,19 @@ class AccutaxClient:
                 if attempt < retries:
                     attempt += 1
                     continue
-                raise AccutaxApiError("unavailable") from e
+                # Not connected at all: nothing ran. Any other failure of a write: it may have run.
+                sure = method == "GET" or isinstance(e, httpx.ConnectError)
+                raise AccutaxApiError("unavailable" if sure else "error") from e
             ms = int((time.monotonic() - started) * 1000)
             logger.info("accutax %s %s -> %s in %dms", method, path, response.status_code, ms)
             if response.status_code in _RETRY_STATUS and attempt < retries:
                 attempt += 1
                 continue
             if response.status_code >= 400:
-                raise AccutaxApiError(_kind(response.status_code), response.status_code, _detail(response))
+                kind = _kind(response.status_code)
+                if method != "GET" and response.status_code in (502, 504):
+                    kind = "error"  # a gateway gave up waiting: the write may still have run
+                raise AccutaxApiError(kind, response.status_code, _detail(response))
             if not response.content:
                 return None
             try:

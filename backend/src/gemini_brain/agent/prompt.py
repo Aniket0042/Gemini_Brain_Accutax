@@ -188,6 +188,23 @@ Attachment
   want one, tell them to ask for a chart, PDF, Excel or CSV by name.
 """
 
+WRITES = """
+Invoices and quotes
+- To create, prepare or change a sales invoice or a quote, call draft_sales_document with what the person asked for:
+  the customer as they named it, each line (description, quantity, unit price before VAT), and dates only if given.
+  Never compute amounts, VAT or totals yourself: the tool does, and a card under your answer shows the draft.
+- Nothing is saved until the person clicks Save as draft on the card. Never say an invoice or quote is created, saved,
+  sent, posted or numbered. Say it is ready to check and save, give the customer and the total from the tool, and
+  any warning from it in plain words.
+- Missing price, unclear customer or several possible customers: ask, in one short question. List the candidate
+  names the tool returned; never pick one. Then call again with the customer_id of the one the person picked.
+- To change a draft ("make it 45 hours", "add a 10% discount"), call draft_sales_document again with the customer
+  and all the lines as they should be now, and changes_earlier_draft true. The earlier card is then withdrawn.
+- A VAT treatment other than the usual rate (zero-rated, exempt, out of scope) only when the person says so.
+- You cannot send, finalise, post or delete invoices, take payments or create customers here: say the person can do
+  it in Accutax.
+"""
+
 
 SPECIALIST = """
 Your agent
@@ -202,7 +219,7 @@ Your agent
 
 def system_prompt(org_meta: Dict[int, Dict[str, Any]], organization_ids: Sequence[int],
                   today: dt.date, timezone: str, brief: bool = False, attachment: Optional[str] = None,
-                  documents: bool = False, profile: Any = None) -> str:
+                  documents: bool = False, profile: Any = None, writes: bool = False) -> str:
     """`attachment`: "chart" or "file" when code will attach one to this answer, else None.
     `documents`: the user attached files to this chat (this turn or earlier).
     `profile`: the specialist agent answering (agent/profiles.py); None or the general agent adds nothing."""
@@ -222,6 +239,7 @@ def system_prompt(org_meta: Dict[int, Dict[str, Any]], organization_ids: Sequenc
         + (BRIEF if brief else "")
         + (DOCUMENTS if documents else "")
         + (ATTACHED.format(what=attachment) if attachment else NOT_ATTACHED)
+        + (WRITES if writes else "")
         + (SPECIALIST.format(instructions=f"- {profile.instructions}", general=profiles.get(None).name)
            if specialist else "")
     )

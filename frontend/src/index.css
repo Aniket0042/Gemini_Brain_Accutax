@@ -3761,3 +3761,41 @@ a.vr-bill-number:hover { text-decoration: underline; }
   border-color: #ef4444;
 }
 
+
+/* ── Sales invoice / quote draft card (SalesDocumentDraftBlock) ── */
+.sd-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: 12px 14px;
+  margin: 4px 0;
+  font-size: var(--text-sm);
+}
+.sd-card.sd-status-discarded, .sd-card.sd-status-expired { opacity: 0.65; }
+.sd-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.sd-title { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: var(--text-ui); font-weight: 600; color: var(--ink); }
+.sd-sub, .sd-faint { color: var(--ink-faint); font-size: var(--text-xs); }
+.sd-badge { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
+  font-size: var(--text-xs); background: var(--surface-2); color: var(--ink-soft); }
+.sd-badge-done { background: var(--success-soft); color: var(--success-ink); }
+.sd-badge-failed { background: var(--warning-soft); color: var(--warning-ink); }
+.sd-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 6px 16px; margin: 10px 0; }
+.sd-meta dt, .sd-totals dt { color: var(--ink-faint); font-size: var(--text-xs); }
+.sd-meta dd, .sd-totals dd { margin: 0; color: var(--ink); }
+.sd-lines { width: 100%; border-collapse: collapse; margin: 4px 0 8px; }
+.sd-lines th { text-align: left; font-weight: 500; color: var(--ink-faint); font-size: var(--text-xs); border-bottom: 1px solid var(--border); padding: 4px 6px; }
+.sd-lines td { padding: 5px 6px; border-bottom: 1px solid var(--border); color: var(--ink); vertical-align: top; }
+.sd-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sd-totals { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; margin: 0 0 8px; }
+.sd-totals div { display: flex; gap: 16px; font-variant-numeric: tabular-nums; }
+.sd-totals .sd-total dd, .sd-totals .sd-total dt { font-weight: 600; color: var(--ink); font-size: var(--text-sm); }
+.sd-notes { margin: 0 0 8px; color: var(--ink-soft); white-space: pre-wrap; }
+.sd-warning { display: flex; gap: 8px; align-items: flex-start; margin: 4px 0; padding: 6px 8px; border-radius: var(--radius-sm, 6px);
+  background: var(--warning-soft); color: var(--warning-ink); }
+.sd-error { margin: 4px 0; color: var(--danger-ink, #b42318); }
+.sd-actions { margin-top: 6px; }
+.sd-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.sd-primary:hover:not(:disabled) { background: var(--accent-strong); }
+.sd-foot { margin: 6px 0 0; }
+.sd-card .spin { animation: sd-spin 1s linear infinite; }
+@keyframes sd-spin { to { transform: rotate(360deg); } }

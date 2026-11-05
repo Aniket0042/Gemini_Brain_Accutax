@@ -270,6 +270,24 @@ def discard(action_id: str, *, user_id: int, now: Optional[float] = None) -> Pen
         return action
 
 
+def latest_open(kind: str, *, user_id: int, organization_id: int, session_id: Optional[str],
+                now: Optional[float] = None) -> Optional[PendingAction]:
+    """The newest pending (not expired) action of this kind in this chat, for "change the draft" follow-ups."""
+    if not session_id:
+        return None
+    ts = now or time.time()
+    best: Optional[PendingAction] = None
+    for path in _dir().glob("act_*.json"):
+        action = _load(path.stem)
+        if (action is None or action.kind != kind or action.user_id != int(user_id)
+                or action.organization_id != int(organization_id) or action.session_id != session_id
+                or action.status != PENDING or action.expired(ts)):
+            continue
+        if best is None or action.created_at > best.created_at:
+            best = action
+    return best
+
+
 def sweep(now: Optional[float] = None) -> List[str]:
     """Delete expired actions (and done or discarded ones past their expiry). Returns their ids."""
     ts = now or time.time()

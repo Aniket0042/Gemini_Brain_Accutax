@@ -17,7 +17,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, FrozenSet, List, Optional, Sequence, Tuple
 
-from gemini_brain.accutax_api.client import AccutaxCredential
+from gemini_brain.accutax_api.client import AccutaxApiError, AccutaxCredential
 from gemini_brain.config.settings import settings
 from gemini_brain.semantic import cash_forecast, list_documents, query_metrics
 from gemini_brain.semantic.catalog import ToolInputError, get_catalog
@@ -115,6 +115,8 @@ class ToolContext:
     accutax: Optional[AccutaxCredential] = field(default=None, repr=False)
     #: Whether this person may use write actions now (actions.enabled_for), decided by the route.
     write_actions: bool = False
+    #: Cards built by write tools this request (invoicing/blocks.py); shown under the answer.
+    cards: List[Dict[str, Any]] = field(default_factory=list)
 
     def allows(self, name: str) -> bool:
         return self.allowed_tools is None or name in self.allowed_tools
@@ -159,7 +161,16 @@ def specs(ctx: ToolContext) -> List[Dict[str, Any]]:
     out += [VAT_KB_SPEC, APP_GUIDE_SPEC, vat_return.PENALTY_SPEC]
     if ctx.document_ids:
         out.append(READ_DOCUMENT_SPEC)
+    if ctx.write_actions:
+        from gemini_brain.invoicing import draft as sales_draft
+        out.append(sales_draft.SPEC)
     return [s for s in out if ctx.allows(s["toolSpec"]["name"]) and _write_allowed(s["toolSpec"]["name"], ctx)]
+
+
+def writes_offered(ctx: ToolContext) -> bool:
+    """Whether this request offers any write tool (the prompt then adds its rules for drafts)."""
+    from gemini_brain import actions
+    return any(ctx.allows(n) and _write_allowed(n, ctx) for n in actions.WRITE_TOOLS)
 
 
 def _write_allowed(name: str, ctx: ToolContext) -> bool:
@@ -197,9 +208,14 @@ def execute(name: str, params: Any, ctx: ToolContext) -> Tuple[Dict[str, Any], b
             return vat_return.penalty_run(params), True
         if name == "read_document":
             return _read_document(params, ctx), True
+        if name == "draft_sales_document":
+            from gemini_brain.invoicing import draft as sales_draft
+            return sales_draft.run(params, ctx), True
         return {"error": f"Unknown tool {name!r}"}, False
     except ToolInputError as e:
         return {"error": str(e)}, False
+    except AccutaxApiError as e:
+        return {"error": f"{e.user_message} Tell the person this; nothing was prepared."}, False
     except CubeError as e:
         logger.warning("agent: %s failed in Cube: %s", name, e)
         return {"error": FIGURES_UNAVAILABLE}, False

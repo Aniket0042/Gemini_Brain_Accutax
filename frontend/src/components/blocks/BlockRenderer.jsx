@@ -12,6 +12,7 @@ import { CollapsibleGroupBlock } from './CollapsibleGroupBlock';
 import { FtaSourcesBlock } from './FtaSourcesBlock';
 import { DocumentCardsBlock } from './DocumentCardsBlock';
 import { VatReviewBlock } from './VatReviewBlock';
+import { SalesDocumentDraftBlock } from './SalesDocumentDraftBlock';
 
 /**
  * BLOCK_REGISTRY — the one place a new block type gets wired up.
@@ -30,6 +31,7 @@ const BLOCK_REGISTRY = {
   fta_sources: FtaSourcesBlock,
   documents: DocumentCardsBlock,
   vat_review: VatReviewBlock,
+  sales_document_draft: SalesDocumentDraftBlock,
 };
 
 /**
@@ -81,6 +83,6 @@ export function chatFacingBlocks(blocks) {
   return blocks.filter((b) => {
     if (b?.type === 'canvas' || b?.type === 'artifact') return false;
     if (hasTable && b?.type === 'kpi_grid') return false;
-    return ['markdown', 'chart', 'table', 'kpi_grid', 'collapsible_group', 'fta_sources', 'documents'].includes(b?.type);
+    return ['markdown', 'chart', 'table', 'kpi_grid', 'collapsible_group', 'fta_sources', 'documents', 'sales_document_draft'].includes(b?.type);
   });
 }

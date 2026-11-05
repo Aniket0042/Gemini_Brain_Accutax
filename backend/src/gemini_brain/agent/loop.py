@@ -349,7 +349,8 @@ def run_agent(
 
         def build_system(meta: Dict[int, Dict[str, Any]], placeholders: bool) -> str:
             return (system_prompt(meta, orgs, today, settings.report_timezone, brief=brief, attachment=attachment,
-                                  documents=bool(documents or document_ids), profile=profile)
+                                  documents=bool(documents or document_ids), profile=profile,
+                                  writes=tools.writes_offered(ctx))
                     + (PLACEHOLDER_RULES if placeholders else "") + CANARY_RULE.format(marker=CANARY))
 
         system = build_system(masking.org_meta(org_meta) if masked else org_meta, masked)
@@ -456,7 +457,7 @@ def run_agent(
         usage=_usage(planner, writer),
         elapsed_ms=int((time.monotonic() - started) * 1000),
         data=data,
-        blocks=[fta] if fta else [],
+        blocks=([fta] if fta else []) + list(ctx.cards),
         privacy=masking.stats() if masking is not None else {},
         ai_view=ai_view(model_text) if status == "ok" else {},
         capture=getattr(masking, "capture", None),
