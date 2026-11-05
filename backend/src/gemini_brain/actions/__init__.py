@@ -14,7 +14,7 @@ from typing import Any, FrozenSet, Optional
 from gemini_brain.config.settings import settings
 
 #: Every write tool the assistant has. A tool not listed here is never treated as a write tool.
-WRITE_TOOLS: FrozenSet[str] = frozenset({"draft_sales_document", "update_sales_document", "convert_quote_to_invoice"})
+WRITE_TOOLS: FrozenSet[str] = frozenset({"draft_sales_document", "copy_sales_document", "create_customer"})
 
 
 def _listed(raw: str) -> set:

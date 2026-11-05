@@ -31,7 +31,7 @@ import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Sequence
 
 from gemini_brain.config.settings import settings
 
@@ -270,18 +270,19 @@ def discard(action_id: str, *, user_id: int, now: Optional[float] = None) -> Pen
         return action
 
 
-def latest_open(kind: str, *, user_id: int, organization_id: int, session_id: Optional[str],
-                now: Optional[float] = None) -> Optional[PendingAction]:
-    """The newest pending (not expired) action of this kind in this chat, for "change the draft" follow-ups."""
+def latest_in_chat(kinds: Sequence[str], *, user_id: int, organization_id: int, session_id: Optional[str],
+                   statuses: Sequence[str] = (PENDING,), now: Optional[float] = None) -> Optional[PendingAction]:
+    """The newest action of these kinds and states in this chat, for "change the draft" follow-ups. Pending
+    ones that expired are skipped."""
     if not session_id:
         return None
     ts = now or time.time()
     best: Optional[PendingAction] = None
     for path in _dir().glob("act_*.json"):
         action = _load(path.stem)
-        if (action is None or action.kind != kind or action.user_id != int(user_id)
+        if (action is None or action.kind not in kinds or action.user_id != int(user_id)
                 or action.organization_id != int(organization_id) or action.session_id != session_id
-                or action.status != PENDING or action.expired(ts)):
+                or action.status not in statuses or action.expired(ts)):
             continue
         if best is None or action.created_at > best.created_at:
             best = action

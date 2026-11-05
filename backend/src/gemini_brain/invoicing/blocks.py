@@ -23,9 +23,14 @@ def record_url(record_id: Any) -> str:
         return ""
 
 
+#: The block type of each kind of pending action.
+BLOCK_TYPES = {"sales_document": "sales_document_draft", "sales_document_update": "sales_document_draft",
+               "customer": "customer_draft"}
+
+
 def card(action: PendingAction) -> Dict[str, Any]:
     public = action.public()
-    return {"type": "sales_document_draft", "action_id": action.id, "status": public["status"],
+    return {"type": BLOCK_TYPES.get(action.kind, "sales_document_draft"), "action_id": action.id, "status": public["status"],
             "version": action.version, "organization_id": action.organization_id, "expires_at": action.expires_at,
             "view": action.view, "result": action.result, "error": action.error,
             "text": _text(action)}
@@ -34,5 +39,7 @@ def card(action: PendingAction) -> Dict[str, Any]:
 def _text(action: PendingAction) -> str:
     """The card as one line, for a client that does not render it (and the saved chat's plain text)."""
     v = action.view or {}
+    if v.get("kind") == "customer":
+        return f"New customer {v.get('name', '')}".strip()
     who = (v.get("customer") or {}).get("name") or "the customer"
     return f"{v.get('document_label', 'Draft')} for {who}: total {v.get('currency', '')} {v.get('total', '')}".strip()

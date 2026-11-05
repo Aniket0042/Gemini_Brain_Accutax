@@ -25,6 +25,8 @@ from gemini_brain.invoicing import lookups, totals
 from gemini_brain.semantic.catalog import ToolInputError
 
 KIND = "sales_document"
+UPDATE_KIND = "sales_document_update"   # a change to a draft already saved in Accutax
+DOCUMENT_KINDS = (KIND, UPDATE_KIND)
 TYPES = {"invoice": "INVOICE", "quote": "QUOTE"}
 LABELS = {"INVOICE": "Invoice", "QUOTE": "Quote"}
 TREATMENTS = ("standard", "zero_rated", "exempt", "out_of_scope")
@@ -33,13 +35,17 @@ DEFAULT_DUE_DAYS = 30
 SAVE_NOTE = ("A card with this draft and a Save as draft button is shown under your answer. Nothing is saved in "
              "Accutax until the person clicks it: never say it is saved, sent or posted.")
 
+SAVE_CHANGES_NOTE = ("The draft is already saved in Accutax. A card with this change and a Save changes button is shown "
+                     "under your answer. Nothing changes in Accutax until the person clicks it: never say it is updated.")
+
 SPEC = {"toolSpec": {
     "name": "draft_sales_document",
     "description": (
         "Prepare a sales invoice or a quote for one customer, from what the person asked for. Code finds the customer "
         "and items in Accutax, picks the VAT rate and computes the totals; a card lets the person save it as a draft. "
         "Nothing is saved by this call. To change the draft of this chat (quantity, price, lines, dates, customer), "
-        "call it again with every line as it should be now and changes_earlier_draft true."
+        "call it again with every line as it should be now and changes_earlier_draft true; this also changes a draft "
+        "that was already saved."
     ),
     "inputSchema": {"json": {
         "type": "object",
@@ -126,10 +132,17 @@ def run(params: Dict[str, Any], ctx: Any) -> Dict[str, Any]:
     if len(raw_lines) > MAX_LINES:
         raise ToolInputError(f"At most {MAX_LINES} lines")
     org = _organization(params, ctx)
-    replaces = None
+    earlier = None
     if params.get("changes_earlier_draft") is True:
-        earlier = pending.latest_open(KIND, user_id=ctx.user_id, organization_id=org, session_id=ctx.session_id)
-        replaces = earlier.id if earlier is not None else None
+        earlier = pending.latest_in_chat(DOCUMENT_KINDS, user_id=ctx.user_id, organization_id=org,
+                                         session_id=ctx.session_id, statuses=(pending.PENDING, pending.DONE))
+    saved = earlier is not None and earlier.status == pending.DONE
+    replaces = earlier.id if earlier is not None and not saved else None
+    if saved:
+        if earlier.view.get("document_type") != income_type:
+            raise ToolInputError("A saved draft cannot change from invoice to quote or back: prepare a new one")
+        if (earlier.result or {}).get("record_id") in (None, ""):
+            raise ToolInputError("Accutax has not finished saving the earlier draft: try again in a moment")
 
     with client_for(ctx.accutax, org) as client:
         try:
@@ -173,13 +186,17 @@ def run(params: Dict[str, Any], ctx: Any) -> Dict[str, Any]:
         warnings.append("Accutax suggested no number; set one when you open the draft.")
 
     notes = str(params.get("notes") or "").strip()[:2000]
-    payload = _payload(income_type, ctx.user_id, org, customer.id, invoice_date, due_date, numbers.suggested, notes,
+    number = (earlier.result.get("number") or earlier.view.get("number") or "") if saved else numbers.suggested
+    payload = _payload(income_type, ctx.user_id, org, customer.id, invoice_date, due_date, number, notes,
                        lines, per_line)
-    view = _view(income_type, customer, invoice_date, due_date, numbers.suggested, notes, lines, per_line, doc,
-                 warnings)
-    action = pending.create(KIND, user_id=ctx.user_id, organization_id=org, session_id=ctx.session_id,
-                            payload=payload, view=view)
-    action_audit.step("prepared", action_id=action.id, kind=KIND, user_id=ctx.user_id, organization_id=org,
+    if saved:
+        payload = update_payload(payload, int(earlier.result["record_id"]))
+    view = _view(income_type, customer, invoice_date, due_date, number, notes, lines, per_line, doc, warnings)
+    if saved:
+        view["mode"] = "update"
+    action = pending.create(UPDATE_KIND if saved else KIND, user_id=ctx.user_id, organization_id=org,
+                            session_id=ctx.session_id, payload=payload, view=view)
+    action_audit.step("prepared", action_id=action.id, kind=action.kind, user_id=ctx.user_id, organization_id=org,
                       session_id=ctx.session_id, payload=payload, document_type=income_type,
                       lines=len(lines), replaces=replaces)
     if replaces:
@@ -197,9 +214,10 @@ def run(params: Dict[str, Any], ctx: Any) -> Dict[str, Any]:
                    "line_total": totals.money(t.line_total)} for l, t in zip(lines, per_line)],
         "subtotal": totals.money(doc.subtotal), "vat": totals.money(doc.vat), "total": totals.money(doc.total),
         "date": invoice_date.isoformat(), "due_date": due_date.isoformat(),
-        "suggested_number": numbers.suggested or None,
+        "suggested_number": number or None,
+        "mode": "change_saved_draft" if saved else "new_draft",
         "warnings": warnings,
-        "note": SAVE_NOTE,
+        "note": SAVE_CHANGES_NOTE if saved else SAVE_NOTE,
     }
 
 
@@ -279,10 +297,37 @@ def _payload(income_type: str, user_id: int, org: int, contact_id: int, invoice_
     }
 
 
+def update_payload(create_payload: Dict[str, Any], income_id: int) -> Dict[str, Any]:
+    """PUT income/update, from the create payload: the same fields, plus the record to change (UpdateIncomeDTO)."""
+    keep = ("income_type", "user_id", "organization_id", "contact_id", "payment_type_id", "invoice_date", "due_date",
+            "invoice_number", "is_draft", "additional_notes", "terms_and_conditions", "line_items")
+    return {"income_id": int(income_id), **{k: create_payload[k] for k in keep if k in create_payload}}
+
+
 def _view(income_type: str, customer: lookups.Customer, invoice_date: dt.date, due_date: dt.date, number: str,
           notes: str, lines: List[Dict[str, Any]], per_line: List[totals.LineTotals], doc: totals.DocumentTotals,
           warnings: List[str]) -> Dict[str, Any]:
     """What the card shows. Built in code; the model never writes it."""
+    shown = [{
+        "description": l["description"],
+        "item": l["item"].name if l["item"] else None,
+        "quantity": l["calc"].quantity,
+        "unit_price": totals.money(l["calc"].unit_price),
+        "discount": " + ".join(x for x in (
+            f"{l['calc'].discount_percent:g}%" if l["calc"].discount_percent else "",
+            totals.money(l["calc"].discount_amount) if l["calc"].discount_amount else "") if x),
+        "vat": l["vat_label"],
+        "vat_amount": totals.money(t.tax),
+        "line_total": totals.money(t.line_total),
+    } for l, t in zip(lines, per_line)]
+    return _view_from(income_type, customer, invoice_date, due_date, number, notes, shown, doc, warnings)
+
+
+def _view_from(income_type: str, customer: lookups.Customer, invoice_date: dt.date, due_date: dt.date, number: str,
+               notes: str, shown: List[Dict[str, Any]], doc: totals.DocumentTotals,
+               warnings: List[str]) -> Dict[str, Any]:
+    """The card from lines already formatted for display."""
+    keys = ("description", "item", "quantity", "unit_price", "discount", "vat", "vat_amount", "line_total")
     return {
         "document_type": income_type,
         "document_label": LABELS[income_type],
@@ -293,18 +338,7 @@ def _view(income_type: str, customer: lookups.Customer, invoice_date: dt.date, d
         "due_date": due_date.isoformat(),
         "due_label": "Due" if income_type == "INVOICE" else "Valid until",
         "notes": notes,
-        "lines": [{
-            "description": l["description"],
-            "item": l["item"].name if l["item"] else None,
-            "quantity": l["calc"].quantity,
-            "unit_price": totals.money(l["calc"].unit_price),
-            "discount": (f"{l['calc'].discount_percent:g}%" if l["calc"].discount_percent else "")
-                        + (" + " if l["calc"].discount_percent and l["calc"].discount_amount else "")
-                        + (totals.money(l["calc"].discount_amount) if l["calc"].discount_amount else ""),
-            "vat": l["vat_label"],
-            "vat_amount": totals.money(t.tax),
-            "line_total": totals.money(t.line_total),
-        } for l, t in zip(lines, per_line)],
+        "lines": [{k: l.get(k) for k in keys} for l in shown],
         "subtotal": totals.money(doc.subtotal),
         "vat": totals.money(doc.vat),
         "total": totals.money(doc.total),

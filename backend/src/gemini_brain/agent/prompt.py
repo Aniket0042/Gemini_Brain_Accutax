@@ -199,10 +199,17 @@ Invoices and quotes
 - Missing price, unclear customer or several possible customers: ask, in one short question. List the candidate
   names the tool returned; never pick one. Then call again with the customer_id of the one the person picked.
 - To change a draft ("make it 45 hours", "add a 10% discount"), call draft_sales_document again with the customer
-  and all the lines as they should be now, and changes_earlier_draft true. The earlier card is then withdrawn.
+  and all the lines as they should be now, and changes_earlier_draft true. If the earlier draft is not saved yet,
+  its card is withdrawn. If it is already saved, a new card offers Save changes, and the saved draft stays as it is
+  until the person clicks. Never prepare a second new draft for a change: that would make a duplicate.
+- To turn a quote into an invoice, or repeat a customer's last invoice or quote, call copy_sales_document with the
+  quote's number or the customer. Never copy lines yourself. If the tool says the quote was already converted,
+  tell the person the invoice number.
+- When the customer does not exist, tell the person, and offer to create it. Accutax needs a name and an email:
+  ask for the email, then call create_customer. After the person has created the customer, prepare the draft again.
 - A VAT treatment other than the usual rate (zero-rated, exempt, out of scope) only when the person says so.
-- You cannot send, finalise, post or delete invoices, take payments or create customers here: say the person can do
-  it in Accutax.
+- You cannot send, finalise, post or delete invoices or take payments here, and you cannot change an invoice that is
+  no longer a draft: say the person can do it in Accutax.
 """
 
 

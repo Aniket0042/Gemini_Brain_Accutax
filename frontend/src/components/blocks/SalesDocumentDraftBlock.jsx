@@ -15,6 +15,7 @@ const STATUS_TEXT = {
   pending: null,
   confirming: 'Saving…',
   done: 'Saved as a draft in Accutax',
+  doneUpdate: 'Changes saved in Accutax',
   failed: 'Not confirmed',
   discarded: 'Withdrawn',
   expired: 'Expired',
@@ -53,16 +54,27 @@ export function SalesDocumentDraftBlock({ block, token }) {
     }
   };
 
-  const statusText = STATUS_TEXT[status];
+  const isUpdate = v.mode === 'update';
+  const statusText = status === 'done' && isUpdate ? STATUS_TEXT.doneUpdate : STATUS_TEXT[status];
   const lastError = card.error?.message;
 
   return (
     <section className={`sd-card sd-status-${status}`} aria-label={`${v.document_label} draft`}>
       <header className="sd-head">
-        <h3 className="sd-title"><FileText size={15} aria-hidden="true" />{v.document_label} draft</h3>
-        {v.number && <span className="sd-sub">{status === 'done' ? '' : 'Suggested no. '}{card.result?.number || v.number}</span>}
+        <h3 className="sd-title"><FileText size={15} aria-hidden="true" />{isUpdate ? `Change to ${v.document_label.toLowerCase()} ${v.number}` : `${v.document_label} draft`}</h3>
+        {v.number && !isUpdate && <span className="sd-sub">{status === 'done' ? '' : 'Suggested no. '}{card.result?.number || v.number}</span>}
         {statusText && <span className={`sd-badge sd-badge-${status}`}>{status === 'done' && <Check size={12} aria-hidden="true" />}{statusText}</span>}
       </header>
+
+      {v.copied_from && (
+        <p className="sd-faint sd-copied">
+          Copied from {v.copied_from.type.toLowerCase()} {v.copied_from.number}
+          {v.copied_from.linked ? ' · the quote is marked as converted when you save' : ''}
+        </p>
+      )}
+      {isUpdate && open && (
+        <p className="sd-faint sd-copied">This replaces the lines and details of the draft you saved. It stays unchanged until you click Save changes.</p>
+      )}
 
       <dl className="sd-meta">
         <div><dt>Customer</dt><dd>{v.customer?.name}{v.customer?.trn ? <span className="sd-faint"> · TRN {v.customer.trn}</span> : null}</dd></div>
@@ -106,7 +118,7 @@ export function SalesDocumentDraftBlock({ block, token }) {
             <button type="button" className="report-action sd-primary" disabled={busy}
               onClick={() => run(() => saveDraft(card.action_id, card.version, token))}>
               {busy ? <Loader2 size={14} className="spin" aria-hidden="true" /> : <Check size={14} aria-hidden="true" />}
-              Save as draft
+              {isUpdate ? 'Save changes' : 'Save as draft'}
             </button>
             <button type="button" className="report-action" disabled={busy}
               onClick={() => run(() => discardDraft(card.action_id, token))}>
@@ -121,7 +133,7 @@ export function SalesDocumentDraftBlock({ block, token }) {
           </button>
         )}
       </div>
-      {open && <p className="sd-faint sd-foot">Nothing is saved in Accutax until you click Save as draft.</p>}
+      {open && <p className="sd-faint sd-foot">{isUpdate ? 'Nothing changes in Accutax until you click Save changes.' : 'Nothing is saved in Accutax until you click Save as draft.'}</p>}
     </section>
   );
 }

@@ -39,6 +39,11 @@ _pool = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix=
 DATA_TOOLS = {"query_metrics": query_metrics, "list_documents": list_documents, "cash_forecast": cash_forecast,
               "review_vat": review_vat, "vat_return": vat_return}
 
+#: Write tool -> the module whose run(params, ctx) executes it.
+WRITE_RUNNERS = {"draft_sales_document": "gemini_brain.invoicing.draft",
+                 "copy_sales_document": "gemini_brain.invoicing.duplicate",
+                 "create_customer": "gemini_brain.invoicing.customer"}
+
 _SCOPE_PROPERTY = {
     "type": "array", "items": {"type": "integer"},
     "description": "Narrow to some of the organizations selected in this chat (their ids). Omit for all of them.",
@@ -162,8 +167,10 @@ def specs(ctx: ToolContext) -> List[Dict[str, Any]]:
     if ctx.document_ids:
         out.append(READ_DOCUMENT_SPEC)
     if ctx.write_actions:
+        from gemini_brain.invoicing import customer as sales_customer
         from gemini_brain.invoicing import draft as sales_draft
-        out.append(sales_draft.SPEC)
+        from gemini_brain.invoicing import duplicate as sales_copy
+        out += [sales_draft.SPEC, sales_copy.SPEC, sales_customer.SPEC]
     return [s for s in out if ctx.allows(s["toolSpec"]["name"]) and _write_allowed(s["toolSpec"]["name"], ctx)]
 
 
@@ -208,9 +215,9 @@ def execute(name: str, params: Any, ctx: ToolContext) -> Tuple[Dict[str, Any], b
             return vat_return.penalty_run(params), True
         if name == "read_document":
             return _read_document(params, ctx), True
-        if name == "draft_sales_document":
-            from gemini_brain.invoicing import draft as sales_draft
-            return sales_draft.run(params, ctx), True
+        if name in WRITE_RUNNERS:
+            import importlib
+            return importlib.import_module(WRITE_RUNNERS[name]).run(params, ctx), True
         return {"error": f"Unknown tool {name!r}"}, False
     except ToolInputError as e:
         return {"error": str(e)}, False

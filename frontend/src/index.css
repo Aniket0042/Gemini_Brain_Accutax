@@ -3799,3 +3799,4 @@ a.vr-bill-number:hover { text-decoration: underline; }
 .sd-foot { margin: 6px 0 0; }
 .sd-card .spin { animation: sd-spin 1s linear infinite; }
 @keyframes sd-spin { to { transform: rotate(360deg); } }
+.sd-copied { margin: 6px 0 0; }

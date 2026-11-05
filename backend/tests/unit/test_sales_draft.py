@@ -123,6 +123,9 @@ TAX = [{"id": 7, "name": "VAT 5%", "tax_rate": 5, "tax_type": "standard", "rate_
 class FakeAccutax:
     def __init__(self):
         self.calls = []
+        self.bodies = []
+        self.list_rows = []      # income/list_filter rows (dicts)
+        self.records = {}        # income/find: id -> record
         self.create_response = lambda body: httpx.Response(200, json={"error": False, "code": 200, "data": {
             "id": 881, "invoice_number": body["invoice_number"]}})
 
@@ -142,6 +145,23 @@ class FakeAccutax:
             return ok({"prefix": "QUO-", "next_number": 12, "suggested_number": "QUO-0012"})
         if path == "/income/create":
             return self.create_response(json.loads(request.content))
+        if path == "/income/list_filter":
+            q = request.url.params
+            rows = [r for r in self.list_rows if r["income_type"] == q.get("income_type")
+                    and (not q.get("number") or q["number"].lower() in r["number"].lower())
+                    and (not q.get("contact_name") or q["contact_name"].lower() in r["contact_name"].lower())]
+            return ok({"data": rows, "pagination": {"totalItems": len(rows)}})
+        if path == "/income/find":
+            record = self.records.get(int(request.url.params["income_id"]))
+            if record is None:
+                return httpx.Response(200, json={"error": False, "code": 400, "message": "Cannot find income", "data": {}})
+            return ok(record)
+        if path == "/income/update":
+            self.bodies.append(json.loads(request.content))
+            return ok({"income_id": self.bodies[-1]["income_id"]})
+        if path == "/contact/create":
+            self.bodies.append(json.loads(request.content))
+            return httpx.Response(201, json={"id": 77, "name": self.bodies[-1]["base"]["name"]})
         return httpx.Response(404, json={"message": "nope"})
 
     def client(self, credential, org):
@@ -153,6 +173,9 @@ def accutax(monkeypatch, tmp_path):
     fake = FakeAccutax()
     monkeypatch.setattr(draft, "client_for", fake.client)
     monkeypatch.setattr(confirm, "client_for", fake.client)
+    from gemini_brain.invoicing import customer as customer_tool, duplicate
+    monkeypatch.setattr(duplicate, "client_for", fake.client)
+    monkeypatch.setattr(customer_tool, "client_for", fake.client)
     monkeypatch.setattr(settings, "pending_action_dir", str(tmp_path / "pending"))
     monkeypatch.setattr(settings, "agent_audit_log", str(tmp_path / "audit.jsonl"))
     monkeypatch.setattr(settings, "accutax_app_url", "https://app.accutax.test")
@@ -299,7 +322,7 @@ def test_confirm_timeout_blocks_second_save(accutax):
         raise httpx.ReadTimeout("slow")
     accutax.create_response = slow
     out = confirm.confirm(aid, user_id=501, organization_id=24, credential=AccutaxCredential(TOKEN))
-    assert out.status == "failed" and "Check your drafts" in out.error["message"]
+    assert out.status == "failed" and "Check Accutax" in out.error["message"]
     with pytest.raises(pending.ActionStateError):
         confirm.confirm(aid, user_id=501, organization_id=24, credential=AccutaxCredential(TOKEN))
 

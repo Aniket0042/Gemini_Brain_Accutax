@@ -112,7 +112,7 @@ def test_write_switches(monkeypatch):
     monkeypatch.setattr(settings, "ai_write_users", "A@X.com, 7")
     assert actions.enabled_for(99, "a@x.com") and actions.enabled_for(7) and not actions.enabled_for(8, "b@x.com")
     monkeypatch.setattr(settings, "ai_write_tools", "draft_sales_document")
-    assert actions.tool_enabled("draft_sales_document") and not actions.tool_enabled("convert_quote_to_invoice")
+    assert actions.tool_enabled("draft_sales_document") and not actions.tool_enabled("copy_sales_document")
 
 
 def test_write_tool_gate_in_tools(monkeypatch):
