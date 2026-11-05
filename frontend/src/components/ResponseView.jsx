@@ -13,6 +13,10 @@ import { MarkdownLink } from './markdownLinks';
 import { SortableMarkdownTable } from './SortableMarkdownTable';
 import { ReportActions } from './blocks/ReportActions';
 import { PrivacyBadge } from './PrivacyBadge';
+
+// The "N names and IDs hidden from the AI" dropdown under answers. The masking itself always runs; this only shows
+// the dropdown. Off unless the build sets VITE_SHOW_PRIVACY_BADGE=true.
+const SHOW_PRIVACY_BADGE = import.meta.env.VITE_SHOW_PRIVACY_BADGE === 'true';
 import { SensitiveNotice } from './SensitiveNotice';
 import { CodeChrome } from './blocks/CodeBlock';
 import { SqlTraceCard } from './SqlTraceCard';
@@ -325,7 +329,7 @@ const AssistantResponseCard = ({
             <ReportActions blocks={blocks} onOpenCanvas={onOpenCanvas} token={token} />
           )}
 
-          {!isStreaming && privacyBlock && <PrivacyBadge block={privacyBlock} />}
+          {!isStreaming && privacyBlock && SHOW_PRIVACY_BADGE && <PrivacyBadge block={privacyBlock} />}
 
           {msg.stopped ? (
             <div style={styles.emptyNotice}>
