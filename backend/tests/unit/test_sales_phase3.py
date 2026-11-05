@@ -40,7 +40,7 @@ def _record(**over):
     rec = {"id": 881, "invoice_number": "INV-1048", "income_type": "INVOICE", "organization_id": 24, "contact_id": 1,
            "is_draft": True, "invoice_date": "2026-11-05T00:00:00.000Z", "due_date": "2026-12-05", "items": [
                {"items_id": 10, "description": "Consulting", "quantity": 40, "unit_price": 300, "discount_percent": 0,
-                "discount_amount": 0, "tax_rate_id": 7, "tax_amount": 600, "line_amount": 12600, "account_id": 400}]}
+                "discount_amount": 0, "tax_rate_id": 7, "tax_amount": 600, "line_amount": 12000, "account_id": 400}]}
     rec.update(over)
     return rec
 
@@ -116,6 +116,23 @@ def test_finalise_confirm_rechecks_token_organization(finalise_on):
     out, _ = tools.execute("finalise_sales_invoice", {}, ctx)
     done = confirm.confirm(out["draft_id"], user_id=501, organization_id=24, credential=AccutaxCredential(jwt(25)))
     assert done.status == "failed" and "sign-in" in done.error["message"]
+    assert not getattr(finalise_on, "finalised", [])
+
+
+def test_finalise_refuses_vat_counted_twice(finalise_on):
+    # saved the form's way: line_amount = net + VAT (12600). Accutax would post revenue 12600 + VAT 600 and debit 13200.
+    ctx = ctx_for()
+    _saved_invoice(finalise_on, ctx)
+    finalise_on.records[881]["items"][0]["line_amount"] = 12600
+    out, ok = tools.execute("finalise_sales_invoice", {}, ctx)
+    assert ok and out["status"] == "needs_fix" and "twice" in out["note"]
+    # and at the click, if it was changed after the card was prepared
+    finalise_on.records[881]["items"][0]["line_amount"] = 12000
+    out, _ = tools.execute("finalise_sales_invoice", {}, ctx)
+    assert out["status"] == "finalise_ready"
+    finalise_on.records[881]["items"][0]["line_amount"] = 12600
+    done = confirm.confirm(out["draft_id"], user_id=501, organization_id=24, credential=ctx.accutax)
+    assert done.status == "failed" and "wrong total" in done.error["message"]
     assert not getattr(finalise_on, "finalised", [])
 
 

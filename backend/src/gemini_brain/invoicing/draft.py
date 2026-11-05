@@ -305,7 +305,7 @@ def _payload(income_type: str, user_id: int, org: int, contact_id: int, invoice_
             "discount_amount": l["calc"].discount_amount,
             "tax_rate_id": l["rate"].id if l["rate"] else None,
             "tax_amount": t.tax,
-            "line_amount": t.line_total,
+            "line_amount": t.net,       # the net: Accutax adds tax_amount itself (see totals.py)
             "cost_center_id": None,
         } for l, t in zip(lines, per_line)],
     }

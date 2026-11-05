@@ -62,3 +62,16 @@ def test_number_is_read_when_token_matches(accutax):
                               accutax=AccutaxCredential("opaque-token"), write_actions=True)
     out, _ = tools.execute("draft_sales_document", ASK, other)       # a token that names no organization
     assert out["suggested_number"] is None
+
+
+def test_accutax_total_equals_the_card_total(accutax):
+    # the VM showed 1,666.00 on the invoice page for a card total of 1,445.50: Accutax's amount due is
+    # sum(line_amount + tax_amount), so line_amount must be the net
+    accutax.tax_rates = [_rate(1, 18, name="Out of Scope Tax")]
+    ask = {**ASK, "lines": [{"description": "Consulting", "quantity": 3.5, "unit_price": 350}]}
+    out, _ = tools.execute("draft_sales_document", ask, _ctx())
+    assert out["total"] == "1,445.50"
+    from gemini_brain.actions import pending
+    lines = pending.get_for(out["draft_id"], user_id=501).payload["line_items"]
+    accutax_total = sum(l["line_amount"] + l["tax_amount"] for l in lines)
+    assert round(accutax_total, 2) == 1445.50

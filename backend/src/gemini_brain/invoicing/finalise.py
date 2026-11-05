@@ -98,14 +98,20 @@ def run(params: Dict[str, Any], ctx: Any) -> Dict[str, Any]:
     if not doc.lines:
         return _unavailable(f"{doc.number} has no lines that can be read, so it cannot be finalised from chat.")
 
+    if _saved_with_vat_included(doc.lines):
+        return _unavailable(f"{doc.number} was saved with the VAT inside each line amount, so Accutax would count the "
+                            "VAT twice and post the wrong total. Tell the person to change the invoice here first "
+                            "(that saves it correctly) or to fix it in Accutax. It must not be finalised as it is.",
+                            "needs_fix")
     customer = customers.get(doc.contact_id)
-    gross = totals.round2(sum(l["line_amount"] for l in doc.lines))
+    # What Accutax will post: revenue = sum of line_amount, VAT = sum of tax_amount, receivables = both.
+    net = totals.round2(sum(l["line_amount"] for l in doc.lines))
     vat = totals.round2(sum(l["tax_amount"] for l in doc.lines))
     view = {
         "kind": "finalise", "number": doc.number, "customer": customer.label if customer else "",
         "currency": (customer.currency if customer else "") or "AED", "date": doc.date, "due_date": doc.due_date,
-        "lines": len(doc.lines), "subtotal": totals.money(totals.round2(gross - vat)), "vat": totals.money(vat),
-        "total": totals.money(gross),
+        "lines": len(doc.lines), "subtotal": totals.money(net), "vat": totals.money(vat),
+        "total": totals.money(totals.round2(net + vat)),
         "warnings": ["Finalising posts this invoice to your books. To undo it you must void it in Accutax."],
     }
     payload = {"income_id": int(doc.id), "invoice_number": doc.number}
@@ -120,6 +126,21 @@ def run(params: Dict[str, Any], ctx: Any) -> Dict[str, Any]:
             "warnings": view["warnings"], "note": SAVE_NOTE}
 
 
+def _net_of(l: Dict[str, Any]) -> float:
+    gross = l["quantity"] * l["unit_price"]
+    return totals.round2(gross - gross * (l["discount_percent"] / 100) - l["discount_amount"])
+
+
+def _saved_with_vat_included(lines) -> bool:
+    """True when a taxed line's line_amount is its net plus VAT (the way Accutax's own form saves it) instead of its
+    net. Accutax's backend reads line_amount as the net, so such an invoice would be counted with the VAT twice."""
+    for l in lines:
+        if l["tax_amount"] > 0 and l["quantity"] * l["unit_price"] > 0 \
+                and abs(l["line_amount"] - (_net_of(l) + l["tax_amount"])) < 0.02:
+            return True
+    return False
+
+
 def finalise_document(client, action: pending.PendingAction) -> Dict[str, Any]:
     """The confirm step. Everything is checked again: the token's organization, and the record itself."""
     from gemini_brain.invoicing import blocks
@@ -131,5 +152,8 @@ def finalise_document(client, action: pending.PendingAction) -> Dict[str, Any]:
     if doc.income_type not in FINALISABLE or not doc.is_draft or doc.is_posted:
         raise existing.DocumentError(f"{doc.number or 'That invoice'} is no longer a draft in Accutax, so it cannot "
                                      "be finalised from chat.")
+    if _saved_with_vat_included(doc.lines):
+        raise existing.DocumentError(f"{doc.number} has its VAT inside each line amount, so Accutax would post the "
+                                     "wrong total. Fix the invoice before finalising it.")
     lookups.unwrap(client.put(f"income/finalise/{income_id}"))
     return {"record_id": income_id, "number": doc.number, "url": blocks.record_url(income_id), "finalised": True}

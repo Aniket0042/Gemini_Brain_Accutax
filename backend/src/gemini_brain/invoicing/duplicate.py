@@ -117,9 +117,13 @@ def run(params: Dict[str, Any], ctx: Any) -> Dict[str, Any]:
     if doc.income_type == "QUOTE" and doc.is_draft and convert:
         warnings.append(f"Quote {doc.number} is still a draft.")
 
+    # Lines saved by Accutax's own form hold the net plus VAT in line_amount; lines saved by the assistant hold the
+    # net. Either way the copy takes the net from quantity, price and discounts (totals.py), and keeps the stored VAT.
+    for l in doc.lines:
+        l["net"] = _net(l)
     lines = [_line(l, rates) for l in doc.lines]
-    net_lines = [totals.LineTotals(net=totals.round2(l["line_amount"] - l["tax_amount"]), tax=l["tax_amount"],
-                                   line_total=l["line_amount"]) for l in doc.lines]
+    net_lines = [totals.LineTotals(net=l["net"], tax=l["tax_amount"], line_total=totals.round2(l["net"] + l["tax_amount"]))
+                 for l in doc.lines]
     docs = totals.document_totals(net_lines)
     payload = _payload(target, ctx.user_id, org, customer.id, invoice_date, due_date, numbers.suggested, doc,
                        link)
@@ -189,8 +193,17 @@ def _line(l: Dict[str, Any], rates: List[lookups.TaxRate]) -> Dict[str, Any]:
             "unit_price": totals.money(l["unit_price"]), "discount": " + ".join(x for x in (pct, amt) if x),
             "vat": rate.label if rate else ("VAT" if l["tax_amount"] else "No VAT"),
             "vat_name": rate.name if rate else "",
-            "vat_amount": totals.money(l["tax_amount"]), "line_total": totals.money(l["line_amount"]),
-            "line_amount": l["line_amount"], "tax_amount": l["tax_amount"], "_raw": l}
+            "vat_amount": totals.money(l["tax_amount"]), "line_total": totals.money(totals.round2(l["net"] + l["tax_amount"])),
+            "line_amount": l["net"], "tax_amount": l["tax_amount"], "_raw": l}
+
+
+def _net(l: Dict[str, Any]) -> float:
+    """The net of a stored line. From quantity, price and discounts when they are there; else line_amount as stored
+    (Accutax's backend reads it as the net)."""
+    gross = l["quantity"] * l["unit_price"]
+    if gross > 0:
+        return totals.round2(gross - gross * (l["discount_percent"] / 100) - l["discount_amount"])
+    return totals.round2(l["line_amount"])
 
 
 def _payload(target: str, user_id: int, org: int, contact_id: int, invoice_date: dt.date, due_date: dt.date,
@@ -201,9 +214,9 @@ def _payload(target: str, user_id: int, org: int, contact_id: int, invoice_date:
         "status_type_id": 1, "payment_type_id": 1, "is_recurring": False, "is_draft": True,
         "invoice_date": draft._iso(invoice_date), "due_date": draft._iso(due_date), "invoice_number": number,
         "additional_notes": doc.notes, "terms_and_conditions": doc.terms, "attachments": [],
-        "line_items": [{k: l[k] for k in ("items_id", "description", "account_id", "quantity", "unit_price",
-                                          "discount_percent", "discount_amount", "tax_rate_id", "tax_amount",
-                                          "line_amount", "cost_center_id")} for l in doc.lines],
+        "line_items": [{**{k: l[k] for k in ("items_id", "description", "account_id", "quantity", "unit_price",
+                                             "discount_percent", "discount_amount", "tax_rate_id", "tax_amount",
+                                             "cost_center_id")}, "line_amount": l["net"]} for l in doc.lines],
     }
     if link:
         body["reference_id"] = int(doc.id)

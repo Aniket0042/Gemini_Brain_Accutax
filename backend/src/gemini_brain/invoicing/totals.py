@@ -10,6 +10,12 @@ pricesIncludeTax=false):
     line_total = round2(net + tax)
     document:  total = round2(sum line_total), vat = round2(sum tax), subtotal = round2(total - vat)
 
+What is STORED differs from what the form stores. The form saves line_amount as net plus tax, but Accutax's own
+backend (the amount due, the invoice page total, the list totals and the journal entry: revenue is credited
+line_amount, VAT tax_amount, receivables line_amount + tax_amount) reads line_amount as the NET of the line.
+Saving the form's value makes Accutax count the VAT twice (an invoice for 1,225.00 + 220.50 VAT showed 1,666.00).
+So the assistant saves line_amount = net, and shows the person net + tax.
+
 round2 is JavaScript's Math.round(n * 100) / 100 on binary floats (half rounds up, toward +infinity), reproduced
 here on purpose: a Decimal half-even rounding would differ from the form by a fils on some lines.
 

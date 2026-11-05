@@ -48,11 +48,26 @@ def test_convert_quote_to_invoice(accutax):
     p = action.payload
     assert p["income_type"] == "INVOICE" and p["reference_id"] == 55 and p["contact_id"] == 1 and p["is_draft"] is True
     assert p["invoice_number"] == "INV-1048" and p["additional_notes"] == "Net 30"
-    assert [(l["items_id"], l["line_amount"], l["tax_amount"]) for l in p["line_items"]] == [(10, 630, 30), (None, 105, 5)]
+    assert [(l["items_id"], l["line_amount"], l["tax_amount"]) for l in p["line_items"]] == [(10, 600, 30), (None, 100, 5)]
     assert action.view["copied_from"] == {"number": "QUO-0012", "type": "Quote", "linked": True}
     assert not any(c[0] == "POST" for c in accutax.calls)
     done = confirm.confirm(out["draft_id"], user_id=501, organization_id=24, credential=CRED)
     assert done.status == "done"
+
+
+def test_copy_of_a_line_saved_the_forms_way_stores_the_net(accutax):
+    # the quote's lines hold net + VAT in line_amount (630 = 600 + 30); the copy must hold the net (600)
+    _with_quote(accutax)
+    out, _ = tools.execute("copy_sales_document", COPY, _ctx())
+    lines = pending.get_for(out["draft_id"], user_id=501).payload["line_items"]
+    assert [l["line_amount"] for l in lines] == [600.0, 100.0] and [l["tax_amount"] for l in lines] == [30, 5]
+    assert out["total"] == "735.00"
+    # lines saved the assistant's way (the net already) copy the same
+    accutax.records[55]["items"][0]["line_amount"] = 600
+    accutax.records[55]["items"][1]["line_amount"] = 100
+    accutax.list_rows = [_quote_row(total_value=735.0)]
+    out, _ = tools.execute("copy_sales_document", COPY, _ctx())
+    assert out["total"] == "735.00"
 
 
 def test_convert_already_converted(accutax):
@@ -135,7 +150,7 @@ def test_change_saved_draft_updates_in_place(accutax):
     done = confirm.confirm(out["draft_id"], user_id=501, organization_id=24, credential=CRED)
     assert done.status == "done" and done.result["updated"] is True and done.result["record_id"] == 881
     put = accutax.bodies[-1]
-    assert put["income_id"] == 881 and put["is_draft"] is True and put["line_items"][0]["line_amount"] == 12757.5
+    assert put["income_id"] == 881 and put["is_draft"] is True and put["line_items"][0]["line_amount"] == 12150.0
     assert len([c for c in accutax.calls if c[0] == "POST"]) == 1       # no second invoice was created
     again = {**EDIT, "lines": [{"description": "Consulting", "quantity": 1, "unit_price": 10}]}
     out2, _ = tools.execute("draft_sales_document", again, _ctx())

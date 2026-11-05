@@ -233,7 +233,7 @@ def test_draft_ready_and_card(accutax):
     line = action.payload["line_items"][0]
     assert action.payload["contact_id"] == 1 and action.payload["is_draft"] is True
     assert (line["items_id"], line["account_id"], line["tax_rate_id"]) == (10, 400, 7)
-    assert (line["tax_amount"], line["line_amount"]) == (600.0, 12600.0)
+    assert (line["tax_amount"], line["line_amount"]) == (600.0, 12000.0)    # the net: Accutax adds the tax itself
     assert action.view["customer"]["trn"] == "100234567800003"         # the card may show it
     assert not any(c[0] == "POST" for c in accutax.calls)              # preparing never writes
     assert all(c[3] == f"Bearer {TOKEN}" for c in accutax.calls)
