@@ -277,7 +277,7 @@ export default function App({sessionProfile,onSessionLogout,initialHandoff=null}
   const [, setBotAgentsLoaded] = useState(0);
 
   const reloadInbox = async () => {
-    const token = currentUser?.access_token;
+    const token = currentUser?.authenticated;
     if (!token) return;
     try {
       const data = await fetchBotInbox(token);
@@ -288,7 +288,7 @@ export default function App({sessionProfile,onSessionLogout,initialHandoff=null}
   };
 
   const reloadBots = async () => {
-    const token = currentUser?.access_token;
+    const token = currentUser?.authenticated;
     if (token) {
       // The agents' words load on their own, so the bot pages have them even when the bot list does not load.
       fetchBotAgents(token).then((r) => { setBotAgents(r.agents); setBotAgentsLoaded((n) => n + 1); }).catch(() => null);
@@ -307,7 +307,7 @@ export default function App({sessionProfile,onSessionLogout,initialHandoff=null}
   };
 
   const handleDismissFinding = async (botId, key, note = '', supplier = '') => {
-    const token = currentUser?.access_token;
+    const token = currentUser?.authenticated;
     if (!token) return;
     try {
       await dismissBotFinding(botId, key, note, supplier, token);
@@ -318,7 +318,7 @@ export default function App({sessionProfile,onSessionLogout,initialHandoff=null}
   };
 
   const handleUndismissFinding = async (botId, key) => {
-    const token = currentUser?.access_token;
+    const token = currentUser?.authenticated;
     if (!token) return;
     try {
       await undismissBotFinding(botId, key, token);
@@ -329,7 +329,7 @@ export default function App({sessionProfile,onSessionLogout,initialHandoff=null}
   };
 
   const handleMarkInboxSeen = async () => {
-    const token = currentUser?.access_token;
+    const token = currentUser?.authenticated;
     if (!token) return;
     try {
       await markBotInboxSeen(token);
@@ -341,7 +341,7 @@ export default function App({sessionProfile,onSessionLogout,initialHandoff=null}
 
   useEffect(() => {
     reloadBots();
-  }, [currentUser?.access_token]);
+  }, [currentUser?.authenticated]);
 
   const handleOpenBots = () => {
     reloadBots();
@@ -371,7 +371,7 @@ export default function App({sessionProfile,onSessionLogout,initialHandoff=null}
 
   // New bot: the Create page; a template or a chat question goes straight to the builder with its draft.
   const handleStartNewBot = async (startConfig = { mode: 'blank' }) => {
-    const token = currentUser?.access_token || '';
+    const token = currentUser?.authenticated || '';
     setBotsNotice('');
     if (startConfig.mode !== 'template' && startConfig.mode !== 'chat') {
       setPage('new');
@@ -411,7 +411,7 @@ export default function App({sessionProfile,onSessionLogout,initialHandoff=null}
   const handleToggleBot = async (id) => {
     const target = bots.find((b) => b.id === id);
     if (!target) return;
-    const token = currentUser?.access_token;
+    const token = currentUser?.authenticated;
     if (token) {
       try {
         if (target.status === 'active') {
@@ -431,7 +431,7 @@ export default function App({sessionProfile,onSessionLogout,initialHandoff=null}
   };
 
   const handleDeleteBot = async (id) => {
-    const token = currentUser?.access_token;
+    const token = currentUser?.authenticated;
     if (token) {
       try {
         await deleteBotOnServer(id, token);
@@ -1229,12 +1229,12 @@ export default function App({sessionProfile,onSessionLogout,initialHandoff=null}
 
   // AI usage: on sign-in, on a new organization selection, and after each answer (isLoading turns false).
   useEffect(() => {
-    const token = currentUser?.access_token;
+    const token = currentUser?.authenticated;
     if (!token || isLoading) return undefined;
     let cancelled = false;
     fetchUsage(scopeOrgIds, token).then((u) => { if (!cancelled) setUsage(u); });
     return () => { cancelled = true; };
-  }, [currentUser?.access_token, scopeKey, isLoading]);
+  }, [currentUser?.authenticated, scopeKey, isLoading]);
 
   // A different chat: its files are not this chat's. Close any preview and forget the files fetched for it.
   useEffect(() => {
@@ -1720,7 +1720,7 @@ export default function App({sessionProfile,onSessionLogout,initialHandoff=null}
             <div style={styles.chatScrollArea}>
               {page === 'new' ? (
                 <BotCreate
-                  token={currentUser?.access_token || ''}
+                  token={currentUser?.authenticated || ''}
                   orgs={availableTenants.map((t) => ({ id: tenantIdOf(t), name: tenantNameOf(t) }))}
                   orgIds={scopeOrgIds}
                   orgLabel={currentScopeNames.join(', ')}
@@ -1734,7 +1734,7 @@ export default function App({sessionProfile,onSessionLogout,initialHandoff=null}
                   initial={builderInit.initial}
                   botId={builderInit.botId}
                   botStatus={builderInit.botStatus}
-                  token={currentUser?.access_token || ''}
+                  token={currentUser?.authenticated || ''}
                   orgs={availableTenants.map((t) => ({ id: tenantIdOf(t), name: tenantNameOf(t) }))}
                   onBack={() => setPage(builderInit.botId ? 'bot' : 'new')}
                   onDone={handleBuilderDone}
@@ -1755,7 +1755,7 @@ export default function App({sessionProfile,onSessionLogout,initialHandoff=null}
                 <BotsHome
                   bots={bots}
                   summary={botsSummary}
-                  token={currentUser?.access_token || ''}
+                  token={currentUser?.authenticated || ''}
                   inboxNew={botInbox.unread_count || 0}
                   onOpenInbox={handleOpenBotInbox}
                   onNewBot={() => handleStartNewBot({ mode: 'blank' })}
@@ -1767,7 +1767,7 @@ export default function App({sessionProfile,onSessionLogout,initialHandoff=null}
               ) : (
                 <BotDetail
                   bot={bots.find((b) => b.id === activeBotId)}
-                  token={currentUser?.access_token || ''}
+                  token={currentUser?.authenticated || ''}
                   onBack={() => setPage('bots')}
                   onEdit={handleEditBot}
                   onToggle={handleToggleBot}
@@ -1907,8 +1907,8 @@ export default function App({sessionProfile,onSessionLogout,initialHandoff=null}
       )}
 
       {showUsage && usage && (
-        <UsageModal token={currentUser?.access_token || ''} usage={usage}
-          orgNames={Object.fromEntries(availableTenants.map((t) => [tenantIdOf(t), tenantNameOf(t)]))} onClose={() => { setShowUsage(false); fetchUsage(scopeOrgIds, currentUser?.access_token || '').then(setUsage); }} />
+        <UsageModal token={currentUser?.authenticated || ''} usage={usage}
+          orgNames={Object.fromEntries(availableTenants.map((t) => [tenantIdOf(t), tenantNameOf(t)]))} onClose={() => { setShowUsage(false); fetchUsage(scopeOrgIds, currentUser?.authenticated || '').then(setUsage); }} />
       )}
 
       {showPrivacy && privacyAccess.admin && (
