@@ -93,7 +93,7 @@ export function SalesDocumentDraftBlock({ block, token }) {
               <td>{l.description}{l.discount ? <span className="sd-faint"> · less {l.discount}</span> : null}</td>
               <td className="sd-num">{l.quantity}</td>
               <td className="sd-num">{l.unit_price}</td>
-              <td>{l.vat}</td>
+              <td>{l.vat}{l.vat_name ? <span className="sd-faint sd-vatname"> {l.vat_name}</span> : null}</td>
               <td className="sd-num">{l.line_total}</td>
             </tr>
           ))}

@@ -109,7 +109,10 @@ def run(params: Dict[str, Any], ctx: Any) -> Dict[str, Any]:
     due_date = invoice_date + dt.timedelta(days=int(days))
     if numbers.has_custom_columns:
         warnings.append("Your invoice settings add custom columns to lines; this copy leaves them empty.")
-    if not numbers.suggested:
+    if numbers.other_organization:
+        warnings.append("Your Accutax sign-in is on another organization, so the number of this one could not be "
+                        "read. The number is left empty: set it when you open the draft.")
+    elif not numbers.suggested:
         warnings.append("Accutax suggested no number; set one when you open the draft.")
     if doc.income_type == "QUOTE" and doc.is_draft and convert:
         warnings.append(f"Quote {doc.number} is still a draft.")
@@ -185,6 +188,7 @@ def _line(l: Dict[str, Any], rates: List[lookups.TaxRate]) -> Dict[str, Any]:
     return {"description": l["description"], "item": None, "quantity": l["quantity"],
             "unit_price": totals.money(l["unit_price"]), "discount": " + ".join(x for x in (pct, amt) if x),
             "vat": rate.label if rate else ("VAT" if l["tax_amount"] else "No VAT"),
+            "vat_name": rate.name if rate else "",
             "vat_amount": totals.money(l["tax_amount"]), "line_total": totals.money(l["line_amount"]),
             "line_amount": l["line_amount"], "tax_amount": l["tax_amount"], "_raw": l}
 

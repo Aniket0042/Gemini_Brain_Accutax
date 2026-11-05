@@ -15,7 +15,16 @@ from gemini_brain.config.settings import settings
 from gemini_brain.invoicing import confirm, draft, lookups, totals
 from gemini_brain.semantic.catalog import ToolInputError
 
-TOKEN = "accutax-bearer-xyz"
+def _fake_jwt(org):
+    """Accutax's own tokens name an organization; only that claim is read."""
+    import base64
+
+    def part(obj):
+        return base64.urlsafe_b64encode(json.dumps(obj).encode()).decode().rstrip("=")
+    return f"{part({'alg': 'HS256'})}.{part({'userId': 501, 'organization_id': org})}.sig"
+
+
+TOKEN = _fake_jwt(24)
 
 
 # ── totals: parity with InvoiceLineItems.jsx calculateLineAmount ──
@@ -124,6 +133,7 @@ class FakeAccutax:
     def __init__(self):
         self.calls = []
         self.bodies = []
+        self.tax_rates = None    # override the tax rates (a list of dicts)
         self.list_rows = []      # income/list_filter rows (dicts)
         self.records = {}        # income/find: id -> record
         self.create_response = lambda body: httpx.Response(200, json={"error": False, "code": 200, "data": {
@@ -138,7 +148,9 @@ class FakeAccutax:
         if path == "/item/list":
             return ok(ITEMS)
         if path == "/tax-rate/list":
-            return ok(TAX)
+            # Accutax pages this list 10 at a time unless pageSize is sent (a limit parameter is ignored)
+            size = int(request.url.params.get("pageSize", 10))
+            return ok((self.tax_rates if self.tax_rates is not None else TAX)[:size])
         if path.startswith("/income/invoice_setting/"):
             return ok({"suggested_invoice_number": "INV-1048", "due_date_days_after": 30, "custom_columns": []})
         if path == "/income/document-number/QUOTE":
@@ -163,8 +175,14 @@ class FakeAccutax:
             self.finalised = getattr(self, "finalised", []) + [int(path.rsplit("/", 1)[1])]
             return getattr(self, "finalise_response", lambda: ok({"income_id": self.finalised[-1]}))()
         if path == "/contact/create":
-            self.bodies.append(json.loads(request.content))
-            return httpx.Response(201, json={"id": 77, "name": self.bodies[-1]["base"]["name"]})
+            body = json.loads(request.content)
+            self.bodies.append(body)
+            # the contacts table's NOT NULL columns, which Accutax's create code leaves unset when a block omits them
+            missing = [k for k in ("image_url", "last_name", "phone_number") if body["base"].get(k) is None]
+            missing += [k for k in ("trn_number", "website") if (body.get("personal") or {}).get(k) is None]
+            if missing:
+                return httpx.Response(500, json={"message": f"null value in column {missing[0]} violates not-null constraint"})
+            return httpx.Response(201, json={"id": 77, "name": body["base"]["name"]})
         return httpx.Response(404, json={"message": "nope"})
 
     def client(self, credential, org):

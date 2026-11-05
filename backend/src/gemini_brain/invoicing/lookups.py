@@ -23,6 +23,7 @@ from gemini_brain.accutax_api.client import AccutaxApiError, AccutaxClient, _kin
 CUSTOMER_TYPE_ID = 4
 MAX_CUSTOMERS = 1000
 MAX_ITEMS = 1000
+MAX_TAX_RATES = 500
 
 
 def unwrap(body: Any) -> Any:
@@ -191,8 +192,10 @@ class TaxRate:
 
 
 def tax_rates(client: AccutaxClient, user_id: int) -> List[TaxRate]:
+    # Accutax pages this list 10 at a time unless asked (pageSize), and a limit parameter is ignored: without
+    # pageSize the newest ten rates are all we would see and the right one is often missing.
     data = unwrap(client.get("tax-rate/list", {"user_id": str(user_id), "organization_id": client.organization_id,
-                                               "is_active": "true", "limit": 200}))
+                                               "is_active": "true", "page": 1, "pageSize": MAX_TAX_RATES}))
     out = []
     for r in _rows(data):
         rate = _num(r.get("tax_rate")) if _num(r.get("tax_rate")) is not None else _num(r.get("rate"))
@@ -212,15 +215,25 @@ def sales_rates(rates: Sequence[TaxRate]) -> List[TaxRate]:
     return [r for r in rates if r.rate_type != "purchase"]
 
 
-def pick_rate(rates: Sequence[TaxRate], treatment: Optional[str] = None,
-              rate_id: Optional[int] = None) -> Optional[TaxRate]:
-    """The tax rate for a line: the given id (an item's own rate), else the asked treatment, else the organization's
-    default sales rate, else its one standard sales rate. None when nothing fits: the draft then warns."""
+def standard_choices(rates: Sequence[TaxRate]) -> List[str]:
+    """The standard sales rates as short labels ("5%", "18%"), for a warning that asks which to use."""
+    return list(dict.fromkeys(r.label for r in sales_rates(rates) if r.tax_type == "standard"))
+
+
+def pick_rate(rates: Sequence[TaxRate], treatment: Optional[str] = None, rate_id: Optional[int] = None,
+              percent: Optional[float] = None) -> Optional[TaxRate]:
+    """The tax rate for a line: the given id (an item's own rate), else the standard sales rate of the percent the
+    person asked for, else the asked treatment, else the organization's default sales rate, else its 5% standard
+    sales rate (UAE VAT), else its one standard sales rate. None when nothing fits or several do: the draft then
+    warns and asks, it never guesses."""
     sales = sales_rates(rates)
     if rate_id is not None:
         hit = [r for r in sales if r.id == rate_id]
         if hit:
             return hit[0]
+    if percent is not None:
+        hit = [r for r in sales if r.tax_type == "standard" and abs(r.rate - percent) < 1e-9]
+        return (next((r for r in hit if r.is_default), None) or hit[0]) if hit else None
     if treatment and treatment != "standard":
         hit = [r for r in sales if r.tax_type == treatment]
         if not hit and treatment == "exempt":
@@ -233,7 +246,7 @@ def pick_rate(rates: Sequence[TaxRate], treatment: Optional[str] = None,
     if defaults:
         return defaults[0]
     five = [r for r in standard if abs(r.rate - 5.0) < 1e-9]
-    if len(five) == 1:
+    if five:
         return five[0]
     return standard[0] if len(standard) == 1 else None
 
@@ -245,10 +258,16 @@ class Numbering:
     suggested: str
     due_days: Optional[int]
     has_custom_columns: bool
+    #: The person's Accutax sign-in is on another organization, so the settings could not be read for this one.
+    other_organization: bool = False
 
 
 def numbering(client: AccutaxClient, user_id: int, income_type: str) -> Numbering:
     """The next number Accutax suggests, the default days to the due date and whether line custom columns are set."""
+    if client.token_organization_id != client.organization_id:
+        # Accutax answers invoice_setting and document-number for the organization of the token, not the one in
+        # the request. A number taken from there would be the wrong organization's series.
+        return Numbering(suggested="", due_days=None, has_custom_columns=False, other_organization=True)
     due_days, custom = None, False
     suggested = ""
     try:

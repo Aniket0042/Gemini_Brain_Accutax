@@ -67,6 +67,9 @@ SPEC = {"toolSpec": {
                     "discount_amount": {"type": "number"},
                     "vat": {"type": "string", "enum": list(TREATMENTS),
                             "description": "Only when the person says so; omit for the usual rate."},
+                    "vat_percent": {"type": "number",
+                                    "description": "The standard VAT rate in percent, only when the person names it "
+                                                   "(for example after being asked which of several rates)."},
                 }, "required": ["description", "quantity"]},
             },
             "invoice_date": {"type": "string", "description": "YYYY-MM-DD; omit for today."},
@@ -182,7 +185,10 @@ def run(params: Dict[str, Any], ctx: Any) -> Dict[str, Any]:
         raise ToolInputError("due_date cannot be before invoice_date")
     if numbers.has_custom_columns:
         warnings.append("Your invoice settings add custom columns to lines; this draft leaves them empty.")
-    if not numbers.suggested:
+    if numbers.other_organization:
+        warnings.append("Your Accutax sign-in is on another organization, so the number and due-date setting of this "
+                        "one could not be read. The number is left empty: set it when you open the draft.")
+    elif not numbers.suggested:
         warnings.append("Accutax suggested no number; set one when you open the draft.")
 
     notes = str(params.get("notes") or "").strip()[:2000]
@@ -240,10 +246,18 @@ def _lines(raw_lines: List[Any], catalog: List[lookups.Item],
         treatment = str(raw.get("vat") or "").strip().lower() or None
         if treatment and treatment not in TREATMENTS:
             raise ToolInputError(f"line {n} vat must be one of {', '.join(TREATMENTS)}")
-        rate = lookups.pick_rate(rates, treatment, None if treatment else (item.revenue_tax_rate_id if item else None))
+        percent = _number(raw.get("vat_percent"), f"line {n} vat_percent")
+        rate = lookups.pick_rate(rates, treatment, None if treatment or percent is not None
+                                 else (item.revenue_tax_rate_id if item else None), percent)
         if rate is None:
-            warnings.append(f"Line {n} ({description}) has no VAT rate: no matching tax rate is set up in Accutax. "
-                            "Check it before saving.")
+            choices = lookups.standard_choices(rates)
+            if percent is not None or treatment:
+                why = "no tax rate of that kind is set up in Accutax"
+            elif len(choices) > 1:
+                why = f"several standard rates are set up ({', '.join(choices)}): ask which to use"
+            else:
+                why = "no standard sales tax rate is set up in Accutax"
+            warnings.append(f"Line {n} ({description}) has no VAT rate: {why}. No VAT is added until a rate is chosen.")
         if treatment and treatment != "standard" and rate is not None:
             warnings.append(f"Line {n} ({description}) is {rate.label.lower()}: make sure the sale qualifies.")
         calc = totals.Line(quantity=_number(raw.get("quantity"), f"line {n} quantity"), unit_price=price,
@@ -255,7 +269,7 @@ def _lines(raw_lines: List[Any], catalog: List[lookups.Item],
         except totals.TotalsError as e:
             raise ToolInputError(f"line {n}: {e}") from None
         out.append({"description": description, "item": item, "rate": rate, "calc": calc,
-                    "vat_label": rate.label if rate else "No VAT rate"})
+                    "vat_label": rate.label if rate else "No VAT rate", "vat_name": rate.name if rate else ""})
     return out, warnings
 
 
@@ -317,6 +331,7 @@ def _view(income_type: str, customer: lookups.Customer, invoice_date: dt.date, d
             f"{l['calc'].discount_percent:g}%" if l["calc"].discount_percent else "",
             totals.money(l["calc"].discount_amount) if l["calc"].discount_amount else "") if x),
         "vat": l["vat_label"],
+        "vat_name": l["vat_name"],
         "vat_amount": totals.money(t.tax),
         "line_total": totals.money(t.line_total),
     } for l, t in zip(lines, per_line)]
@@ -327,7 +342,7 @@ def _view_from(income_type: str, customer: lookups.Customer, invoice_date: dt.da
                notes: str, shown: List[Dict[str, Any]], doc: totals.DocumentTotals,
                warnings: List[str]) -> Dict[str, Any]:
     """The card from lines already formatted for display."""
-    keys = ("description", "item", "quantity", "unit_price", "discount", "vat", "vat_amount", "line_total")
+    keys = ("description", "item", "quantity", "unit_price", "discount", "vat", "vat_name", "vat_amount", "line_total")
     return {
         "document_type": income_type,
         "document_label": LABELS[income_type],

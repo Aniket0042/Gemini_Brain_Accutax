@@ -79,11 +79,14 @@ def run(params: Dict[str, Any], ctx: Any) -> Dict[str, Any]:
                 "note": ("Customers with similar names exist. List them and ask whether the person means one of "
                          "them, or a new customer (then call again with create_anyway true). Nothing was prepared.")}
 
+    # Accutax's contacts table has NOT NULL columns that its create code fills with a placeholder only when the
+    # block that holds them is missing: image_url, last_name and phone_number (base), trn_number and website
+    # (personal). Sending the personal block without them makes the insert fail with a 500, so they are sent here.
     payload = {
         "base": {"user_id": int(ctx.user_id), "organization_id": int(org), "organization_name": name, "salutation": "",
-                 "name": name, "email": email, "contact_type_id": CUSTOMER_TYPE_ID,
-                 **({"phone_number": phone} if phone else {})},
-        "personal": {"currency": "AED", "portal_access": False, **({"trn_number": trn} if trn else {})},
+                 "name": name, "last_name": "", "email": email, "image_url": "", "phone_number": phone,
+                 "contact_type_id": CUSTOMER_TYPE_ID},
+        "personal": {"currency": "AED", "portal_access": False, "trn_number": trn or "N/A", "website": "N/A"},
     }
     view = {"kind": "customer", "name": name, "email": email, "trn": trn, "phone": phone, "currency": "AED",
             "warnings": ["The address, country and bank details are left empty; add them in Accutax."]

@@ -180,6 +180,16 @@ def test_create_customer_flow(accutax):
     body = accutax.bodies[-1]
     assert body["base"]["contact_type_id"] == 4 and body["base"]["organization_id"] == 24
     assert body["base"]["name"] == "Zenith Labs" and body["personal"]["trn_number"] == "100234567800003"
+    assert body["base"]["image_url"] == "" and body["base"]["last_name"] == "" and body["personal"]["website"] == "N/A"
+
+
+def test_create_customer_without_trn_or_phone_sends_placeholders(accutax):
+    ctx = _ctx()
+    out, _ = tools.execute("create_customer", {"name": "Zenith Labs", "email": "rosetest@gmail.com"}, ctx)
+    done = confirm.confirm(out["draft_id"], user_id=501, organization_id=24, credential=CRED)
+    assert done.status == "done"                    # the fake answers 500 when a NOT NULL column would be left empty
+    body = accutax.bodies[-1]
+    assert body["personal"]["trn_number"] == "N/A" and body["base"]["phone_number"] == ""
 
 
 def test_create_customer_checks(accutax):
