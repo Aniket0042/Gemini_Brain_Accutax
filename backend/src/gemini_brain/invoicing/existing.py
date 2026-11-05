@@ -54,6 +54,7 @@ class Document:
     terms: str
     lines: List[Dict[str, Any]] = field(default_factory=list)
     lines_total: float = 0.0
+    converted_to_number: str = ""
 
 
 def _row(r: Dict[str, Any]) -> Optional[Row]:
@@ -115,7 +116,8 @@ def load(client: AccutaxClient, income_id: int) -> Document:
                        or record.get("is_finalised")),
         date=str(record.get("invoice_date") or "")[:10], due_date=str(record.get("due_date") or "")[:10],
         notes=str(record.get("additional_notes") or ""), terms=str(record.get("terms_and_conditions") or ""),
-        lines=lines, lines_total=sum(l["line_amount"] + l["tax_amount"] for l in lines))
+        lines=lines, lines_total=sum(l["line_amount"] + l["tax_amount"] for l in lines),
+        converted_to_number=str(record.get("converted_to_number") or "").strip())
 
 
 def whole_copy(doc: Document, row: Row) -> bool:

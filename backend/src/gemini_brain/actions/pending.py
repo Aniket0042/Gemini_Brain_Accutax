@@ -289,6 +289,23 @@ def latest_in_chat(kinds: Sequence[str], *, user_id: int, organization_id: int, 
     return best
 
 
+def list_in_chat(kinds: Sequence[str], *, user_id: int, organization_id: int, session_id: Optional[str],
+                 statuses: Sequence[str] = (PENDING,), now: Optional[float] = None) -> List[PendingAction]:
+    """Every action of these kinds and states in this chat, newest change first."""
+    if not session_id:
+        return []
+    ts = now or time.time()
+    found: List[PendingAction] = []
+    for path in _dir().glob("act_*.json"):
+        action = _load(path.stem)
+        if (action is None or action.kind not in kinds or action.user_id != int(user_id)
+                or action.organization_id != int(organization_id) or action.session_id != session_id
+                or action.status not in statuses or action.expired(ts)):
+            continue
+        found.append(action)
+    return sorted(found, key=lambda a: a.updated_at, reverse=True)
+
+
 def sweep(now: Optional[float] = None) -> List[str]:
     """Delete expired actions (and done or discarded ones past their expiry). Returns their ids."""
     ts = now or time.time()

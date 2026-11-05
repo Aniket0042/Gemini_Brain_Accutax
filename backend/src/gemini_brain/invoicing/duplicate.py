@@ -64,25 +64,25 @@ def run(params: Dict[str, Any], ctx: Any) -> Dict[str, Any]:
     number_text = str(params.get("source_number") or "").strip()
     customer_text = str(params.get("customer") or "").strip()
     customer_id = params.get("customer_id")
-    if not number_text and not customer_text and customer_id in (None, ""):
-        raise ToolInputError("Give source_number, or the customer whose newest document to copy")
     org = draft._organization(params, ctx)
     invoice_date = draft._date(params.get("invoice_date"), "invoice_date") or draft._today()
 
     with client_for(ctx.accutax, org) as client:
         try:
             pool = lookups.customers(client, ctx.user_id)
-            found = _find_source(client, ctx, source, number_text, customer_text, customer_id, pool)
+            found = _from_this_chat(client, ctx, org, source, number_text, customer_text, customer_id, pool)
+            if found is None:
+                found = _find_source(client, ctx, source, number_text, customer_text, customer_id, pool)
             if isinstance(found, dict):
                 return found
-            row, doc = found
-            if link and row.converted_to_number:
-                return {"status": "already_converted", "source_number": row.number,
-                        "converted_to": row.converted_to_number,
+            doc, converted_to, complete = found
+            if link and converted_to:
+                return {"status": "already_converted", "source_number": doc.number,
+                        "converted_to": converted_to,
                         "note": ("That quote was already turned into an invoice. Tell the person the invoice "
                                  "number. Ask whether they want another copy without linking (link_to_source false). "
                                  "Nothing was prepared.")}
-            if not doc.lines or not existing.whole_copy(doc, row):
+            if not doc.lines or not complete:
                 return {"status": "cannot_copy", "source_number": doc.number,
                         "note": ("Some lines of that document cannot be read here, so a copy could lose one. Tell "
                                  "the person to copy it in Accutax. Nothing was prepared.")}
@@ -96,6 +96,11 @@ def run(params: Dict[str, Any], ctx: Any) -> Dict[str, Any]:
         except existing.DocumentError as e:
             return {"status": "source_not_found", "note": f"{e} Nothing was prepared."}
         except AccutaxApiError as e:
+            if e.kind in ("unavailable", "error") and (number_text or customer_text or customer_id not in (None, "")):
+                return {"status": "list_unavailable",
+                        "note": ("Accutax's list of documents did not answer in time for this organization. Only "
+                                 "documents saved in this chat can be copied right now. Tell the person this, and "
+                                 "that they can copy it in Accutax. Nothing was prepared.")}
             return draft._accutax_failed(e)
 
     warnings: List[str] = []
@@ -149,9 +154,57 @@ def run(params: Dict[str, Any], ctx: Any) -> Dict[str, Any]:
     }
 
 
+def _from_this_chat(client, ctx, org: int, source: str, number_text: str, customer_text: str, customer_id: Any,
+                    pool: List[lookups.Customer]):
+    """(document, converted_to, complete) of a document saved in this chat, or None to look in the organization.
+
+    Accutax's list of documents (income/list_filter) can take longer than any request may, on big organizations, and
+    the number of a draft made here may be empty. A document this chat saved is known by its Accutax id, so it is
+    read directly (income/find, which the module checks against the organization). Completeness is checked against the
+    lines this chat sent: the saved document must have as many.
+
+    With no number and no customer the newest document of that type saved here is meant. A number or customer that
+    matches nothing made here returns None, so the organization's list is tried."""
+    saved = pending.list_in_chat(draft.DOCUMENT_KINDS, user_id=ctx.user_id, organization_id=org,
+                                 session_id=ctx.session_id, statuses=(pending.DONE,))
+    seen, candidates = set(), []
+    for a in saved:                                   # newest change first: one entry per Accutax record
+        rid = (a.result or {}).get("record_id")
+        if rid in (None, "") or rid in seen or a.view.get("document_type") != source:
+            continue
+        seen.add(rid)
+        candidates.append(a)
+    if number_text:
+        want = "".join(number_text.split()).casefold()
+        candidates = [a for a in candidates
+                      if "".join(str((a.result or {}).get("number") or "").split()).casefold() == want]
+    elif customer_text or customer_id not in (None, ""):
+        try:
+            cid = int(customer_id) if customer_id not in (None, "") else None
+        except (TypeError, ValueError):
+            raise ToolInputError("customer_id must be an id") from None
+        match = lookups.match_customer(customer_text, pool, cid)
+        if match.found is None:
+            return None
+        candidates = [a for a in candidates if (a.view.get("customer") or {}).get("id") == match.found.id]
+    if not candidates:
+        if not number_text and not customer_text and customer_id in (None, ""):
+            raise ToolInputError(f"No {draft.LABELS[source].lower()} was saved in this chat. Give source_number, or "
+                                 "the customer whose newest document to copy")
+        return None
+    chosen = candidates[0]
+    doc = existing.load(client, int(chosen.result["record_id"]))
+    if doc.income_type != source:
+        raise existing.DocumentError("That document is not a " + draft.LABELS[source].lower() + ".")
+    sent = len(chosen.payload.get("line_items") or [])
+    return doc, doc.converted_to_number, len(doc.lines) == sent
+
+
 def _find_source(client, ctx, source: str, number_text: str, customer_text: str, customer_id: Any,
                  pool: List[lookups.Customer]):
-    """(row, document) of the one source, or a status dict to return to the model."""
+    """(document, converted_to, complete) of the one source in the organization, or a status dict for the model."""
+    if not number_text and not customer_text and customer_id in (None, ""):
+        raise ToolInputError("Give source_number, or the customer whose newest document to copy")
     if number_text:
         rows = existing.pick(existing.list_documents(client, ctx.user_id, source, number=number_text), number_text)
         label = draft.LABELS[source].lower()
@@ -182,7 +235,7 @@ def _find_source(client, ctx, source: str, number_text: str, customer_text: str,
     doc = existing.load(client, row.id)
     if doc.income_type != source:
         raise existing.DocumentError("That document is not a " + draft.LABELS[source].lower() + ".")
-    return row, doc
+    return doc, row.converted_to_number, existing.whole_copy(doc, row)
 
 
 def _line(l: Dict[str, Any], rates: List[lookups.TaxRate]) -> Dict[str, Any]:

@@ -203,7 +203,9 @@ Invoices and quotes
   its card is withdrawn. If it is already saved, a new card offers Save changes, and the saved draft stays as it is
   until the person clicks. Never prepare a second new draft for a change: that would make a duplicate.
 - To turn a quote into an invoice, or repeat a customer's last invoice or quote, call copy_sales_document with the
-  quote's number or the customer. Never copy lines yourself. If the tool says the quote was already converted,
+  quote's number or the customer. For "the quote I just made" give neither: it takes the one saved in this chat.
+  A document saved in this chat is always found; others are looked up in the organization and may not be reachable.
+  Never copy lines yourself. If the tool says the quote was already converted,
   tell the person the invoice number.
 - When the customer does not exist, tell the person, and offer to create it. Accutax needs a name and an email:
   ask for the email, then call create_customer. After the person has created the customer, prepare the draft again.

@@ -158,6 +158,9 @@ class FakeAccutax:
         if path == "/income/create":
             return self.create_response(json.loads(request.content))
         if path == "/income/list_filter":
+            self.list_calls = getattr(self, "list_calls", 0) + 1
+            if getattr(self, "list_fails", False):          # the real list times out on big organizations
+                return httpx.Response(504, json={"message": "Request timeout exceeded"})
             q = request.url.params
             rows = [r for r in self.list_rows if r["income_type"] == q.get("income_type")
                     and (not q.get("number") or q["number"].lower() in r["number"].lower())
