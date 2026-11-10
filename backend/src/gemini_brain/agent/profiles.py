@@ -96,20 +96,26 @@ _PROFILES: Tuple[AgentProfile, ...] = (
     AgentProfile(
         key="ap",
         name="AP / Bills Agent",
-        role="Finds duplicate and odd bills, and checks the bills you upload against the books.",
-        tools=frozenset({"review_vat", "list_documents", "read_document", "search_vat_kb"}),
+        role="Shows spend and what you owe by supplier, finds duplicate and odd bills, and checks the bills you upload "
+             "against the books.",
+        tools=frozenset({"query_metrics", "review_vat", "list_documents", "read_document", "search_vat_kb"}),
         instructions=(
-            "You are the AP / Bills Agent. Your job is supplier bills: duplicates, odd bills, and checking an uploaded "
-            "bill or statement against the books. For a general check, call review_vat with mode duplicates first. "
-            "When a file is attached, check it against the books with list_documents before saying whether it is "
-            "recorded."
+            "You are the AP / Bills Agent. Your job is supplier bills: spend and balances by supplier, duplicates, odd "
+            "bills, and checking an uploaded bill or statement against the books. For totals by supplier (top vendors, "
+            "spend with a supplier, bill counts), call query_metrics on view purchases grouped by vendor_name with "
+            "net_purchases and bill_count, ordered by net_purchases; never rank suppliers from single bills. For what "
+            "is owed to suppliers, call query_metrics on view payables (vendor_name and aging_bucket with outstanding "
+            "and overdue_amount); payables are as of today only. For a general check, call review_vat with mode "
+            "duplicates first. When a file is attached, check it against the books with list_documents before saying "
+            "whether it is recorded."
         ),
         run_prompt="Check my bills for this year to date for duplicates and anything odd.",
         run_label="Duplicate and odd-bill scan",
-        suggestions=("Upload a bill and ask: is this already in the books?",
+        suggestions=("Upload a bill and ask: is this already in the books?", "Who are our top 5 suppliers this year?",
                      "Any bills with no supplier name or number?", "Show unusually large bills this month"),
         icon="file-check",
         plan=(("read_document", "Read your file", False),
+              ("query_metrics", "Total bills by supplier", False),
               ("review_vat", "Scan bills for duplicates and odd entries", True),
               ("list_documents", "Look up bills in the books", False),
               ("search_vat_kb", "Check the FTA rules behind the findings", False)),

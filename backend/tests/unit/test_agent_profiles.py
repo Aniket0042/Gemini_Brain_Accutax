@@ -202,3 +202,12 @@ def test_an_unknown_agent_in_the_request_is_a_400():
     with pytest.raises(HTTPException) as e:
         routes._agent_key(SimpleNamespace(agent="payroll"))
     assert e.value.status_code == 400
+
+
+def test_the_ap_agent_totals_bills_by_supplier():
+    """Asked for top vendors, the AP agent once listed the five biggest single bills: it had no query_metrics."""
+    ap = profiles.get("ap")
+    assert ap.allows("query_metrics") and ap.allows("review_vat") and not ap.allows("vat_return")
+    assert "view purchases" in ap.instructions and "net_purchases" in ap.instructions
+    assert "bill_count" in ap.instructions and "never rank suppliers from single bills" in ap.instructions
+    assert "view payables" in ap.instructions
