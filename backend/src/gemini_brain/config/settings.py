@@ -457,6 +457,10 @@ class GeminiBrainSettings(BaseSettings):
     usage_platform_pause_usd: float = Field(
         default=100.0, description="Platform AI spend a day (UTC) at which AI pauses for everyone but super-admins.")
     usage_rate_per_minute: int = Field(default=5, description="Questions a user may send in one minute (USAGE_ENFORCE=hard).")
+    usage_rate_per_minute_mcp: int = Field(
+        default=15, ge=1,
+        description="Questions a user may send in one minute through the MCP connector, where the host model asks "
+                    "several in a row for one request. Still one at a time.")
     usage_admins: str = Field(
         default="", description=("Comma-separated emails or user ids who may open the AI usage admin page, besides "
                                  "users with is_super_admin."))

@@ -51,7 +51,7 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
            on_step: Optional[Callable[[Dict[str, Any]], None]] = None,
            dismissed: Sequence[str] = (),
            authorize: Optional[Callable[[], None]] = None,
-           accutax_token: str = "", user_email: str = "") -> Dict[str, Any]:
+           accutax_token: str = "", user_email: str = "", channel: str = "app") -> Dict[str, Any]:
     """Answer with the agent and save the turn. Returns a QueryResponse-shaped dict. Never raises.
     `dismissed`: keys of review findings the person marked as not a problem in this browser; the review leaves them out.
     `on_step`: gets a step event as each tool call starts and finishes ({"phase", "tool", ...}), for the live run card.
@@ -60,7 +60,9 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
     `allowed_models`: the keys this user may pick (agent/models.allowed), checked here.
     `documents`: the files attached to this question (uploads.context.resolve), already checked.
     `accutax_token`: the person's own Accutax bearer, only for write actions (draft invoices and quotes they then
-    confirm); never shown to the model or logged. `user_email`: for the AI_WRITE_USERS allow-list."""
+    confirm); never shown to the model or logged. `user_email`: for the AI_WRITE_USERS allow-list.
+    `channel`: "mcp" for the MCP connector: its own per-minute limit (USAGE_RATE_PER_MINUTE_MCP), and no chart or
+    file, which the host cannot show."""
     from gemini_brain.usage import ledger, limits
     decision = limits.check(user_id, organization_ids)
     if decision.action == limits.BLOCK:
@@ -81,7 +83,8 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
             try:  # a refusal comes from entering the scope, before anything runs
                 spend = stack.enter_context(ledger.scope(
                     "agent_answer", user_id=user_id, organization_ids=organization_ids, session_id=session_id,
-                    model_mode=decision.model_mode, gate=limits.speed_gate() if speed and not in_process else None))
+                    model_mode=decision.model_mode,
+                    gate=limits.speed_gate(channel) if speed and not in_process else None))
             except Refused as r:
                 return limits.refused_response(limits.speed_refusal(r.code))
             response = _answer(question, organization_ids, org_meta, session_id=session_id, user_id=user_id,
@@ -89,7 +92,7 @@ def answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[]
                                allowed_models=allowed_models, documents=documents,
                                lite=decision.action == limits.LITE, agent_key=agent_key, on_step=on_step,
                                dismissed=dismissed, authorize=authorize,
-                               accutax_token=accutax_token, user_email=user_email)
+                               accutax_token=accutax_token, user_email=user_email, channel=channel)
             spend.status = str(response.get("status") or "ok")
         response["usage"] = limits.public(decision)
         return response
@@ -106,7 +109,7 @@ def _answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[
             agent_key: Optional[str] = None, on_step: Optional[Callable[[Dict[str, Any]], None]] = None,
             dismissed: Sequence[str] = (),
             authorize: Optional[Callable[[], None]] = None,
-            accutax_token: str = "", user_email: str = "") -> Dict[str, Any]:
+            accutax_token: str = "", user_email: str = "", channel: str = "app") -> Dict[str, Any]:
     """answer()'s work. `lite` (the owner's AI for the month is used up): UAE VAT law answers use the picked (lite)
     model too, and the thread keeps the model it had, so it is not stuck on the lite model once the bucket renews."""
     from gemini_brain.agent import models as agent_models
@@ -144,8 +147,9 @@ def _answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[
         if progress:
             progress(step_label(name, params))
         step({"phase": "start", "tool": name, "label": step_label(name, params).rstrip("…")})
-    delivery = delivery_for(question, thread)
-    attached = attachment(question, delivery)
+    # Through the MCP connector only text and tables reach the host: no chart or file is made or promised.
+    delivery = None if channel == "mcp" else delivery_for(question, thread)
+    attached = None if channel == "mcp" else attachment(question, delivery)
     rid, traces = _start_traces()
     try:
         result = run_agent(question, orgs, meta, history=thread.messages, turn_specs=thread.specs,
@@ -177,8 +181,9 @@ def _answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[
     if wants_files:
         step({"phase": "start", "tool": FILES_STEP, "label": "Building the files"})
     files_started = time.monotonic()
-    files = _files(question, result, orgs, meta, user_id=user_id, session_id=session_id, answer_text=answer_text,
-                   delivery=delivery, documents=docs, title=profile.title_for(question))
+    files = [] if channel == "mcp" else _files(
+        question, result, orgs, meta, user_id=user_id, session_id=session_id, answer_text=answer_text,
+        delivery=delivery, documents=docs, title=profile.title_for(question))
     if wants_files:
         step({"phase": "done", "tool": FILES_STEP, "ok": any(b.get("type") == "artifact" for b in files) or not delivery.wants_file,
               "ms": int((time.monotonic() - files_started) * 1000), "rows": None})

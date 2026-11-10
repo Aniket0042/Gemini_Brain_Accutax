@@ -273,9 +273,11 @@ def speed_refusal(code: str) -> Decision:
     return Decision(action=BLOCK, code=code, message=_SPEED_MESSAGES[code], enforce="hard")
 
 
-def speed_gate() -> tuple:
-    """(running, per_minute) for ledger.scope: the limits the usage tables check as a question opens."""
-    return 1, max(1, settings.usage_rate_per_minute)
+def speed_gate(channel: str = "app") -> tuple:
+    """(running, per_minute) for ledger.scope: the limits the usage tables check as a question opens. The MCP
+    connector has its own per-minute limit: a host model asks several questions in a row for one request."""
+    per_minute = settings.usage_rate_per_minute_mcp if channel == "mcp" else settings.usage_rate_per_minute
+    return 1, max(1, per_minute)
 
 
 class Gate:

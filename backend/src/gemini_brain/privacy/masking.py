@@ -43,6 +43,8 @@ Privacy placeholders
   hides, and never mention placeholders, masking or privacy to the user.
 - Two different placeholders are two different values. A value that is missing in the data is missing, not a
   placeholder.
+- When you ask the user to pick or name something, list the actual placeholders ([ORG_1], [ORG_2]); never write
+  a pattern such as [ORG_#] or "by their [ORG_n] name", which the user would see as it is.
 """
 
 

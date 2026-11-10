@@ -978,7 +978,7 @@ async def run_query(
             brief=bool(payload.brief), documents=documents, agent_key=agent_key,
             dismissed=payload.dismissed_findings, **_model_choice(payload, current_user),
             **_current_authority(current_user,orgs),
-            **_write_identity(current_user, external=payload.channel == "mcp"),
+            **_write_identity(current_user, external=payload.channel == "mcp"), channel=payload.channel,
         )
         if payload.channel == "mcp":
             from fastapi.encoders import jsonable_encoder

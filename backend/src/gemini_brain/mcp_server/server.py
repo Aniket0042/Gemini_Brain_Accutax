@@ -31,6 +31,10 @@ INSTRUCTIONS = (
     "Accutax is UAE accounting and VAT software. Use these tools for questions about the user's own books "
     "(revenue, expenses, invoices, bills, VAT returns, cash, receivables, payables) and about UAE VAT law. "
     "Call list_organizations first when the user has not said which company they mean, then pass its id. "
+    "Accutax does not remember earlier calls: write every question so it stands alone, with the measure, the "
+    "period and the organizations it is about, even when the user only said 'and last quarter?' or 'now the "
+    "top 2'. Answers are text and tables only: Accutax sends no charts or files here, so draw any chart yourself "
+    "from the figures. "
     "For a question about several or all organizations (for example 'for every organization'), make ONE "
     "ask_accutax call with all their ids in organization_ids (up to 10) and the user's question as asked: "
     "Accutax answers per organization in a single reply, the way the Accutax app does. Do not ask once per "
@@ -220,8 +224,10 @@ def build_server(upstream: Upstream | None = None, provider: AccutaxOAuthProvide
     @server.tool(title="Ask Accutax", annotations=READ_ONLY)
     async def ask_accutax(
         question: Annotated[str, Field(min_length=3, max_length=4000,
-                                       description="The question, in the user's words, with any period or "
-                                                   "company they named.")],
+                                       description="The question, complete on its own: Accutax does not see "
+                                                   "earlier messages. Turn a follow-up ('and last quarter?') "
+                                                   "into the full question, with the measure, period and "
+                                                   "companies.")],
         organization_ids: Annotated[Optional[list[int]], Field(
             min_length=1, max_length=MAX_ORGS_PER_CALL,
             description="Organization ids from list_organizations: one id for one company, or ALL the ids the "

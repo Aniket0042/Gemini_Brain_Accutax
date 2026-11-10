@@ -148,6 +148,27 @@ def test_a_file_request_gets_download_blocks_from_the_agent_figures(monkeypatch)
     assert seen["organization_id"] == 24 and seen["org_name"] == "A" and seen["answer_text"] == "Revenue AED 10."
 
 
+def test_the_mcp_channel_gets_no_file_or_chart_and_none_is_promised(monkeypatch):
+    """The MCP host shows text and tables only, so no file is made and the model is not told one is attached."""
+    import gemini_brain.artifacts.attach as attach
+    seen = {}
+    monkeypatch.setattr(attach, "attach_delivery", lambda *a, **k: pytest.fail("no file through MCP"))
+    monkeypatch.setattr(loop, "run_agent", lambda *a, **k: seen.update(k) or loop.AgentResult(
+        answer="Revenue AED 10.", status="ok",
+        data=[{"tool": "query_metrics", "result": {"rows": [{"pnl.organization_name": "A", "pnl.revenue": "10"}]}}]))
+    out = preview.answer("Monthly revenue trend as a chart and a PDF", [24], lambda: {24: {"name": "A"}},
+                         session_id=None, user_id=501, channel="mcp")
+    assert out["answer"] == "Revenue AED 10." and not out["blocks"]
+    assert seen.get("attachment") is None
+
+
+def test_the_mcp_channel_has_its_own_per_minute_limit(monkeypatch):
+    from gemini_brain.usage import limits
+    monkeypatch.setattr(limits.settings, "usage_rate_per_minute", 5)
+    monkeypatch.setattr(limits.settings, "usage_rate_per_minute_mcp", 15)
+    assert limits.speed_gate() == (1, 5) and limits.speed_gate("mcp") == (1, 15)
+
+
 def test_a_plain_question_gets_no_file(monkeypatch):
     monkeypatch.setattr(loop, "run_agent", lambda *a, **k: loop.AgentResult(answer="AED 10.", status="ok"))
     assert preview.answer("Revenue this year?", [24], lambda: {}, session_id=None, user_id=501)["blocks"] is None

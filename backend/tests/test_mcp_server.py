@@ -207,6 +207,26 @@ class TestToolsThroughApi:
             _call(api_app, _token(), "ask_accutax", {"question": "What was revenue?", "agent": "payroll"})
         assert agent_calls == []
 
+    def test_the_agent_is_told_the_mcp_channel(self, api_app):
+        seen = {}
+
+        def answer(question, orgs, org_meta, **kw):
+            seen.update(kw)
+            return {"answer": "AED 10.", "status": "ok", "request_id": "r",
+                    "token_usage": {"input_tokens": 0, "output_tokens": 0, "llm_calls": 0, "cost_usd": 0.0,
+                                    "elapsed_seconds": 0}}
+
+        with patch("gemini_brain.api.routes.agent_preview.answer", answer):
+            _call(api_app, _token(), "ask_accutax", {"question": "Revenue this year?"})
+        assert seen.get("channel") == "mcp"
+
+    def test_host_is_told_questions_stand_alone_and_no_charts(self):
+        from gemini_brain.mcp_server.server import INSTRUCTIONS
+        tools = asyncio.run(build_server(Upstream("http://unused")).list_tools())
+        question = next(t for t in tools if t.name == "ask_accutax").input_schema["properties"]["question"]
+        assert "does not remember earlier calls" in INSTRUCTIONS and "no charts or files" in INSTRUCTIONS
+        assert "complete on its own" in question["description"]
+
     def test_only_a_list_of_orgs_is_offered(self):
         """A single-org field lets the host ask once per organization; only the list is offered."""
         tools = asyncio.run(build_server(Upstream("http://unused")).list_tools())
