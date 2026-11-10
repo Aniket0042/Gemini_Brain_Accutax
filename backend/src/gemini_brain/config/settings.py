@@ -572,8 +572,9 @@ class GeminiBrainSettings(BaseSettings):
     )
     mcp_full_detail_orgs: str = Field(
         default="",
-        description="Comma-separated organization ids whose MCP answers keep real names and ID numbers. Every other "
-                    "organization's answers reach ChatGPT / Claude with placeholders ([SUPPLIER_1], [TRN_2]).",
+        description="Comma-separated organization ids whose MCP answers keep real names and ID numbers, or '*' for "
+                    "every organization. Every other organization's answers reach ChatGPT / Claude with placeholders "
+                    "([SUPPLIER_1], [TRN_2]).",
     )
     mcp_max_output_chars: int = Field(default=24_000, ge=1_000,
                                       description="Longest tool result returned to the host model, in characters.")

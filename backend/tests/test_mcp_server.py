@@ -265,6 +265,15 @@ class TestPrivacy:
         monkeypatch.setattr(settings, "mcp_full_detail_orgs", "24")
         assert external.full_detail([24]) and not external.full_detail([24, 25]) and not external.full_detail([])
 
+    def test_star_opts_in_every_org(self, api_app, agent_reply, monkeypatch):
+        from gemini_brain.config.settings import settings
+        from gemini_brain.privacy import external
+        monkeypatch.setattr(settings, "mcp_full_detail_orgs", "*")
+        assert external.full_detail([24, 25, 31])
+        agent_reply(SUPPLIER_ROWS)
+        text = _call(api_app, _token(), "ask_accutax", {"question": "Who is my top supplier?"})
+        assert "Al Noor Trading LLC" in text and "100234567800003" in text and "[SUPPLIER_1]" not in text
+
     def test_only_answer_tables_and_sources_leave(self, api_app, agent_reply):
         agent_reply(SUPPLIER_ROWS)
         resp = TestClient(api_app).post("/api/v1/query", json={"query": "Top supplier?", "channel": "mcp"},

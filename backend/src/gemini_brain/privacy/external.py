@@ -8,7 +8,8 @@ would see it: supplier, customer and person names, TRNs, IBANs, emails and other
 names: the user picks an organization by its name, and it is their own company.
 
 An organization in MCP_FULL_DETAIL_ORGS opted in to full detail: its answers go out with real values. An answer
-covering several organizations keeps real values only when every one of them opted in.
+covering several organizations keeps real values only when every one of them opted in. "*" opts in every
+organization: masking is off for the connector.
 
 Only the answer, its tables and its FTA sources leave, never traces, SQL, raw results or the privacy view. Masking
 never fails open: without the contact names it still masks name fields and identifier patterns, and when masking
@@ -32,6 +33,10 @@ WITHHELD = "Accutax could not prepare this answer for sharing outside Accutax. T
 _KEPT = ("answer", "status", "notice", "agent", "request_id", "error")
 
 
+#: MCP_FULL_DETAIL_ORGS value that opts every organization in.
+ALL = "*"
+
+
 def full_detail_orgs() -> frozenset:
     out = set()
     for part in (settings.mcp_full_detail_orgs or "").split(","):
@@ -42,10 +47,14 @@ def full_detail_orgs() -> frozenset:
 
 
 def full_detail(organization_ids: Sequence[int]) -> bool:
-    """True when every organization of the answer opted in to full detail."""
-    allowed = full_detail_orgs()
+    """True when every organization of the answer opted in to full detail ("*": all of them)."""
     orgs = [int(o) for o in organization_ids]
-    return bool(orgs) and all(o in allowed for o in orgs)
+    if not orgs:
+        return False
+    if any(p.strip() == ALL for p in (settings.mcp_full_detail_orgs or "").split(",")):
+        return True
+    allowed = full_detail_orgs()
+    return all(o in allowed for o in orgs)
 
 
 def _scrubber(organization_ids: Sequence[int], subject: str) -> Scrubber:
