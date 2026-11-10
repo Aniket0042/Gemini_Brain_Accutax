@@ -95,10 +95,12 @@ class Upstream:
         return list(body.get("tenants") or [])
 
     async def ask(self, token: str, question: str, *, organization_id: Optional[int] = None,
-                  agent: Optional[str] = None) -> dict[str, Any]:
+                  organization_ids: Optional[list[int]] = None, agent: Optional[str] = None) -> dict[str, Any]:
         # channel "mcp": the API returns only what may leave for the host, masked (privacy/external.py).
         payload: dict[str, Any] = {"query": question, "channel": "mcp"}
-        if organization_id is not None:
+        if organization_ids:
+            payload["organization_ids"] = list(dict.fromkeys(int(o) for o in organization_ids))
+        elif organization_id is not None:
             payload["organization_id"] = organization_id
         if agent:
             payload["agent"] = agent

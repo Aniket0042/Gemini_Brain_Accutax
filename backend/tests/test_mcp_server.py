@@ -174,6 +174,30 @@ class TestToolsThroughApi:
         assert "select secret" not in text and "cost" not in text.lower()
         assert "duplicate of answer" not in text
 
+    def test_several_orgs_in_one_call(self, api_app, agent_calls, monkeypatch):
+        from gemini_brain.config.settings import settings
+        monkeypatch.setattr(settings, "multi_org_enabled", True)
+        monkeypatch.setattr(settings, "max_orgs_per_query", 10)
+        _call(api_app, _token(orgs=[24, 25, 26]), "ask_accutax",
+              {"question": "Top 5 vendors for every organization", "organization_ids": [24, 25, 26]})
+        assert agent_calls == [{"question": "Top 5 vendors for every organization", "orgs": [24, 25, 26]}]
+
+    def test_several_orgs_one_foreign_refused(self, api_app, agent_calls, monkeypatch):
+        from gemini_brain.config.settings import settings
+        monkeypatch.setattr(settings, "multi_org_enabled", True)
+        with pytest.raises(ToolError):
+            _call(api_app, _token(orgs=[24, 25]), "ask_accutax",
+                  {"question": "Compare revenue", "organization_ids": [24, 30]})
+        assert agent_calls == []
+
+    def test_busy_refusal_is_a_tool_error(self, api_app, agent_reply):
+        agent_reply({"answer": "Your previous question is still being answered. Ask again when it finishes.",
+                     "status": "failed", "notice": {"code": "USAGE_BUSY", "message": "busy"},
+                     "token_usage": {"input_tokens": 0, "output_tokens": 0, "llm_calls": 0, "cost_usd": 0.0,
+                                     "elapsed_seconds": 0}})
+        with pytest.raises(ToolError, match="still being answered"):
+            _call(api_app, _token(), "ask_accutax", {"question": "What was revenue?"})
+
     def test_list_organizations_only_own(self, api_app):
         text = _call(api_app, _token(orgs=[24, 26]), "list_organizations", {})
         assert "| 24 |" in text and "| 26 |" in text and "| 25 |" not in text
@@ -296,8 +320,9 @@ class TestPrivacy:
             raise RuntimeError("boom")
         monkeypatch.setattr(external, "_scrubber", broken)
         agent_reply(SUPPLIER_ROWS)
-        text = _call(api_app, _token(), "ask_accutax", {"question": "Who is my top supplier?"})
-        assert "Al Noor" not in text and "could not prepare this answer" in text
+        with pytest.raises(ToolError, match="could not prepare this answer") as e:
+            _call(api_app, _token(), "ask_accutax", {"question": "Who is my top supplier?"})
+        assert "Al Noor" not in str(e.value)
 
     def test_contact_names_unavailable_still_masks_fields_and_patterns(self, api_app, agent_reply, monkeypatch):
         from gemini_brain.privacy import external
