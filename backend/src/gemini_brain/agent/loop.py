@@ -38,6 +38,8 @@ from gemini_brain.semantic import periods
 logger = logging.getLogger("gemini_brain.agent.loop")
 
 MAX_ANSWER_TOKENS = 3000
+#: Most tool calls one question over several organizations may make (agent_max_tool_calls is the floor).
+MAX_TOOL_CALLS_MULTI_ORG = 12
 #: Below this many seconds left, another model call would not finish in time.
 MIN_SECONDS_FOR_MODEL_CALL = 4.0
 BUDGET_USED = ("Tool budget used. Answer now with the figures you already have, "
@@ -275,8 +277,10 @@ def run_agent(
     problem (keys); the review leaves them out."""
     started = time.monotonic()
     deadline = started + (deadline_seconds or settings.agent_deadline_seconds)
-    budget = max_tool_calls or settings.agent_max_tool_calls
     orgs = [int(o) for o in organization_ids]
+    # A question over many organizations often needs a call per organization ("top 5 customers for each"); they
+    # run at the same time, so the budget grows with the organizations, up to MAX_TOOL_CALLS_MULTI_ORG.
+    budget = max_tool_calls or max(settings.agent_max_tool_calls, min(len(orgs) + 2, MAX_TOOL_CALLS_MULTI_ORG))
     sentinel.note_request(session_id=session_id, organization_ids=orgs,
                           org_names=[(org_meta.get(o) or {}).get("name") for o in orgs], subject=subject)
     if authorize:
@@ -374,7 +378,9 @@ def run_agent(
             message = (resp.get("output") or {}).get("message") or {"role": "assistant", "content": []}
             messages.append(message)
             uses = [b["toolUse"] for b in message.get("content") or [] if "toolUse" in b]
-            if resp.get("stopReason") != "tool_use" or not uses:
+            # Tool calls are run even when the reply was cut off after them (stopReason max_tokens, many calls in
+            # one turn): every toolUse in the conversation needs its toolResult, or the next model call is refused.
+            if not uses:
                 answer = _text_of(message)
                 cut_off = resp.get("stopReason") == "max_tokens" or not answer
                 if cut_off and not asked_shorter:

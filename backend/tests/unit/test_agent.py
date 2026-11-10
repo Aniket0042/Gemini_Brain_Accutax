@@ -149,6 +149,33 @@ def test_a_cut_off_answer_is_asked_once_to_be_shorter(agent):
     assert result.answer == "Short summary: AED 5,809,352." and result.usage["llm_calls"] == 3
 
 
+def test_tool_calls_in_a_cut_off_reply_still_run(agent):
+    """Ten calls at once can end in max_tokens; their toolUse blocks still need results, or Bedrock refuses the
+    next call ("tool_use ids were found without tool_result blocks")."""
+    many = {"stopReason": "max_tokens", "output": {"message": {"role": "assistant", "content": [
+        {"toolUse": {"toolUseId": f"u{i}", "name": "query_metrics", "input": {"organization_ids": [24]}}}
+        for i in range(3)]}}}
+    FakeAdapter.script = [many, final("Org One earned AED 5,809,352.")]
+    result = loop.run_agent("Top customers for every organization", ORGS, META)
+    assert result.status == "ok" and len(agent) == 3
+    assert result.answer == "Org One earned AED 5,809,352."
+
+
+def test_the_tool_budget_grows_with_the_organizations(agent, monkeypatch):
+    monkeypatch.setattr(loop.settings, "agent_max_tool_calls", 6)
+    ten = list(range(24, 34))
+    FakeAdapter.script = [tool_use("query_metrics", {}, uid=f"t{i}") for i in range(20)] + [final("done")]
+    loop.run_agent("Top 5 customers for each organization", ten, {o: {"name": f"Org {o}"} for o in ten})
+    assert len(agent) == 12  # 10 organizations + 2, capped at MAX_TOOL_CALLS_MULTI_ORG
+
+
+def test_one_organization_keeps_the_configured_budget(agent, monkeypatch):
+    monkeypatch.setattr(loop.settings, "agent_max_tool_calls", 6)
+    FakeAdapter.script = [tool_use("query_metrics", {}, uid=f"t{i}") for i in range(20)] + [final("done")]
+    loop.run_agent("Loop", [24], {24: {"name": "Org 24"}})
+    assert len(agent) == 6
+
+
 def test_a_chart_follow_up_that_fetched_nothing_is_asked_once_to_fetch(agent):
     # "show me the graphs for the same": the figures are in history, but the chart is built only from this
     # turn's tool results, so an answer without a data call is sent back once.
