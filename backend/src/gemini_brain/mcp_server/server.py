@@ -31,9 +31,11 @@ INSTRUCTIONS = (
     "Accutax is UAE accounting and VAT software. Use these tools for questions about the user's own books "
     "(revenue, expenses, invoices, bills, VAT returns, cash, receivables, payables) and about UAE VAT law. "
     "Call list_organizations first when the user has not said which company they mean, then pass its id. "
-    "For a question about several or all organizations, make ONE ask_accutax call with all their ids in "
-    "organization_ids (up to 10): Accutax compares them in one answer. Never call ask_accutax in parallel: "
-    "Accutax answers one question at a time per user and refuses the others. "
+    "For a question about several or all organizations (for example 'for every organization'), make ONE "
+    "ask_accutax call with all their ids in organization_ids (up to 10) and the user's question as asked: "
+    "Accutax answers per organization in a single reply, the way the Accutax app does. Do not ask once per "
+    "organization and never call ask_accutax in parallel: Accutax answers one question at a time per user, "
+    "a few a minute, and refuses the rest. "
     "Quote figures and FTA citations exactly as returned; do not recompute or round them. "
     "Names and ID numbers may come back as placeholders in square brackets, such as [SUPPLIER_1] or [TRN_2]: "
     "show them exactly as written and never guess what they hide. A placeholder's number holds only within one "
@@ -191,7 +193,6 @@ def build_server(upstream: Upstream | None = None, provider: AccutaxOAuthProvide
         access = get_access_token()
         user = (access.subject if access else None) or "unknown"
         line = {"user_id": user, "client_id": access.client_id if access else None, "tool": tool,
-                "organization_id": arguments.get("organization_id"),
                 "organization_ids": arguments.get("organization_ids"), "agent": arguments.get("agent"),
                 "args_sha256": audit.args_hash(arguments)}
         started = time.monotonic()
@@ -221,14 +222,12 @@ def build_server(upstream: Upstream | None = None, provider: AccutaxOAuthProvide
         question: Annotated[str, Field(min_length=3, max_length=4000,
                                        description="The question, in the user's words, with any period or "
                                                    "company they named.")],
-        organization_id: Annotated[Optional[int], Field(
-            description="Organization id from list_organizations, for a question about one organization. Omit "
-                        "both this and organization_ids to use the user's default organization.")] = None,
         organization_ids: Annotated[Optional[list[int]], Field(
             min_length=1, max_length=MAX_ORGS_PER_CALL,
-            description="Several organization ids from list_organizations, for one question about all of them "
-                        "(totals per organization, comparisons, 'for every organization'). Use this instead of "
-                        "separate calls.")] = None,
+            description="Organization ids from list_organizations: one id for one company, or ALL the ids the "
+                        "question covers ('for every organization', comparisons, per-company totals) in this one "
+                        "call. Accutax answers per organization in a single reply; never split the ids over "
+                        "several calls. Omit to use the user's default organization.")] = None,
         agent: Annotated[Optional[AgentKey], Field(
             description="Specialist to answer: vat (VAT returns, reviews, VAT law), ap (bills and payables), "
                         "cash (cash and bank), accutax (general). Omit to let Accutax choose.")] = None,
@@ -237,16 +236,16 @@ def build_server(upstream: Upstream | None = None, provider: AccutaxOAuthProvide
 
         Figures come from the organization's live Accutax data; VAT law answers cite FTA documents. Use it
         for revenue, expenses, profit, invoices, bills, customers, suppliers, cash, VAT returns, VAT review
-        findings and VAT rules. One question per call, one call at a time; several organizations go together in
-        organization_ids. It can take up to a few minutes.
+        findings and VAT rules. A question about several organizations is ONE call with all their ids in
+        organization_ids, not one call per organization: separate calls are slow and hit the per-minute limit.
+        One call at a time. It can take up to a few minutes.
         """
         async def call(token: str) -> str:
-            envelope = await api.ask(token, question, organization_id=organization_id,
-                                     organization_ids=organization_ids, agent=agent)
+            envelope = await api.ask(token, question, organization_ids=organization_ids, agent=agent)
             if envelope.get("status") == "failed":  # not answered (busy, limits, error): the host must see a failure
                 raise UpstreamError(str(envelope.get("answer") or "Accutax AI could not answer that. Try again."))
             return render_answer(envelope)
-        return await audited("ask_accutax", {"question": question, "organization_id": organization_id,
-                                             "organization_ids": organization_ids, "agent": agent}, call)
+        return await audited("ask_accutax", {"question": question, "organization_ids": organization_ids,
+                                             "agent": agent}, call)
 
     return server

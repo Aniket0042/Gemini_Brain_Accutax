@@ -156,7 +156,7 @@ class TestToolsThroughApi:
 
     def test_ask_runs_on_own_org(self, api_app, agent_calls):
         text = _call(api_app, _token(orgs=[24, 25]), "ask_accutax",
-                     {"question": "What was revenue?", "organization_id": 25})
+                     {"question": "What was revenue?", "organization_ids": [25]})
         assert agent_calls == [{"question": "What was revenue?", "orgs": [25]}]
         assert "AED 1,000" in text and "| Jan | 600 |" in text
 
@@ -166,7 +166,7 @@ class TestToolsThroughApi:
 
     def test_foreign_org_refused_before_agent_runs(self, api_app, agent_calls):
         with pytest.raises(ToolError, match="not in the caller's allowed tenant list"):
-            _call(api_app, _token(orgs=[24]), "ask_accutax", {"question": "What was revenue?", "organization_id": 30})
+            _call(api_app, _token(orgs=[24]), "ask_accutax", {"question": "What was revenue?", "organization_ids": [30]})
         assert agent_calls == []
 
     def test_answer_carries_no_traces_or_cost(self, api_app, agent_calls):
@@ -206,6 +206,12 @@ class TestToolsThroughApi:
         with pytest.raises(ToolError):
             _call(api_app, _token(), "ask_accutax", {"question": "What was revenue?", "agent": "payroll"})
         assert agent_calls == []
+
+    def test_only_a_list_of_orgs_is_offered(self):
+        """A single-org field lets the host ask once per organization; only the list is offered."""
+        tools = asyncio.run(build_server(Upstream("http://unused")).list_tools())
+        props = next(t for t in tools if t.name == "ask_accutax").input_schema["properties"]
+        assert "organization_ids" in props and "organization_id" not in props
 
 
 class TestHttpEndpoint:
@@ -367,12 +373,12 @@ class TestAuditAndLimits:
 
     def test_each_call_logged_without_the_question(self, api_app, agent_calls, tmp_path):
         _call(api_app, _token(orgs=[24, 25]), "ask_accutax",
-              {"question": "Secret question about Al Noor", "organization_id": 25})
+              {"question": "Secret question about Al Noor", "organization_ids": [25]})
         with pytest.raises(ToolError):
-            _call(api_app, _token(orgs=[24]), "ask_accutax", {"question": "Other org?", "organization_id": 30})
+            _call(api_app, _token(orgs=[24]), "ask_accutax", {"question": "Other org?", "organization_ids": [30]})
         lines = self._lines(tmp_path)
-        assert [(x["tool"], x["organization_id"], x["outcome"]) for x in lines] == [
-            ("ask_accutax", 25, "ok"), ("ask_accutax", 30, "refused")]
+        assert [(x["tool"], x["organization_ids"], x["outcome"]) for x in lines] == [
+            ("ask_accutax", [25], "ok"), ("ask_accutax", [30], "refused")]
         assert lines[0]["user_id"] == "101" and len(lines[0]["args_sha256"]) == 64
         assert "Al Noor" not in (tmp_path / "mcp_audit.jsonl").read_text(encoding="utf-8")
 
