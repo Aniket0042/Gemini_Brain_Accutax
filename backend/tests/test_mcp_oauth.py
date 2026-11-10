@@ -158,6 +158,12 @@ class TestSignIn:
             _sign_in(client, txn, "wrong")
         assert _sign_in(client, txn).status_code == 400  # link spent, even with the right password
 
+    def test_enter_key_submits_allow_not_cancel(self, setup):
+        """Enter in a field submits with the form's first button, so Allow must come before Cancel in the page."""
+        client, _, _ = setup
+        page = client.get(f"/login?txn={_authorize(client, _register(client).json()['client_id'])}").text
+        assert page.index('value="allow"') < page.index('value="deny"')
+
     def test_cancel_returns_access_denied(self, setup):
         client, _, _ = setup
         txn = _authorize(client, _register(client).json()["client_id"])

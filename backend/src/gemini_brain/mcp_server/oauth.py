@@ -223,6 +223,7 @@ class AccutaxOAuthProvider:
         p = self._pending.pop(txn or "", None)
         if p is None:
             return None
+        logger.info("MCP sign-in cancelled for client %s", p.client_id)
         return construct_redirect_uri(str(p.params.redirect_uri), error="access_denied", state=p.params.state)
 
     # ── Codes and tokens ──
@@ -325,7 +326,7 @@ main{{max-width:380px;margin:8vh auto;padding:32px;background:#fff;border:1px so
 h1{{font-size:20px;margin:0 0 8px}}p{{margin:0 0 16px;color:#55544f}}
 label{{display:block;font-weight:600;margin:12px 0 4px}}
 input{{width:100%;box-sizing:border-box;padding:10px;border:1px solid #cfcdc6;border-radius:8px;font:inherit}}
-.row{{display:flex;gap:8px;margin-top:20px}}button{{flex:1;padding:10px;border-radius:8px;font:inherit;cursor:pointer}}
+.row{{display:flex;flex-direction:row-reverse;gap:8px;margin-top:20px}}button{{flex:1;padding:10px;border-radius:8px;font:inherit;cursor:pointer}}
 .ok{{background:#1d1d1b;color:#fff;border:0}}.no{{background:#fff;border:1px solid #cfcdc6}}
 .err{{background:#fbebeb;color:#8a1c1c;padding:8px 12px;border-radius:8px}}ul{{padding-left:20px;color:#55544f}}
 </style></head><body><main>
@@ -338,8 +339,9 @@ file or pay anything. You can disconnect it at any time.</p>
 <input type="hidden" name="txn" value="{txn}">
 <label for="email">Accutax email</label><input id="email" name="email" type="email" autocomplete="username" required value="{email}">
 <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
-<div class="row"><button class="no" name="action" value="deny" formnovalidate>Cancel</button>
-<button class="ok" name="action" value="allow">Sign in and allow</button></div>
+<!-- Allow comes first in the page: Enter in a field submits with the first button. Cancel is drawn on the left. -->
+<div class="row"><button class="ok" name="action" value="allow">Sign in and allow</button>
+<button class="no" name="action" value="deny" formnovalidate>Cancel</button></div>
 </form></main></body></html>"""
 
 _GONE = ("<!doctype html><meta charset='utf-8'><title>Accutax</title><p style='font:15px system-ui;margin:10vh auto;"
