@@ -226,6 +226,7 @@ class TestToolsThroughApi:
         question = next(t for t in tools if t.name == "ask_accutax").input_schema["properties"]["question"]
         assert "does not remember earlier calls" in INSTRUCTIONS and "no charts or files" in INSTRUCTIONS
         assert "complete on its own" in question["description"]
+        assert "one topic per call" in INSTRUCTIONS.lower() and "One topic per question" in question["description"]
 
     def test_only_a_list_of_orgs_is_offered(self):
         """A single-org field lets the host ask once per organization; only the list is offered."""

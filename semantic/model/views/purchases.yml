@@ -33,6 +33,8 @@ views:
           - input_vat
           - bill_count
           - vendor_count
+          - first_bill_date
+          - last_bill_date
       - join_path: purchase_lines.branches
         includes:
           - branch_name

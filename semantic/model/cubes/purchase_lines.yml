@@ -144,3 +144,19 @@ cubes:
       - name: vendor_count
         type: count_distinct
         sql: "{CUBE}.vendor_id"
+      - name: first_bill_date
+        description: >-
+          Date of the earliest purchase document (bill, expense, cash expense) in the selection; with
+          vendor_name, each vendor's first bill. Vendor credits are left out.
+        type: min
+        sql: "{CUBE}.document_date"
+        filters:
+          - sql: "{CUBE}.document_type <> 'VENDOR_CREDIT'"
+      - name: last_bill_date
+        description: >-
+          Date of the latest purchase document (bill, expense, cash expense) in the selection; with
+          vendor_name, each vendor's most recent bill. Vendor credits are left out.
+        type: max
+        sql: "{CUBE}.document_date"
+        filters:
+          - sql: "{CUBE}.document_type <> 'VENDOR_CREDIT'"

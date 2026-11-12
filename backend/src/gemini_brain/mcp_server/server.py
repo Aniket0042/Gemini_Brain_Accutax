@@ -35,6 +35,10 @@ INSTRUCTIONS = (
     "period and the organizations it is about, even when the user only said 'and last quarter?' or 'now the "
     "top 2'. Answers are text and tables only: Accutax sends no charts or files here, so draw any chart yourself "
     "from the figures. "
+    "Ask about one topic per call, the way a person would ask: for a report, first the headline figures (for "
+    "example 'top 5 suppliers by billed amount this year'), then a separate call for each further part (paid and "
+    "outstanding for those suppliers, bills per year). One question that lists many figures at once is slower "
+    "and may run out of time; several short questions answer fast. "
     "For a question about several or all organizations (for example 'for every organization'), make ONE "
     "ask_accutax call with all their ids in organization_ids (up to 10) and the user's question as asked: "
     "Accutax answers per organization in a single reply, the way the Accutax app does. Do not ask once per "
@@ -227,7 +231,8 @@ def build_server(upstream: Upstream | None = None, provider: AccutaxOAuthProvide
                                        description="The question, complete on its own: Accutax does not see "
                                                    "earlier messages. Turn a follow-up ('and last quarter?') "
                                                    "into the full question, with the measure, period and "
-                                                   "companies.")],
+                                                   "companies. One topic per question; split a long list of "
+                                                   "figures into several calls.")],
         organization_ids: Annotated[Optional[list[int]], Field(
             min_length=1, max_length=MAX_ORGS_PER_CALL,
             description="Organization ids from list_organizations: one id for one company, or ALL the ids the "

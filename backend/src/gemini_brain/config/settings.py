@@ -405,6 +405,9 @@ class GeminiBrainSettings(BaseSettings):
     )
     agent_max_tool_calls: int = Field(default=6, ge=1, le=12)
     agent_deadline_seconds: float = Field(default=45.0, ge=5.0, le=120.0)
+    agent_deadline_seconds_mcp: float = Field(
+        default=75.0, ge=5.0, le=95.0,
+        description="Time one MCP connector question may take. Kept under the 100 s a Cloudflare tunnel waits.")
     aed_rates_file: str = Field(
         default="",
         description=(

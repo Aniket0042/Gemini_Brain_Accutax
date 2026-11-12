@@ -162,6 +162,16 @@ def test_the_mcp_channel_gets_no_file_or_chart_and_none_is_promised(monkeypatch)
     assert seen.get("attachment") is None
 
 
+def test_the_mcp_channel_gets_its_own_time_limit(monkeypatch):
+    seen = []
+    monkeypatch.setattr(loop, "run_agent", lambda *a, **k: seen.append(k.get("deadline_seconds")) or loop.AgentResult(
+        answer="AED 10.", status="ok"))
+    monkeypatch.setattr(preview.settings, "agent_deadline_seconds_mcp", 75.0)
+    preview.answer("Revenue this year?", [24], lambda: {}, session_id=None, user_id=501, channel="mcp")
+    preview.answer("Revenue this year?", [24], lambda: {}, session_id=None, user_id=501)
+    assert seen == [75.0, None]  # the app keeps AGENT_DEADLINE_SECONDS
+
+
 def test_the_mcp_channel_has_its_own_per_minute_limit(monkeypatch):
     from gemini_brain.usage import limits
     monkeypatch.setattr(limits.settings, "usage_rate_per_minute", 5)

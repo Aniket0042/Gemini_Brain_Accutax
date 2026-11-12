@@ -145,3 +145,19 @@ cubes:
       - name: customer_count
         type: count_distinct
         sql: "{CUBE}.customer_id"
+      - name: first_invoice_date
+        description: >-
+          Date of the earliest sales document in the selection; with customer_name, each customer's first
+          invoice. Credit notes are left out.
+        type: min
+        sql: "{CUBE}.document_date"
+        filters:
+          - sql: "{CUBE}.document_type <> 'CREDIT_NOTE'"
+      - name: last_invoice_date
+        description: >-
+          Date of the latest sales document in the selection; with customer_name, each customer's most
+          recent invoice. Credit notes are left out.
+        type: max
+        sql: "{CUBE}.document_date"
+        filters:
+          - sql: "{CUBE}.document_type <> 'CREDIT_NOTE'"

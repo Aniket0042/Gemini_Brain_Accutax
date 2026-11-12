@@ -33,6 +33,8 @@ views:
           - standard_rated_sales
           - invoice_count
           - customer_count
+          - first_invoice_date
+          - last_invoice_date
       - join_path: sales_lines.branches
         includes:
           - branch_name

@@ -73,8 +73,8 @@ def cell_text(value: Any) -> Any:
 
 
 def _additive(member: str) -> bool:
-    """Amounts that may be added up; percentages and ratios may not."""
-    return not member.endswith("_pct") and not member.endswith("_ratio")
+    """Amounts that may be added up; percentages, ratios and dates (first_bill_date) may not."""
+    return not member.endswith(("_pct", "_ratio", "_date"))
 
 
 def _dec(value: Any) -> Optional[Decimal]:

@@ -139,6 +139,14 @@ def test_totals_add_amounts_but_never_percentages():
     assert out == {"totals": {"currency": "AED", "pnl.revenue": "-12886381"}}
 
 
+def test_date_measures_are_never_added_up():
+    """first_bill_date / last_bill_date are dates; a total of them would read as 0."""
+    rows = [{**_row(24, "2026-01-01", "100"), "pnl.first_bill_date": "2025-02-03T00:00:00.000"},
+            {**_row(25, "2026-01-01", "200"), "pnl.first_bill_date": "2025-05-06T00:00:00.000"}]
+    out = query_metrics.summarize(rows, {"measures": ["pnl.revenue", "pnl.first_bill_date"]}, CATALOG.views["pnl"], None)
+    assert out == {"totals": {"currency": "AED", "pnl.revenue": "300"}}
+
+
 def test_no_total_across_currencies():
     rows = [_row(24, "2026-01-01", "100"), _row(25, "2026-01-01", "100", currency="USD")]
     assert "totals" not in query_metrics.summarize(rows, {"measures": ["pnl.revenue"]}, CATALOG.views["pnl"], None)

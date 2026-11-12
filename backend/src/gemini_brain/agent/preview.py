@@ -159,7 +159,9 @@ def _answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[
                            brief=brief, attachment=attached, documents=doc_prompt, document_ids=doc_ids,
                            document_evidence=doc_evidence, user_id=user_id, session_id=session_id, profile=profile,
                            dismissed=dismissed, **_write_access(accutax_token, user_id, user_email),
-                           **({"authorize":authorize} if authorize else {}), **model_ids)
+                           **({"authorize":authorize} if authorize else {}), **model_ids,
+                           # The MCP host asks fuller questions and waits longer than the app's chat.
+                           **({"deadline_seconds": settings.agent_deadline_seconds_mcp} if channel == "mcp" else {}))
     finally:
         traces = _collect_traces(rid)
     data = getattr(result, "data", None) or []
