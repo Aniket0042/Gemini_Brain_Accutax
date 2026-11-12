@@ -39,8 +39,22 @@ class LawAnswer:
     blocks: List[Dict[str, Any]] = field(default_factory=list)
 
 
+#: The organization's own VAT figures or deadline: "our VAT position", "when is my next VAT return due", "my output VAT",
+#: "how much VAT do we owe", "for the last 3 months". Set phrases only: law questions say "our" too ("a company leaves
+#: our VAT tax group", "can we recover input VAT on ...").
+_OWN_VAT_FIGURES = re.compile(
+    r"\b(our|my)\s+(next\s+|current\s+|latest\s+|last\s+)?(vat|tax)\s+(position|returns?|payable|liabilit\w*|refund\w*|"
+    r"figures?|bill|deadline)\b"
+    r"|\b(our|my)\s+(output|input|net)\s+(vat|tax)\b"
+    r"|\b(vat|tax)\b.{0,30}\b(do|does|did)\s+(we|i)\s+owe\b"
+    r"|\bhow much (vat|tax)\b"
+    r"|\blast\s+\d+\s+(days|weeks|months|quarters)\b",
+    re.I | re.S,
+)
+
+
 def about_the_organizations(question: str) -> bool:
-    return bool(_ABOUT_THE_ORGS.search(question or ""))
+    return bool(_ABOUT_THE_ORGS.search(question or "") or _OWN_VAT_FIGURES.search(question or ""))
 
 
 #: Added to the law prompt when the user turned on Brief answers.

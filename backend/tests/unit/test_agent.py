@@ -309,6 +309,9 @@ def test_a_refused_cache_point_is_dropped_for_good(monkeypatch, agent):
     "A company leaves our VAT tax group mid-year. What output tax and input tax adjustments are needed?",
     "What is VAT?",
     "When does e-invoicing become mandatory for a business with AED 60 million revenue?",
+    "Can we recover input VAT on employee entertainment expenses?",
+    "Under UAE law, when is a VAT return due?",
+    "Do we need to register for VAT if our turnover is AED 400,000?",
 ])
 def test_law_questions_are_not_mistaken_for_organization_questions(question):
     assert not loop.law.about_the_organizations(question)
@@ -317,6 +320,9 @@ def test_law_questions_are_not_mistaken_for_organization_questions(question):
 @pytest.mark.parametrize("question", [
     "What is VAT for each organization?", "Compare VAT payable for Q2 2026", "Compare tax payable",
     "Input VAT vs output VAT per entity this year", "Which entities have VAT return due this month?",
+    # A QBR's VAT question once took the law route and the model worked out a due date from the dates asked.
+    "For the last 3 months (12 Aug to 12 Nov 2026), what is our VAT position and when is the next return due?",
+    "When is our next VAT return due?", "How much VAT do we owe this quarter?", "What is my output VAT for October?",
 ])
 def test_organization_questions_never_take_the_law_route(question):
     assert loop.law.about_the_organizations(question)
