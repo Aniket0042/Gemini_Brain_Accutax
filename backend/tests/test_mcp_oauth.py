@@ -128,6 +128,23 @@ class TestDiscoveryAndRegistration:
         assert resp.status_code == 400 and resp.json()["error"] == "invalid_redirect_uri"
 
 
+class TestIcon:
+
+    @pytest.mark.parametrize("path,mime,magic", [("/favicon.ico", "image/x-icon", b"\x00\x00\x01\x00"),
+                                                 ("/icon.png", "image/png", b"\x89PNG"),
+                                                 ("/favicon.svg", "image/svg+xml", b"<svg")])
+    def test_icon_served_without_sign_in(self, setup, path, mime, magic):
+        client, _, _ = setup
+        resp = client.get(path)
+        assert resp.status_code == 200 and resp.headers["content-type"].startswith(mime)
+        assert resp.content.startswith(magic)
+
+    def test_server_lists_its_icons(self):
+        from gemini_brain.mcp_server.server import server_icons
+        found = server_icons()
+        assert found[0].src.endswith("/icon.png") and found[1].src.startswith("data:image/svg+xml;base64,")
+
+
 class TestSignIn:
 
     def test_login_page_names_client_and_return_host(self, setup):

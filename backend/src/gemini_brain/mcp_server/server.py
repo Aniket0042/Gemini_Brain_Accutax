@@ -5,6 +5,7 @@ leave: the host model sees the answer, its tables and its FTA sources, nothing e
 """
 from __future__ import annotations
 
+import base64
 import logging
 import time
 from typing import Annotated, Any, Awaitable, Callable, Literal, Optional
@@ -15,11 +16,13 @@ from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, Re
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
-from mcp.types import ToolAnnotations
+from mcp.types import Icon, ToolAnnotations
 from pydantic import Field
+from starlette.requests import Request
+from starlette.responses import Response
 
 from gemini_brain.config.settings import settings
-from gemini_brain.mcp_server import audit
+from gemini_brain.mcp_server import audit, icons
 from gemini_brain.mcp_server.oauth import AccutaxOAuthProvider, register_login_routes
 from gemini_brain.mcp_server.upstream import Upstream, UpstreamError
 from gemini_brain.mcp_server.verifier import SCOPE
@@ -165,6 +168,23 @@ def _issuer_url() -> str:
     return f"{parts.scheme}://{parts.netloc}"
 
 
+def server_icons() -> list[Icon]:
+    """The Accutax "A" mark: the PNG by URL on this server, and the SVG inline."""
+    return [Icon(src=f"{_issuer_url()}/icon.png", mime_type="image/png", sizes=["256x256"]),
+            Icon(src="data:image/svg+xml;base64," + base64.b64encode(icons.SVG.encode()).decode(),
+                 mime_type="image/svg+xml", sizes=["any"])]
+
+
+def register_icon_routes(server: MCPServer) -> None:
+    """/favicon.ico, /favicon.svg and /icon.png: public, so an AI app can fetch the connector's icon."""
+    files = {"/favicon.ico": (icons.FAVICON_ICO, "image/x-icon"), "/favicon.svg": (icons.SVG.encode(), "image/svg+xml"),
+             "/icon.png": (icons.ICON_PNG, "image/png")}
+    for path, (body, mime) in files.items():
+        async def serve(request: Request, body: bytes = body, mime: str = mime) -> Response:
+            return Response(body, media_type=mime, headers={"Cache-Control": "public, max-age=86400"})
+        server.custom_route(path, methods=["GET"], include_in_schema=False)(serve)
+
+
 def transport_security() -> TransportSecuritySettings:
     """Host-header guard against DNS rebinding: localhost always, plus MCP_ALLOWED_HOSTS (the public domain)."""
     hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
@@ -181,6 +201,7 @@ def build_server(upstream: Upstream | None = None, provider: AccutaxOAuthProvide
         title="Accutax",
         instructions=INSTRUCTIONS,
         website_url="https://accutax.ai",
+        icons=server_icons(),
         auth_server_provider=oauth,
         auth=AuthSettings(
             issuer_url=_issuer_url(),
@@ -194,6 +215,7 @@ def build_server(upstream: Upstream | None = None, provider: AccutaxOAuthProvide
         ),
     )
     register_login_routes(server, oauth)
+    register_icon_routes(server)
     limit = speed_limit or audit.SpeedLimit()
 
     async def audited(tool: str, arguments: dict[str, Any], call: Callable[[str], Awaitable[str]]) -> str:
