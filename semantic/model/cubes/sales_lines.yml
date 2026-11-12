@@ -149,15 +149,11 @@ cubes:
         description: >-
           Date of the earliest sales document in the selection; with customer_name, each customer's first
           invoice. Credit notes are left out.
-        type: min
-        sql: "{CUBE}.document_date"
-        filters:
-          - sql: "{CUBE}.document_type <> 'CREDIT_NOTE'"
+        type: time
+        sql: "MIN(CASE WHEN {CUBE}.document_type <> 'CREDIT_NOTE' THEN {CUBE}.document_date END)"
       - name: last_invoice_date
         description: >-
           Date of the latest sales document in the selection; with customer_name, each customer's most
           recent invoice. Credit notes are left out.
-        type: max
-        sql: "{CUBE}.document_date"
-        filters:
-          - sql: "{CUBE}.document_type <> 'CREDIT_NOTE'"
+        type: time
+        sql: "MAX(CASE WHEN {CUBE}.document_type <> 'CREDIT_NOTE' THEN {CUBE}.document_date END)"
