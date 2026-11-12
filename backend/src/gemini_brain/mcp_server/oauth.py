@@ -45,6 +45,7 @@ from starlette.responses import HTMLResponse, RedirectResponse, Response
 
 from gemini_brain.api.auth import create_access_token, decode_access_token, get_jwt_secret
 from gemini_brain.config.settings import settings
+from gemini_brain.mcp_server.login_page import GONE as _GONE, PAGE as _PAGE
 from gemini_brain.mcp_server.upstream import Upstream, UpstreamError
 from gemini_brain.mcp_server.verifier import SCOPE, AccutaxTokenVerifier
 
@@ -317,35 +318,6 @@ _SECURITY_HEADERS = {
     "Referrer-Policy": "no-referrer",
     "Cache-Control": "no-store",
 }
-
-_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in to Accutax</title>
-<style>
-body{{margin:0;font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;background:#f6f6f4;color:#1d1d1b}}
-main{{max-width:380px;margin:8vh auto;padding:32px;background:#fff;border:1px solid #e3e2dd;border-radius:12px}}
-h1{{font-size:20px;margin:0 0 8px}}p{{margin:0 0 16px;color:#55544f}}
-label{{display:block;font-weight:600;margin:12px 0 4px}}
-input{{width:100%;box-sizing:border-box;padding:10px;border:1px solid #cfcdc6;border-radius:8px;font:inherit}}
-.row{{display:flex;flex-direction:row-reverse;gap:8px;margin-top:20px}}button{{flex:1;padding:10px;border-radius:8px;font:inherit;cursor:pointer}}
-.ok{{background:#1d1d1b;color:#fff;border:0}}.no{{background:#fff;border:1px solid #cfcdc6}}
-.err{{background:#fbebeb;color:#8a1c1c;padding:8px 12px;border-radius:8px}}ul{{padding-left:20px;color:#55544f}}
-</style></head><body><main>
-<h1>Connect {client} to Accutax</h1>
-<p>{client} will be able to <b>read</b> your Accutax data and ask Accutax AI questions. It cannot change,
-file or pay anything. You can disconnect it at any time.</p>
-<ul><li>Returns to: {host}</li></ul>
-{error}
-<form method="post" action="login">
-<input type="hidden" name="txn" value="{txn}">
-<label for="email">Accutax email</label><input id="email" name="email" type="email" autocomplete="username" required value="{email}">
-<label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
-<!-- Allow comes first in the page: Enter in a field submits with the first button. Cancel is drawn on the left. -->
-<div class="row"><button class="ok" name="action" value="allow">Sign in and allow</button>
-<button class="no" name="action" value="deny" formnovalidate>Cancel</button></div>
-</form></main></body></html>"""
-
-_GONE = ("<!doctype html><meta charset='utf-8'><title>Accutax</title><p style='font:15px system-ui;margin:10vh auto;"
-         "max-width:380px'>This sign-in link has expired. Start the connection again from your AI app.</p>")
 
 
 def _page(provider: AccutaxOAuthProvider, client: Optional[OAuthClientInformationFull], txn: str, p: _Pending,
