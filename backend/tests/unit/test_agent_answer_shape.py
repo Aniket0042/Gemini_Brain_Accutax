@@ -57,3 +57,13 @@ def test_digits_inside_document_numbers_are_not_unverified_figures():
     assert ok.to_public()["grounded"] is True
     wrong = verify_answer("INV-BULK-26-20241216180347-114231 owes AED 99,999", loop._evidence(results), enforce=False)
     assert wrong.to_public()["unmatched"] == ["99,999"]
+
+
+def test_the_prompt_checks_odd_accounts_and_vat_before_concluding():
+    """A QBR called sales invoices posted to Penalties & Fines a loss, and gave a VAT due date for dates that are not
+    a tax period: the rules that stop both."""
+    text = system_prompt({}, [27], dt.date(2026, 11, 12), "Asia/Dubai")
+    assert "view ledger with account_name and" in text and "source_type INCOME" in text
+    assert "posted to the wrong account" in text and "Never draw a business conclusion" in text
+    assert "take the due date only" in text and "from next_return" in text
+    assert "never call the position nil from the documents alone" in text

@@ -104,7 +104,7 @@ def test_the_agent_offers_and_runs_the_penalty_tool():
 
 # --- the vat_return tool --------------------------------------------------------------------------------------------
 
-def fake_cube(monkeypatch, settings_rows=None, figures=None, settings_error=False):
+def fake_cube(monkeypatch, settings_rows=None, figures=None, settings_error=False, ledger_rows=None):
     seen = []
 
     def load(query, *, organization_ids, subject, deadline):
@@ -113,6 +113,10 @@ def fake_cube(monkeypatch, settings_rows=None, figures=None, settings_error=Fals
             if settings_error:
                 raise CubeError("Forbidden: 'vat_settings' is not queryable")
             return SimpleNamespace(rows=settings_rows or [])
+        if any(m.startswith("ledger.") for m in query.get("dimensions", [])):
+            if ledger_rows is None:  # no ledger check unless a test gives the ledger's rows
+                raise CubeError("Forbidden: 'ledger' is not queryable")
+            return SimpleNamespace(rows=ledger_rows)
         org = organization_ids[0]
         return SimpleNamespace(rows=[(figures or {}).get(org, {})])
 
@@ -186,6 +190,56 @@ def test_the_agent_runs_vat_return_on_the_chats_organizations_only(monkeypatch):
     assert ok and result["organizations"][0]["organization_id"] == 25
     result, ok = tools.execute("vat_return", {"organization_ids": [99]}, ctx)
     assert not ok and "not selected" in result["error"]
+
+
+def test_dates_that_are_not_a_tax_period_take_the_next_returns_due_date(monkeypatch):
+    """A QBR over 12 Aug - 12 Nov once said the return was due 10 Dec: 28 days after the last date asked."""
+    fake_cube(monkeypatch, figures={27: FIG})
+    out = tool.run({"which": "period", "period": {"start": "2026-08-12", "end": "2026-10-16"}},
+                   organization_ids=[27], subject="t", deadline=1e12)
+    [org] = out["organizations"]
+    assert org["is_tax_period"] is False and org["due_date"] is None and org["days_to_due"] is None
+    assert org["next_return"] == {"period": {"start": "2026-07-01", "end": "2026-09-30"}, "due_date": "2026-10-28",
+                                  "days_to_due": 12}
+    assert out["rows"][0]["due_date"] == "2026-10-28" and "if_still_unfiled_and_unpaid_today" not in org
+    assert any("not a tax period" in n for n in out["notes"])
+
+
+def test_a_tax_period_given_as_dates_keeps_its_own_due_date(monkeypatch):
+    fake_cube(monkeypatch, figures={25: FIG})
+    out = tool.run({"which": "period", "period": {"start": "2026-07-01", "end": "2026-09-30"}},
+                   organization_ids=[25], subject="t", deadline=1e12)
+    org = out["organizations"][0]
+    assert org["is_tax_period"] and org["due_date"] == "2026-10-28" and "next_return" not in org
+
+
+NIL = {"vat.output_vat": "0", "vat.input_vat": "0", "vat.net_vat_payable": "0", "vat.standard_rated_sales": "0"}
+
+
+def test_vat_in_the_ledger_but_not_on_the_documents_is_said(monkeypatch):
+    """The documents showed no VAT while sales invoices had credited 26,299 to VAT Payable: not a nil return."""
+    ledger = [{"ledger.account_name": "VAT Payable", "ledger.source_type": "INCOME", "ledger.debit": "0",
+               "ledger.credit": "26299.00"},
+              {"ledger.account_name": "VAT Payable", "ledger.source_type": "PAYMENT", "ledger.debit": "5000",
+               "ledger.credit": "0"}]
+    seen = fake_cube(monkeypatch, figures={27: NIL}, ledger_rows=ledger)
+    out = tool.run({}, organization_ids=[27], subject="t", deadline=1e12)
+    org = out["organizations"][0]
+    assert org["position"] == "nil" and org["ledger_vat"]["output_vat_posted_by_sales"] == 26299.0
+    assert org["ledger_vat"]["input_vat_posted_by_bills"] == 0.0 and org["ledger_vat"]["accounts"] == ["VAT Payable"]
+    assert any("do not match" in n and "26,299.00" in n for n in out["notes"])
+    q = next(q for q, _ in seen if "ledger.account_name" in q.get("dimensions", []))
+    assert q["timeDimensions"][0]["dateRange"] == ["2026-07-01", "2026-09-30"]
+
+
+def test_a_ledger_that_matches_the_documents_adds_no_note(monkeypatch):
+    ledger = [{"ledger.account_name": "VAT Payable", "ledger.source_type": "INCOME", "ledger.debit": "0",
+               "ledger.credit": "12500"},
+              {"ledger.account_name": "VAT Receivable", "ledger.source_type": "EXPENSE", "ledger.debit": "4500",
+               "ledger.credit": "0"}]
+    fake_cube(monkeypatch, figures={25: FIG}, ledger_rows=ledger)
+    out = tool.run({}, organization_ids=[25], subject="t", deadline=1e12)
+    assert not any("do not match" in n for n in out["notes"])
 
 
 def test_the_next_due_period_is_the_last_one_until_its_due_date_passes():

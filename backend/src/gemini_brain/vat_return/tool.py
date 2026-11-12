@@ -65,6 +65,33 @@ def _figures(org: int, start: dt.date, end: dt.date, subject: str, deadline: flo
     return {k: _number(row.get(f"vat.{k}")) for k in ("output_vat", "input_vat", "net_vat_payable", "standard_rated_sales")}
 
 
+def _ledger(org: int, start: dt.date, end: dt.date, subject: str, deadline: float) -> Optional[Dict[str, Any]]:
+    """The VAT posted to the ledger's VAT accounts in the period: output VAT credited by sales invoices (source INCOME)
+    and input VAT debited by bills (source EXPENSE), on asset and liability accounts named VAT. None when unavailable."""
+    try:
+        result = cube_client.load({
+            "dimensions": ["ledger.account_name", "ledger.source_type"],
+            "measures": ["ledger.debit", "ledger.credit"],
+            "filters": [{"member": "ledger.account_name", "operator": "contains", "values": ["VAT"]},
+                        {"member": "ledger.account_type", "operator": "equals", "values": ["Asset", "Liability"]}],
+            "timeDimensions": [{"dimension": "ledger.transaction_date", "dateRange": [start.isoformat(), end.isoformat()]}],
+            "limit": 200}, organization_ids=[org], subject=subject, deadline=deadline)
+    except Exception:  # noqa: BLE001 - the check is extra; the return figures still stand
+        return None
+    output = input_ = 0.0
+    accounts = set()
+    for row in result.rows:
+        source = str(row.get("ledger.source_type") or "").upper()
+        debit, credit = _number(row.get("ledger.debit")), _number(row.get("ledger.credit"))
+        accounts.add(str(row.get("ledger.account_name") or ""))
+        if source == "INCOME":
+            output += credit - debit
+        elif source == "EXPENSE":
+            input_ += debit - credit
+    return {"output_vat_posted_by_sales": round(output, 2), "input_vat_posted_by_bills": round(input_, 2),
+            "accounts": sorted(a for a in accounts if a)}
+
+
 def _date(value: Any, name: str) -> dt.date:
     try:
         return dt.date.fromisoformat(str(value)[:10])
@@ -106,26 +133,46 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
         else:
             start, end = tax_periods.last_complete_period(today, frequency, quarter_group)
         figures = _figures(org, start, end, subject, deadline)
-        due = tax_periods.due_date(end)
+        # Only a tax period has a due date. Dates that are not one ("the last 3 months") get the real next return instead.
+        is_tax_period = tax_periods.period_containing(start, frequency, quarter_group) == (start, end)
+        due = tax_periods.due_date(end) if is_tax_period else None
         entry: Dict[str, Any] = {
             "organization_id": org, "frequency": frequency, "frequency_source": source,
             "quarter_months": (None if frequency == "monthly" else
                                ("calendar quarters (March, June, September, December)" if quarter_group == 3 else
                                 f"quarters ending in month {quarter_group} and every three months after")),
-            "period": {"start": start.isoformat(), "end": end.isoformat()}, **figures,
+            "period": {"start": start.isoformat(), "end": end.isoformat()}, "is_tax_period": is_tax_period, **figures,
             "position": "payable" if figures["net_vat_payable"] > 0 else "refundable" if figures["net_vat_payable"] < 0 else "nil",
-            "due_date": due.isoformat(), "days_to_due": (due - today).days,
+            "due_date": due.isoformat() if due else None, "days_to_due": (due - today).days if due else None,
         }
-        if today > due and figures["net_vat_payable"] > 0:
+        if not is_tax_period:
+            n_start, n_end = tax_periods.next_due_period(today, frequency, quarter_group)
+            n_due = tax_periods.due_date(n_end)
+            entry["next_return"] = {"period": {"start": n_start.isoformat(), "end": n_end.isoformat()},
+                                    "due_date": n_due.isoformat(), "days_to_due": (n_due - today).days}
+        if due and today > due and figures["net_vat_payable"] > 0:
             entry["if_still_unfiled_and_unpaid_today"] = {
                 "late_return": penalty.late_return(False), "late_payment": penalty.late_payment(figures["net_vat_payable"], due, today)}
+        ledger = _ledger(org, start, end, subject, deadline)
+        if ledger is not None:
+            entry["ledger_vat"] = ledger
+            if (abs(ledger["output_vat_posted_by_sales"] - figures["output_vat"]) > 1
+                    or abs(ledger["input_vat_posted_by_bills"] - figures["input_vat"]) > 1):
+                notes.append(
+                    f"Organization {org}: the ledger's VAT accounts do not match the VAT on the documents. Sales invoices "
+                    f"posted {ledger['output_vat_posted_by_sales']:,.2f} of output VAT and bills "
+                    f"{ledger['input_vat_posted_by_bills']:,.2f} of input VAT, against {figures['output_vat']:,.2f} and "
+                    f"{figures['input_vat']:,.2f} on the documents. Say both; do not call the position nil or final.")
         out_orgs.append(entry)
+    if any(not o["is_tax_period"] for o in out_orgs):
+        notes.append("The dates asked are not a tax period, so they have no due date of their own. The due date to give "
+                     "is next_return's.")
     if any(o["frequency_source"].startswith("assumed") for o in out_orgs) and group is None:
         notes.append("Quarterly periods were assumed to be calendar quarters. If the organization's quarters end in "
                      "January or February, ask again with that quarter group.")
     rows = [{"organization_id": o["organization_id"], "period_start": o["period"]["start"], "period_end": o["period"]["end"],
              "output_vat": o["output_vat"], "input_vat": o["input_vat"], "net_vat_payable": o["net_vat_payable"],
-             "due_date": o["due_date"]} for o in out_orgs]
+             "due_date": o["due_date"] or (o.get("next_return") or {}).get("due_date")} for o in out_orgs]
     return {"today": today.isoformat(), "organizations": out_orgs, "rows": rows, "row_count": len(rows), "notes": notes}
 
 
