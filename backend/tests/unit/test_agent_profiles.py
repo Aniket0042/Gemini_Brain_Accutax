@@ -204,6 +204,15 @@ def test_an_unknown_agent_in_the_request_is_a_400():
     assert e.value.status_code == 400
 
 
+def test_the_ar_agent_reads_receivables_and_has_a_bot():
+    from gemini_brain.bots import agents as bot_agents
+    ar = profiles.get("ar")
+    assert ar.allows("query_metrics") and ar.allows("review_vat") and not ar.allows("vat_return")
+    assert "receivables" in ar.instructions and "never say a reminder was sent" in ar.instructions
+    # "Make this a bot" shows under an answer when the answer's agent also has a bot.
+    assert "ar" in bot_agents.keys()
+
+
 def test_the_ap_agent_totals_bills_by_supplier():
     """Asked for top vendors, the AP agent once listed the five biggest single bills: it had no query_metrics."""
     ap = profiles.get("ap")

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Receipt, FileCheck, Wallet, FileBarChart, Play, MessageSquare, Clock, Bell, ArrowUpRight } from 'lucide-react';
+import { Sparkles, Receipt, FileCheck, Wallet, FileBarChart, HandCoins, Play, MessageSquare, Clock, Bell, ArrowUpRight } from 'lucide-react';
 import { timeAgo } from '../services/agentRuns';
 
 /**
@@ -7,7 +7,7 @@ import { timeAgo } from '../services/agentRuns';
  * and the badge over an answer. Each agent is the same Accutax AI with fewer tools and its own job.
  */
 
-const ICONS = { sparkles: Sparkles, receipt: Receipt, 'file-check': FileCheck, wallet: Wallet, 'file-chart': FileBarChart };
+const ICONS = { sparkles: Sparkles, receipt: Receipt, 'file-check': FileCheck, wallet: Wallet, 'file-chart': FileBarChart, 'hand-coins': HandCoins };
 
 export function AgentIcon({ icon, size = 15 }) {
   const Icon = ICONS[icon] || Sparkles;

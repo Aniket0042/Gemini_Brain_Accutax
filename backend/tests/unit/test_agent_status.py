@@ -106,3 +106,17 @@ def test_a_failing_step_callback_never_breaks_the_answer(monkeypatch):
         raise RuntimeError("socket closed")
     result = loop.run_agent("Cash?", [25], {25: {"name": "Org"}}, tool_done=boom)
     assert result.status == "ok" and result.answer == "Done."
+
+
+def test_ar_status_from_the_receivables_query_and_the_duplicate_check():
+    ar = profiles.get("ar")
+    rows = [{"receivables.customer_name": "Arjun", "receivables.overdue_amount": "1277895", "receivables.currency": "AED"},
+            {"receivables.customer_name": "Pavani", "receivables.overdue_amount": "1255556", "receivables.currency": "AED"}]
+    data = [{"tool": "query_metrics", "result": {"rows": rows}},
+            {"tool": "review_vat", "result": {"side": "sales", "bills_checked": 216, "groups_found": 3}}]
+    st = status_for(ar, data, [])
+    assert st["headline"] == "AED 2.5M overdue" and st["badge"] == "3 duplicate groups" and st["tone"] == "danger"
+    assert status_for(ar, data[:1], [])["badge"] == "Overdue to collect"
+    # Only the duplicate check ran: the review status, worded for invoices.
+    assert status_for(ar, data[1:], [])["headline"] == "Checked 216 invoices"
+    assert status_for(ar, [], []) is None

@@ -16,6 +16,8 @@ def status_for(profile: Any, data: Sequence[Dict[str, Any]], blocks: Sequence[Di
     key = getattr(profile, "key", "")
     if key in ("vat", "ap"):
         return _review(_last(data, "review_vat"))
+    if key == "ar":
+        return _receivables(_last(data, "query_metrics"), _last(data, "review_vat"))
     if key == "cash":
         return _cash(_last(data, "cash_forecast"))
     if key == "reporting":
@@ -62,6 +64,21 @@ def _cash(result: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     else:
         badge, tone = "No overdue amounts", "success"
     return {"headline": f"Lowest week {_short(lowest, currency)}{when}", "badge": badge, "tone": tone}
+
+
+def _receivables(metrics: Optional[Dict[str, Any]], review: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """AR: the overdue total from a receivables query, with the duplicate check's count when it ran."""
+    rows = (metrics or {}).get("rows") or []
+    overdue = [_dec(r.get("receivables.overdue_amount")) for r in rows if "receivables.overdue_amount" in r]
+    total = sum((v for v in overdue if v is not None), Decimal(0)) if overdue else None
+    groups = int((review or {}).get("groups_found") or 0)
+    if total is None:
+        return _review(review)
+    currency = next((r.get("receivables.currency") for r in rows if r.get("receivables.currency")), "")
+    badge = f"{groups:,} duplicate group{'s' if groups != 1 else ''}" if groups else (
+        "Overdue to collect" if total else "Nothing overdue")
+    tone = "danger" if groups else ("warning" if total else "success")
+    return {"headline": f"{_short(total, currency)} overdue", "badge": badge, "tone": tone}
 
 
 def _report(result: Optional[Dict[str, Any]], blocks: Sequence[Dict[str, Any]]) -> Optional[Dict[str, Any]]:

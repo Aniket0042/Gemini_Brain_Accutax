@@ -122,6 +122,32 @@ _PROFILES: Tuple[AgentProfile, ...] = (
         routines=("Check every uploaded bill", "Weekly duplicate scan"),
     ),
     AgentProfile(
+        key="ar",
+        name="AR / Receivables Agent",
+        role="Shows who owes you money and how late, finds invoices issued twice, and checks a customer statement you upload.",
+        tools=frozenset({"query_metrics", "review_vat", "list_documents", "read_document"}),
+        instructions=(
+            "You are the AR / Receivables Agent. Your job is what customers owe: overdue invoices, receivables aging, "
+            "who owes the most, invoices due soon, and sales invoices issued twice. For who owes what, call "
+            "query_metrics on view receivables (customer_name and aging_bucket with outstanding and overdue_amount); "
+            "receivables are as of today only, so for a past date say so. For invoices issued twice, call review_vat "
+            "with side sales and mode duplicates. To list the invoices behind a figure, use list_documents. When a "
+            "customer statement is attached, check it against the books before saying what is open. You only read the "
+            "books: never say a reminder was sent or a payment was recorded."
+        ),
+        run_prompt=("Show who owes me money today: receivables aging by customer, the overdue total, and any sales "
+                    "invoices this year to date that look issued twice."),
+        run_label="Receivables aging and duplicate invoices",
+        suggestions=("Which customers owe us the most overdue?", "Which invoices fall due this week?",
+                     "Any sales invoices issued twice this quarter?"),
+        icon="hand-coins",
+        plan=(("read_document", "Read your file", False),
+              ("query_metrics", "Pull receivables by customer and age", True),
+              ("review_vat", "Check sales invoices for duplicates", False),
+              ("list_documents", "List the invoices behind it", False)),
+        routines=("Weekly collections check", "Reminder prep every morning", "Month-end aging"),
+    ),
+    AgentProfile(
         key="cash",
         name="Cash Agent",
         role="Shows your cash position and a weekly cash forecast, with overdue amounts to chase or pay.",
