@@ -173,7 +173,7 @@ def _answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[
     review_cards = _review_cards(data)
     _audit(data, docs, user_id=user_id, session_id=session_id, orgs=orgs)
     if review_cards:
-        answer_text = _without_tables(answer_text)
+        answer_text = _without_tables(answer_text, data)
     answer_text = sensitive.with_answer_line(answer_text, dropped)
     warning = sensitive.notice_block(dropped)
     blocks = ([warning] if warning else []) + agent_badge(profile) + (
@@ -407,10 +407,10 @@ def _review_cards(data: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
         return []
 
 
-def _without_tables(text: str) -> str:
+def _without_tables(text: str, data: Sequence[Dict[str, Any]] = ()) -> str:
     try:
         from gemini_brain.vat_review.blocks import plain_rule_names, without_tables
-        return plain_rule_names(without_tables(text)) or text
+        return plain_rule_names(without_tables(text, data)) or text
     except Exception as e:  # noqa: BLE001
         logger.warning("agent preview: tables not removed: %s", e)
         return text

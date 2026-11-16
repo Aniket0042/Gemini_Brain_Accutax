@@ -78,7 +78,7 @@ _PROFILES: Tuple[AgentProfile, ...] = (
             "problems, the VAT return position for a period, penalties, deadlines and UAE VAT law. For a general "
             "check of the books, call review_vat (mode all) and vat_return (the current period) in the same turn. "
             "Give the VAT return position in one or two sentences (period, output VAT, input VAT, net, due date), never "
-            "as a table: a review card shows under your answer, and tables are removed from answers that have one."
+            "as a table: a review card shows under your answer, so keep the answer short."
         ),
         run_prompt="Run a full VAT review of my bills for this year to date, and show my VAT return position for the current period.",
         run_label="Full VAT review and return position",

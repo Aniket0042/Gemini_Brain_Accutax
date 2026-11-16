@@ -132,6 +132,34 @@ def test_tables_are_taken_out_of_a_review_answer():
     assert vb.without_tables(text) == "Three groups.\n\n- Group 1 is sure.\n\nNext step: check."
 
 
+AR_DATA = [
+    {"tool": "query_metrics", "result": {"rows": [{"customer_name": "Jyoti", "outstanding": 812450.0},
+                                                  {"customer_name": "Arjun", "outstanding": "640,120.50"}]}},
+    {"tool": "review_vat", "result": {"side": "sales", "groups": [{"extra_amount": 3300.0, "bills": [{"total": 3300.0}]},
+                                                                {"extra_amount": 1850.0, "bills": [{"total": 1850.0}]}]}},
+]
+
+
+def test_a_table_from_another_tool_stays_in_a_review_answer():
+    text = ("Receivables by customer:\n\n| Customer | Outstanding |\n|---|---|\n| Jyoti | 812,450.00 |\n"
+            "| Arjun | 640,120.50 |\n\nDuplicates:\n\n| Group | Amount |\n|---|---|\n| 1 | 3,300.00 |\n| 2 | 1,850.00 |\n\n"
+            "Next step: check.")
+    got = vb.without_tables(text, AR_DATA)
+    assert "| Jyoti | 812,450.00 |" in got and "| Arjun | 640,120.50 |" in got
+    assert "3,300.00" not in got and "| Group |" not in got
+    assert got.endswith("Duplicates:\n\nNext step: check.")
+
+
+def test_a_table_matching_nothing_still_goes_with_data():
+    text = "Found:\n\n| a | b |\n|---|---|\n| x | 99,999.00 |\n\nDone."
+    assert vb.without_tables(text, AR_DATA) == "Found:\n\nDone."
+
+
+def test_preview_passes_the_turn_data():
+    text = "Owed:\n\n| Customer | Outstanding |\n|---|---|\n| Jyoti | 812,450.00 |"
+    assert "812,450.00" in preview._without_tables(text, AR_DATA)
+
+
 def test_text_without_a_table_is_unchanged_and_never_empty():
     assert vb.without_tables("Found 3.\n\n- one\n- two") == "Found 3.\n\n- one\n- two"
     assert vb.without_tables("") == ""

@@ -76,21 +76,83 @@ def review_blocks(data: Sequence[Dict[str, Any]], urls: Dict[str, str] | None = 
     return out
 
 
-def without_tables(answer: str) -> str:
-    """The answer without its Markdown tables. The review card lists every group and bill, so a table in the answer only
-    repeats it; the prompt says so, and this makes it so when the model writes one anyway."""
-    lines, out, in_table = (answer or "").split("\n"), [], False
-    for line in lines:
+#: A figure in a table cell: digits with optional thousands commas and decimals.
+_CELL_NUMBER = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
+#: Figures below this are counts, ranks or days and appear in any result, so they say nothing about where a table came from.
+_TELLING = 100.0
+
+
+def _figures(payload: Any, out: set, depth: int = 0) -> set:
+    """Every figure of at least _TELLING in a tool result, rounded to cents."""
+    if depth > 8 or isinstance(payload, bool):
+        return out
+    if isinstance(payload, (int, float)):
+        if abs(payload) >= _TELLING:
+            out.add(round(float(payload), 2))
+    elif isinstance(payload, str):
+        try:
+            value = float(payload.replace(",", ""))
+        except ValueError:
+            return out
+        if abs(value) >= _TELLING:
+            out.add(round(value, 2))
+    elif isinstance(payload, dict):
+        for v in payload.values():
+            _figures(v, out, depth + 1)
+    elif isinstance(payload, (list, tuple)):
+        for v in payload:
+            _figures(v, out, depth + 1)
+    return out
+
+
+def _table_figures(table: Sequence[str]) -> set:
+    found: set = set()
+    for line in table:
+        for m in _CELL_NUMBER.findall(line):
+            try:
+                value = float(m.replace(",", ""))
+            except ValueError:
+                continue
+            if abs(value) >= _TELLING:
+                found.add(round(value, 2))
+    return found
+
+
+def _keep(table: Sequence[str], review: set, other: set) -> bool:
+    """A table stays when more of its figures come from the other tools of the turn (receivables, P&L, ...) than from the
+    review: the card does not show those. A table that repeats the review, or that matches nothing, goes."""
+    figures = _table_figures(table)
+    return bool(figures & other) and len(figures & other) > len(figures & review)
+
+
+def without_tables(answer: str, data: Sequence[Dict[str, Any]] | None = None) -> str:
+    """The answer without the Markdown tables that repeat the review card. The card lists every group and bill, so such a
+    table only repeats it; the prompt says so, and this makes it so when the model writes one anyway. With `data` (the
+    turn's tool results), a table built from another tool's figures, such as receivables by customer, is kept: the card
+    does not show it."""
+    review: set = set()
+    other: set = set()
+    for item in data or []:
+        _figures(item.get("result"), review if item.get("tool") == "review_vat" else other)
+    out: List[str] = []
+    table: List[str] = []
+    just_dropped = False
+    for line in (answer or "").split("\n"):
         if line.lstrip().startswith("|"):
-            in_table = True
+            table.append(line)
             continue
-        if in_table and not line.strip():
-            in_table = False
-            if out and not out[-1].strip():
-                continue  # the blank line before the table already separates the paragraphs
-        else:
-            in_table = False
+        if table:
+            just_dropped = not _keep(table, review, other)
+            if not just_dropped:
+                out.extend(table)
+            table = []
+        if just_dropped and not line.strip() and out and not out[-1].strip():
+            just_dropped = False
+            continue  # the blank line before the dropped table already separates the paragraphs
+        just_dropped = False
         out.append(line)
+    if table and _keep(table, review, other):
+        out.extend(table)
     return "\n".join(out).strip()
 
 
