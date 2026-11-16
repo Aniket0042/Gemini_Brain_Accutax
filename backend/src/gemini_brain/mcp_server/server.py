@@ -78,6 +78,12 @@ MAX_ORGS_PER_CALL = 10
 # ── Wording an answer for the host model ────────────────────────────────────
 
 def _cell(value: Any) -> str:
+    if isinstance(value, dict):
+        value = "; ".join(f"{k}: {'' if v is None else v}" for k, v in value.items())
+    elif isinstance(value, (list, tuple)):
+        # A list of records in one cell (a duplicate group's bills): their numbers, not every field.
+        value = ", ".join(str(v.get("document_number") or v.get("number") or _cell(v)) if isinstance(v, dict)
+                          else "" if v is None else str(v) for v in value)
     text = "" if value is None else str(value)
     return text.replace("|", "\\|").replace("\n", " ")
 
@@ -150,6 +156,8 @@ def render_answer(envelope: dict[str, Any], max_rows: int | None = None, max_cha
 DATA_FOOTER = "Data from Accutax, read directly from the books (no AI)"
 #: Keys of a data result that are for the agent's own loop, not for the host.
 _DATA_SKIP = {"type", "row_count", "available", "confident"}
+#: Columns of a data table that are internal ids (a finding's dismiss key), not facts for the host.
+_DATA_SKIP_COLUMNS = {"key"}
 
 
 def _label(key: Any) -> str:
@@ -161,7 +169,8 @@ def _render_value(key: Any, value: Any, depth: int, max_rows: int) -> list[str]:
     if value is None or value == "" or value == [] or value == {}:
         return []
     if isinstance(value, list) and all(isinstance(v, dict) for v in value):
-        table = render_table({"title": _label(key), "rows": value, "total_rows": len(value)}, max_rows)
+        rows = [{k: v for k, v in r.items() if k not in _DATA_SKIP_COLUMNS} for r in value]
+        table = render_table({"title": _label(key), "rows": rows, "total_rows": len(rows)}, max_rows)
         return [table] if table else []
     if isinstance(value, list):
         return [f"**{_label(key)}**"] + [f"- {_cell(v)}" for v in value[:max_rows]]

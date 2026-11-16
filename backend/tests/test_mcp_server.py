@@ -559,6 +559,20 @@ class TestRenderData:
         assert "- total: AED 5" in text and "**period**" in text and "- start: 2026-01-01" in text
         assert "| a | b |" in text and "- n1" in text and "row count" not in text
 
+    def test_nested_values_in_cells_read_plainly(self):
+        from gemini_brain.mcp_server.server import render_data
+        text = render_data({"result": {"rows": [{"period": {"start": "2026-07-01", "end": "2026-09-30"},
+                                                 "accounts": ["VAT Payable", "VAT Receivable"]}]}})
+        assert "start: 2026-07-01; end: 2026-09-30" in text and "VAT Payable, VAT Receivable" in text
+        assert "{'" not in text
+
+    def test_bills_in_a_group_shown_by_number(self):
+        from gemini_brain.mcp_server.server import render_data
+        text = render_data({"result": {"groups": [{"rule": "same_number", "key": "k1", "bills": [
+            {"document_number": "B-1", "vendor_name": "[SUPPLIER_1]", "net_purchases": 5.0},
+            {"document_number": "B-2", "vendor_name": "[SUPPLIER_1]", "net_purchases": 5.0}]}]}})
+        assert "| same_number | B-1, B-2 |" in text and "k1" not in text and "net_purchases" not in text
+
     def test_capped(self):
         from gemini_brain.mcp_server.server import render_data
         rows = [{"n": "x" * 50} for _ in range(40)]
