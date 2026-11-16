@@ -18,7 +18,7 @@ itself breaks the answer is withheld.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from gemini_brain.config.settings import settings
 from gemini_brain.privacy import dictionary
@@ -109,3 +109,37 @@ def view(envelope: Dict[str, Any], organization_ids: Sequence[int], *, subject: 
         return {**{k: out[k] for k in ("request_id", "agent") if k in out}, "answer": WITHHELD, "status": "failed",
                 "blocks": [], "masked": True, "placeholders": 0}
     return {**out, "blocks": blocks, "masked": True, "placeholders": hidden}
+
+
+#: Fields holding the organization's own name: kept, as in answers (the user picks an organization by its name).
+_ORG_NAME_KEYS = {"organization_name", "org_name", "organization"}
+
+
+def _keep_org_names(scrubber: Scrubber, value: Any, key: Optional[str] = None, depth: int = 0) -> Any:
+    if depth > 16:
+        return value
+    if isinstance(value, dict):
+        return {k: v if str(k) in _ORG_NAME_KEYS and isinstance(v, str) else _keep_org_names(scrubber, v, str(k), depth + 1)
+                for k, v in value.items()}
+    if isinstance(value, list):
+        return [_keep_org_names(scrubber, v, key, depth + 1) for v in value]
+    return scrubber.json(value, key)
+
+
+class Withheld(Exception):
+    """Masking a data tool's result failed; the result must not leave."""
+
+
+def data(result: Dict[str, Any], organization_ids: Sequence[int], *, subject: str = "") -> Tuple[Dict[str, Any], bool, int]:
+    """A data tool's result as it may go to an outside AI host: (result, masked, placeholders). Field by field like
+    a tool result the agent's model gets: name and contact fields become placeholders, free text is searched,
+    figures, dates and document numbers stay. Raises Withheld when masking fails (never fails open)."""
+    if full_detail(organization_ids):
+        return result, False, 0
+    try:
+        scrubber = _scrubber(organization_ids, subject)
+        masked = _keep_org_names(scrubber, result)
+        return masked, True, len(scrubber.vault)
+    except Exception as e:  # noqa: BLE001
+        logger.error("external view: data masking failed, result withheld: %s", e, exc_info=True)
+        raise Withheld() from e

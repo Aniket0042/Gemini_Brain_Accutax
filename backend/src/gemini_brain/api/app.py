@@ -251,6 +251,8 @@ def create_app() -> FastAPI:
     app.include_router(insight_router)
     from gemini_brain.api.action_routes import router as action_router
     app.include_router(action_router)
+    from gemini_brain.api.mcp_routes import router as mcp_router
+    app.include_router(mcp_router)
 
     return app
 

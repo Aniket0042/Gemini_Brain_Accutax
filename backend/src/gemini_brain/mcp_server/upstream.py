@@ -106,5 +106,13 @@ class Upstream:
             payload["agent"] = agent
         return await self._call("POST", "/query", token, json=payload)
 
+    async def data(self, token: str, tool: str, params: dict[str, Any], *,
+                   organization_id: Optional[int] = None) -> dict[str, Any]:
+        """One data tool (api/mcp_routes.py): the agent's own tool, run without a model, masked like an answer."""
+        payload: dict[str, Any] = {"params": params}
+        if organization_id is not None:
+            payload["organization_id"] = organization_id
+        return await self._call("POST", f"/mcp/data/{tool}", token, json=payload)
+
     async def aclose(self) -> None:
         await self._client.aclose()

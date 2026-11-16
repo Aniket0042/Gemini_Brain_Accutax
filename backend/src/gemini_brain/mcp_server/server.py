@@ -47,6 +47,11 @@ INSTRUCTIONS = (
     "Accutax answers per organization in a single reply, the way the Accutax app does. Do not ask once per "
     "organization and never call ask_accutax in parallel: Accutax answers one question at a time per user, "
     "a few a minute, and refuses the rest. "
+    "Fast data tools answer without the Accutax agent: get_vat_summary (a period's VAT position), list_invoices "
+    "(individual invoices and bills), review_vat (duplicate and VAT checks) and search_vat_law (FTA rules). Use "
+    "them for plain figures and lists. Use ask_accutax for anything that needs judgment or applies tax rules to "
+    "the user's books (is this recoverable, how should this be treated), for totals across many documents, and "
+    "for analysis over several measures. "
     "Quote figures and FTA citations exactly as returned; do not recompute or round them. "
     "Names and ID numbers may come back as placeholders in square brackets, such as [SUPPLIER_1] or [TRN_2]: "
     "show them exactly as written and never guess what they hide. A placeholder's number holds only within one "
@@ -139,6 +144,92 @@ def render_answer(envelope: dict[str, Any], max_rows: int | None = None, max_cha
     if envelope.get("request_id"):
         footer += f" · request {envelope['request_id']}"
     return "\n\n".join([body] + [f"_{n}_" for n in notes + [footer]])
+
+
+#: Under a data tool's result: where it came from and what it is not.
+DATA_FOOTER = "Data from Accutax, read directly from the books (no AI)"
+#: Keys of a data result that are for the agent's own loop, not for the host.
+_DATA_SKIP = {"type", "row_count", "available", "confident"}
+
+
+def _label(key: Any) -> str:
+    return str(key).replace("_", " ")
+
+
+def _render_value(key: Any, value: Any, depth: int, max_rows: int) -> list[str]:
+    """One part of a data result as markdown lines: lists of records as tables, records as nested lists."""
+    if value is None or value == "" or value == [] or value == {}:
+        return []
+    if isinstance(value, list) and all(isinstance(v, dict) for v in value):
+        table = render_table({"title": _label(key), "rows": value, "total_rows": len(value)}, max_rows)
+        return [table] if table else []
+    if isinstance(value, list):
+        return [f"**{_label(key)}**"] + [f"- {_cell(v)}" for v in value[:max_rows]]
+    if isinstance(value, dict):
+        if depth >= 3:
+            return [f"- {_label(key)}: {_cell(value)}"]
+        lines = [f"**{_label(key)}**"]
+        for k, v in value.items():
+            lines += _render_value(k, v, depth + 1, max_rows)
+        return lines if len(lines) > 1 else []
+    return [f"- {_label(key)}: {_cell(value)}"]
+
+
+def render_data(body: dict[str, Any], max_rows: int | None = None, max_chars: int | None = None) -> str:
+    """A data tool's result (api/mcp_routes.py) as one markdown text: figures as given, tables capped."""
+    max_rows = max_rows or settings.mcp_max_table_rows
+    result = body.get("result") or {}
+    lines: list[str] = []
+    scalars = [(k, v) for k, v in result.items()
+               if k not in _DATA_SKIP and not isinstance(v, (list, dict)) and v not in (None, "")]
+    for k, v in scalars:
+        lines.append(f"- {_label(k)}: {_cell(v)}")
+    for k, v in result.items():
+        if k not in _DATA_SKIP and isinstance(v, (list, dict)):
+            part = _render_value(k, v, 0, max_rows)
+            if part:
+                lines.append("")
+                lines += part
+    text = cap("\n".join(lines).strip() or "No data.", max_chars or settings.mcp_max_output_chars)
+    notes = []
+    if body.get("injection"):
+        notes.append(INJECTION_NOTE.format(found=", ".join(body["injection"])))
+    if body.get("masked") and body.get("placeholders"):
+        notes.append(MASKED_NOTE)
+    footer = DATA_FOOTER + (f" · organization {body['organization_id']}" if body.get("organization_id") else "")
+    return "\n\n".join([text] + [f"_{n}_" for n in notes + [footer]])
+
+
+def render_vat_law(body: dict[str, Any]) -> str:
+    """The FTA passages search_vat_law found, with the citing rules and the source links."""
+    result = body.get("result") or {}
+    if not result.get("sources_and_rules"):
+        return str(result.get("note") or "No FTA source matches this question. Say so; do not answer from memory.")
+    parts = [str(result["sources_and_rules"]).strip()]
+    sources = [s for s in result.get("sources") or [] if isinstance(s, dict) and s.get("url")]
+    if sources:
+        parts.append("**Sources — Federal Tax Authority**\n\n" + "\n".join(
+            f"{s.get('n')}. [{_cell(s.get('title') or s['url'])}]({s['url']})" for s in sources))
+    parts.append("_Published FTA guidance, not advice on the user's own books. To apply it to their figures, "
+                 "use ask_accutax._")
+    return "\n\n".join(parts)
+
+
+def _period(start: Optional[str], end: Optional[str]) -> Optional[dict[str, str]]:
+    if bool(start) != bool(end):
+        raise ToolError("Give both period_start and period_end, or neither.")
+    return {"start": start, "end": end} if start else None
+
+
+#: list_invoices document type -> the counterparty member its filter uses.
+COUNTERPARTY = {"sales_invoices": "sales.customer_name", "bills": "purchases.vendor_name",
+                "open_receivables": "receivables.customer_name", "open_payables": "payables.vendor_name"}
+DocumentType = Literal["sales_invoices", "bills", "open_receivables", "open_payables"]
+#: Most rows one list_invoices call returns (the agent tool allows more; the host's context is the limit here).
+MAX_LIST_ROWS = 50
+Date = Annotated[Optional[str], Field(pattern=r"^\d{4}-\d{2}-\d{2}$", description="YYYY-MM-DD")]
+OrgId = Annotated[Optional[int], Field(
+    description="Organization id from list_organizations. Omit to use the user's default organization.")]
 
 
 def render_organizations(tenants: list[dict[str, Any]]) -> str:
@@ -280,5 +371,102 @@ def build_server(upstream: Upstream | None = None, provider: AccutaxOAuthProvide
             return render_answer(envelope)
         return await audited("ask_accutax", {"question": question, "organization_ids": organization_ids,
                                              "agent": agent}, call)
+
+    # ── Data tools: the agent's own tools, run without our model ──────────
+
+    async def data_call(tool: str, params: dict[str, Any], organization_id: Optional[int],
+                        render: Callable[[dict[str, Any]], str] = render_data) -> str:
+        async def call(token: str) -> str:
+            return render(await api.data(token, tool, params, organization_id=organization_id))
+        return await audited(tool, {"organization_ids": [organization_id] if organization_id else None,
+                                    "params": params}, call)
+
+    @server.tool(title="Search UAE VAT law", annotations=READ_ONLY)
+    async def search_vat_law(
+        question: Annotated[str, Field(min_length=3, max_length=1000,
+                                       description="The law question, complete on its own.")],
+    ) -> str:
+        """Find UAE VAT and e-invoicing rules in official Federal Tax Authority documents: rates, deadlines,
+        penalties, zero-rating, exemptions, reverse charge, registration. Returns numbered FTA passages and how to
+        cite them; cite with [n] and quote rules exactly. Public law only, no company data. For what a rule means
+        for this user's own books (is this bill's VAT recoverable, what do we owe), use ask_accutax.
+        """
+        return await data_call("search_vat_law", {"question": question}, None, render_vat_law)
+
+    @server.tool(title="VAT summary", annotations=READ_ONLY)
+    async def get_vat_summary(
+        organization_id: OrgId = None,
+        which: Annotated[Literal["last", "current", "next_due", "period"], Field(
+            description="last: the latest ended tax period (default); current: the one running now; next_due: the "
+                        "period whose return is due next; period: the dates given in period_start/period_end.")] = "last",
+        period_start: Date = None,
+        period_end: Date = None,
+    ) -> str:
+        """The VAT position of one organization for a tax period: output VAT, input VAT, net payable or
+        refundable, the due date, days left or overdue, and penalties if still unfiled. Already computed from the
+        documents in the books (not a filed return): quote the figures as given, never recompute them. For
+        whether something is recoverable or how to treat it, use ask_accutax.
+        """
+        params: dict[str, Any] = {"which": which}
+        period = _period(period_start, period_end)
+        if period:
+            params.update(which="period", period=period)
+        return await data_call("vat_summary", params, organization_id)
+
+    @server.tool(title="Review VAT on bills or invoices", annotations=READ_ONLY)
+    async def review_vat(
+        organization_id: OrgId = None,
+        side: Annotated[Literal["purchases", "sales"], Field(
+            description="purchases: posted bills, input VAT (default); sales: sales invoices, output VAT.")] = "purchases",
+        mode: Annotated[Literal["all", "duplicates", "anomalies"], Field(
+            description="duplicates: documents that look recorded twice; anomalies: VAT not 0 or 5%, missing or "
+                        "invalid TRN, future dates, unusual amounts; all: both (default).")] = "all",
+        period_start: Date = None,
+        period_end: Date = None,
+        limit: Annotated[int, Field(ge=1, le=MAX_LIST_ROWS, description="Most findings returned.")] = 25,
+    ) -> str:
+        """Check every posted bill or sales invoice of one organization in a period (default: year to date) for
+        likely duplicates and VAT problems, with the rule each finding broke and the amounts involved. Findings
+        are checks to look at, not conclusions: say 'looks like' and let the user confirm. For what the law says
+        about a finding, use search_vat_law or ask_accutax.
+        """
+        params: dict[str, Any] = {"side": side, "mode": mode, "limit": limit}
+        period = _period(period_start, period_end)
+        if period:
+            params["period"] = period
+        return await data_call("review_vat", params, organization_id)
+
+    @server.tool(title="List invoices and bills", annotations=READ_ONLY)
+    async def list_invoices(
+        document_type: Annotated[DocumentType, Field(
+            description="sales_invoices: issued sales invoices; bills: purchase bills; open_receivables: sales "
+                        "invoices still unpaid today; open_payables: bills still unpaid today.")],
+        organization_id: OrgId = None,
+        period_start: Annotated[Date, Field(description="YYYY-MM-DD. sales_invoices and bills only.")] = None,
+        period_end: Annotated[Date, Field(description="YYYY-MM-DD. sales_invoices and bills only.")] = None,
+        counterparty: Annotated[Optional[str], Field(
+            max_length=200, description="Only documents whose customer or supplier name contains this text. "
+                                        "A placeholder such as [SUPPLIER_1] cannot be used here.")] = None,
+        order_by: Annotated[Literal["amount", "date", "days_overdue"], Field(
+            description="days_overdue: open_receivables and open_payables only.")] = "amount",
+        direction: Literal["desc", "asc"] = "desc",
+        limit: Annotated[int, Field(ge=1, le=MAX_LIST_ROWS, description="Most documents returned.")] = 25,
+    ) -> str:
+        """Individual sales invoices or bills of one organization: number, date, customer or supplier, status,
+        amount and VAT (for open ones: due date, days overdue, outstanding). For 'which', 'largest', 'top N',
+        'overdue more than N days'. Returns at most 50 rows, so for totals over many documents use
+        get_vat_summary or ask_accutax instead of adding rows up yourself.
+        """
+        params: dict[str, Any] = {"type": document_type, "limit": limit,
+                                  "order": {"by": order_by, "direction": direction}}
+        period = _period(period_start, period_end)
+        if period:
+            if document_type not in ("sales_invoices", "bills"):
+                raise ToolError("A period applies to sales_invoices and bills only; open documents are as of today.")
+            params["period"] = period
+        if counterparty and counterparty.strip():
+            params["filters"] = [{"member": COUNTERPARTY[document_type], "operator": "contains",
+                                  "values": [counterparty.strip()]}]
+        return await data_call("list_documents", params, organization_id)
 
     return server

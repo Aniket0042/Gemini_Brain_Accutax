@@ -61,6 +61,12 @@ Nginx serves `frontend/dist` and proxies `/api` to uvicorn on port 8010.
 Streamable HTTP. It runs as its own process and calls this API with the caller's own bearer, so tenant
 isolation, usage limits and the org-access audit log are the API's.
 
+Four data tools answer without our model, so they cost no Bedrock tokens and no credits: `get_vat_summary`,
+`list_invoices`, `review_vat` and `search_vat_law`. They run the agent's own tools (`vat_return`,
+`list_documents`, `review_vat`, `search_vat_kb`) through `POST /api/v1/mcp/data/{tool}` (`api/mcp_routes.py`),
+with the same org check, masking and injection flag as `ask_accutax`. The host model reasons over the facts;
+tax judgment stays with `ask_accutax`.
+
 ```bash
 cd backend
 pip install -e ".[mcp]"
