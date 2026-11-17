@@ -20,6 +20,7 @@ views:
           - document_date
           - due_date
           - days_overdue
+          - due_date_basis
           - aging_bucket
           - outstanding
           - overdue_amount

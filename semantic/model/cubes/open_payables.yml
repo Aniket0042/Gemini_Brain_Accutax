@@ -89,10 +89,20 @@ cubes:
       - name: due_date
         sql: due_date
         type: time
+      # A bill without a due date counts from its document date, as Accutax's own AP aging does
+      # (due_date || created_date); 0 used to make a 2022 bill with no due date look current.
       - name: days_overdue
-        description: Days past the due date; 0 when not yet due.
+        description: >
+          Days past the due date; 0 when not yet due. A bill with no due date counts from its document date
+          (due_date_basis says which).
         type: number
-        sql: "CASE WHEN {CUBE}.due_date < {CUBE}.local_today THEN {CUBE}.local_today - {CUBE}.due_date ELSE 0 END"
+        sql: >
+          CASE WHEN COALESCE({CUBE}.due_date, {CUBE}.document_date) < {CUBE}.local_today
+               THEN {CUBE}.local_today - COALESCE({CUBE}.due_date, {CUBE}.document_date) ELSE 0 END
+      - name: due_date_basis
+        description: The date days_overdue counts from - due date, or document date when the bill has no due date.
+        type: string
+        sql: "CASE WHEN {CUBE}.due_date IS NULL THEN 'document date (no due date)' ELSE 'due date' END"
       - name: aging_bucket
         description: No due date, Not yet due, 1-30 days, 31-60 days, 61-90 days or Over 90 days.
         type: string
