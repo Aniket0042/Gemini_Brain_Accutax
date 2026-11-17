@@ -173,6 +173,48 @@ def prompt_block(question: str, result: SearchResult, numbers: Optional[dict] = 
     return "\n".join(lines)
 
 
+#: For an outside AI host (the MCP connector): the rules that matter, in a few lines, instead of VAT_ANSWER_RULES.
+COMPACT_RULES = (
+    "UAE VAT law from official Federal Tax Authority documents, numbered below.\n"
+    "- Answer only from these sources and cite them as [n]. Never invent articles, dates, rates or amounts.\n"
+    "- If they do not answer the question, say so. When sources disagree, the most recent applies.\n"
+    "- This is the law, not advice on the user's own books."
+)
+COMPACT_PASSAGES = 6
+COMPACT_CHARS = 7_000
+
+
+def compact_block(question: str, result: SearchResult, numbers: Optional[dict] = None, *,
+                  max_passages: int = COMPACT_PASSAGES, max_chars: int = COMPACT_CHARS) -> str:
+    """prompt_block for an outside AI host: short rules, the best few passages and a character budget. Passages are
+    taken best-first and printed in document order under their source; a passage that would overflow the budget is
+    cut at a line end."""
+    numbers = numbers or {chunk.url: n for n, chunk in enumerate(result.sources(), 1)}
+    grouped: dict[int, list] = {}
+    firsts: dict[int, object] = {}
+    budget = max_chars
+    for hit in result.hits[:max_passages]:
+        if budget <= 200:
+            break
+        body = _body(hit.chunk.text).strip()
+        if len(body) > budget:
+            cut = body.rfind("\n", 0, budget)
+            body = body[:cut if cut > budget // 2 else budget].rstrip() + " …"
+        budget -= len(body)
+        n = numbers[hit.chunk.url]
+        grouped.setdefault(n, []).append((hit.chunk.position, body))
+        firsts.setdefault(n, hit.chunk)
+    lines = [COMPACT_RULES, ""]
+    calcs = _calculations(question, result)
+    if calcs:
+        lines += ["Exact calculations:"] + [f"- {c}" for c in calcs] + [""]
+    for n in sorted(grouped):
+        lines.append(_source_line(n, firsts[n]))
+        lines += [body for _, body in sorted(grouped[n], key=lambda pb: pb[0])]
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
 EXCERPT_CHARS = 320
 _NUMBER_IN_TEXT = re.compile(r"(?<![\w.])(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?")
 

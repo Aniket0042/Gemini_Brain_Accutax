@@ -125,6 +125,9 @@ class ToolContext:
     org_names: Dict[int, str] = field(default_factory=dict)
     #: Cards built by write tools this request (invoicing/blocks.py); shown under the answer.
     cards: List[Dict[str, Any]] = field(default_factory=list)
+    #: search_vat_kb for an outside AI host (the MCP connector): short rules and fewer passages
+    #: (vat_kb.answer.compact_block) instead of the agent's full prompt block.
+    compact_law: bool = False
 
     def allows(self, name: str) -> bool:
         return self.allowed_tools is None or name in self.allowed_tools
@@ -278,7 +281,9 @@ def _search_vat_kb(params: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
     if not result.hits:
         return {"available": True, "confident": False,
                 "note": "No FTA source matches this question. Say so; do not answer from memory."}
-    from gemini_brain.vat_kb.answer import prompt_block, sources_block
+    from gemini_brain.vat_kb.answer import compact_block, prompt_block, sources_block
+    if ctx.compact_law:
+        prompt_block = compact_block  # noqa: F811 - same signature, shorter text for an outside host
     # One numbering for every search of this request: a document found twice keeps its number.
     for chunk in result.sources():
         ctx.fta_numbers.setdefault(chunk.url, len(ctx.fta_numbers) + 1)

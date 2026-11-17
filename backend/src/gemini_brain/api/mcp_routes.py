@@ -38,6 +38,31 @@ class DataRequest(BaseModel):
     params: Dict[str, Any] = Field(default_factory=dict, description="The agent tool's own input.")
 
 
+#: review_vat's result for an outside host: the summary first, then the details. `rows` (the same findings again,
+#: flat, for the app's table) is left out, and so is the glossary of rules that found nothing.
+_REVIEW_ORDER = ("mode", "side", "period", "bills_checked", "groups_found", "findings_found", "amount_counted_twice",
+                 "groups_by_rule", "findings_by_rule", "findings_by_severity", "notes", "organizations", "groups",
+                 "findings", "patterns", "rules", "law_questions")
+_REVIEW_DROP = {"rows", "row_count"}
+
+
+def _review_for_host(result: Dict[str, Any]) -> Dict[str, Any]:
+    fired = {r for key in ("groups_by_rule", "findings_by_rule") for r, n in (result.get(key) or {}).items() if n}
+    out: Dict[str, Any] = {}
+    for key in _REVIEW_ORDER + tuple(k for k in result if k not in _REVIEW_ORDER):
+        if key not in result or key in _REVIEW_DROP or key in out:
+            continue
+        value = result[key]
+        if key in ("groups_by_rule", "findings_by_rule") and isinstance(value, dict):
+            value = {r: n for r, n in value.items() if n}
+        elif key == "rules" and isinstance(value, dict):
+            value = {r: text for r, text in value.items() if r in fired}
+        elif key == "dismissed" and not value:
+            continue
+        out[key] = value
+    return out
+
+
 def _scope(user: CurrentUser, organization_id: Optional[int], tool: str) -> list[int]:
     orgs = authorize_org_scope([organization_id] if organization_id is not None else [], user, action=f"mcp.{tool}")
     scope = orgs or [int(o) for o in (user.allowed_org_ids or [])[:1]]
@@ -60,7 +85,7 @@ def run_data_tool(
     orgs = [] if tool == "search_vat_law" else _scope(current_user, payload.organization_id, tool)
     subject = f"mcp:{current_user.user_id}"
     ctx = tools.ToolContext(organization_ids=orgs, subject=subject, deadline=time.monotonic() + DEADLINE_SECONDS,
-                            user_id=current_user.user_id,
+                            user_id=current_user.user_id, compact_law=True,
                             authorize=(lambda: current_user.ensure_current_scope(orgs)) if orgs else None)
     params = {k: v for k, v in (payload.params or {}).items() if k != "organization_ids"}
     result, ok = tools.execute(name, params, ctx)
@@ -68,8 +93,13 @@ def run_data_tool(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                             detail=str(result.get("error") or "That could not be answered."))
     if tool == "search_vat_law":
-        # Published FTA documents: nothing of the customer's to hide.
-        return {"tool": tool, "result": {**result, "sources": ctx.fta_sources}, "masked": False, "placeholders": 0}
+        # Published FTA documents: nothing of the customer's to hide. Only the sources whose passages were sent.
+        text = str(result.get("sources_and_rules") or "")
+        sources = [{k: s.get(k) for k in ("n", "title", "url", "issued")} for s in ctx.fta_sources
+                   if f"[{s.get('n')}] " in text]
+        return {"tool": tool, "result": {**result, "sources": sources}, "masked": False, "placeholders": 0}
+    if tool == "review_vat":
+        result = _review_for_host(result)
     flags = injection.scan_value(result)
     try:
         shared, masked, hidden = external.data(result, orgs, subject=subject)

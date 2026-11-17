@@ -49,9 +49,13 @@ INSTRUCTIONS = (
     "a few a minute, and refuses the rest. "
     "Fast data tools answer without the Accutax agent: get_vat_summary (a period's VAT position), list_invoices "
     "(individual invoices and bills), review_vat (duplicate and VAT checks) and search_vat_law (FTA rules). Use "
-    "them for plain figures and lists. Use ask_accutax for anything that needs judgment or applies tax rules to "
-    "the user's books (is this recoverable, how should this be treated), for totals across many documents, and "
-    "for analysis over several measures. "
+    "them for plain figures and lists. "
+    "RULE: a question that applies VAT law to the user's own documents or figures goes to ask_accutax, never to "
+    "your own reasoning. That covers: can we reclaim or recover this VAT, is this input tax deductible, is the VAT "
+    "on these bills or invoices correct, how should this be treated, does a penalty apply to us, what do we owe "
+    "after an adjustment. Call ask_accutax even when you already fetched the documents with list_invoices or the "
+    "rule with search_vat_law: do not combine their results to decide it yourself. Also use ask_accutax for "
+    "totals across many documents and for analysis over several measures. "
     "Quote figures and FTA citations exactly as returned; do not recompute or round them. "
     "Names and ID numbers may come back as placeholders in square brackets, such as [SUPPLIER_1] or [TRN_2]: "
     "show them exactly as written and never guess what they hide. A placeholder's number holds only within one "
@@ -219,8 +223,9 @@ def render_vat_law(body: dict[str, Any]) -> str:
     if sources:
         parts.append("**Sources — Federal Tax Authority**\n\n" + "\n".join(
             f"{s.get('n')}. [{_cell(s.get('title') or s['url'])}]({s['url']})" for s in sources))
-    parts.append("_Published FTA guidance, not advice on the user's own books. To apply it to their figures, "
-                 "use ask_accutax._")
+    parts.append("_Published FTA law, not advice on the user's own books. To decide what it means for their own "
+                 "bills, invoices or figures (can they reclaim it, is their VAT right), call ask_accutax; do not "
+                 "decide it yourself._")
     return "\n\n".join(parts)
 
 
@@ -367,6 +372,11 @@ def build_server(upstream: Upstream | None = None, provider: AccutaxOAuthProvide
     ) -> str:
         """Answer a question about the user's books or UAE VAT law with the Accutax AI agent.
 
+        Always use this for tax judgment on the user's own data: can we reclaim or recover this VAT, is this
+        input tax deductible, is the VAT on these bills right, how should this be treated, does a penalty apply
+        to us. It applies the FTA rules to the books and checks its figures; do not decide these yourself from
+        list_invoices or search_vat_law results.
+
         Figures come from the organization's live Accutax data; VAT law answers cite FTA documents. Use it
         for revenue, expenses, profit, invoices, bills, customers, suppliers, cash, VAT returns, VAT review
         findings and VAT rules. A question about several organizations is ONE call with all their ids in
@@ -396,9 +406,10 @@ def build_server(upstream: Upstream | None = None, provider: AccutaxOAuthProvide
                                        description="The law question, complete on its own.")],
     ) -> str:
         """Find UAE VAT and e-invoicing rules in official Federal Tax Authority documents: rates, deadlines,
-        penalties, zero-rating, exemptions, reverse charge, registration. Returns numbered FTA passages and how to
-        cite them; cite with [n] and quote rules exactly. Public law only, no company data. For what a rule means
-        for this user's own books (is this bill's VAT recoverable, what do we owe), use ask_accutax.
+        penalties, zero-rating, exemptions, reverse charge, registration. Returns numbered FTA passages; cite with
+        [n] and quote rules exactly. Public law only, for general questions ('are exports zero-rated?'). Do NOT use
+        it to decide something about the user's own bills, invoices or figures (can we reclaim this, is this VAT
+        right, does this penalty apply to us): that is ask_accutax.
         """
         return await data_call("search_vat_law", {"question": question}, None, render_vat_law)
 
@@ -413,8 +424,8 @@ def build_server(upstream: Upstream | None = None, provider: AccutaxOAuthProvide
     ) -> str:
         """The VAT position of one organization for a tax period: output VAT, input VAT, net payable or
         refundable, the due date, days left or overdue, and penalties if still unfiled. Already computed from the
-        documents in the books (not a filed return): quote the figures as given, never recompute them. For
-        whether something is recoverable or how to treat it, use ask_accutax.
+        documents in the books (not a filed return): quote the figures as given, never recompute them. Whether
+        any of it can be reclaimed, is correct or needs adjusting is a tax judgment: use ask_accutax.
         """
         params: dict[str, Any] = {"which": which}
         period = _period(period_start, period_end)
@@ -432,12 +443,15 @@ def build_server(upstream: Upstream | None = None, provider: AccutaxOAuthProvide
                         "invalid TRN, future dates, unusual amounts; all: both (default).")] = "all",
         period_start: Date = None,
         period_end: Date = None,
-        limit: Annotated[int, Field(ge=1, le=MAX_LIST_ROWS, description="Most findings returned.")] = 25,
+        limit: Annotated[int, Field(ge=1, le=MAX_LIST_ROWS,
+                                    description="Most duplicate groups and most findings returned (default 10). "
+                                                "The counts cover all of them.")] = 10,
     ) -> str:
         """Check every posted bill or sales invoice of one organization in a period (default: year to date) for
-        likely duplicates and VAT problems, with the rule each finding broke and the amounts involved. Findings
-        are checks to look at, not conclusions: say 'looks like' and let the user confirm. For what the law says
-        about a finding, use search_vat_law or ask_accutax.
+        likely duplicates and VAT problems. Returns the counts first (documents checked, groups and findings by
+        rule, amount that may be counted twice), then the top groups and findings. Findings are checks to look
+        at, not conclusions: say 'looks like' and let the user confirm. Whether a finding changes what VAT can be
+        reclaimed or owed is a tax judgment: use ask_accutax for that.
         """
         params: dict[str, Any] = {"side": side, "mode": mode, "limit": limit}
         period = _period(period_start, period_end)
@@ -464,7 +478,9 @@ def build_server(upstream: Upstream | None = None, provider: AccutaxOAuthProvide
         """Individual sales invoices or bills of one organization: number, date, customer or supplier, status,
         amount and VAT (for open ones: due date, days overdue, outstanding). For 'which', 'largest', 'top N',
         'overdue more than N days'. Returns at most 50 rows, so for totals over many documents use
-        get_vat_summary or ask_accutax instead of adding rows up yourself.
+        get_vat_summary or ask_accutax instead of adding rows up yourself. Facts only: whether the VAT on these
+        documents can be reclaimed or is correct is a tax judgment for ask_accutax, not for you to decide from
+        these rows.
         """
         params: dict[str, Any] = {"type": document_type, "limit": limit,
                                   "order": {"by": order_by, "direction": direction}}
