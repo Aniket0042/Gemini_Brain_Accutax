@@ -71,27 +71,61 @@ def _scope(user: CurrentUser, organization_id: Optional[int], tool: str) -> list
     return scope
 
 
+def _search_scope(user: CurrentUser) -> list[int]:
+    """Every organization the caller may read, up to the per-query limit: search has no organization argument."""
+    from gemini_brain.config.settings import settings
+    allowed = [int(o) for o in (user.allowed_org_ids or [])][:max(1, settings.max_orgs_per_query)]
+    if not allowed:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No organization is available for this account.")
+    return authorize_org_scope(allowed, user, action="mcp.search")
+
+
 @router.post("/data/{tool}", summary="Run one MCP data tool (no model call)")
 def run_data_tool(
-    tool: Literal["search_vat_law", "vat_summary", "review_vat", "list_documents"],
+    tool: Literal["search_vat_law", "vat_summary", "review_vat", "list_documents", "run_report", "search", "fetch"],
     payload: DataRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> Dict[str, Any]:
     from gemini_brain.agent import tools
+    from gemini_brain.api import mcp_data
     from gemini_brain.policy import injection
     from gemini_brain.privacy import external
+    from gemini_brain.semantic.catalog import ToolInputError
 
-    name = TOOLS[tool]
-    orgs = [] if tool == "search_vat_law" else _scope(current_user, payload.organization_id, tool)
+    params = {k: v for k, v in (payload.params or {}).items() if k != "organization_ids"}
+    if tool == "search_vat_law":
+        orgs: list[int] = []
+    elif tool == "search":
+        orgs = _search_scope(current_user)
+    elif tool == "fetch":
+        try:
+            _, org, _ = mcp_data.parse_id(params.get("id"))
+        except ToolInputError as e:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from None
+        orgs = _scope(current_user, org, tool)
+    else:
+        orgs = _scope(current_user, payload.organization_id, tool)
     subject = f"mcp:{current_user.user_id}"
     ctx = tools.ToolContext(organization_ids=orgs, subject=subject, deadline=time.monotonic() + DEADLINE_SECONDS,
                             user_id=current_user.user_id, compact_law=True,
                             authorize=(lambda: current_user.ensure_current_scope(orgs)) if orgs else None)
-    params = {k: v for k, v in (payload.params or {}).items() if k != "organization_ids"}
-    result, ok = tools.execute(name, params, ctx)
-    if not ok:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                            detail=str(result.get("error") or "That could not be answered."))
+
+    def run(name: str, args: Dict[str, Any], scope: Any) -> Dict[str, Any]:
+        result, ok = tools.execute(name, {**args, "organization_ids": list(scope)}, ctx)
+        if not ok:
+            raise ToolInputError(str(result.get("error") or "That could not be answered."))
+        return result
+
+    if tool in mcp_data.COMPOSITE:
+        try:
+            result = mcp_data.COMPOSITE[tool](params, run, orgs)
+        except ToolInputError as e:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from None
+    else:
+        result, ok = tools.execute(TOOLS[tool], params, ctx)
+        if not ok:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                detail=str(result.get("error") or "That could not be answered."))
     if tool == "search_vat_law":
         # Published FTA documents: nothing of the customer's to hide. Only the sources whose passages were sent.
         text = str(result.get("sources_and_rules") or "")
@@ -109,5 +143,5 @@ def run_data_tool(
         from gemini_brain.agent import audit
         audit.event("injection_in_results", user_id=current_user.user_id, organization_ids=orgs, tool=f"mcp.{tool}",
                     patterns=flags)
-    return {"tool": tool, "organization_id": orgs[0], "result": shared, "masked": masked, "placeholders": hidden,
-            "injection": flags}
+    return {"tool": tool, "organization_id": orgs[0] if len(orgs) == 1 else None, "result": shared, "masked": masked,
+            "placeholders": hidden, "injection": flags}

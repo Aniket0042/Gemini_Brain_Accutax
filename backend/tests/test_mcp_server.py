@@ -619,3 +619,99 @@ class TestRenderData:
         rows = [{"n": "x" * 50} for _ in range(40)]
         text = render_data({"result": {"rows": rows}}, max_rows=40, max_chars=1500)
         assert "left out to keep it short" in text and "no AI" in text
+
+
+class TestReportSearchFetch:
+    """run_report, search and fetch: fixed recipes on the agent's query_metrics and list_documents."""
+
+    BILL = {"organization_id": 27, "organization_name": "Org 27 Co", "currency": "AED", "document_number": "B-17",
+            "document_id": "6880", "document_date": "2026-03-02", "status": "PENDING",
+            "vendor_name": "Al Noor Trading LLC", "net_purchases": "4399.00", "input_vat": "0.00"}
+
+    @pytest.fixture
+    def calls(self, monkeypatch):
+        from gemini_brain.agent import tools
+        seen = []
+
+        def execute(name, params, ctx):
+            seen.append({"name": name, "params": params, "orgs": list(ctx.organization_ids)})
+            if name == "query_metrics":
+                if params.get("view") == "purchases" and params.get("group_by") == ["purchases.item_name"]:
+                    return {"rows": [{"purchases.item_name": "Consulting", "purchases.quantity_purchased": "1",
+                                      "purchases.net_purchases": "4399.00", "purchases.input_vat": "0.00"}]}, True
+                return {"view": params["view"], "rows": [{f"{params['view']}.revenue": "100.00"}],
+                        "totals": {"currency": "AED"}, "notes": ["Period: 2026-01-01 to 2026-11-17."]}, True
+            if name == "list_documents":
+                kind = params["type"]
+                member = (params.get("filters") or [{}])[0].get("member", "")
+                if kind == "bills" and (member.endswith("vendor_name") or member.endswith("document_id")):
+                    return {"rows": [dict(self.BILL)]}, True
+                if kind == "open_payables":
+                    return {"rows": [{"outstanding": "4399.00", "due_date": None, "days_overdue": "251",
+                                      "due_date_basis": "document date (no due date)"}]}, True
+                return {"rows": []}, True
+            raise AssertionError(name)
+        monkeypatch.setattr(tools, "execute", execute)
+        return seen
+
+    def test_profit_and_loss_recipe(self, api_app, calls):
+        text = _call(api_app, _token(orgs=[24, 27]), "run_report",
+                     {"report": "profit_and_loss", "organization_id": 27, "period_preset": "last_quarter"})
+        q = calls[0]["params"]
+        assert calls[0]["name"] == "query_metrics" and calls[0]["orgs"] == [27]
+        assert q["view"] == "pnl" and "pnl.net_profit" in q["measures"] and q["period"] == {"preset": "last_quarter"}
+        assert "pnl.revenue: 100.00" in text or "100.00" in text
+
+    def test_top_suppliers_ranked_and_limited(self, api_app, calls):
+        _call(api_app, _token(), "run_report", {"report": "top_suppliers", "limit": 5,
+                                                 "period_start": "2026-01-01", "period_end": "2026-06-30"})
+        q = calls[0]["params"]
+        assert q["group_by"] == ["purchases.vendor_name"] and q["limit"] == 5
+        assert q["order"] == {"member": "purchases.net_purchases", "direction": "desc"}
+        assert q["period"] == {"start": "2026-01-01", "end": "2026-06-30"}
+
+    def test_balance_sheet_as_of(self, api_app, calls):
+        _call(api_app, _token(), "run_report", {"report": "balance_sheet", "as_of": "2026-06-30"})
+        assert calls[0]["params"]["as_of"] == "2026-06-30" and "period" not in calls[0]["params"]
+
+    def test_aging_refuses_a_period(self, api_app, calls):
+        with pytest.raises(ToolError, match="as of today only"):
+            _call(api_app, _token(), "run_report", {"report": "payables_aging", "period_preset": "ytd"})
+
+    def test_preset_and_dates_not_both(self, api_app, calls):
+        with pytest.raises(ToolError, match="not both"):
+            _call(api_app, _token(), "run_report", {"report": "profit_and_loss", "period_preset": "ytd",
+                                                    "period_start": "2026-01-01", "period_end": "2026-02-01"})
+        assert calls == []
+
+    def test_search_across_own_orgs_masked(self, api_app, calls):
+        import json
+        text = _call(api_app, _token(orgs=[24, 27]), "search", {"query": "Al Noor"})
+        body = json.loads(text)
+        assert [set(r) for r in body["results"]] == [{"id", "title", "url"}]
+        assert body["results"][0]["id"] == "bill:27:6880"
+        assert body["results"][0]["url"] in ("", ) or body["results"][0]["url"].endswith("/expenses/edit-expense/6880")
+        assert "Al Noor" not in text and "B-17" in text
+        assert {c["params"]["type"] for c in calls} == {"sales_invoices", "bills"} and len(calls) == 4
+        assert all(c["orgs"] == [24, 27] for c in calls)
+
+    def test_fetch_full_document(self, api_app, calls):
+        import json
+        body = json.loads(_call(api_app, _token(orgs=[27]), "fetch", {"id": "bill:27:6880"}))
+        assert body["id"] == "bill:27:6880" and set(body) == {"id", "title", "text", "url", "metadata"}
+        assert "| Consulting | 1 | 4399.00 | 0.00 |" in body["text"] and "days overdue: 251" in body["text"]
+        assert "Al Noor" not in body["text"] and "[SUPPLIER_1]" in body["text"]
+        assert all(c["orgs"] == [27] for c in calls)
+
+    def test_fetch_other_org_refused(self, api_app, calls):
+        with pytest.raises(ToolError, match="not in the caller's allowed tenant list"):
+            _call(api_app, _token(orgs=[24]), "fetch", {"id": "bill:27:6880"})
+        assert calls == []
+
+    def test_fetch_bad_id(self, api_app, calls):
+        with pytest.raises(ToolError, match="id must be one that search returned"):
+            _call(api_app, _token(), "fetch", {"id": "27"})
+
+    def test_fetch_unknown_document(self, api_app, calls):
+        with pytest.raises(ToolError, match="No such document"):
+            _call(api_app, _token(), "fetch", {"id": "inv:24:999"})

@@ -6,6 +6,7 @@ leave: the host model sees the answer, its tables and its FTA sources, nothing e
 from __future__ import annotations
 
 import base64
+import json
 import logging
 import time
 from typing import Annotated, Any, Awaitable, Callable, Literal, Optional
@@ -47,9 +48,11 @@ INSTRUCTIONS = (
     "Accutax answers per organization in a single reply, the way the Accutax app does. Do not ask once per "
     "organization and never call ask_accutax in parallel: Accutax answers one question at a time per user, "
     "a few a minute, and refuses the rest. "
-    "Fast data tools answer without the Accutax agent: get_vat_summary (a period's VAT position), list_invoices "
-    "(individual invoices and bills), review_vat (duplicate and VAT checks) and search_vat_law (FTA rules). Use "
-    "them for plain figures and lists. "
+    "Fast data tools answer without the Accutax agent: run_report (profit and loss, balance sheet, agings, top "
+    "customers and suppliers, monthly sales and purchases), get_vat_summary (a period's VAT position), "
+    "list_invoices (individual invoices and bills), search and fetch (find one document by number or name, then "
+    "read it in full), review_vat (duplicate and VAT checks) and search_vat_law (FTA rules). Use them for plain "
+    "figures, reports and lists. "
     "RULE: a question that applies VAT law to the user's own documents or figures goes to ask_accutax, never to "
     "your own reasoning. That covers: can we reclaim or recover this VAT, is this input tax deductible, is the VAT "
     "on these bills or invoices correct, how should this be treated, does a penalty apply to us, what do we owe "
@@ -227,6 +230,42 @@ def render_vat_law(body: dict[str, Any]) -> str:
                  "bills, invoices or figures (can they reclaim it, is their VAT right), call ask_accutax; do not "
                  "decide it yourself._")
     return "\n\n".join(parts)
+
+
+def render_search(body: dict[str, Any]) -> str:
+    """search's result in the shape ChatGPT's deep research reads: {"results": [{id, title, url}]} as JSON text."""
+    results = [{"id": r.get("id"), "title": r.get("title"), "url": r.get("url") or ""}
+               for r in (body.get("result") or {}).get("results") or [] if r.get("id")]
+    return json.dumps({"results": results}, ensure_ascii=False)
+
+
+def render_fetch(body: dict[str, Any]) -> str:
+    """fetch's result in the shape ChatGPT's deep research reads: {id, title, text, url, metadata} as JSON text.
+    `text` is the document as markdown: header, lines, and what is still open."""
+    doc = (body.get("result") or {})
+    head = doc.get("document") or {}
+    parts = [f"**{_cell(doc.get('title'))}**", ""]
+    parts += [f"- {_label(k)}: {_cell(v)}" for k, v in head.items() if v not in (None, "")]
+    lines = doc.get("lines") or []
+    if lines:
+        parts += ["", render_table({"title": "Lines", "rows": lines, "total_rows": len(lines)}, settings.mcp_max_table_rows)]
+    if doc.get("open"):
+        parts += ["", "**Open today**"] + [f"- {_label(k)}: {_cell(v)}" for k, v in doc["open"].items() if v not in (None, "")]
+    if body.get("masked") and body.get("placeholders"):
+        parts += ["", f"_{MASKED_NOTE}_"]
+    if body.get("injection"):
+        parts += ["", f"_{INJECTION_NOTE.format(found=', '.join(body['injection']))}_"]
+    return json.dumps({"id": doc.get("id"), "title": doc.get("title"), "text": "\n".join(parts),
+                       "url": doc.get("url") or "", "metadata": {"source": "Accutax", "masked": bool(body.get("masked"))}},
+                      ensure_ascii=False)
+
+
+#: run_report's reports (api/mcp_data.REPORTS), with what each returns, for the tool description.
+REPORT_NAMES = Literal["profit_and_loss", "profit_and_loss_by_account", "monthly_profit_and_loss", "balance_sheet",
+                       "receivables_aging", "payables_aging", "top_customers", "top_suppliers", "sales_by_month",
+                       "purchases_by_month", "expenses_by_category"]
+PeriodPreset = Literal["this_month", "last_month", "this_quarter", "last_quarter", "ytd", "last_year",
+                       "last_12_months"]
 
 
 def _period(start: Optional[str], end: Optional[str]) -> Optional[dict[str, str]]:
@@ -493,5 +532,60 @@ def build_server(upstream: Upstream | None = None, provider: AccutaxOAuthProvide
             params["filters"] = [{"member": COUNTERPARTY[document_type], "operator": "contains",
                                   "values": [counterparty.strip()]}]
         return await data_call("list_documents", params, organization_id)
+
+    @server.tool(title="Run a standard report", annotations=READ_ONLY)
+    async def run_report(
+        report: Annotated[REPORT_NAMES, Field(
+            description="profit_and_loss: revenue, other income, cost of sales, operating expenses, gross and net "
+                        "profit; profit_and_loss_by_account: the same by account; monthly_profit_and_loss: revenue, "
+                        "expenses, net profit and margin per month; balance_sheet: assets, liabilities, equity, cash "
+                        "(as of a date); receivables_aging / payables_aging: open amounts by age today; "
+                        "top_customers / top_suppliers: ranked by net amount; sales_by_month / purchases_by_month: "
+                        "net amount, VAT and count per month; expenses_by_category: purchases by expense category.")],
+        organization_id: OrgId = None,
+        period_preset: Annotated[Optional[PeriodPreset], Field(
+            description="The period, for every report except balance_sheet and the agings. Default: year to date.")] = None,
+        period_start: Date = None,
+        period_end: Date = None,
+        as_of: Annotated[Date, Field(description="balance_sheet only: the date of the balances. Default: today.")] = None,
+        limit: Annotated[int, Field(ge=1, le=25, description="top_customers, top_suppliers, expenses_by_category: "
+                                                             "how many rows.")] = 10,
+    ) -> str:
+        """One of the standard Accutax reports for one organization, computed from the books exactly as the
+        Accutax app does, with totals worked out for you. Quote the figures as given; never add rows up or
+        recompute them. For commentary, comparisons across reports or anything that needs judgment, use
+        ask_accutax.
+        """
+        params: dict[str, Any] = {"report": report, "limit": limit}
+        period = _period(period_start, period_end)
+        if period and period_preset:
+            raise ToolError("Give period_preset or period_start/period_end, not both.")
+        if period or period_preset:
+            params["period"] = period or {"preset": period_preset}
+        if as_of:
+            params["as_of"] = as_of
+        return await data_call("run_report", params, organization_id)
+
+    @server.tool(title="Search invoices and bills", annotations=READ_ONLY)
+    async def search(
+        query: Annotated[str, Field(min_length=2, max_length=200,
+                                    description="A document number or part of it, or a customer or supplier name.")],
+    ) -> str:
+        """Find sales invoices and bills by number or by customer / supplier name across all the user's
+        organizations, newest first. Returns JSON {"results": [{"id", "title", "url"}]}; pass an id to fetch for
+        the whole document. For lists by date, amount or overdue days, use list_invoices.
+        """
+        return await data_call("search", {"query": query}, None, render_search)
+
+    @server.tool(title="Fetch an invoice or bill", annotations=READ_ONLY)
+    async def fetch(
+        id: Annotated[str, Field(description="An id that search returned, such as inv:27:22539 or bill:27:6880.")],
+    ) -> str:
+        """One sales invoice or bill in full: number, date, customer or supplier, status, net and VAT, its lines
+        (items, quantity, net, VAT) and what is still open today (outstanding, due date, days overdue). Returns
+        JSON {"id", "title", "text", "url", "metadata"}. Whether its VAT is right or can be reclaimed is a tax
+        judgment: use ask_accutax.
+        """
+        return await data_call("fetch", {"id": id}, None, render_fetch)
 
     return server
