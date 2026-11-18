@@ -11,6 +11,8 @@ need the supplier's TRN, the VAT category or a reverse-charge flag wait for thos
   future_date             medium  dated after today
   large_for_supplier      medium  far above this supplier's usual bill
   supplier_trn_invalid    medium  VAT on the bill, but the supplier's TRN is missing or does not have 15 digits
+  rcm_candidate           medium  supplier outside the UAE and no VAT: the bill may need reverse charge
+  foreign_vat_charged     medium  supplier outside the UAE charged VAT, and has no UAE TRN
   vat_zero                low     no VAT on a bill with an amount (zero-rated, exempt, out of scope, or VAT left off)
   round_amount            low     a round amount, when round amounts are rare
   large_one_off_supplier  low     the supplier's only bill in the period, and a large one
@@ -32,7 +34,8 @@ from gemini_brain.vat_review.duplicates import vendor_key
 SEVERITY = {
     "vat_rate_not_standard": "high", "vat_wrong_sign": "high", "vat_without_amount": "high",
     "missing_supplier": "medium", "missing_number": "medium", "future_date": "medium", "large_for_supplier": "medium",
-    "supplier_trn_invalid": "medium", "vat_zero": "low", "round_amount": "low", "large_one_off_supplier": "low",
+    "supplier_trn_invalid": "medium", "rcm_candidate": "medium", "foreign_vat_charged": "medium",
+    "vat_zero": "low", "round_amount": "low", "large_one_off_supplier": "low",
 }
 RULES = tuple(SEVERITY)
 _RANK = {"high": 0, "medium": 1, "low": 2}
@@ -50,6 +53,38 @@ def _finding(rule: str, bill: Dict[str, Any], why: str, **details: Any) -> Dict[
     return {"rule": rule, "severity": SEVERITY[rule], "why": why, "details": details,
             "bill": {k: bill.get(k) for k in ("document_number", "document_id", "document_date", "document_type", "status",
                                               "vendor_name", "net_purchases", "input_vat")}}
+
+
+def foreign_country(bill: Dict[str, Any], side: str = "purchases") -> str:
+    """The supplier's country code when the supplier is outside the UAE, else "". Only on purchases, and only when the
+    books give the country at all (the key is present)."""
+    if side != "purchases" or "vendor_country_code" not in bill:
+        return ""
+    code = str(bill.get("vendor_country_code") or "").strip().upper()
+    return code if code and code != "AE" else ""
+
+
+def _rcm_finding(bill: Dict[str, Any], net: float, code: str) -> Dict[str, Any]:
+    self_assessed = round(net * t.STANDARD_RATE, 2)
+    return _finding(
+        "rcm_candidate", bill,
+        f"The supplier is outside the UAE ({code}) and no VAT is recorded on {_money(net)}. "
+        f"If this is a service or goods imported for the business, the business must account for the "
+        f"VAT itself under the reverse charge: about {_money(self_assessed)} in Box 3, recoverable "
+        f"in Box 10 if the cost is fully recoverable.",
+        net=net, country=code, self_assessed_vat=self_assessed)
+
+
+def rcm_candidates(bills: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Every rcm_candidate finding, one per bill, never folded into a pattern: bills from a supplier outside the UAE
+    with an amount and no VAT (Decree-Law No. 8 of 2017, Article 48). find_anomalies uses the same test."""
+    out: List[Dict[str, Any]] = []
+    for b in bills:
+        net, vat = _num(b.get("net_purchases")), _num(b.get("input_vat")) or 0.0
+        code = foreign_country(b)
+        if net and code and abs(vat) < 0.005:
+            out.append(_rcm_finding(b, net, code))
+    return out
 
 
 def find_future(bills: Sequence[Dict[str, Any]], today: dt.date) -> List[Dict[str, Any]]:
@@ -79,7 +114,10 @@ def find_anomalies(bills: Sequence[Dict[str, Any]], today: dt.date,
         return findings, patterns
 
     # --- VAT against the net amount --------------------------------------------------------------------------------
+    # Decree-Law No. 8 of 2017, Article 48: Reverse charge mechanism on imported supplies.
     zero_vat: List[Dict[str, Any]] = []
+    rcm: List[Dict[str, Any]] = []
+    skip_trn_check = set()
     for b in bills:
         net, vat = _num(b.get("net_purchases")), _num(b.get("input_vat")) or 0.0
         if not net:
@@ -91,16 +129,30 @@ def find_anomalies(bills: Sequence[Dict[str, Any]], today: dt.date,
             findings.append(_finding("vat_wrong_sign", b, f"The VAT ({_money(vat)}) and the amount ({_money(net)}) have "
                                      "opposite signs.", vat=vat, net=net))
         elif abs(vat) < 0.005:
-            zero_vat.append(_finding("vat_zero", b, f"No VAT is recorded on an amount of {_money(net)}. That is correct "
-                                     "only for zero-rated, exempt or out-of-scope purchases.", net=net))
+            code = foreign_country(b, side)
+            if code:
+                rcm.append(_rcm_finding(b, net, code))
+            else:
+                zero_vat.append(_finding("vat_zero", b, f"No VAT is recorded on an amount of {_money(net)}. That is correct "
+                                         "only for zero-rated, exempt or out-of-scope purchases.", net=net))
         else:
-            expected = round(net * t.STANDARD_RATE, 2)
-            if abs(vat - expected) > max(t.ROUNDING_AMOUNT, t.ROUNDING_RATE * abs(net)):
+            code = foreign_country(b, side)
+            trn_digits = re.sub(r"\D", "", str(b.get("vendor_trn") or ""))
+            if code and vat > 0.005 and len(trn_digits) != t.TRN_DIGITS:
                 findings.append(_finding(
-                    "vat_rate_not_standard", b,
-                    f"The VAT is {_money(vat)}, which is {vat / net * 100:.1f}% of {_money(net)}. UAE VAT is 5% "
-                    f"({_money(expected)} on this amount) or 0%.", net=net, vat=vat, expected_vat=expected,
-                    rate_percent=round(vat / net * 100, 2), difference=round(vat - expected, 2)))
+                    "foreign_vat_charged", b,
+                    f"The supplier is outside the UAE ({code}) and has no UAE TRN, but VAT of {_money(vat)} is recorded. "
+                    f"Foreign VAT is not UAE input VAT and can't be claimed in Box 9. The purchase may need reverse charge instead.",
+                    net=net, vat=vat, country=code))
+                skip_trn_check.add(id(b))
+            else:
+                expected = round(net * t.STANDARD_RATE, 2)
+                if abs(vat - expected) > max(t.ROUNDING_AMOUNT, t.ROUNDING_RATE * abs(net)):
+                    findings.append(_finding(
+                        "vat_rate_not_standard", b,
+                        f"The VAT is {_money(vat)}, which is {vat / net * 100:.1f}% of {_money(net)}. UAE VAT is 5% "
+                        f"({_money(expected)} on this amount) or 0%.", net=net, vat=vat, expected_vat=expected,
+                        rate_percent=round(vat / net * 100, 2), difference=round(vat - expected, 2)))
     if zero_vat and len(zero_vat) / total >= t.ZERO_VAT_SYSTEMIC_SHARE:
         patterns.append({"rule": "vat_zero", "bills": len(zero_vat), "of": total,
                          "share_percent": round(len(zero_vat) / total * 100),
@@ -110,8 +162,17 @@ def find_anomalies(bills: Sequence[Dict[str, Any]], today: dt.date,
     else:
         findings += zero_vat
 
+    if rcm and len(rcm) / total >= t.ZERO_VAT_SYSTEMIC_SHARE:
+        patterns.append({"rule": "rcm_candidate", "bills": len(rcm), "of": total,
+                         "share_percent": round(len(rcm) / total * 100),
+                         "text": f"{len(rcm):,} of {total:,} bills ({len(rcm) / total * 100:.0f}%) are from suppliers "
+                                 "outside the UAE with no VAT recorded. If these are imported services, reverse charge "
+                                 "is probably not being recorded."})
+    else:
+        findings += rcm
+
     # --- the supplier's TRN, for bills that carry VAT (only when the books give the TRN at all) ----------------------
-    with_vat = [b for b in bills if "vendor_trn" in b and (_num(b.get("input_vat")) or 0) > 0.005]
+    with_vat = [b for b in bills if "vendor_trn" in b and (_num(b.get("input_vat")) or 0) > 0.005 and id(b) not in skip_trn_check]
     bad_trn = []
     for b in with_vat:
         digits = re.sub(r"\D", "", str(b.get("vendor_trn") or ""))

@@ -62,6 +62,7 @@ def bill(number, vendor, date, net, cur="AED"):
 @pytest.fixture
 def cube(monkeypatch):
     monkeypatch.setattr(tool, "_has_trn", lambda *a, **k: False)
+    monkeypatch.setattr(tool, "_has_country", lambda *a, **k: False)
 
     def make(bills):
         def load(query, *, organization_ids, subject, deadline):
@@ -87,6 +88,7 @@ def test_the_review_gives_the_amount_counted_twice_for_all_and_for_the_shown_gro
 def test_amounts_in_two_currencies_are_never_added_together(monkeypatch):
     """An organization's books are in its base currency; two organizations may have two currencies."""
     monkeypatch.setattr(tool, "_has_trn", lambda *a, **k: False)
+    monkeypatch.setattr(tool, "_has_country", lambda *a, **k: False)
     books = {7: [bill("A", "S1", "2026-03-01", 100.0), bill("B", "S1", "2026-03-02", 100.0)],
              8: [bill("C", "S2", "2026-03-01", 50.0, "USD"), bill("D", "S2", "2026-03-02", 50.0, "USD")]}
 

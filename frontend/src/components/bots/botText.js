@@ -23,6 +23,9 @@ export const DEFAULT_AGENT = {
       desc: "These bills can't support a VAT claim.", bar: 'Missing details' },
     { id: 'unusual_bill', side: 'purchases', kind: 'document', default_on: false, label: "A bill far above the supplier's usual amount",
       desc: "Compared with that supplier's past bills.", bar: 'Unusually large' },
+    { id: 'reverse_charge_missed', side: 'purchases', kind: 'document', default_on: false,
+      label: 'A bill from outside the UAE may need reverse charge',
+      desc: 'Supplier outside the UAE with no VAT, or foreign VAT recorded as input VAT.', bar: 'Reverse charge?' },
     { id: 'sales_vat_wrong', side: 'sales', kind: 'document', default_on: true, label: 'A sales invoice with wrong or no output VAT',
       desc: "Zero VAT where 5% is expected, or a rate that isn't 0% or 5%.", bar: 'Sales VAT wrong' },
   ],
@@ -54,6 +57,7 @@ export const DEFAULT_AGENT = {
       bill_missing_details: 'missing details',
       unusual_bill: 'unusual amounts',
       sales_vat_wrong: 'sales VAT',
+      reverse_charge_missed: 'reverse charge',
     },
     rule_titles: {
       same_number: 'Bill may be recorded twice',
@@ -70,6 +74,8 @@ export const DEFAULT_AGENT = {
       vat_zero: 'No VAT on an amount',
       round_amount: 'Round amount',
       supplier_trn_invalid: "Supplier's TRN missing or wrong",
+      rcm_candidate: 'May need reverse charge',
+      foreign_vat_charged: 'Foreign VAT recorded',
     },
     sales_rule_titles: {
       vat_zero: 'Sales invoice with no VAT',

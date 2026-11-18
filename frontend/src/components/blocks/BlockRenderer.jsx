@@ -12,6 +12,7 @@ import { CollapsibleGroupBlock } from './CollapsibleGroupBlock';
 import { FtaSourcesBlock } from './FtaSourcesBlock';
 import { DocumentCardsBlock } from './DocumentCardsBlock';
 import { VatReviewBlock } from './VatReviewBlock';
+import { Vat201Block } from './Vat201Block';
 import { SalesDocumentDraftBlock } from './SalesDocumentDraftBlock';
 import { CustomerDraftBlock } from './CustomerDraftBlock';
 import { FinaliseDraftBlock } from './FinaliseDraftBlock';
@@ -33,6 +34,7 @@ const BLOCK_REGISTRY = {
   fta_sources: FtaSourcesBlock,
   documents: DocumentCardsBlock,
   vat_review: VatReviewBlock,
+  vat_201: Vat201Block,
   sales_document_draft: SalesDocumentDraftBlock,
   customer_draft: CustomerDraftBlock,
   finalise_draft: FinaliseDraftBlock,

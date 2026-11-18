@@ -14,6 +14,7 @@ TODAY = dt.date(2026, 10, 15)
 @pytest.fixture(autouse=True)
 def _no_cube_catalog(monkeypatch):
     monkeypatch.setattr(tool, "_has_trn", lambda *a, **k: False)  # no Cube in unit tests
+    monkeypatch.setattr(tool, "_has_country", lambda *a, **k: False)
 
 
 def bill(number="B-1", vendor="Acme", date="2026-03-01", net=1000.0, vat=50.0, status="ACCEPTED", id_=None):

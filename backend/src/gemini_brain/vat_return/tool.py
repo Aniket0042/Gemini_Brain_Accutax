@@ -99,6 +99,38 @@ def _date(value: Any, name: str) -> dt.date:
         raise ToolInputError(f"{name} must be a date (YYYY-MM-DD)") from None
 
 
+def resolve_period(params: Dict[str, Any], org: int, today: dt.date, known: Dict[int, str],
+                   group: Optional[int]) -> Dict[str, Any]:
+    """{"frequency", "frequency_source", "start", "end", "is_tax_period", "due"} for one organization."""
+    forced = params.get("frequency")
+    frequency = forced or known.get(org) or "quarterly"
+    source = ("as asked" if forced else "from the organization's VAT settings" if org in known else
+              "assumed: the books do not say; the FTA sets it on the registration certificate")
+    quarter_group = group or tax_periods.DEFAULT_QUARTER_GROUP
+    which = params.get("which") or "last"
+    if which == "period":
+        period = params.get("period") or {}
+        start, end = _date(period.get("start"), "period.start"), _date(period.get("end"), "period.end")
+        if start > end:
+            raise ToolInputError("period start is after its end")
+    elif which == "current":
+        start, end = tax_periods.period_containing(today, frequency, quarter_group)
+    elif which == "next_due":
+        start, end = tax_periods.next_due_period(today, frequency, quarter_group)
+    else:
+        start, end = tax_periods.last_complete_period(today, frequency, quarter_group)
+    is_tax_period = tax_periods.period_containing(start, frequency, quarter_group) == (start, end)
+    due = tax_periods.due_date(end) if is_tax_period else None
+    quarter_months = (None if frequency == "monthly" else
+                      ("calendar quarters (March, June, September, December)" if quarter_group == 3 else
+                       f"quarters ending in month {quarter_group} and every three months after"))
+    return {
+        "frequency": frequency, "frequency_source": source, "start": start, "end": end,
+        "is_tax_period": is_tax_period, "due": due, "quarter_group": quarter_group,
+        "quarter_months": quarter_months,
+    }
+
+
 def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str, deadline: float) -> Dict[str, Any]:
     if not isinstance(params, dict):
         raise ToolInputError("Tool input must be an object")
@@ -117,30 +149,17 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
     out_orgs: List[Dict[str, Any]] = []
     notes: List[str] = [NOT_A_RETURN]
     for org in organization_ids:
-        frequency = forced or known.get(org) or "quarterly"
-        source = ("as asked" if forced else "from the organization's VAT settings" if org in known else
-                  "assumed: the books do not say; the FTA sets it on the registration certificate")
-        quarter_group = group or tax_periods.DEFAULT_QUARTER_GROUP
-        if which == "period":
-            period = params.get("period") or {}
-            start, end = _date(period.get("start"), "period.start"), _date(period.get("end"), "period.end")
-            if start > end:
-                raise ToolInputError("period start is after its end")
-        elif which == "current":
-            start, end = tax_periods.period_containing(today, frequency, quarter_group)
-        elif which == "next_due":
-            start, end = tax_periods.next_due_period(today, frequency, quarter_group)
-        else:
-            start, end = tax_periods.last_complete_period(today, frequency, quarter_group)
+        pinfo = resolve_period(params, org, today, known, group)
+        frequency = pinfo["frequency"]
+        source = pinfo["frequency_source"]
+        quarter_group = pinfo["quarter_group"]
+        start, end = pinfo["start"], pinfo["end"]
+        is_tax_period = pinfo["is_tax_period"]
+        due = pinfo["due"]
         figures = _figures(org, start, end, subject, deadline)
-        # Only a tax period has a due date. Dates that are not one ("the last 3 months") get the real next return instead.
-        is_tax_period = tax_periods.period_containing(start, frequency, quarter_group) == (start, end)
-        due = tax_periods.due_date(end) if is_tax_period else None
         entry: Dict[str, Any] = {
             "organization_id": org, "frequency": frequency, "frequency_source": source,
-            "quarter_months": (None if frequency == "monthly" else
-                               ("calendar quarters (March, June, September, December)" if quarter_group == 3 else
-                                f"quarters ending in month {quarter_group} and every three months after")),
+            "quarter_months": pinfo["quarter_months"],
             "period": {"start": start.isoformat(), "end": end.isoformat()}, "is_tax_period": is_tax_period, **figures,
             "position": "payable" if figures["net_vat_payable"] > 0 else "refundable" if figures["net_vat_payable"] < 0 else "nil",
             "due_date": due.isoformat() if due else None, "days_to_due": (due - today).days if due else None,

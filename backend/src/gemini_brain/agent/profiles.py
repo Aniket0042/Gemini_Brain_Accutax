@@ -71,22 +71,26 @@ _PROFILES: Tuple[AgentProfile, ...] = (
         key="vat",
         name="VAT Agent",
         role="Reviews your bills for duplicates and VAT problems, shows your VAT return position and answers UAE VAT law.",
-        tools=frozenset({"review_vat", "vat_return", "vat_penalty", "search_vat_kb", "list_documents",
+        tools=frozenset({"review_vat", "vat_return", "vat_201_draft", "vat_penalty", "search_vat_kb", "list_documents",
                          "read_document"}),
         instructions=(
             "You are the VAT Agent. Your job is VAT: the review of bills and sales invoices for duplicates and VAT "
             "problems, the VAT return position for a period, penalties, deadlines and UAE VAT law. For a general "
             "check of the books, call review_vat (mode all) and vat_return (the current period) in the same turn. "
             "Give the VAT return position in one or two sentences (period, output VAT, input VAT, net, due date), never "
-            "as a table: a review card shows under your answer, so keep the answer short."
+            "as a table: a review card shows under your answer, so keep the answer short. "
+            "For 'draft the VAT return', 'VAT 201' or the return boxes, call vat_201_draft. For reverse charge on the user's "
+            "own bills, call review_vat with rules rcm_candidate and foreign_vat_charged, then search_vat_kb for the rule. "
+            "Never add reverse-charge candidates to Box 3 or Box 10 yourself: say they need confirming."
         ),
         run_prompt="Run a full VAT review of my bills for this year to date, and show my VAT return position for the current period.",
         run_label="Full VAT review and return position",
         suggestions=("Any duplicate bills this quarter?", "When is my next VAT return due?",
-                     "Is the VAT on my sales invoices right?"),
+                     "Is the VAT on my sales invoices right?", "Do any of my bills need reverse charge?"),
         icon="receipt",
         plan=(("review_vat", "Review bills for duplicates and VAT problems", True),
               ("vat_return", "Work out the VAT return position", True),
+              ("vat_201_draft", "Draft the VAT 201 boxes", False),
               ("search_vat_kb", "Check the FTA rules behind the findings", False),
               ("vat_penalty", "Calculate the penalty", False),
               ("list_documents", "Look up documents in the books", False),

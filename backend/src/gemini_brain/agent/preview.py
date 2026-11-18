@@ -28,6 +28,7 @@ _STEP = {
     "app_guide": "Checking the Accutax guide",
     "review_vat": "Reviewing bills",
     "vat_return": "Working out the VAT return",
+    "vat_201_draft": "Drafting the VAT 201 return",
     "vat_penalty": "Calculating the penalty",
     "read_document": "Reading the file",
 }
@@ -171,13 +172,14 @@ def _answer(question: str, organization_ids: Sequence[int], org_meta: Callable[[
     answer_text = links.link_documents(answer_text, links.document_links(data))
     cards = _document_cards(docs)
     review_cards = _review_cards(data)
+    form201_cards = _form201_cards(data)
     _audit(data, docs, user_id=user_id, session_id=session_id, orgs=orgs)
-    if review_cards:
+    if review_cards or form201_cards:
         answer_text = _without_tables(answer_text, data)
     answer_text = sensitive.with_answer_line(answer_text, dropped)
     warning = sensitive.notice_block(dropped)
     blocks = ([warning] if warning else []) + agent_badge(profile) + (
-        cards + tiles.kpi_tiles(data) + review_cards + _cash_cards(data) + list(getattr(result, "blocks", None) or [])
+        cards + tiles.kpi_tiles(data) + review_cards + form201_cards + _cash_cards(data) + list(getattr(result, "blocks", None) or [])
         + links.guide_buttons(data))
     wants_files = delivery is not None and getattr(delivery, "mode", "none") != "none"
     if wants_files:
@@ -407,6 +409,16 @@ def _review_cards(data: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
         return []
 
 
+def _form201_cards(data: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The card of what a VAT 201 draft found. Never raises: the answer reaches the user without it."""
+    try:
+        from gemini_brain.vat_return.blocks import form201_blocks
+        return form201_blocks(data, links.document_links(data))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("agent preview: form 201 card not built: %s", e, exc_info=True)
+        return []
+
+
 def _without_tables(text: str, data: Sequence[Dict[str, Any]] = ()) -> str:
     try:
         from gemini_brain.vat_review.blocks import plain_rule_names, without_tables
@@ -439,6 +451,8 @@ def export_rows(data: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if item.get("tool") == "cash_forecast":
             rows = [{"organization": org.get("organization_name"), "currency": org.get("currency"), **week}
                     for org in result.get("organizations") or [] for week in org.get("weeks") or []]
+        elif item.get("tool") == "vat_201_draft":
+            rows = [dict(r) for r in result.get("rows") or []]
         else:
             rows = [_plain(r) for r in result.get("rows") or []]
             granularity = (item.get("input") or {}).get("granularity")

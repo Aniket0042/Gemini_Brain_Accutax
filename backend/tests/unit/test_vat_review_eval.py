@@ -124,3 +124,50 @@ def test_the_sales_book_gives_what_is_expected_and_leaves_the_clean_invoices(mon
         assert set(expected) <= found.get(rule, set()), rule
     flagged = {k for keys in found.values() for k in keys}
     assert not flagged & set(vc.SALES_CLEAN)
+
+
+def test_planted_reverse_charge_and_foreign_vat_rules_found():
+    """Case A8: local eval harness for reverse-charge and foreign VAT anomalies."""
+    import datetime as dt
+    from gemini_brain.vat_review import anomalies
+
+    today = dt.date(2026, 10, 15)
+    # Planted clean bills: 20 bills with 5% VAT in AE
+    bills = [
+        {"document_number": f"PLANT-AE-{i:02d}", "document_id": str(800000 + i), "document_date": f"2026-05-{i:02d}",
+         "vendor_name": f"Supplier AE {i}", "net_purchases": 1000.0 + 100 * i, "input_vat": round((1000.0 + 100 * i) * 0.05, 2),
+         "vendor_country_code": "AE", "vendor_trn": "100123456700003"}
+        for i in range(1, 21)
+    ]
+    # Planted anomaly 1: RCM candidate (US supplier, no VAT recorded)
+    bills.append({
+        "document_number": "PLANT-RCM-1", "document_id": "800099", "document_date": "2026-06-10",
+        "vendor_name": "Planted AWS US", "net_purchases": 5000.0, "input_vat": 0.0,
+        "vendor_country_code": "US", "vendor_trn": None,
+    })
+    # Planted anomaly 2: Foreign VAT charged (UK supplier, 20% VAT, no UAE TRN)
+    bills.append({
+        "document_number": "PLANT-FOR-1", "document_id": "800100", "document_date": "2026-06-12",
+        "vendor_name": "Planted UK Software", "net_purchases": 2000.0, "input_vat": 400.0,
+        "vendor_country_code": "GB", "vendor_trn": None,
+    })
+
+    findings, patterns = anomalies.find_anomalies(bills, today, side="purchases")
+    by_rule = {f["rule"]: f for f in findings}
+
+    assert "rcm_candidate" in by_rule
+    rcm_f = by_rule["rcm_candidate"]
+    assert rcm_f["bill"]["document_number"] == "PLANT-RCM-1"
+    assert rcm_f["details"]["country"] == "US"
+    assert rcm_f["details"]["net"] == 5000.0
+    assert rcm_f["details"]["self_assessed_vat"] == 250.0
+
+    assert "foreign_vat_charged" in by_rule
+    for_f = by_rule["foreign_vat_charged"]
+    assert for_f["bill"]["document_number"] == "PLANT-FOR-1"
+    assert for_f["details"]["country"] == "GB"
+    assert for_f["details"]["vat"] == 400.0
+
+    clean_nums = {f"PLANT-AE-{i:02d}" for i in range(1, 21)}
+    flagged_nums = {f["bill"]["document_number"] for f in findings if f["rule"] in ("rcm_candidate", "foreign_vat_charged")}
+    assert not (clean_nums & flagged_nums)

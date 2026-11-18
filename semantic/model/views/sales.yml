@@ -21,6 +21,7 @@ views:
           - status
           - customer_name
           - customer_trn
+          - vat_category
           - project_name
           - cost_center_name
           - item_name
@@ -43,3 +44,4 @@ views:
           - name: name
             alias: organization_name
           - currency
+          - emirate

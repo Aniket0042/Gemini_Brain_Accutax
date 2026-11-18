@@ -16,3 +16,6 @@ cubes:
       - name: currency
         sql: currency
         type: string
+      - name: emirate
+        sql: emirate
+        type: string

@@ -24,6 +24,7 @@ cubes:
              e.contact_id                                  AS vendor_id,
              COALESCE(NULLIF(c.name, ''), NULLIF(c.organization_name, ''), 'Unknown') AS vendor_name,
              NULLIF(TRIM(c.trn_number), '')                AS vendor_trn,
+             UPPER(NULLIF(TRIM(ctry.code), ''))            AS vendor_country_code,
              COALESCE(ect.value, 'Uncategorised')          AS expense_category,
              COALESCE(p.project_name, 'No project')        AS project_name,
              COALESCE(cc.costcenter_name, 'Unallocated')   AS cost_center_name,
@@ -38,6 +39,7 @@ cubes:
       JOIN   public.expense_items ei ON ei.expense_id = e.id
       JOIN   public.status_type   st ON st.id = e.status_type_id
       LEFT   JOIN public.contacts              c   ON c.id   = e.contact_id      AND c.organization_id  = e.organization_id
+      LEFT   JOIN public.country_type          ctry ON ctry.id = c.country_id
       LEFT   JOIN public.expense_category_type ect ON ect.id = e.expense_category_type_id
       LEFT   JOIN public.projects              p   ON p.id   = e.project_id      AND p.organization_id  = e.organization_id
       LEFT   JOIN public.cost_centers          cc  ON cc.id  = ei.cost_center_id AND cc.organization_id = e.organization_id
@@ -91,6 +93,12 @@ cubes:
           The supplier's tax registration number as stored on the contact (null when blank). Used to check
           that a bill with VAT shows a 15-digit UAE TRN; a number is not proof that the FTA registered it.
         sql: vendor_trn
+        type: string
+      - name: vendor_country_code
+        description: >-
+          Two-letter country code of the supplier as stored on the contact (AE is the UAE). Null when the contact has no
+          country. Used to find suppliers outside the UAE, whose bills may need reverse charge.
+        sql: vendor_country_code
         type: string
       - name: expense_category
         sql: expense_category

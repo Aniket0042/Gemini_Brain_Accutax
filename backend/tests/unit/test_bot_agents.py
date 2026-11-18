@@ -146,7 +146,7 @@ def test_get_agents_lists_vat(auth_headers):
     res = client.get("/api/v1/bots/agents", headers=auth_headers)
     assert res.status_code == 200
     vat = next(a for a in res.json()["agents"] if a["key"] == "vat")
-    assert vat["copy"]["label"] == "VAT agent" and len(vat["watches"]) == 5 and len(vat["templates"]) == 3
+    assert vat["copy"]["label"] == "VAT agent" and len(vat["watches"]) == 6 and len(vat["templates"]) == 3
 
 
 def test_an_unknown_agent_is_404(auth_headers):

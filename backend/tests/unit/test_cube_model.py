@@ -110,6 +110,12 @@ def test_inventory_bank_and_branch_views_are_queryable():
     assert "branch_name" in _included(VIEWS["sales"]) and "branch_name" in _included(VIEWS["purchases"])
 
 
+def test_purchases_and_sales_expose_rcm_and_vat_201_fields():
+    assert "vendor_country_code" in _included(VIEWS["purchases"])
+    assert "vat_category" in _included(VIEWS["sales"])
+    assert "emirate" in _included(VIEWS["sales"])
+
+
 def test_the_organization_directory_is_a_lookup_the_agent_never_sees():
     from gemini_brain.semantic.catalog import parse_meta
     view = VIEWS["organization_directory"]

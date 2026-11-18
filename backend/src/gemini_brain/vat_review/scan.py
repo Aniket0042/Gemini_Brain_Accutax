@@ -20,7 +20,8 @@ MEASURES = ("net_purchases", "input_vat")
 #: vendor_trn for both sides: on sales they hold the customer, the net sales, the output VAT and the customer's TRN.
 SIDES = {
     "purchases": {"view": "purchases", "vendor_name": "vendor_name", "net_purchases": "net_purchases",
-                  "input_vat": "input_vat", "vendor_trn": "vendor_trn"},
+                  "input_vat": "input_vat", "vendor_trn": "vendor_trn",
+                  "vendor_country_code": "vendor_country_code"},
     "sales": {"view": "sales", "vendor_name": "customer_name", "net_purchases": "net_sales", "input_vat": "output_vat",
               "vendor_trn": "customer_trn"},
 }
@@ -42,10 +43,16 @@ def member(side: str, name: str) -> str:
     return f"{spec['view']}.{spec.get(name, name)}"
 
 
-def _query(start: dt.date, end: dt.date, with_trn: bool = False, side: str = "purchases") -> Dict[str, Any]:
+def _query(start: dt.date, end: dt.date, with_trn: bool = False, with_country: bool = False,
+           side: str = "purchases") -> Dict[str, Any]:
     view = SIDES[side]["view"]
+    extra_dims: List[str] = []
+    if with_trn:
+        extra_dims.append("vendor_trn")
+    if with_country and side == "purchases":
+        extra_dims.append("vendor_country_code")
     return {
-        "dimensions": [member(side, c) for c in COLUMNS + (("vendor_trn",) if with_trn else ())]
+        "dimensions": [member(side, c) for c in COLUMNS + tuple(extra_dims)]
         + [f"{view}.currency", f"{view}.organization_name"],
         "measures": [member(side, m) for m in MEASURES],
         "limit": CUBE_ROW_LIMIT,
@@ -66,7 +73,7 @@ def _row(raw: Dict[str, Any], side: str = "purchases") -> Dict[str, Any]:
 
 
 def scan_bills(organization_id: int, start: dt.date, end: dt.date, *, subject: str, deadline: float,
-               with_trn: bool = False, side: str = "purchases") -> Scan:
+               with_trn: bool = False, with_country: bool = False, side: str = "purchases") -> Scan:
     scan = Scan()
 
     def part(a: dt.date, b: dt.date) -> None:
@@ -75,7 +82,8 @@ def scan_bills(organization_id: int, start: dt.date, end: dt.date, *, subject: s
         if time.monotonic() >= deadline:
             scan.complete, scan.why_incomplete = False, "time ran out"
             return
-        result = cube_client.load(_query(a, b, with_trn, side), organization_ids=[organization_id], subject=subject, deadline=deadline)
+        result = cube_client.load(_query(a, b, with_trn, with_country, side), organization_ids=[organization_id],
+                                  subject=subject, deadline=deadline)
         scan.queries += 1
         if len(result.rows) < CUBE_ROW_LIMIT or a >= b:
             scan.bills.extend(_row(r, side) for r in result.rows)

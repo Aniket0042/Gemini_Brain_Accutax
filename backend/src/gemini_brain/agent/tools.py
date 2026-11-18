@@ -22,7 +22,7 @@ from gemini_brain.config.settings import settings
 from gemini_brain.semantic import cash_forecast, list_documents, query_metrics
 from gemini_brain.semantic.catalog import ToolInputError, get_catalog
 from gemini_brain.semantic.cube_client import CubeError
-from gemini_brain.vat_return import tool as vat_return
+from gemini_brain.vat_return import form201, tool as vat_return
 from gemini_brain.vat_review import tool as review_vat
 
 logger = logging.getLogger("gemini_brain.agent.tools")
@@ -37,7 +37,7 @@ _pool = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix=
 
 #: Tools that read figures from Cube, on the organizations in scope.
 DATA_TOOLS = {"query_metrics": query_metrics, "list_documents": list_documents, "cash_forecast": cash_forecast,
-              "review_vat": review_vat, "vat_return": vat_return}
+              "review_vat": review_vat, "vat_return": vat_return, "vat_201_draft": form201}
 
 #: Write tool -> the module whose run(params, ctx) executes it.
 WRITE_RUNNERS = {"draft_sales_document": "gemini_brain.invoicing.draft",
@@ -167,6 +167,8 @@ def specs(ctx: ToolContext) -> List[Dict[str, Any]]:
             out.append(_with_scope(review_vat.tool_spec()))
         if "vat" in catalog.views:
             out.append(_with_scope(vat_return.tool_spec()))
+        if "sales" in catalog.views and "purchases" in catalog.views:
+            out.append(_with_scope(form201.tool_spec()))
     except Exception as e:  # noqa: BLE001 - the agent still answers law and how-to questions
         logger.warning("agent: Cube catalog unavailable, figure tools left out: %s", e)
     out += [VAT_KB_SPEC, APP_GUIDE_SPEC, vat_return.PENALTY_SPEC]

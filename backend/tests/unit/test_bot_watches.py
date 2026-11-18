@@ -26,6 +26,18 @@ def test_default_ids():
     assert "sales_vat_wrong" in defaults
     assert "bill_missing_details" not in defaults
     assert "unusual_bill" not in defaults
+    assert "reverse_charge_missed" not in defaults
+
+
+def test_reverse_charge_missed_watch():
+    from gemini_brain.vat_review import anomalies
+    w = get("reverse_charge_missed")
+    assert w.id == "reverse_charge_missed"
+    assert w.side == "purchases"
+    assert w.default_on is False
+    assert set(w.rules) == {"rcm_candidate", "foreign_vat_charged"}
+    for r in w.rules:
+        assert r in anomalies.RULES
 
 
 def test_review_calls_standard_example():

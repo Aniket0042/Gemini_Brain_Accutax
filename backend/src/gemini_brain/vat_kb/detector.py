@@ -31,7 +31,7 @@ _TAX_WORD = re.compile(r"\b(tax|vat|penalt\w+|refund|invoice|supply|supplies|reg
 # Asking for the user's own numbers or records: that is a data question, never a law question.
 _OWN_DATA = re.compile(
     r"\b(show|list|display|give me|pull|fetch|export|download)\b.{0,40}\b(my|our|the)\b"
-    r"|\bhow much (vat|tax|output tax|input tax)\b.{0,30}\b(did|do|have|has|will)\b.{0,10}\b(we|i|you)\b"
+    r"|\bhow much (vat|tax|output tax|input tax|reverse[- ]charge)\b.{0,30}\b(did|do|have|has|will)\b.{0,10}\b(we|i|you)\b"
     r"|\b(my|our)\s+(total|vat payable|vat liability|vat return for|revenue|sales|expenses|invoices for|balance|outstanding)\b"
     r"|\b(this|last|current|previous|next)\s+(month|quarter|year|period)'?s?\b.{0,40}\b(vat|tax)\s+(payable|liability|due|amount|collected|paid)\b"
     r"|\b(vat|tax)\s+(payable|liability|collected|paid)\b.{0,30}\b(this|last|current|previous)\s+(month|quarter|year|period)\b"
@@ -42,12 +42,14 @@ _OWN_DATA = re.compile(
     r"|\b(duplicate|duplicated|double[- ]entered|odd|unusual|suspicious)\s+(bills?|invoices?|purchases?|entries)\b"
     r"|\b(bills?|invoices?|purchases?)\b.{0,30}\b(recorded|entered|posted|booked)\s+twice\b"
     r"|\b(my|our)\s+(purchase\s+|supplier\s+|vendor\s+)?(bills?|purchases?)\b"
-    r"|\b(any|are there)\b.{0,15}\b(bills?|purchases?)\b.{0,40}\b(with|without|dated|missing|that)\b"
+    r"|\b(any|are there)\b.{0,15}\b(bills?|purchases?)\b.{0,40}\b(with|without|dated|missing|that|need)\b"
     r"|\breview\b.{0,20}\b(bills?|purchases?|invoices?|sales)\b"
+    r"|\b(bills?|purchases?)\b.{0,30}\bneed\s+reverse[- ]charge\b"
     # The user's own VAT return, deadline or amount owed (the vat_return tool), and a penalty on given figures (the
     # vat_penalty calculator): the law answer would explain the rule instead of working it out.
-    r"|\b(our|my)\s+(next\s+)?(vat\s+)?(return|deadline|due date|filing)\b|\bnext\s+(vat\s+)?(return\s+)?deadline\b"
-    r"|\bhow much (vat|tax) do (we|i) (owe|pay|have to pay)\b"
+    r"|\b(our|my)\s+(next\s+)?(vat\s+)?(\d{3}\s+)?(return|deadline|due date|filing)\b|\bnext\s+(vat\s+)?(return\s+)?deadline\b"
+    r"|\b(draft|prepare|fill)\s+(in\s+|out\s+)?(our|my)\b.{0,20}\b(vat\s+)?(\d{3}\s+)?return\b"
+    r"|\bhow much (vat|tax|reverse[- ]charge)\b.{0,15}\bdo (we|i) (owe|pay|have to pay)\b"
     r"|\bpenalt\w*\b.{0,80}\b(aed|dhs?|dirhams?)\s?\d|\b(aed|dhs?|dirhams?)\s?\d[\d,.]*\b.{0,120}\bpenalt"
     r"|\b(my|our)\s+(sales\s+)?invoices\b|\b(on|in)\s+(my|our)\s+sales\b", re.I)
 

@@ -30,7 +30,8 @@ cubes:
              inc.branch_id                                    AS branch_id,
              CASE WHEN inc.income_type = 'CREDIT_NOTE' THEN -1 ELSE 1 END AS doc_sign,
              ii.line_amount                                AS line_amount,
-             COALESCE(ii.tax_amount, 0)                    AS tax_amount
+             COALESCE(ii.tax_amount, 0)                    AS tax_amount,
+             COALESCE(NULLIF(TRIM(tr.tax_type), ''), 'unknown') AS vat_category
       FROM   public.income inc
       JOIN   public.income_items ii ON ii.income_id = inc.id
       JOIN   public.status_type  st ON st.id = inc.status_type_id
@@ -38,6 +39,7 @@ cubes:
       LEFT   JOIN public.projects     p  ON p.id  = inc.project_id    AND p.organization_id  = inc.organization_id
       LEFT   JOIN public.cost_centers cc ON cc.id = ii.cost_center_id AND cc.organization_id = inc.organization_id
       LEFT   JOIN public.items it ON it.id = ii.items_id AND it.organization_id = inc.organization_id
+      LEFT   JOIN public.tax_rates tr ON tr.id = ii.tax_rate_id AND tr.organization_id = inc.organization_id
       WHERE  inc.income_type IN ('INVOICE', 'CASH_INVOICE', 'INCOME', 'CREDIT_NOTE')
         AND  inc.is_draft = false
         AND  inc.voided_at IS NULL
@@ -84,6 +86,12 @@ cubes:
           The customer's tax registration number as stored on the contact (null when blank). A tax invoice to a
           VAT-registered customer shows it; a number is not proof that the FTA registered it.
         sql: customer_trn
+        type: string
+      - name: vat_category
+        description: >-
+          VAT category of the line from its tax code: standard, zero_rated, exempt, no_vat, out_of_scope,
+          or unknown when the line has no tax code.
+        sql: vat_category
         type: string
       - name: customer_name
         sql: customer_name

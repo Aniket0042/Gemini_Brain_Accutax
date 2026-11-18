@@ -40,6 +40,8 @@ RULE_TEXT = {
     "vat_zero": "no VAT on a bill with an amount",
     "round_amount": "a round amount, when round amounts are rare",
     "large_one_off_supplier": "the supplier's only bill in the period, and a large one",
+    "rcm_candidate": "supplier outside the UAE and no VAT: the bill may need reverse charge",
+    "foreign_vat_charged": "supplier outside the UAE charged VAT, and has no UAE TRN",
 }
 
 
@@ -57,6 +59,8 @@ LAW_QUESTIONS = {
     "vat_wrong_sign": "How is a tax credit note recorded and what must it show in the UAE?",
     "vat_without_amount": "How is a tax credit note recorded and what must it show in the UAE?",
     "future_date": "When is the date of supply and when must a tax invoice be issued in the UAE?",
+    "rcm_candidate": "When must a UAE VAT registrant account for VAT under the reverse charge on imported services, and in which boxes of the VAT return is it reported?",
+    "foreign_vat_charged": "Can a UAE VAT registrant recover VAT charged by a supplier outside the UAE as input tax, and how does the reverse charge apply to imported services?",
 }
 MAX_LAW_QUESTIONS = 3
 
@@ -82,13 +86,24 @@ def _has_trn(organization_ids: Sequence[int], subject: str, deadline: float, sid
         return False
 
 
+def _has_country(organization_ids: Sequence[int], subject: str, deadline: float) -> bool:
+    """Whether this Cube gives the supplier's country (purchases.vendor_country_code). A Cube started
+    before the field was added does not; the review then skips the country check, instead of failing."""
+    try:
+        from gemini_brain.semantic.catalog import get_catalog
+        return scan_mod.member("purchases", "vendor_country_code") in get_catalog(list(organization_ids), subject, deadline).view("purchases").dimensions
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _future_dated(org: int, end: Any, today: Any, subject: str, deadline: float,
-                  with_trn: bool = False, side: str = "purchases") -> List[Dict[str, Any]]:
+                  with_trn: bool = False, with_country: bool = False, side: str = "purchases") -> List[Dict[str, Any]]:
     """Bills dated after the period's end and after today, which a scan "up to today" never reaches."""
     import datetime as dt
     first = max(today, end) + dt.timedelta(days=1)
     scan = scan_bills(org, first, first + dt.timedelta(days=FUTURE_DAYS), subject=subject,
-                      deadline=min(deadline, time.monotonic() + SCAN_SECONDS), with_trn=with_trn, side=side)
+                      deadline=min(deadline, time.monotonic() + SCAN_SECONDS), with_trn=with_trn,
+                      with_country=with_country, side=side)
     bills, _ = duplicates.usable(scan.bills)
     return anomalies.find_future(bills, today)
 
@@ -172,6 +187,7 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
         want_dup = want_dup and any(r in duplicates.RULES for r in only)
         want_odd = want_odd and any(r in anomalies.RULES for r in only)
     with_trn = want_odd and _has_trn(organization_ids, subject, deadline, side)
+    with_country = want_odd and side == "purchases" and _has_country(organization_ids, subject, deadline)
 
     groups: List[Dict[str, Any]] = []
     findings: List[Dict[str, Any]] = []
@@ -180,7 +196,7 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
     per_org: List[Dict[str, Any]] = []
     for org in organization_ids:
         scan = scan_bills(org, start, end, subject=subject, deadline=min(deadline, time.monotonic() + SCAN_SECONDS),
-                          with_trn=with_trn, side=side)
+                          with_trn=with_trn, with_country=with_country, side=side)
         bills, skipped = duplicates.usable(scan.bills)
         name = next((b.get("organization_name") for b in scan.bills if b.get("organization_name")), None) or f"Organization {org}"
         currency = next((b.get("currency") for b in scan.bills if b.get("currency")), None)
@@ -191,7 +207,7 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
             found_groups = [g for g in found_groups if g["rule"] in only]
             found_patterns = [p for p in found_patterns if p["rule"] in only]
         if want_odd:
-            found_odd += _future_dated(org, end, today, subject, deadline, with_trn, side)
+            found_odd += _future_dated(org, end, today, subject, deadline, with_trn, with_country, side)
         if only:
             found_odd = [f for f in found_odd if f["rule"] in only]
         for item in found_groups + found_odd + found_patterns:

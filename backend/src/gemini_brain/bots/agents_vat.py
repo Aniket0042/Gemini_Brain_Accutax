@@ -63,6 +63,15 @@ WATCHES = (
         bar="Unusually large",
     ),
     Watch(
+        id="reverse_charge_missed",
+        label="A bill from outside the UAE may need reverse charge",
+        side="purchases",
+        rules=("rcm_candidate", "foreign_vat_charged"),
+        default_on=False,
+        desc="Supplier outside the UAE with no VAT, or foreign VAT recorded as input VAT.",
+        bar="Reverse charge?",
+    ),
+    Watch(
         id="sales_vat_wrong",
         label="A sales invoice with wrong or no output VAT",
         side="sales",
@@ -130,7 +139,7 @@ Fill only what the sentence says or clearly means. Leave the rest out: code fill
 "after the quarter ends" is after_period_end. A time like "9am" is "09:00". No time given: leave time out.
 "email me" adds email to deliver. "alert me", "notify me right away" adds bell.
 Pick watches only from the list. "duplicates" is duplicate_bill. "wrong VAT", "VAT not 5%" is vat_rate_wrong.
-"sales", "invoices I send" is sales_vat_wrong.
+"sales", "invoices I send" is sales_vat_wrong. "reverse charge", "imported services", "foreign suppliers" is reverse_charge_missed.
 Organization names the user wrote go in org_names, exactly as written. Never invent an organization.
 Anything you are not sure about goes in unclear as a short question. Never ask more than 3.
 Never put figures, amounts or dates of transactions in any field.
@@ -151,6 +160,8 @@ RULE_TITLES = {
     "vat_zero": "No VAT on an amount",
     "round_amount": "Round amount",
     "supplier_trn_invalid": "Supplier's TRN missing or wrong",
+    "rcm_candidate": "May need reverse charge",
+    "foreign_vat_charged": "Foreign VAT recorded",
 }
 
 COPY: Dict[str, Any] = {
@@ -175,6 +186,7 @@ COPY: Dict[str, Any] = {
         "bill_missing_details": "missing details",
         "unusual_bill": "unusual amounts",
         "sales_vat_wrong": "sales VAT",
+        "reverse_charge_missed": "reverse charge",
     },
     "rule_titles": RULE_TITLES,
     "sales_rule_titles": {

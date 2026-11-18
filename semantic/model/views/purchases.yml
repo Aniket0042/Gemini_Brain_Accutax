@@ -21,6 +21,7 @@ views:
           - status
           - vendor_name
           - vendor_trn
+          - vendor_country_code
           - expense_category
           - project_name
           - cost_center_name

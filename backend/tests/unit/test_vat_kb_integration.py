@@ -49,6 +49,10 @@ VAT_LAW = [
     "We found an error in last quarter's return that understated tax by AED 8,000. Voluntary disclosure, "
     "or correct it in the next return?",
     "Can we claim bad debt relief on last year's invoice?",
+    "When does reverse charge apply to imported services?",
+    "What must I fill in Box 3 of the VAT return for imported services?",
+    "How do I fill the VAT 201 return for exempt supplies?",
+    "Which boxes of the VAT return are for reverse charge?",
 ]
 NOT_VAT_LAW = [
     "Show me my VAT payable for this quarter",
@@ -99,6 +103,11 @@ NOT_VAT_LAW = [
     "When is our next VAT return deadline?",
     "How much VAT do we owe for the last quarter?",
     "We paid AED 12,000 of VAT due on 28 July 2026 on 16 October 2026. What is the late payment penalty?",
+    "Do any of my bills need reverse charge?",
+    "How much reverse charge do we owe this quarter?",
+    "Draft our VAT 201 return for Q3",
+    "Prepare our VAT return for this quarter",
+    "Fill in my VAT 201 return",
 ]
 
 
