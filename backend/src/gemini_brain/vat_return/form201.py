@@ -116,6 +116,11 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
     deadline_val = deadline if deadline is not None else time.monotonic() + 30.0
     today = semantic_periods.today_in(settings.report_timezone)
     known = vat_return_tool.filing_frequencies(organization_ids, subject, deadline_val) if forced is None else {}
+    # Ask Cube only for the members it has: a Cube without the supplier's TRN or country still drafts the return
+    # (without reverse-charge candidates), as the VAT review does.
+    from gemini_brain.vat_review import tool as review_tool
+    with_trn = review_tool._has_trn(organization_ids, subject, deadline_val, "purchases")
+    with_country = review_tool._has_country(organization_ids, subject, deadline_val)
 
     out_orgs: List[Dict[str, Any]] = []
     all_rows: List[Dict[str, Any]] = []
@@ -192,9 +197,18 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
             )
 
         # 2. Bills: Box 9 and the reverse-charge candidates, from the same bills the VAT review looks at.
-        scan = scan_bills(org, start, end, subject=subject, deadline=deadline_val, with_trn=True, with_country=True,
-                          side="purchases")
-        bills, _ = duplicates.usable(scan.bills)
+        bills_ok = True
+        try:
+            scan = scan_bills(org, start, end, subject=subject, deadline=deadline_val, with_trn=with_trn,
+                              with_country=with_country, side="purchases")
+        except Exception as e:  # noqa: BLE001 - shown as unavailable, never as zero input VAT
+            bills_ok, scan = False, None
+            org_notes.append(f"Organization {org}: the bills could not be read from the books ({type(e).__name__}), "
+                             "so Boxes 9, 11, 13 and 14 are not shown. Try again later; do not read them as zero.")
+        if not with_country:
+            org_notes.append(f"Organization {org}: the supplier's country is not available yet, so bills that may need "
+                             "reverse charge are not listed.")
+        bills, _ = duplicates.usable(scan.bills) if bills_ok else ([], 0)
         findings, _ = anomalies.find_anomalies(bills, today, side="purchases")
         foreign_vat_ids = {(f["bill"].get("document_id"), f["bill"].get("document_number"))
                            for f in findings if f.get("rule") == "foreign_vat_charged"}
@@ -208,7 +222,9 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
                 box9_net += b_net
                 box9_vat += b_vat
 
-        if not scan.complete:
+        if not bills_ok:
+            box9_status = "unavailable"
+        elif not scan.complete:
             box9_status = "incomplete"
             org_notes.append(f"Organization {org}: Box 9 is incomplete: {scan.why_incomplete}.")
         else:
@@ -271,15 +287,15 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
         box8_status = _weakest(box_1_status, "approximate" if candidate_count else "from_books")
         box8 = {"box": "8", "label": BOX_LABELS["8"], "net": None,
                 "vat": round(standard_vat, 2) if sales_ok else None, "status": box8_status}
-        box9 = {"box": "9", "label": BOX_LABELS["9"], "net": round(box9_net, 2), "vat": round(box9_vat, 2),
-                "status": box9_status}
+        box9 = {"box": "9", "label": BOX_LABELS["9"], "net": round(box9_net, 2) if bills_ok else None,
+                "vat": round(box9_vat, 2) if bills_ok else None, "status": box9_status}
         box10 = {"box": "10", "label": BOX_LABELS["10"], "net": 0.0, "vat": 0.0, "status": "candidates_only"}
-        box11 = {"box": "11", "label": BOX_LABELS["11"], "net": None, "vat": round(box9_vat, 2), "status": box9_status}
+        box11 = {"box": "11", "label": BOX_LABELS["11"], "net": None, "vat": box9["vat"], "status": box9_status}
         box12 = {"box": "12", "label": BOX_LABELS["12"], "net": None, "vat": _vat(box8["vat"]), "status": box8_status}
         box13 = {"box": "13", "label": BOX_LABELS["13"], "net": None, "vat": _vat(box11["vat"]),
                  "status": box11["status"]}
         box14 = {"box": "14", "label": BOX_LABELS["14"], "net": None,
-                 "vat": None if box12["vat"] is None else round(box12["vat"] - box13["vat"], 2),
+                 "vat": None if box12["vat"] is None or box13["vat"] is None else round(box12["vat"] - box13["vat"], 2),
                  "status": _weakest(box12["status"], box13["status"])}
 
         boxes = [box1, box2, box3, box4, box5, box6, box7, box8, box9, box10, box11, box12, box13, box14]

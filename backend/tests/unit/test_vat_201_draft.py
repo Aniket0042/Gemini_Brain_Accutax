@@ -12,6 +12,14 @@ from gemini_brain.vat_review.scan import Scan
 D = dt.date
 
 
+@pytest.fixture(autouse=True)
+def _cube_members(monkeypatch):
+    """No live Cube catalog in unit tests: the supplier's TRN and country are there unless a test says otherwise."""
+    from gemini_brain.vat_review import tool as review_tool
+    monkeypatch.setattr(review_tool, "_has_trn", lambda *a, **k: True)
+    monkeypatch.setattr(review_tool, "_has_country", lambda *a, **k: True)
+
+
 def mock_env(monkeypatch, sales_rows=None, bills=None, scan_complete=True, why_incomplete=None):
     def fake_load(query, *, organization_ids, subject, deadline):
         if any(m.startswith("vat_settings.") for m in query.get("dimensions", [])):
@@ -399,3 +407,36 @@ def test_candidate_bills_get_app_links(monkeypatch):
         {"document_number": "F-100", "document_id": 77}]}}], "rows": []}}]
     urls = links.document_links(data)
     assert "F-100" in urls and urls["F-100"].startswith("https://app.example")
+
+
+def test_a_cube_without_the_supplier_country_still_drafts_the_return(monkeypatch):
+    from gemini_brain.vat_review import tool as review_tool
+    monkeypatch.setattr(review_tool, "_has_country", lambda *a, **k: False)
+    mock_env(monkeypatch, sales_rows=DUBAI_SALES, bills=[_bill("B-100", 4000.0, 200.0)])
+    seen = {}
+
+    def fake_scan(*a, **kw):
+        seen.update(kw)
+        return Scan(bills=[{k: v for k, v in _bill("B-100", 4000.0, 200.0).items() if k != "vendor_country_code"}])
+
+    monkeypatch.setattr(form201, "scan_bills", fake_scan)
+    res = form201.run({}, organization_ids=[24], subject="t", deadline=1e12)
+    assert seen["with_country"] is False
+    assert _boxes(res)["9"]["vat"] == 200.0
+    assert res["organizations"][0]["reverse_charge"]["candidate_count"] == 0
+    assert any("country is not available" in n for n in res["notes"])
+
+
+def test_a_cube_error_on_bills_shows_boxes_9_to_14_unavailable(monkeypatch):
+    mock_env(monkeypatch, sales_rows=DUBAI_SALES)
+
+    def broken(*a, **kw):
+        raise form201.cube_client.CubeError("Cube refused the query (HTTP 400)")
+
+    monkeypatch.setattr(form201, "scan_bills", broken)
+    res = form201.run({}, organization_ids=[24], subject="t", deadline=1e12)
+    boxes = _boxes(res)
+    for box in ("9", "11", "13", "14"):
+        assert boxes[box]["status"] == "unavailable" and boxes[box]["vat"] is None, box
+    assert boxes["1b"]["vat"] == 500.0
+    assert any("bills could not be read" in n for n in res["notes"])
