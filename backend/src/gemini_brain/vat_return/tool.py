@@ -20,7 +20,7 @@ from gemini_brain.semantic import periods as semantic_periods
 from gemini_brain.semantic.catalog import ToolInputError
 from gemini_brain.semantic.cube_client import CubeError
 from gemini_brain.semantic.query_metrics import cell_text
-from gemini_brain.vat_return import penalty
+from gemini_brain.vat_return import penalty, reconcile
 from gemini_brain.vat_return import periods as tax_periods
 
 WHICH = ("last", "current", "next_due", "period")
@@ -163,6 +163,17 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
                     f"posted {ledger['output_vat_posted_by_sales']:,.2f} of output VAT and bills "
                     f"{ledger['input_vat_posted_by_bills']:,.2f} of input VAT, against {figures['output_vat']:,.2f} and "
                     f"{figures['input_vat']:,.2f} on the documents. Say both; do not call the position nil or final.")
+                sides = [s for s, ledger_key, doc_key in (("output", "output_vat_posted_by_sales", "output_vat"),
+                                                          ("input", "input_vat_posted_by_bills", "input_vat"))
+                         if abs(ledger[ledger_key] - figures[doc_key]) > 1]
+                why = reconcile.explain(org, start.isoformat(), end.isoformat(), subject, deadline, sides)
+                if why:
+                    entry["ledger_gap_explained"] = why
+                    notes.append(
+                        f"Organization {org}: ledger_gap_explained matches the ledger's VAT journals to the documents "
+                        "one by one. Explain the gap with these causes only (counts and amounts as given, effect_on_gap "
+                        "is ledger minus documents). Do not offer other causes, and do not name a cause that is not "
+                        "listed. If unexplained is not 0, say that part is unexplained.")
         out_orgs.append(entry)
     if any(not o["is_tax_period"] for o in out_orgs):
         notes.append("The dates asked are not a tax period, so they have no due date of their own. The due date to give "
@@ -173,7 +184,16 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
     rows = [{"organization_id": o["organization_id"], "period_start": o["period"]["start"], "period_end": o["period"]["end"],
              "output_vat": o["output_vat"], "input_vat": o["input_vat"], "net_vat_payable": o["net_vat_payable"],
              "due_date": o["due_date"] or (o.get("next_return") or {}).get("due_date")} for o in out_orgs]
-    return {"today": today.isoformat(), "organizations": out_orgs, "rows": rows, "row_count": len(rows), "notes": notes}
+    gap_causes = [{"organization_id": o["organization_id"], "side": side, "cause": c["cause"], "documents": c["documents"],
+                   "effect_on_gap_ledger_minus_documents": c["effect_on_gap"], "examples": ", ".join(c["examples"])}
+                  for o in out_orgs for side, v in (o.get("ledger_gap_explained") or {}).items() for c in v["causes"]]
+    gap_causes += [{"organization_id": o["organization_id"], "side": side, "cause": "Unexplained remainder",
+                    "documents": 0, "effect_on_gap_ledger_minus_documents": v["unexplained"], "examples": ""}
+                   for o in out_orgs for side, v in (o.get("ledger_gap_explained") or {}).items() if abs(v["unexplained"]) > 0.01]
+    result = {"today": today.isoformat(), "organizations": out_orgs, "rows": rows, "row_count": len(rows), "notes": notes}
+    if gap_causes:
+        result["gap_causes"] = gap_causes
+    return result
 
 
 def tool_spec() -> Dict[str, Any]:

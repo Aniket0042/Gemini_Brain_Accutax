@@ -60,6 +60,11 @@ INSTRUCTIONS = (
     "rule with search_vat_law: do not combine their results to decide it yourself. Also use ask_accutax for "
     "totals across many documents and for analysis over several measures. "
     "Quote figures and FTA citations exactly as returned; do not recompute or round them. "
+    "A list or count with no dates covers this year to date only. When the user says 'in total', 'all time', "
+    "'ever' or 'across all periods', pass the dates 2000-01-01 to 2100-12-31 (list_invoices) or use ask_accutax; "
+    "never answer such a question from a year-to-date list. "
+    "When get_vat_summary returns ledger_gap_explained, explain a ledger-versus-documents gap with exactly those "
+    "causes, counts and amounts, and no others. "
     "Never change a figure's sign. A negative revenue or expense line is a finding about the books, not a "
     "convention: show it as returned and say the report cannot be relied on. Name the period or as-of date "
     "with every ledger or VAT figure ('ledger, Q4 so far' or 'ledger, year to date'), and never call two "
@@ -176,7 +181,7 @@ DATA_FOOTER = "Data from Accutax, read directly from the books (no AI)"
 #: Keys of a data result that are for the agent's own loop, not for the host.
 _DATA_SKIP = {"type", "row_count", "available", "confident"}
 #: Columns of a data table that are internal ids (a finding's dismiss key), not facts for the host.
-_DATA_SKIP_COLUMNS = {"key"}
+_DATA_SKIP_COLUMNS = {"key", "ledger_gap_explained"}  # the latter is shown flat as gap_causes
 
 
 def _label(key: Any) -> str:
@@ -516,8 +521,13 @@ def build_server(upstream: Upstream | None = None, provider: AccutaxOAuthProvide
             description="sales_invoices: issued sales invoices; bills: purchase bills; open_receivables: sales "
                         "invoices still unpaid today; open_payables: bills still unpaid today.")],
         organization_id: OrgId = None,
-        period_start: Annotated[Date, Field(description="YYYY-MM-DD. sales_invoices and bills only.")] = None,
-        period_end: Annotated[Date, Field(description="YYYY-MM-DD. sales_invoices and bills only.")] = None,
+        period_start: Annotated[Date, Field(description="YYYY-MM-DD. sales_invoices and bills only. Omit both "
+                                                        "dates and only THIS YEAR TO DATE is listed. For 'in "
+                                                        "total', 'all time', 'ever' or 'across all periods' give "
+                                                        "2000-01-01 here and 2100-12-31 as period_end, so documents "
+                                                        "dated after today are counted too.")] = None,
+        period_end: Annotated[Date, Field(description="YYYY-MM-DD. sales_invoices and bills only. See period_start: "
+                                                      "2100-12-31 for all time.")] = None,
         counterparty: Annotated[Optional[str], Field(
             max_length=200, description="Only documents whose customer or supplier name contains this text. "
                                         "A placeholder such as [SUPPLIER_1] cannot be used here.")] = None,
