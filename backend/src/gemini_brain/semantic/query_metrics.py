@@ -125,6 +125,37 @@ def _pivot(rows: Sequence[Dict[str, Any]], view: View, granularity: str, measure
     return out
 
 
+PIVOT_MAX_SINGLE_PERIODS = 24
+
+
+def _single_org_table(rows: Sequence[Dict[str, Any]], view: View, granularity: str,
+                      measures: Sequence[str]) -> Optional[Dict[str, Any]]:
+    """One organization's trend with two or more measures: periods as rows, one column per measure, totals in code."""
+    bucket = f"{view.time_dimension}.{granularity}"
+    orgs = {str(r.get(f"{view.name}.organization_id") or "") for r in rows}
+    if len(orgs) != 1 or "" in orgs or len(measures) < 2:
+        return None
+    by_period: Dict[str, Dict[str, Decimal]] = {}
+    for r in rows:
+        period = str(r.get(bucket) or "")[:10]
+        if not period:
+            return None
+        for m in measures:
+            value = _dec(r.get(m))
+            if value is not None:
+                by_period.setdefault(period, {})[m] = value
+    if not by_period or len(by_period) > PIVOT_MAX_SINGLE_PERIODS:
+        return None
+    short = lambda m: m.split(".", 1)[-1]  # noqa: E731
+    table = [{"period": p[:7] if granularity == "month" else p,
+              **{short(m): (str(by_period[p][m]) if m in by_period[p] else "no data") for m in measures}}
+             for p in sorted(by_period)]
+    total = {"period": "Total", **{short(m): str(sum((by_period[p][m] for p in by_period if m in by_period[p]), Decimal(0)))
+                                   for m in measures}}
+    name = str(rows[0].get(f"{view.name}.organization_name") or next(iter(orgs)))
+    return {"organization": name, "rows": table, "total": total}
+
+
 def summarize(rows: Sequence[Dict[str, Any]], query: Dict[str, Any], view: View,
               granularity: Optional[str]) -> Dict[str, Any]:
     """Figures worked out in code so the model never adds up rows itself.
@@ -168,7 +199,7 @@ def summarize(rows: Sequence[Dict[str, Any]], query: Dict[str, Any], view: View,
                   for m, s in by_measure.items()}
             for org, by_measure in per_org.items()
         }
-        table = _pivot(rows, view, granularity, measures)
+        table = _pivot(rows, view, granularity, measures) or _single_org_table(rows, view, granularity, measures)
         if table:
             out["pivot"] = table
     return out

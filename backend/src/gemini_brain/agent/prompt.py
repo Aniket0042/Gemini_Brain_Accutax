@@ -140,8 +140,9 @@ Answer format
   (a) "by month" (or quarter) for each organization: when the tool result has "pivot", show that table exactly
   (periods as rows, one column per organization labelled "Org <id>", its total row), say once which Org number is which
   organization (pivot.columns), and add best or worst months only if asked;
-  (b) ONE organization's monthly or quarterly trend: one row per period (up to 24), one column per measure asked,
-  never only the total, best and worst.
+  (b) ONE organization's monthly or quarterly trend: when the tool result has "pivot" (organization, rows, total),
+  show it exactly, one row per period and one column per measure, plus its total row; never only the total, best and
+  worst, and never "summaries rather than a full table" because the figures look odd (say they look odd instead).
 - Document lists: when the user asks for a number of documents ("30 largest"), fetch and list exactly that many
   (list_documents takes a limit up to 100). Without a number, show at most 15 rows. When there are more than you
   show, give the true count and total from query_metrics (for example sales.invoice_count and sales.net_sales)
