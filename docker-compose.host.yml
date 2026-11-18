@@ -1,0 +1,60 @@
+# Accutax AI on a shared server whose other services listen on 127.0.0.1
+# (the VM: Accutax backend :3001, Cube :4000; EC2: DB tunnel :5435).
+#
+# Both containers use the server's own network, so the existing .env works unchanged:
+# 127.0.0.1 inside the container is the server itself. Nothing is published on a new
+# public port; the API listens on 127.0.0.1 only, and the web container on AI_WEB_PORT.
+#
+#   docker compose -f docker-compose.host.yml --env-file docker/deploy.env up -d --build
+#   (Podman: podman-compose -f docker-compose.host.yml --env-file docker/deploy.env up -d --build)
+#
+# Pick ports nothing else uses (check with: ss -tlnp). This file is standalone, not an
+# override of docker-compose.yml.
+
+name: accutax-ai
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    image: accutax-ai-api:${AI_IMAGE_TAG:-latest}
+    network_mode: host
+    env_file:
+      - ${AI_ENV_FILE:-.env}
+    environment:
+      VAT_KB_DIR: /kb
+      API_BIND: 127.0.0.1
+      API_PORT: ${AI_API_PORT:-8021}
+    volumes:
+      - ai-data:/data
+      # :z lets SELinux hosts (the VM runs CentOS Stream) share the folder; Docker on
+      # Ubuntu ignores it.
+      - ${AI_KB_DIR:-./vat_kb_data}:/kb:z
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      args:
+        VITE_AUTH_MODE: ${VITE_AUTH_MODE:-legacy}
+        VITE_BFF_API_URL: ${VITE_BFF_API_URL:-}
+        VITE_HUB_URL: ${VITE_HUB_URL:-}
+        VITE_ACCUTAX_APP_URL: ${VITE_ACCUTAX_APP_URL:-}
+        VITE_SHOW_SQL_TRACES: ${VITE_SHOW_SQL_TRACES:-}
+        VITE_SHOW_API_TRACES: ${VITE_SHOW_API_TRACES:-}
+        VITE_SHOW_LLM_TRACES: ${VITE_SHOW_LLM_TRACES:-}
+        VITE_SHOW_PRIVACY_BADGE: ${VITE_SHOW_PRIVACY_BADGE:-}
+        ALLOW_INSECURE_BFF: ${ALLOW_INSECURE_BFF:-}
+    image: accutax-ai-web:${AI_IMAGE_TAG:-latest}
+    network_mode: host
+    environment:
+      API_UPSTREAM: 127.0.0.1:${AI_API_PORT:-8021}
+      WEB_LISTEN_PORT: ${AI_WEB_PORT:-8020}
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  ai-data:

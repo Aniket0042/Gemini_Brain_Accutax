@@ -1,0 +1,36 @@
+# Keeps secrets, local junk and heavy folders out of the Docker build.
+# Secrets come in at run time through the env file, never inside the image.
+
+.git
+.claude
+**/.env
+**/.env.*
+!**/.env.example
+**/*.env
+scratch/
+toke.py
+
+# Python leftovers
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/*.egg-info
+backend/.venv
+backend/venv
+backend/logs
+backend/data
+backend/tests
+backend/scripts/eval
+
+# Frontend leftovers (the image builds its own)
+frontend/node_modules
+frontend/dist
+
+# Not needed to run the app. These patterns match the top level only,
+# so backend/src/gemini_brain/knowledge/accutax_guide.md (read at run time) stays in.
+docs
+manual_test_files
+semantic
+*.docx
+*.pdf
+*.md
