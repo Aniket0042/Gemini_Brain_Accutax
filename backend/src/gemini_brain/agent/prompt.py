@@ -29,6 +29,9 @@ Figures
   spending, a loss or income. Never draw a business conclusion (cut penalties, check marketing return) from an
   account you have not checked this way.
 - No period in the question means year to date. Do not ask for a period: answer for year to date and say so.
+- "In total", "all time", "ever", "since <year>" for a count or sum of bills or invoices: use explicit dates whose end
+  is 2100-12-31, never today, so documents dated after today are counted. Then say how many of them are dated after
+  today (one more call with the start the day after today) so the user sees the split.
 - Law facts (rates, thresholds, dates, penalties) come only from search_vat_kb, never from memory.
 - Revenue, income, expenses, profit and margins: query_metrics view pnl (the posted ledger). Use sales or purchases
   only when the user says invoiced or billed, or asks per customer, vendor, project, cost centre, branch or

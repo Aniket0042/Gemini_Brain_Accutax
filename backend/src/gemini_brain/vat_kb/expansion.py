@@ -33,6 +33,13 @@ LEGAL_TERMS: list[tuple[str, str]] = [
     (r"\b(wrong|incorrect|exempt|zero-rated|standard-rated)\s+box\b|\b(mistake|error|errors|misreport\w*)\b.{0,40}\breturn\b",
      "error or omission in the Tax Return correction voluntary disclosure"),
     (r"\b(vat|tax)\s+group\b", "Tax Group"),
+    # When a VAT return is due: Executive Regulation Article 64 and Taxable Person Guide 11.3.1 say "the 28th
+    # (twenty eighth) day following the end of the Tax Period", which plain "deadline to file" does not match.
+    # Penalty questions are left to the penalty terms above.
+    (r"^(?!.*\bpenalt)(?=.*\b(deadline|due|when|by when|last (day|date)|how long|submit\w*|fil(e|ed|ing))\b)"
+     r".*\b(vat |tax )?returns?\b",
+     "Tax Return must be received by the Authority no later than the 28th (twenty eighth) day following the "
+     "end of the Tax Period; due date for submitting tax returns and making a payment of payable tax"),
     # Supplier due diligence: FTA Decision No. 13 of 2026 (bank account check above AED 375,000,
     # exception below AED 10,000 unless the supplier exceeds AED 100,000).
     (r"\b(check\w*|verif\w*|due diligence|vet\w*)\b.{0,60}\bsuppliers?\b|\bsuppliers?\b.{0,60}\b(check\w*|verif\w*|due diligence)\b",
