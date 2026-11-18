@@ -1,0 +1,514 @@
+{
+ "description": "Re-run of 8 cases after seed fixes (18 Nov 2026)",
+ "truth": {
+  "alnoor": {
+   "org_id": 10173,
+   "revenue_2023": 10148188.97,
+   "revenue_2024": 12144551.52,
+   "revenue_2025": 14762060.79,
+   "revenue_ytd": 13367020.89,
+   "net_profit_2024": 835411.32,
+   "net_profit_2025": 1209090.53,
+   "net_profit_ytd": 1407295.95,
+   "ar_outstanding": 4071317.7,
+   "ar_overdue": 2745898.65,
+   "bank_balance": 3244390.98,
+   "inventory_value": 292272.87,
+   "tracked_items": 10,
+   "uncategorized_txns": 85,
+   "unreconciled_txns": 246,
+   "bank_txns": 6979
+  },
+  "desertrose": {
+   "org_id": 10174,
+   "revenue_2023": 10704044.1,
+   "revenue_2024": 7785621.9,
+   "revenue_2025": 11760173.4,
+   "revenue_ytd": 11556921.3,
+   "net_profit_2024": -343257.77,
+   "net_profit_2025": 742667.45,
+   "net_profit_ytd": 1149146.25,
+   "ar_outstanding": 4380834.79,
+   "ar_overdue": 3366935.36,
+   "bank_balance": 3514419.65,
+   "inventory_value": 0,
+   "tracked_items": 0,
+   "uncategorized_txns": 26,
+   "unreconciled_txns": 227,
+   "bank_txns": 2747
+  },
+  "spiceroute": {
+   "org_id": 10175,
+   "revenue_2023": 4642606.2,
+   "revenue_2024": 5050526.21,
+   "revenue_2025": 5984058.98,
+   "revenue_ytd": 5570833.42,
+   "net_profit_2024": 193054.19,
+   "net_profit_2025": 652501.67,
+   "net_profit_ytd": 817205.2,
+   "ar_outstanding": 411579.43,
+   "ar_overdue": 280591.68,
+   "bank_balance": 2701748.45,
+   "inventory_value": 0,
+   "tracked_items": 0,
+   "uncategorized_txns": 29,
+   "unreconciled_txns": 109,
+   "bank_txns": 4199
+  },
+  "pixelforge": {
+   "org_id": 10176,
+   "revenue_2023": 933072,
+   "revenue_2024": 1456904,
+   "revenue_2025": 2104741,
+   "revenue_ytd": 2689114,
+   "net_profit_2024": -454493.4,
+   "net_profit_2025": -122866.15,
+   "net_profit_ytd": 463350.58,
+   "ar_outstanding": 754011.88,
+   "ar_overdue": 391008.92,
+   "bank_balance": 371525.92,
+   "inventory_value": 0,
+   "tracked_items": 0,
+   "uncategorized_txns": 87,
+   "unreconciled_txns": 2187,
+   "bank_txns": 7007
+  },
+  "gulfmeridian": {
+   "org_id": 10177,
+   "revenue_2023": 12144742.68,
+   "revenue_2024": 13754080.25,
+   "revenue_2025": 14997800.51,
+   "revenue_ytd": 15612735.26,
+   "net_profit_2024": 284305.04,
+   "net_profit_2025": 742274.26,
+   "net_profit_ytd": 1401492.05,
+   "ar_outstanding": 5140859.85,
+   "ar_overdue": 2664683.36,
+   "bank_balance": 1559909.37,
+   "inventory_value": 0,
+   "tracked_items": 0,
+   "uncategorized_txns": 51,
+   "unreconciled_txns": 189,
+   "bank_txns": 6200
+  },
+  "alshifa": {
+   "org_id": 10179,
+   "revenue_2023": 6610784.54,
+   "revenue_2024": 7495719.8,
+   "revenue_2025": 8448617.79,
+   "revenue_ytd": 7820430.67,
+   "net_profit_2024": 277303.92,
+   "net_profit_2025": 841385.56,
+   "net_profit_ytd": 1096504.43,
+   "ar_outstanding": 1902116.71,
+   "ar_overdue": 975828.62,
+   "bank_balance": 2418444.29,
+   "inventory_value": 2204.7,
+   "tracked_items": 1,
+   "uncategorized_txns": 124,
+   "unreconciled_txns": 448,
+   "bank_txns": 12755
+  },
+  "horizon": {
+   "org_id": 10180,
+   "revenue_2023": 10001809,
+   "revenue_2024": 11129805,
+   "revenue_2025": 12063256,
+   "revenue_ytd": 12300219,
+   "net_profit_2024": 1698822.63,
+   "net_profit_2025": 1919965.04,
+   "net_profit_ytd": 2344547.91,
+   "ar_outstanding": 3392846.88,
+   "ar_overdue": 2793859.68,
+   "bank_balance": 7786048.73,
+   "inventory_value": 0,
+   "tracked_items": 0,
+   "uncategorized_txns": 48,
+   "unreconciled_txns": 187,
+   "bank_txns": 5928
+  },
+  "emiratesfresh": {
+   "org_id": 10181,
+   "revenue_2023": 22987563.11,
+   "revenue_2024": 26564343.57,
+   "revenue_2025": 30180389.2,
+   "revenue_ytd": 31514490.38,
+   "net_profit_2024": 588316.25,
+   "net_profit_2025": 954848.1,
+   "net_profit_ytd": 1535398.52,
+   "ar_outstanding": 8221717.07,
+   "ar_overdue": 5308061.56,
+   "bank_balance": 777209.49,
+   "inventory_value": 836529.94,
+   "tracked_items": 6,
+   "uncategorized_txns": 79,
+   "unreconciled_txns": 293,
+   "bank_txns": 9489
+  },
+  "summit": {
+   "org_id": 10182,
+   "revenue_2023": 13060347.7,
+   "revenue_2024": 14021168.4,
+   "revenue_2025": 15327532.7,
+   "revenue_ytd": 14997468,
+   "net_profit_2024": 2598437.04,
+   "net_profit_2025": 2985310.56,
+   "net_profit_ytd": 4172477.81,
+   "ar_outstanding": 3941726.79,
+   "ar_overdue": 2352649.41,
+   "bank_balance": 11983707.76,
+   "inventory_value": 0,
+   "tracked_items": 0,
+   "uncategorized_txns": 18,
+   "unreconciled_txns": 66,
+   "bank_txns": 2565
+  },
+  "brightminds": {
+   "org_id": 10183,
+   "revenue_2023": 22105672,
+   "revenue_2024": 24012246,
+   "revenue_2025": 26378399,
+   "revenue_ytd": 27848050,
+   "net_profit_2024": 4345476.56,
+   "net_profit_2025": 5534491.27,
+   "net_profit_ytd": 9509022.66,
+   "ar_outstanding": 4395430.92,
+   "ar_overdue": 4395430.92,
+   "bank_balance": 23826204.59,
+   "inventory_value": 157107.56,
+   "tracked_items": 1,
+   "uncategorized_txns": 44,
+   "unreconciled_txns": 199,
+   "bank_txns": 9135
+  }
+ },
+ "cases": [
+  {
+   "id": "S14",
+   "asked": "2026-11-18",
+   "orgs": [
+    10173
+   ],
+   "question": "What is total receivables outstanding right now?",
+   "kind": "metric",
+   "behavior": "answer",
+   "must_show": "",
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "outstanding",
+       "open_count"
+      ]
+     }
+    ]
+   },
+   "context": [],
+   "truth": {
+    "ar_outstanding": 4071317.7
+   }
+  },
+  {
+   "id": "S17",
+   "asked": "2026-11-18",
+   "orgs": [
+    10183
+   ],
+   "question": "How much tuition is still unpaid?",
+   "kind": "metric",
+   "behavior": "answer",
+   "must_show": "",
+   "expect": {
+    "ref": [
+     {
+      "view": "receivables",
+      "measures": [
+       "outstanding",
+       "open_count"
+      ]
+     }
+    ]
+   },
+   "context": [],
+   "truth": {
+    "ar_outstanding": 4395430.92
+   }
+  },
+  {
+   "id": "S26",
+   "asked": "2026-11-18",
+   "orgs": [
+    10182
+   ],
+   "question": "How many bank transactions are waiting to be categorised?",
+   "kind": "metric",
+   "behavior": "answer",
+   "must_show": "",
+   "expect": {
+    "ref": [
+     {
+      "view": "bank_accounts",
+      "measures": [
+       "uncategorized_transactions"
+      ]
+     }
+    ]
+   },
+   "context": [],
+   "truth": {
+    "uncategorized_txns": 0
+   }
+  },
+  {
+   "id": "S29",
+   "asked": "2026-11-18",
+   "orgs": [
+    10181
+   ],
+   "question": "Which items are below their reorder level?",
+   "kind": "metric",
+   "behavior": "answer",
+   "must_show": "Lists the Emirates Fresh items at or below reorder level (see truth)",
+   "expect": {
+    "ref": [
+     {
+      "view": "inventory",
+      "measures": [
+       "quantity_on_hand",
+       "reorder_level"
+      ],
+      "group_by": [
+       "item_name"
+      ],
+      "filters": [
+       [
+        "below_reorder_level",
+        "equals",
+        [
+         "yes"
+        ]
+       ]
+      ]
+     }
+    ]
+   },
+   "context": [],
+   "truth": {
+    "items_below_reorder_emiratesfresh": [
+     {
+      "org": "Emirates Fresh Foods Trading LLC",
+      "item": "Fresh Vegetables Mixed Crate",
+      "qoh": "650.0000",
+      "reorder_level": "915.0000"
+     },
+     {
+      "org": "Emirates Fresh Foods Trading LLC",
+      "item": "Premium Ajwa Dates 5kg Box",
+      "qoh": "471.0000",
+      "reorder_level": "665.0000"
+     }
+    ]
+   }
+  },
+  {
+   "id": "M08",
+   "asked": "2026-11-18",
+   "orgs": [
+    10173,
+    10174,
+    10175,
+    10176,
+    10177,
+    10179,
+    10180,
+    10181,
+    10182,
+    10183
+   ],
+   "question": "Which companies have bank transactions waiting to be categorised?",
+   "kind": "metric",
+   "behavior": "answer",
+   "must_show": "",
+   "expect": {
+    "ref": [
+     {
+      "view": "bank_accounts",
+      "measures": [
+       "uncategorized_transactions"
+      ]
+     }
+    ]
+   },
+   "context": [],
+   "truth": {
+    "Al Noor Electronics Trading LLC": 4,
+    "Al Shifa Medical Centre LLC": 1,
+    "Bright Minds Private Academy LLC": 2,
+    "Desert Rose Contracting LLC": 1,
+    "Gulf Meridian Logistics LLC": 1,
+    "Horizon Property Management LLC": 2,
+    "Pixel Forge Technologies FZ-LLC": 1,
+    "Spice Route Restaurants LLC": 1
+   }
+  },
+  {
+   "id": "D-DUP-alnoor-2024-25",
+   "asked": "2026-11-18",
+   "orgs": [
+    10173
+   ],
+   "question": "Check my sales invoices for possible duplicates in 2024 and 2025",
+   "kind": "metric",
+   "behavior": "answer",
+   "must_show": "Finds invoices that repeat the same customer, amount and date; planted duplicates listed in truth",
+   "expect": {
+    "ref": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales",
+       "invoice_count"
+      ],
+      "group_by": [
+       "customer_name",
+       "document_date"
+      ],
+      "period": [
+       "2024-01-01",
+       "2025-12-31"
+      ],
+      "limit": 20
+     }
+    ]
+   },
+   "context": [],
+   "truth": {
+    "duplicate_invoices": [
+     {
+      "number": "INV-2024-00617",
+      "amount": 3108,
+      "of": "INV-2024-00614"
+     },
+     {
+      "number": "INV-2024-00809",
+      "amount": 10760.4,
+      "of": "INV-2024-00805"
+     },
+     {
+      "number": "INV-2025-00525",
+      "amount": 41055,
+      "of": "INV-2025-00523"
+     }
+    ]
+   }
+  },
+  {
+   "id": "D-DUP-emiratesfresh-2022",
+   "asked": "2026-11-18",
+   "orgs": [
+    10181
+   ],
+   "question": "Check my sales invoices for possible duplicates in 2022",
+   "kind": "metric",
+   "behavior": "answer",
+   "must_show": "Finds invoices that repeat the same customer, amount and date; planted duplicates listed in truth",
+   "expect": {
+    "ref": [
+     {
+      "view": "sales",
+      "measures": [
+       "net_sales",
+       "invoice_count"
+      ],
+      "group_by": [
+       "customer_name",
+       "document_date"
+      ],
+      "period": [
+       "2022-01-01",
+       "2022-12-31"
+      ],
+      "limit": 20
+     }
+    ]
+   },
+   "context": [],
+   "truth": {
+    "duplicate_invoices": [
+     {
+      "number": "INV-2022-00677",
+      "amount": 43662.49,
+      "of": "INV-2022-00672"
+     },
+     {
+      "number": "INV-2022-01054",
+      "amount": 5840.1,
+      "of": "INV-2022-01053"
+     }
+    ]
+   }
+  },
+  {
+   "id": "D-VAT-desertrose-2022-23",
+   "asked": "2026-11-18",
+   "orgs": [
+    10174
+   ],
+   "question": "Did we charge VAT correctly on our invoices between 2022 and 2023? Anything look wrong?",
+   "kind": "partial",
+   "behavior": "partial",
+   "must_show": "Either flags planted mistakes (zero VAT on domestic sale, VAT charged on export) or states that line-level checks are not available",
+   "expect": {
+    "ref": [
+     {
+      "view": "vat",
+      "measures": [
+       "output_vat"
+      ],
+      "period": [
+       "2022-01-01",
+       "2023-12-31"
+      ]
+     }
+    ]
+   },
+   "context": [],
+   "truth": {
+    "vat_defects": [
+     {
+      "type": "SUPPLIER_MISSING_TRN_WITH_VAT"
+     },
+     {
+      "type": "SUPPLIER_MISSING_TRN_WITH_VAT"
+     },
+     {
+      "type": "ZERO_VAT_ON_DOMESTIC_SALE",
+      "number": "INV-2022-00105",
+      "amount": 50040
+     },
+     {
+      "type": "ZERO_VAT_ON_DOMESTIC_SALE",
+      "number": "INV-2023-00022",
+      "amount": 183300
+     },
+     {
+      "type": "ZERO_VAT_ON_DOMESTIC_SALE",
+      "number": "INV-2023-00119",
+      "amount": 56738.4
+     },
+     {
+      "type": "BILL_WITHOUT_VAT_FROM_VAT_REGISTERED_SUPPLIER",
+      "number": "GULF-2300959",
+      "amount": 42223.83
+     },
+     {
+      "type": "BILL_WITHOUT_VAT_FROM_VAT_REGISTERED_SUPPLIER",
+      "number": "GULF-2501438",
+      "amount": 24259.55
+     }
+    ]
+   }
+  }
+ ]
+}
