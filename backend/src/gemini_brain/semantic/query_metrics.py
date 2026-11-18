@@ -84,6 +84,47 @@ def _dec(value: Any) -> Optional[Decimal]:
         return None
 
 
+PIVOT_MAX_PERIODS, PIVOT_MAX_ORGS, PIVOT_MAX_MEASURES = 12, 10, 2
+
+
+def _pivot(rows: Sequence[Dict[str, Any]], view: View, granularity: str, measures: Sequence[str]) -> Optional[Dict[str, Any]]:
+    """Periods as rows and one column per organization, built in code so the model copies it instead of composing it.
+
+    Only for a trend over several organizations that fits on a screen (12 periods, 10 organizations, 2 measures).
+    Columns are "Org <id>" (`columns` says which is which); `total` is each organization's sum, worked out here.
+    """
+    bucket = f"{view.time_dimension}.{granularity}"
+    names: Dict[str, str] = {}
+    cells: Dict[tuple, Dict[str, Decimal]] = {}
+    periods: List[str] = []
+    for r in rows:
+        oid = str(r.get(f"{view.name}.organization_id") or "")
+        period = str(r.get(bucket) or "")[:10]
+        if not oid or not period:
+            return None
+        names[oid] = str(r.get(f"{view.name}.organization_name") or oid)
+        if period not in periods:
+            periods.append(period)
+        for m in measures:
+            value = _dec(r.get(m))
+            if value is not None:
+                cells.setdefault((period, oid), {})[m] = value
+    if len(names) < 2 or len(names) > PIVOT_MAX_ORGS or len(periods) > PIVOT_MAX_PERIODS:
+        return None
+    periods.sort()
+    org_ids = sorted(names, key=lambda o: int(o) if o.isdigit() else 0)
+    label = (lambda o: f"Org {o}")
+    out: Dict[str, Any] = {"columns": {label(o): names[o] for o in org_ids}, "measures": {}}
+    for m in measures[:PIVOT_MAX_MEASURES]:
+        table = [{"period": p[:7] if granularity == "month" else p,
+                  **{label(o): (str(cells[(p, o)][m]) if m in cells.get((p, o), {}) else "no data") for o in org_ids}}
+                 for p in periods]
+        total = {"period": "Total", **{label(o): str(sum((cells[(p, o)][m] for p in periods if m in cells.get((p, o), {})),
+                                                       Decimal(0))) for o in org_ids}}
+        out["measures"][m] = {"rows": table, "total": total}
+    return out
+
+
 def summarize(rows: Sequence[Dict[str, Any]], query: Dict[str, Any], view: View,
               granularity: Optional[str]) -> Dict[str, Any]:
     """Figures worked out in code so the model never adds up rows itself.
@@ -127,6 +168,9 @@ def summarize(rows: Sequence[Dict[str, Any]], query: Dict[str, Any], view: View,
                   for m, s in by_measure.items()}
             for org, by_measure in per_org.items()
         }
+        table = _pivot(rows, view, granularity, measures)
+        if table:
+            out["pivot"] = table
     return out
 
 

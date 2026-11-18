@@ -182,7 +182,7 @@ def render_answer(envelope: dict[str, Any], max_rows: int | None = None, max_cha
 #: Under a data tool's result: where it came from and what it is not.
 DATA_FOOTER = "Data from Accutax, read directly from the books (no AI)"
 #: Keys of a data result that are for the agent's own loop, not for the host.
-_DATA_SKIP = {"type", "row_count", "available", "confident"}
+_DATA_SKIP = {"type", "row_count", "available", "confident", "pivot"}  # pivot is for the portal agent
 #: Columns of a data table that are internal ids (a finding's dismiss key), not facts for the host.
 _DATA_SKIP_COLUMNS = {"key", "ledger_gap_explained"}  # the latter is shown flat as gap_causes
 

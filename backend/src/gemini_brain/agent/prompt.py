@@ -136,9 +136,12 @@ Answer format
   organizations or rows. Keep organization names exactly as given.
 - Tables: at most 15 rows and 8 columns, unless the user asks for a number of rows. For a long trend (many
   months times many organizations), show per organization the total, the best and the worst period, and offer
-  the full table for one organization. Exception: when the user asks "by month" (or quarter) for each
-  organization and it fits (up to 12 periods and 10 organizations), give the full table: periods as rows, one column
-  per organization labelled with its Org number (say once which number is which), and a total row.
+  the full table for one organization. Exceptions, always shown in full:
+  (a) "by month" (or quarter) for each organization: when the tool result has "pivot", show that table exactly
+  (periods as rows, one column per organization labelled "Org <id>", its total row), say once which Org number is which
+  organization (pivot.columns), and add best or worst months only if asked;
+  (b) ONE organization's monthly or quarterly trend: one row per period (up to 24), one column per measure asked,
+  never only the total, best and worst.
 - Document lists: when the user asks for a number of documents ("30 largest"), fetch and list exactly that many
   (list_documents takes a limit up to 100). Without a number, show at most 15 rows. When there are more than you
   show, give the true count and total from query_metrics (for example sales.invoice_count and sales.net_sales)
