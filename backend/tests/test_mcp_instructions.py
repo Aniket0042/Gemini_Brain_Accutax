@@ -48,3 +48,7 @@ def test_record_links_only_for_https_app_address(monkeypatch):
     assert mcp_data._url("bill", 12135) == ""
     monkeypatch.setattr(links, "_app_url", lambda: "https://app.example.ae")
     assert mcp_data._url("bill", 12135).startswith("https://app.example.ae/")
+
+
+def test_lists_are_not_grouped_or_tallied_by_hand():
+    assert "Do not group or tally a list's rows yourself" in INSTRUCTIONS
