@@ -60,6 +60,10 @@ INSTRUCTIONS = (
     "rule with search_vat_law: do not combine their results to decide it yourself. Also use ask_accutax for "
     "totals across many documents and for analysis over several measures. "
     "Quote figures and FTA citations exactly as returned; do not recompute or round them. "
+    "Never change a figure's sign. A negative revenue or expense line is a finding about the books, not a "
+    "convention: show it as returned and say the report cannot be relied on. Name the period or as-of date "
+    "with every ledger or VAT figure ('ledger, Q4 so far' or 'ledger, year to date'), and never call two "
+    "figures a match unless the numbers and periods are the same. "
     "Any list a tool returns may be capped (search always is): never count its rows or add them up to answer "
     "'how many' or 'how much'; use the total the tool reports, or call list_invoices or run_report for it. "
     "Penalty rates, recovery deadlines and other legal figures: give them only as the latest result states them, "
@@ -122,6 +126,8 @@ def render_table(block: dict[str, Any], max_rows: int) -> str:
     shown = min(len(rows), max_rows)
     if total > shown:
         lines.append(f"\n_{shown} of {total} rows shown. Ask a narrower question for the rest._")
+    elif shown > 1:
+        lines.append(f"\n_{shown} rows in total._")
     return "\n".join(lines)
 
 

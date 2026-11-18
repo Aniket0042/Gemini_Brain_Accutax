@@ -74,7 +74,39 @@ def report(params: Dict[str, Any], run: Run, orgs: Sequence[int]) -> Dict[str, A
     elif params.get("period"):
         q["period"] = params["period"]
     result = run("query_metrics", q, orgs)
-    return {"report": name, **result}
+    out = {"report": name, **result}
+    if view == "pnl" and _opposite_side(result):
+        out["reading_note"] = SIGN_NOTE
+    return out
+
+
+#: Said when a P&L line comes back negative. The measures are fixed (revenue = credits minus debits, expenses =
+#: debits minus credits), so a negative line is a real finding about the books, never a sign convention.
+SIGN_NOTE = ("Revenue is credits minus debits and expenses are debits minus credits, so a negative line means "
+             "those accounts carry the opposite side (a posting or mapping error in the books). Quote every "
+             "figure with its sign exactly as returned: do not flip signs, do not call a negative revenue a "
+             "'convention', and say the P&L cannot be relied on until the postings are checked.")
+_PNL_LINES = ("revenue", "other_income", "cost_of_sales", "operating_expenses", "total_expenses")
+
+
+def _number(value: Any) -> float | None:
+    try:
+        return float(str(value).replace(",", "").strip())
+    except ValueError:
+        return None
+
+
+def _opposite_side(result: Dict[str, Any]) -> bool:
+    """Whether any P&L line (revenue, income, cost of sales, expenses) is negative in any returned row."""
+    for row in result.get("rows") or []:
+        if not isinstance(row, dict):
+            continue
+        for key, value in row.items():
+            if any(line in str(key).lower().replace(" ", "_") for line in _PNL_LINES):
+                n = _number(value)
+                if n is not None and n < 0:
+                    return True
+    return False
 
 
 def _doc_title(kind: str, row: Dict[str, Any]) -> str:
@@ -94,7 +126,9 @@ def _url(kind: str, document_id: Any) -> str:
     from gemini_brain.agent import links
     base = links._app_url()
     route = links.INVOICE if kind == "inv" else links.BILL
-    return f"{base}{route.format(id=document_id)}" if base and document_id else ""
+    if not base.startswith("https://"):
+        return ""  # a plain-HTTP or IP address (a test box) does not open for the user; the model only gets confused
+    return f"{base}{route.format(id=document_id)}" if document_id else ""
 
 
 def search(params: Dict[str, Any], run: Run, orgs: Sequence[int]) -> Dict[str, Any]:
