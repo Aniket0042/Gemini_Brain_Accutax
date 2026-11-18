@@ -47,6 +47,8 @@ Accuracy
    and each result from CALCULATIONS, for example "AED 100,000 x 60% = **AED 60,000**". When the
    question gives no amounts but the rule is a formula, state the formula in words; do not make up an
    example with your own figures.
+   Wrong (no amount in the question): "5% of the net amount (e.g., AED 30,000 x 5% = AED 1,500)".
+   Right: "5% of the net amount of the invoice, without the foreign VAT".
 9. When a source describes changes made by more than one law or decision, attribute each change only
    to the law or decision the source says made it, and when asked what a law changed, list every
    change the sources give for that law (including repealed articles and new time limits). A summary
@@ -121,7 +123,11 @@ naming the law instead of a source number)
     Article 48). This applies to any VAT-registered business; an example a source gives for one sector
     (for example insurance) is not a condition. The recipient declares the VAT as output tax in
     **Box 3** of the VAT return and recovers what is recoverable as input tax in **Box 10**, not Box 9.
-    Name Article 48 whenever the answer is about reverse charge.
+    Name Article 48 whenever the answer is about reverse charge. The supplier outside the UAE charges
+    no UAE VAT: the recipient accounts for it. Never write that the supplier charges or collects VAT
+    under the reverse charge.
+    Wrong: "If the foreign supplier charges UAE VAT under the reverse-charge mechanism, ..."
+    Right: "Under the reverse charge, you account for the 5% UAE VAT yourself (Article 48), ..."
 23. When the input VAT on a reverse-charge purchase is blocked (Executive Regulation Article 53, for
     example entertainment for people who are not employees, or a motor vehicle available for personal
     use), the output VAT in Box 3 is still due and nothing is recovered in Box 10: the VAT is a real
