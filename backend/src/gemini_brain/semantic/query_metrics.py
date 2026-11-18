@@ -243,6 +243,21 @@ def _pick(names: Any, allowed: Dict[str, str], kind: str, lo: int, hi: int) -> L
     return names
 
 
+_TRUE_WORDS, _FALSE_WORDS = {"true", "yes", "y", "1"}, {"false", "no", "n", "0"}
+
+
+def _yes_no_values(description: Optional[str], op: str, values: List[str]) -> List[str]:
+    """Flag dimensions hold the strings 'yes' and 'no' (their description starts "yes when ...").
+
+    Models often send true/false, which matches no row and reads as "none found". Map them here;
+    any other value (for example 'No due date') is left alone.
+    """
+    if op not in ("equals", "notEquals") or not description or not description.lstrip().lower().startswith("yes when"):
+        return values
+    return ["yes" if v.strip().lower() in _TRUE_WORDS else "no" if v.strip().lower() in _FALSE_WORDS else v
+            for v in values]
+
+
 def _filters(raw: Any, view: View) -> List[Dict[str, Any]]:
     if not isinstance(raw, list):
         raise ToolInputError("filters must be a list")
@@ -258,7 +273,7 @@ def _filters(raw: Any, view: View) -> List[Dict[str, Any]]:
             raise ToolInputError(f"Unknown filter member {member!r}")
         if op not in OPERATORS:
             raise ToolInputError(f"Unsupported operator {op!r}. Use one of {list(OPERATORS)}")
-        values = [str(v) for v in (f.get("values") or [])]
+        values = _yes_no_values(view.dimensions.get(member), op, [str(v) for v in (f.get("values") or [])])
         if len(values) > MAX_FILTER_VALUES:
             raise ToolInputError(f"At most {MAX_FILTER_VALUES} values per filter")
         if op not in ("set", "notSet") and not values:

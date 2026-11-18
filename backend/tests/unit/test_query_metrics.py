@@ -123,3 +123,30 @@ def test_tool_spec_lists_only_catalog_views():
     spec = query_metrics.tool_spec(CATALOG)["toolSpec"]
     assert spec["inputSchema"]["json"]["properties"]["view"]["enum"] == ["balance_sheet", "pnl", "receivables"]
     assert "measure pnl.revenue" in spec["description"]
+
+
+FLAG_CATALOG = parse_meta({"cubes": [
+    {"name": "inventory", "type": "view", "description": "Stock today.", "meta": {"kind": "current"},
+     "measures": [{"name": "inventory.quantity_on_hand"}],
+     "dimensions": [{"name": "inventory.organization_id"}, {"name": "inventory.organization_name"},
+                    {"name": "inventory.currency"}, {"name": "inventory.item_name"},
+                    {"name": "inventory.below_reorder_level",
+                     "description": "yes when the quantity available is below the item's reorder level."}]}]})
+
+
+@pytest.mark.parametrize("sent,expected", [("true", "yes"), ("True", "yes"), ("1", "yes"), ("false", "no"),
+                                          ("FALSE", "no"), ("yes", "yes"), ("no", "no")])
+def test_yes_no_flag_dimension_accepts_true_false(sent, expected):
+    query, _, _ = query_metrics.build_query({
+        "view": "inventory", "measures": ["inventory.quantity_on_hand"], "group_by": ["inventory.item_name"],
+        "filters": [{"member": "inventory.below_reorder_level", "operator": "equals", "values": [sent]}],
+    }, FLAG_CATALOG)
+    assert query["filters"] == [{"member": "inventory.below_reorder_level", "operator": "equals", "values": [expected]}]
+
+
+def test_other_dimensions_keep_their_values_untouched():
+    query, _, _ = query_metrics.build_query({
+        "view": "inventory", "measures": ["inventory.quantity_on_hand"],
+        "filters": [{"member": "inventory.item_name", "operator": "equals", "values": ["true"]}],
+    }, FLAG_CATALOG)
+    assert query["filters"][0]["values"] == ["true"]
