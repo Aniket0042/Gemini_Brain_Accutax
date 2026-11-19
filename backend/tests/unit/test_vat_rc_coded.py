@@ -69,7 +69,9 @@ def test_the_review_gives_totals_of_all_candidates_beyond_the_listed_rows(monkey
     rc = res["reverse_charge"][0]
     assert rc["candidates"]["bills"] == 11
     assert rc["candidates"]["net"] == round(sum(1000.0 + i for i in range(11)), 2)
-    assert rc["already_reverse_charged"] == {"bills": 1, "net": 2000.0, "self_assessed_vat": 100.0}
+    done = rc["already_reverse_charged"]
+    assert (done["bills"], done["net"], done["self_assessed_vat"]) == (1, 2000.0, 100.0)
+    assert [(s["vendor_name"], s["bills"], s["net"]) for s in done["by_supplier"]] == [("Supplier RC-1", 1, 2000.0)]
 
 
 def test_no_reverse_charge_totals_on_a_review_of_other_rules(monkeypatch):

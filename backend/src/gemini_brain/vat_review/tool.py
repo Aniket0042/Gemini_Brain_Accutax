@@ -236,13 +236,8 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
                 c.update(tag)
                 c["key"] = item_key(c, side)
             cands = [c for c in cands if not exclude or c["key"] not in exclude]
-            coded = [b for b in bills if anomalies.reverse_charged(b)]
             reverse_charge.append({**tag, "candidates": anomalies.rcm_totals(cands),
-                                   "already_reverse_charged": {
-                                       "bills": len(coded),
-                                       "net": round(sum(b.get("reverse_charge_net") or 0.0 for b in coded), 2),
-                                       "self_assessed_vat": round(sum(b.get("reverse_charge_net") or 0.0 for b in coded)
-                                                                  * 0.05, 2)} if with_rc else None})
+                                   "already_reverse_charged": anomalies.reverse_charged_totals(bills) if with_rc else None})
         checked += len(bills)
         left_out += skipped
         groups += found_groups

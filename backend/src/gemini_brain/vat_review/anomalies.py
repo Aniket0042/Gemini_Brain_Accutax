@@ -112,6 +112,23 @@ def rcm_totals(findings: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
             "self_assessed_vat": round(sum(e["self_assessed_vat"] for e in rows), 2), "by_supplier": rows}
 
 
+def reverse_charged_totals(bills: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    """Totals of the bills already reverse-charged in the books (lines with a reverse-charge tax code), per supplier."""
+    by: Dict[str, Dict[str, Any]] = {}
+    for b in bills:
+        if not reverse_charged(b):
+            continue
+        name = str(b.get("vendor_name") or "Unknown")
+        e = by.setdefault(name, {"vendor_name": name, "country": b.get("vendor_country_code"), "bills": 0, "net": 0.0})
+        e["bills"] += 1
+        e["net"] += _num(b.get("reverse_charge_net")) or 0.0
+    rows = sorted(({**e, "net": round(e["net"], 2), "self_assessed_vat": round(e["net"] * t.STANDARD_RATE, 2)}
+                   for e in by.values()), key=lambda e: -abs(e["net"]))
+    net = round(sum(e["net"] for e in rows), 2)
+    return {"bills": sum(e["bills"] for e in rows), "net": net, "self_assessed_vat": round(net * t.STANDARD_RATE, 2),
+            "by_supplier": rows}
+
+
 def find_future(bills: Sequence[Dict[str, Any]], today: dt.date) -> List[Dict[str, Any]]:
     """future_date findings for bills dated after today. A review of "this year so far" scans up to today, so the tool
     looks at the bills dated later separately and passes them here."""
