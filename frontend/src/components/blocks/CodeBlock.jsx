@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { copyText } from '../../services/clipboard';
 import { Copy, Check } from 'lucide-react';
 
 /**
@@ -15,11 +16,12 @@ export function CodeBlock({ block }) {
 export function CodeChrome({ language, content, title }) {
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!content) return;
-    navigator.clipboard.writeText(content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    if (await copyText(content)) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }
   };
 
   if (!content) return null;

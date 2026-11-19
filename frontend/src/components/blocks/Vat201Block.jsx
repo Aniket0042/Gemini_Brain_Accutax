@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { copyText } from '../../services/clipboard';
 import { FileText, Copy, Check, ChevronDown, ChevronRight, ExternalLink, Info } from 'lucide-react';
 import { formatAmount, formatDay } from './VatReviewBlock';
 
@@ -180,11 +181,9 @@ function ReverseChargeSection({ rc, currency }) {
 export function Vat201Block({ block }) {
   const [copiedKey, setCopiedKey] = useState(null);
 
-  const handleCopy = (key, val) => {
+  const handleCopy = async (key, val) => {
     if (val === null || val === undefined) return;
-    const numStr = Number(val).toFixed(2);
-    if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(numStr);
+    if (await copyText(Number(val).toFixed(2))) {
       setCopiedKey(key);
       setTimeout(() => setCopiedKey(null), 1500);
     }

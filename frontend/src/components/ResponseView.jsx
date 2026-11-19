@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { copyText } from '../services/clipboard';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { NoticeCard } from './NoticeCard';
@@ -38,38 +39,6 @@ function formatTime(ts) {
     return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   } catch {
     return null;
-  }
-}
-
-/**
- * Copies text and reports whether it worked. The async Clipboard API is
- * refused outside a secure context and inside an iframe without the
- * clipboard-write permission (the Accutax dashboard widget), so a hidden
- * textarea + execCommand is the fallback. Callers show "Copied" only on true.
- */
-async function copyText(text) {
-  if (!text) return false;
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    /* fall through to the textarea fallback */
-  }
-  try {
-    const area = document.createElement('textarea');
-    area.value = text;
-    area.setAttribute('readonly', '');
-    area.style.position = 'fixed';
-    area.style.opacity = '0';
-    document.body.appendChild(area);
-    area.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(area);
-    return ok;
-  } catch {
-    return false;
   }
 }
 

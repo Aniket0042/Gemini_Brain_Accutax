@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { copyText } from '../services/clipboard';
 import { Globe, ChevronDown, ChevronUp, Copy, Check, Terminal, Cpu, AlertTriangle, CircleSlash, Zap } from 'lucide-react';
 
 const FAILED_OUTCOMES = new Set(['unavailable', 'invalid', 'denied']);
@@ -55,9 +56,11 @@ export const ApiTraceCard = ({ apiTraces = [] }) => {
       null,
       2
     );
-    navigator.clipboard.writeText(text);
-    setCopiedIdx(idx);
-    setTimeout(() => setCopiedIdx(null), 2000);
+    copyText(text).then((ok) => {
+      if (!ok) return;
+      setCopiedIdx(idx);
+      setTimeout(() => setCopiedIdx(null), 2000);
+    });
   };
 
   return (

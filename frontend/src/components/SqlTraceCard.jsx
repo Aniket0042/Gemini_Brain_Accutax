@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { copyText } from '../services/clipboard';
 import { Database, ChevronDown, ChevronUp, Copy, Check, Terminal, Cpu } from 'lucide-react';
 
 export const SqlTraceCard = ({ sqlTraces = [], fallbackSql = null }) => {
@@ -26,9 +27,11 @@ export const SqlTraceCard = ({ sqlTraces = [], fallbackSql = null }) => {
 
   const handleCopy = (sqlText, idx) => {
     if (!sqlText) return;
-    navigator.clipboard.writeText(sqlText);
-    setCopiedIdx(idx);
-    setTimeout(() => setCopiedIdx(null), 2000);
+    copyText(sqlText).then((ok) => {
+      if (!ok) return;
+      setCopiedIdx(idx);
+      setTimeout(() => setCopiedIdx(null), 2000);
+    });
   };
 
   return (

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { copyText } from '../services/clipboard';
 import { Brain, ChevronDown, ChevronUp, Copy, Check, Terminal, Cpu } from 'lucide-react';
 
 // Purpose codes recorded by the backend (see gemini_brain.observability.llm_tracer)
@@ -43,9 +44,11 @@ export const LlmTraceCard = ({ llmTraces = [] }) => {
       null,
       2
     );
-    navigator.clipboard.writeText(text);
-    setCopiedIdx(idx);
-    setTimeout(() => setCopiedIdx(null), 2000);
+    copyText(text).then((ok) => {
+      if (!ok) return;
+      setCopiedIdx(idx);
+      setTimeout(() => setCopiedIdx(null), 2000);
+    });
   };
 
   return (
