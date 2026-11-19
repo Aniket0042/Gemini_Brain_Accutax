@@ -43,6 +43,23 @@ def _bill(b: Dict[str, Any], urls: Dict[str, str]) -> Dict[str, Any]:
             **({"url": urls[number]} if number in urls else {})}
 
 
+def _reverse_charge(result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Per organization, every supplier whose bills are reverse charge: the ones already coded in the books (Box 3 and
+    Box 10) and the ones still to confirm, with bills, net and the 5% VAT. Built from the review's totals, so the card
+    names every supplier however many rows the list shows. [] when the review found none."""
+    out: List[Dict[str, Any]] = []
+    for org in result.get("reverse_charge") or []:
+        rows = []
+        for state, part in (("to_confirm", org.get("candidates")), ("already", org.get("already_reverse_charged"))):
+            for s in (part or {}).get("by_supplier") or []:
+                rows.append({"supplier": s.get("vendor_name"), "country": s.get("country"), "bills": s.get("bills"),
+                             "net": s.get("net"), "vat": s.get("self_assessed_vat"), "state": state})
+        if rows:
+            out.append({"organization": org.get("organization_name"), "currency": org.get("currency"), "rows": rows,
+                        "net": round(sum(r["net"] or 0 for r in rows), 2), "vat": round(sum(r["vat"] or 0 for r in rows), 2)})
+    return out
+
+
 def review_blocks(data: Sequence[Dict[str, Any]], urls: Dict[str, str] | None = None) -> List[Dict[str, Any]]:
     """One card for each successful review_vat result of the turn (normally one). [] when there is none."""
     urls = urls or {}
@@ -73,6 +90,7 @@ def review_blocks(data: Sequence[Dict[str, Any]], urls: Dict[str, str] | None = 
                         "high": by_severity.get("high"), "medium": by_severity.get("medium"), "low": by_severity.get("low")},
             "patterns": [p.get("text") for p in result.get("patterns") or [] if p.get("text")],
             "items": items, "notes": [n for n in result.get("notes") or [] if n],
+            "reverse_charge": _reverse_charge(result),
             "dismissed": result.get("dismissed") or 0,
         })
     return out

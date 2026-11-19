@@ -31,7 +31,7 @@ DOCUMENT_TYPES: Dict[str, tuple] = {
     "sales_invoices": ("sales", ("document_number", "document_id", "document_date", "document_weekday", "document_type",
                                  "status", "customer_name"), ("net_sales", "output_vat"), "net_sales"),
     "bills": ("purchases", ("document_number", "document_id", "document_date", "document_weekday", "document_type",
-                            "status", "vendor_name"), ("net_purchases", "input_vat"), "net_purchases"),
+                            "status", "vendor_name"), ("net_purchases", "input_vat", "reverse_charge_vat"), "net_purchases"),
     "open_receivables": ("receivables", ("document_number", "document_id", "document_date", "due_date", "days_overdue",
                                          "due_date_basis", "aging_bucket", "status", "customer_name"),
                          ("outstanding",), "outstanding"),
@@ -57,11 +57,23 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
     query, period_note = build_query(params, catalog)
     result = cube_client.load(query, organization_ids=organization_ids, subject=subject, deadline=deadline)
     rows = [{k.split(".", 1)[1]: cell_text(v) for k, v in r.items()} for r in result.rows]
+    # The reverse-charge VAT of a bill (5% of its reverse-charge lines) only when some bill has any: a list of
+    # ordinary bills keeps its usual columns.
+    if rows and "reverse_charge_vat" in rows[0] and not any(_nonzero(r.get("reverse_charge_vat")) for r in rows):
+        for r in rows:
+            r.pop("reverse_charge_vat", None)
     notes = [period_note, CURRENCY_NOTE]
     if len(rows) >= query["limit"]:
         notes.append(f"Only the first {query['limit']} documents are listed; there may be more.")
     return {"type": params.get("type"), "rows": rows, "row_count": len(rows),
             "data_as_of": result.last_refresh_time, "notes": notes}
+
+
+def _nonzero(value: Any) -> bool:
+    try:
+        return abs(float(value)) >= 0.005
+    except (TypeError, ValueError):
+        return False
 
 
 def build_query(params: Dict[str, Any], catalog: Catalog) -> tuple[Dict[str, Any], str]:

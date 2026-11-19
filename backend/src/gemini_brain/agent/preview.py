@@ -443,6 +443,12 @@ def attachment(question: str, delivery: Any = None) -> Optional[str]:
     return "chart" if delivery.wants_chart else "file"
 
 
+#: The VAT 201 box statuses as the card shows them, for the exported file.
+_STATUS_WORDS = {"from_books": "From books", "approximate": "Approximate", "not_in_books": "Not in books",
+                 "candidates_only": "To confirm", "needs_emirate": "Needs emirate", "incomplete": "Incomplete",
+                 "unavailable": "Not available"}
+
+
 def export_rows(data: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """The rows a file or chart is built from: the figure-tool result with the most rows, with plain column names."""
     best: List[Dict[str, Any]] = []
@@ -452,7 +458,7 @@ def export_rows(data: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
             rows = [{"organization": org.get("organization_name"), "currency": org.get("currency"), **week}
                     for org in result.get("organizations") or [] for week in org.get("weeks") or []]
         elif item.get("tool") == "vat_201_draft":
-            rows = [dict(r) for r in result.get("rows") or []]
+            rows = [{**r, "status": _STATUS_WORDS.get(r.get("status"), r.get("status"))} for r in result.get("rows") or []]
         else:
             rows = [_plain(r) for r in result.get("rows") or []]
             granularity = (item.get("input") or {}).get("granularity")

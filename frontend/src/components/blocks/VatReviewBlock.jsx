@@ -115,6 +115,49 @@ function Item({ item, showOrganization, onAsk }) {
   );
 }
 
+/** Reverse charge by supplier: the bills already coded in the books (Box 3 and Box 10) and the ones to confirm. */
+function ReverseCharge({ groups, showOrganization }) {
+  if (!groups || !groups.length) return null;
+  return groups.map((g, gi) => (
+    <div key={gi} className="vr-rc">
+      <h4 className="vr-item-title">Reverse charge by supplier{showOrganization && g.organization ? ` · ${g.organization}` : ''}</h4>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="vr-rc-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-xs)', minWidth: '420px' }}>
+          <thead>
+            <tr style={{ textAlign: 'left', color: 'var(--ink-faint)', borderBottom: '1px solid var(--border)' }}>
+              <th style={{ padding: '4px 6px' }}>Supplier</th>
+              <th style={{ padding: '4px 6px' }}>Bills</th>
+              <th style={{ padding: '4px 6px', textAlign: 'right' }}>Net{g.currency ? ` (${g.currency})` : ''}</th>
+              <th style={{ padding: '4px 6px', textAlign: 'right' }}>VAT 5%</th>
+              <th style={{ padding: '4px 6px' }}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {g.rows.map((r, i) => (
+              <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                <td style={{ padding: '4px 6px' }}>{r.supplier}{r.country ? ` (${r.country})` : ''}</td>
+                <td style={{ padding: '4px 6px' }}>{r.bills}</td>
+                <td style={{ padding: '4px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{formatAmount(r.net)}</td>
+                <td style={{ padding: '4px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{formatAmount(r.vat)}</td>
+                <td style={{ padding: '4px 6px' }}>
+                  <Chip level={r.state === 'already' ? 'good' : 'medium'}>{r.state === 'already' ? 'In Box 3/10' : 'To confirm'}</Chip>
+                </td>
+              </tr>
+            ))}
+            <tr>
+              <td style={{ padding: '4px 6px', fontWeight: 700 }}>Total</td>
+              <td />
+              <td style={{ padding: '4px 6px', textAlign: 'right', fontWeight: 700 }}>{formatAmount(g.net)}</td>
+              <td style={{ padding: '4px 6px', textAlign: 'right', fontWeight: 700 }}>{formatAmount(g.vat)}</td>
+              <td />
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  ));
+}
+
 /** What a VAT review of the books found: totals, patterns, then each duplicate group and odd bill with its bills. */
 export function VatReviewBlock({ block, onAsk }) {
   const items = block.items || [];
@@ -139,6 +182,7 @@ export function VatReviewBlock({ block, onAsk }) {
           {items.map((item, i) => <Item key={item.key || i} item={item} showOrganization={organizations.size > 1} onAsk={onAsk} />)}
         </div>
       )}
+      <ReverseCharge groups={block.reverse_charge} showOrganization={(block.reverse_charge || []).length > 1} />
       {(block.notes || []).map((text, i) => <p key={i} className="vr-note">{text}</p>)}
     </section>
   );
