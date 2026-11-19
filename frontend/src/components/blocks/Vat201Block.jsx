@@ -199,7 +199,7 @@ export function Vat201Block({ block }) {
           <FileText size={15} aria-hidden="true" color="var(--accent)" />
           {block.title || 'VAT 201 draft'}
         </h3>
-        <span className="vr-chip vr-level-good">Official Statutory Layout</span>
+        <span className="vr-chip vr-level-medium">Draft from your books · not filed</span>
       </header>
 
       {orgs.map((org) => {

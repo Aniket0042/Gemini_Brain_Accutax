@@ -62,7 +62,22 @@ def _figures(org: int, start: dt.date, end: dt.date, subject: str, deadline: flo
         "timeDimensions": [{"dimension": "vat.document_date", "dateRange": [start.isoformat(), end.isoformat()]}],
         "limit": 10}, organization_ids=[org], subject=subject, deadline=deadline)
     row = result.rows[0] if result.rows else {}
-    return {k: _number(row.get(f"vat.{k}")) for k in ("output_vat", "input_vat", "net_vat_payable", "standard_rated_sales")}
+    out = {k: _number(row.get(f"vat.{k}")) for k in ("output_vat", "input_vat", "net_vat_payable", "standard_rated_sales")}
+    # Bills with a reverse-charge tax code: the recipient's own 5% is output VAT (Box 3) and input VAT (Box 10), as in
+    # the VAT 201 draft. The net does not change. A Cube without the measure leaves the figures as they were.
+    rc_vat = 0.0
+    try:
+        rc = cube_client.load({
+            "measures": ["purchases.reverse_charge_net"],
+            "timeDimensions": [{"dimension": "purchases.document_date", "dateRange": [start.isoformat(), end.isoformat()]}],
+            "limit": 10}, organization_ids=[org], subject=subject, deadline=deadline)
+        rc_vat = round(_number((rc.rows[0] if rc.rows else {}).get("purchases.reverse_charge_net")) * 0.05, 2)
+    except Exception:  # noqa: BLE001 - the measure is extra; the return figures still stand
+        rc_vat = 0.0
+    out["reverse_charge_vat"] = rc_vat
+    out["output_vat"] = round(out["output_vat"] + rc_vat, 2)
+    out["input_vat"] = round(out["input_vat"] + rc_vat, 2)
+    return out
 
 
 def _ledger(org: int, start: dt.date, end: dt.date, subject: str, deadline: float) -> Optional[Dict[str, Any]]:
@@ -175,13 +190,14 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
         ledger = _ledger(org, start, end, subject, deadline)
         if ledger is not None:
             entry["ledger_vat"] = ledger
-            if (abs(ledger["output_vat_posted_by_sales"] - figures["output_vat"]) > 1
-                    or abs(ledger["input_vat_posted_by_bills"] - figures["input_vat"]) > 1):
+            rc_vat = figures.get("reverse_charge_vat") or 0.0  # posted by its own journal, not by the sales or bills
+            if (abs(ledger["output_vat_posted_by_sales"] - (figures["output_vat"] - rc_vat)) > 1
+                    or abs(ledger["input_vat_posted_by_bills"] - (figures["input_vat"] - rc_vat)) > 1):
                 notes.append(
                     f"Organization {org}: the ledger's VAT accounts do not match the VAT on the documents. Sales invoices "
                     f"posted {ledger['output_vat_posted_by_sales']:,.2f} of output VAT and bills "
-                    f"{ledger['input_vat_posted_by_bills']:,.2f} of input VAT, against {figures['output_vat']:,.2f} and "
-                    f"{figures['input_vat']:,.2f} on the documents. Say both; do not call the position nil or final.")
+                    f"{ledger['input_vat_posted_by_bills']:,.2f} of input VAT, against {figures['output_vat'] - rc_vat:,.2f} and "
+                    f"{figures['input_vat'] - rc_vat:,.2f} on the documents. Say both; do not call the position nil or final.")
                 sides = [s for s, ledger_key, doc_key in (("output", "output_vat_posted_by_sales", "output_vat"),
                                                           ("input", "input_vat_posted_by_bills", "input_vat"))
                          if abs(ledger[ledger_key] - figures[doc_key]) > 1]
@@ -193,6 +209,10 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
                         "one by one. Explain the gap with these causes only (counts and amounts as given, effect_on_gap "
                         "is ledger minus documents). Do not offer other causes, and do not name a cause that is not "
                         "listed. If unexplained is not 0, say that part is unexplained.")
+        if figures.get("reverse_charge_vat"):
+            notes.append(f"Organization {org}: output and input VAT each include {figures['reverse_charge_vat']:,.2f} of "
+                         "reverse charge on bills with a reverse-charge tax code (Box 3 and Box 10); it does not change "
+                         "the net.")
         out_orgs.append(entry)
     if any(not o["is_tax_period"] for o in out_orgs):
         notes.append("The dates asked are not a tax period, so they have no due date of their own. The due date to give "

@@ -45,7 +45,8 @@ class Scrubber:
         for text in texts:
             if not isinstance(text, str) or not text.strip():
                 continue
-            taken = self.spans(text)
+            # partial: a shortened name of a selected organization ("Al Noor") is the organization, not a new person.
+            taken = self.spans(text, partial=True)
             for f in ner.find(text):
                 if any(a < f.end and f.start < b for a, b, _, _ in taken):
                     continue

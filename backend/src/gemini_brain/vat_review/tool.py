@@ -268,7 +268,8 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
                            "bills_checked": checked, "organizations": per_org, "notes": notes, "dismissed": dismissed}
     if reverse_charge:
         out["reverse_charge"] = reverse_charge
-        notes.append("reverse_charge holds the totals of ALL bills that may need reverse charge (candidates, with "
+        # For the model only: notes are shown on the review card, this is not.
+        out["reverse_charge_note"] = ("reverse_charge holds the totals of ALL bills that may need reverse charge (candidates, with "
                       "each supplier), whatever the list shows; give totals from it. already_reverse_charged are bills "
                       "with a reverse-charge tax code: the books already account for them, they are not candidates."
                       + ("" if with_rc else " This book does not show reverse-charge tax codes, so none are counted "

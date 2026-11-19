@@ -135,7 +135,8 @@ def without_tables(answer: str, data: Sequence[Dict[str, Any]] | None = None) ->
     review: set = set()
     other: set = set()
     for item in data or []:
-        _figures(item.get("result"), review if item.get("tool") == "review_vat" else other)
+        # The VAT 201 draft has its own card with every box, so a table of its boxes only repeats the card too.
+        _figures(item.get("result"), review if item.get("tool") in ("review_vat", "vat_201_draft") else other)
     out: List[str] = []
     table: List[str] = []
     just_dropped = False

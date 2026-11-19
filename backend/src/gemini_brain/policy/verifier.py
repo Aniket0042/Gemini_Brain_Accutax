@@ -35,7 +35,12 @@ _NOT_FIGURES = re.compile(
     rf"|\b\d{{1,2}}(?:st|nd|rd|th)?(?:\s*[–-]\s*\d{{1,2}}(?:st|nd|rd|th)?)?\s+{_MONTH}\b\.?(?:,?\s+\d{{4}})?"
     rf"|\b{_MONTH}\.?\s+\d{{1,2}}(?:st|nd|rd|th)?\b(?:\s*[–-]\s*\d{{1,2}}\b)?(?:,?\s+\d{{4}})?"
     r"|\b\d{1,2}(?:st|nd|rd|th)\s+(?:calendar\s+)?day\b"
-    r"|\b\d+[- ]digits?\b",
+    r"|\b\d+[- ]digits?\b"
+    # References, not amounts: VAT return boxes ("Box 1b", "Boxes 3 and 10", a bare "1b" in a box table), articles,
+    # clauses and numbered laws ("Article 53", "Article 59(5)", "Decree-Law No. 8", "Cabinet Decision No. 129").
+    r"|\b(?:box(?:es)?|article|art\.|clause|section|no\.)\s*\d+[a-g]?(?:\(\d+\))?"
+    r"(?:\s*(?:and|or|to|&|,|–|-)\s*(?:box\s*)?\d+[a-g]?(?:\(\d+\))?)*"
+    r"|\b1[a-g]\b",
     re.IGNORECASE,
 )
 

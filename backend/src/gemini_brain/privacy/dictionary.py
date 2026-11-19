@@ -147,6 +147,8 @@ class Dictionary:
         self._first = {key.split()[0] for key in self.entries}
         self._max_words = max((len(key.split()) for key in self.entries), default=0)
         self._partial_words = self._index_partial()
+        self._org_prefixes = self._index_org_prefixes()
+        self._max_prefix_words = max((len(p.split()) for p in self._org_prefixes), default=0)
 
     def __len__(self) -> int:
         return len(self.entries)
@@ -160,6 +162,34 @@ class Dictionary:
                         and not word.isdigit():
                     owners.setdefault(word, set()).add(key)
         return {w: next(iter(keys)) for w, keys in owners.items() if len(keys) == 1}
+
+    def _index_org_prefixes(self) -> Dict[str, str]:
+        """The leading words of an organization's own name -> that name ("al noor", "al noor electronics",
+        "desert rose" for "Desert Rose Contracting"), so a question that shortens a selected organization's name
+        is matched to the organization, not taken for a person. Two words or more, or one distinctive word; a run
+        shared by two organizations is left out."""
+        owners: Dict[str, set] = {}
+        for key, e in self.entries.items():
+            if e.kind != "ORG":
+                continue
+            words = key.split()
+            for k in range(1, len(words)):
+                run = " ".join(words[:k])
+                if k == 1 and (len(run) < MIN_PARTIAL_CHARS or run in COMMON_WORDS or run in LEGAL_SUFFIXES):
+                    continue
+                if run in self.entries:
+                    continue
+                owners.setdefault(run, set()).add(key)
+        return {run: next(iter(keys)) for run, keys in owners.items() if len(keys) == 1}
+
+    def _org_prefix_at(self, text: str, tokens: List[Tuple[int, int, str]], i: int) -> Optional[Tuple[Entry, int]]:
+        """The longest leading run of an organization's name starting at word i, and how many words it takes."""
+        words = [t[2] for t in tokens[i:i + self._max_prefix_words]]
+        for size in range(len(words), 0, -1):
+            key = self._org_prefixes.get(" ".join(words[:size]))
+            if key is not None and _joined(text, tokens, i, size):
+                return self.entries[key], size
+        return None
 
     def _name_at(self, text: str, tokens: List[Tuple[int, int, str]], i: int) -> Optional[Tuple[Entry, int]]:
         """The longest known name starting at word i, and how many words it takes."""
@@ -194,6 +224,10 @@ class Dictionary:
         while i < len(tokens):
             word = tokens[i][2]
             found = self._name_at(text, tokens, i) if word in self._first else None
+            if partial and self._org_prefixes:
+                short = self._org_prefix_at(text, tokens, i)
+                if short is not None and (found is None or short[1] > found[1]):
+                    found = short
             if found is not None:
                 entry, size = found
                 j = self._suffix_end(text, tokens, i + size)
@@ -208,7 +242,21 @@ class Dictionary:
                 start, end = tokens[i][0], tokens[i][1]
                 spans.append(NameSpan(start, end, entry.kind, entry.key, text[start:end], 0.6, partial=True))
             i += 1
-        return spans
+        return _merged(text, spans)
+
+
+def _merged(text: str, spans: List[NameSpan]) -> List[NameSpan]:
+    """Neighbouring spans of the same name with only spaces between them as one span, so "pixel forge" is one
+    placeholder, not two."""
+    out: List[NameSpan] = []
+    for s in spans:
+        if out and out[-1].key == s.key and not text[out[-1].end:s.start].strip():
+            p = out[-1]
+            out[-1] = NameSpan(p.start, s.end, p.kind, p.key, text[p.start:s.end], max(p.score, s.score),
+                               partial=p.partial and s.partial)
+        else:
+            out.append(s)
+    return out
 
 
 # ── Loading and cache ───────────────────────────────────────────────────────
