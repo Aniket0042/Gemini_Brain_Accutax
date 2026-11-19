@@ -307,8 +307,8 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
         if len(findings) > len(shown_f):
             notes.append(f"Showing {len(shown_f)} of {len(findings)} findings: the most serious, with each rule represented.")
         if not findings and not patterns:
-            notes.append("No odd bills were found by these rules. Rules that need the supplier's TRN, the VAT category or "
-                         "a reverse-charge flag are not applied, because the books do not hold those fields.")
+            notes.append("No odd bills were found by these rules. It does not prove the VAT is right: the books hold no "
+                         "VAT category on most bills, so zero-rated, exempt and out-of-scope purchases can't be told apart.")
     fired = [f["rule"] for f in sorted(findings, key=lambda f: anomalies._RANK[f["severity"]])] if want_odd else []
     fired += [g["rule"] for g in groups] if want_dup else []
     seen_rules = list(dict.fromkeys(fired))
