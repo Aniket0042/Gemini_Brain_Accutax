@@ -326,8 +326,10 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
 
         boxes = [box1, box2, box3, box4, box5, box6, box7, box8, box9, box10, box11, box12, box13, box14]
 
+        org_name = next((b.get("organization_name") for b in bills if b.get("organization_name")), None)
         org_entry = {
             "organization_id": org,
+            "organization_name": org_name,
             "emirate": org_emirate_raw,
             "period": {"start": start.isoformat(), "end": end.isoformat()},
             "frequency": frequency,

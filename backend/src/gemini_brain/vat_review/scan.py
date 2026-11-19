@@ -18,6 +18,8 @@ COLUMNS = ("document_number", "document_id", "document_date", "document_type", "
 MEASURES = ("net_purchases", "input_vat")
 #: On purchases, when the Cube has them: the net amount and VAT of bill lines with a reverse-charge tax code.
 RC_MEASURES = ("reverse_charge_net", "reverse_charge_vat_recorded")
+#: On sales, when the Cube has it: the net of lines whose tax code says no VAT is due (zero-rated, exempt, ...).
+CODED_MEASURES = ("net_sales_coded_no_vat",)
 #: Where each side reads from, by the names the rules use. The rules read vendor_name, net_purchases, input_vat and
 #: vendor_trn for both sides: on sales they hold the customer, the net sales, the output VAT and the customer's TRN.
 SIDES = {
@@ -25,7 +27,7 @@ SIDES = {
                   "input_vat": "input_vat", "vendor_trn": "vendor_trn",
                   "vendor_country_code": "vendor_country_code"},
     "sales": {"view": "sales", "vendor_name": "customer_name", "net_purchases": "net_sales", "input_vat": "output_vat",
-              "vendor_trn": "customer_trn"},
+              "vendor_trn": "customer_trn", "vendor_country_code": "customer_country_code"},
 }
 #: Most bills one scan keeps: a guard for memory and time, not a rule of the review.
 MAX_BILLS = 50_000
@@ -51,13 +53,14 @@ def _query(start: dt.date, end: dt.date, with_trn: bool = False, with_country: b
     extra_dims: List[str] = []
     if with_trn:
         extra_dims.append("vendor_trn")
-    if with_country and side == "purchases":
+    if with_country:
         extra_dims.append("vendor_country_code")
     return {
         "dimensions": [member(side, c) for c in COLUMNS + tuple(extra_dims)]
         + [f"{view}.currency", f"{view}.organization_name"],
         "measures": [member(side, m) for m in MEASURES]
-        + ([f"{view}.{m}" for m in RC_MEASURES] if with_rc and side == "purchases" else []),
+        + ([f"{view}.{m}" for m in RC_MEASURES] if with_rc and side == "purchases" else [])
+        + ([f"{view}.{m}" for m in CODED_MEASURES] if with_rc and side == "sales" else []),
         "limit": CUBE_ROW_LIMIT,
         "timeDimensions": [{"dimension": f"{view}.document_date", "dateRange": [start.isoformat(), end.isoformat()]}],
     }
@@ -66,7 +69,7 @@ def _query(start: dt.date, end: dt.date, with_trn: bool = False, with_country: b
 def _row(raw: Dict[str, Any], side: str = "purchases") -> Dict[str, Any]:
     rename = {v: k for k, v in SIDES[side].items() if k != "view"}  # customer_name -> vendor_name, on sales
     out = {rename.get(k.split(".", 1)[1], k.split(".", 1)[1]): cell_text(v) for k, v in raw.items()}  # Decimals become text: results go to the model as JSON
-    for key in MEASURES + tuple(k for k in RC_MEASURES if k in out):
+    for key in MEASURES + tuple(k for k in RC_MEASURES + CODED_MEASURES if k in out):
         try:
             out[key] = float(out[key]) if out.get(key) not in (None, "") else None
         except (TypeError, ValueError):

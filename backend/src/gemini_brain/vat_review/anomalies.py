@@ -12,6 +12,7 @@ need the supplier's TRN, the VAT category or a reverse-charge flag wait for thos
   large_for_supplier      medium  far above this supplier's usual bill
   supplier_trn_invalid    medium  VAT on the bill, but the supplier's TRN is missing or does not have 15 digits
   rcm_candidate           medium  supplier outside the UAE and no VAT: the bill may need reverse charge
+  vat_on_zero_rated_customer medium  (sales) VAT charged to a customer outside the UAE, or one whose other invoices carry none
   foreign_vat_charged     medium  supplier outside the UAE charged VAT, and has no UAE TRN
   vat_zero                low     no VAT on a bill with an amount (zero-rated, exempt, out of scope, or VAT left off)
   round_amount            low     a round amount, when round amounts are rare
@@ -35,6 +36,7 @@ SEVERITY = {
     "vat_rate_not_standard": "high", "vat_wrong_sign": "high", "vat_without_amount": "high",
     "missing_supplier": "medium", "missing_number": "medium", "future_date": "medium", "large_for_supplier": "medium",
     "supplier_trn_invalid": "medium", "rcm_candidate": "medium", "foreign_vat_charged": "medium",
+    "vat_on_zero_rated_customer": "medium",
     "vat_zero": "low", "round_amount": "low", "large_one_off_supplier": "low",
 }
 RULES = tuple(SEVERITY)
@@ -90,6 +92,41 @@ def rcm_candidates(bills: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
         code = foreign_country(b)
         if net and code and abs(vat) < 0.005:
             out.append(_rcm_finding(b, net, code))
+    return out
+
+
+def _coded_no_vat(bill: Dict[str, Any], net: float) -> bool:
+    """True when the invoice's lines with a no-VAT tax code (zero-rated, exempt, out of scope) cover its whole amount."""
+    coded = _num(bill.get("net_sales_coded_no_vat"))
+    return coded is not None and abs(coded) >= abs(net) - max(t.ROUNDING_AMOUNT, t.ROUNDING_RATE * abs(net))
+
+
+def _vat_on_zero_rated_customer(invoices: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Sales invoices that charge VAT to a customer outside the UAE, or to a customer whose other invoices in the period
+    nearly all carry none (zero-rated exports or designated-zone supplies): the VAT may have been charged by mistake."""
+    by_customer: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for b in invoices:
+        if (_num(b.get("net_purchases")) or 0) > 0:
+            by_customer[vendor_key(b.get("vendor_name"))].append(b)
+    out: List[Dict[str, Any]] = []
+    for b in invoices:
+        net, vat = _num(b.get("net_purchases")), _num(b.get("input_vat")) or 0.0
+        if not net or net <= 0 or vat <= 0.005:
+            continue
+        code = str(b.get("vendor_country_code") or "").strip().upper()
+        others = [x for x in by_customer.get(vendor_key(b.get("vendor_name")), []) if x is not b]
+        zero = [x for x in others if abs(_num(x.get("input_vat")) or 0.0) < 0.005]
+        if code and code != "AE":
+            why = (f"VAT of {_money(vat)} is charged to a customer outside the UAE ({code}). A supply to a customer "
+                   "outside the UAE is usually zero-rated (Decree-Law Article 45): check whether this sale should carry VAT.")
+        elif len(others) >= t.ZR_CUSTOMER_MIN_OTHERS and len(zero) / len(others) >= t.ZR_CUSTOMER_SHARE:
+            why = (f"VAT of {_money(vat)} is charged on this invoice, but {len(zero)} of the customer's {len(others)} other "
+                   "invoices in the period carry no VAT (zero-rated, for example exports or designated-zone supplies). "
+                   "Check whether this sale should be zero-rated too.")
+        else:
+            continue
+        out.append(_finding("vat_on_zero_rated_customer", b, why, net=net, vat=vat, country=code or None,
+                            customer_invoices=len(others), customer_zero_vat=len(zero)))
     return out
 
 
@@ -174,6 +211,8 @@ def find_anomalies(bills: Sequence[Dict[str, Any]], today: dt.date,
             code = foreign_country(b, side)
             if side == "purchases" and reverse_charged(b):
                 continue  # already reverse-charged in the books: no VAT on the bill is right
+            if side == "sales" and _coded_no_vat(b, net):
+                continue  # every line carries a zero-rated, exempt or out-of-scope tax code: no VAT is right
             if code:
                 rcm.append(_rcm_finding(b, net, code))
             else:
@@ -214,6 +253,10 @@ def find_anomalies(bills: Sequence[Dict[str, Any]], today: dt.date,
                                  "is probably not being recorded."})
     else:
         findings += rcm
+
+    # --- sales: VAT charged to a customer whose sales are normally zero-rated (Decree-Law Article 45) -------------
+    if side == "sales":
+        findings += _vat_on_zero_rated_customer(bills)
 
     # --- the supplier's TRN, for bills that carry VAT (only when the books give the TRN at all) ----------------------
     with_vat = [b for b in bills if "vendor_trn" in b and (_num(b.get("input_vat")) or 0) > 0.005 and id(b) not in skip_trn_check]

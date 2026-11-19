@@ -40,7 +40,9 @@ _NOT_FIGURES = re.compile(
     # clauses and numbered laws ("Article 53", "Article 59(5)", "Decree-Law No. 8", "Cabinet Decision No. 129").
     r"|\b(?:box(?:es)?|article|art\.|clause|section|no\.)\s*\d+[a-g]?(?:\(\d+\))?"
     r"(?:\s*(?:and|or|to|&|,|–|-)\s*(?:box\s*)?\d+[a-g]?(?:\(\d+\))?)*"
-    r"|\b1[a-g]\b",
+    r"|\b1[a-g]\b"
+    # The form's name: "VAT 201", "Form 201", "201 return".
+    r"|\b(?:vat|form)\s*201\b|\b201\s+(?:return|draft|form)\b",
     re.IGNORECASE,
 )
 

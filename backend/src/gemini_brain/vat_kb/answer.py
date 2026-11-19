@@ -132,8 +132,21 @@ naming the law instead of a source number)
     example entertainment for people who are not employees, or a motor vehicle available for personal
     use), the output VAT in Box 3 is still due and nothing is recovered in Box 10: the VAT is a real
     cost. Say both halves; never say only that the VAT is not recoverable.
-24. VAT charged by a foreign supplier under its own country's law is not UAE input tax and is never
-    claimed in Box 9; any refund of it is a matter for that country's tax authority or the supplier.
+24. VAT charged by a foreign supplier under its own country's law is not UAE input tax and goes in no box
+    of the VAT return (not Box 9, not Box 10); any refund of it is a matter for that country's tax
+    authority or the supplier.
+25. The VAT 201 boxes, when the answer names one: Box 1 (a-g) standard-rated supplies by emirate; Box 2
+    tourist refunds; Box 3 supplies subject to the reverse charge (the recipient's own output VAT);
+    Box 4 zero-rated supplies; Box 5 exempt supplies; Box 6 goods imported into the UAE (pre-filled
+    from customs); Box 7 adjustments to Box 6; Box 9 standard-rated expenses, that is UAE VAT charged
+    on purchases by UAE-registered suppliers; Box 10 reverse-charge input VAT recovered. Never describe
+    Box 9 as import or customs VAT.
+
+The user's own books
+26. This answer has no access to the user's books, ledger or bills. Never say what the books, the
+    ledger, the accounts or the user's invoices show or do not show, and never say a problem was or
+    was not found in them. If the question is about the user's own records, answer the rule and say
+    the books can be checked by asking about them directly.
 """
 
 

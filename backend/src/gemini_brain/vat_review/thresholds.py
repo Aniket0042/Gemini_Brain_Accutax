@@ -33,3 +33,7 @@ ROUND_SYSTEMIC_SHARE = 0.20
 #: A one-off supplier's bill is odd when it is in the top (1 - ONE_OFF_PERCENTILE) share of the organization's bills.
 ONE_OFF_PERCENTILE = 0.95
 ONE_OFF_MIN_ORG_BILLS = 50
+#: A sales invoice with VAT is odd when the customer has at least ZR_CUSTOMER_MIN_OTHERS other invoices in the period
+#: and at least ZR_CUSTOMER_SHARE of them carry no VAT (a customer normally zero-rated).
+ZR_CUSTOMER_MIN_OTHERS = 3
+ZR_CUSTOMER_SHARE = 0.80

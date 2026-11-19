@@ -75,9 +75,9 @@ WATCHES = (
         id="sales_vat_wrong",
         label="A sales invoice with wrong or no output VAT",
         side="sales",
-        rules=("vat_rate_not_standard", "vat_zero", "vat_wrong_sign"),
+        rules=("vat_rate_not_standard", "vat_zero", "vat_wrong_sign", "vat_on_zero_rated_customer"),
         default_on=True,
-        desc="Zero VAT where 5% is expected, or a rate that isn't 0% or 5%.",
+        desc="Zero VAT where 5% is expected, VAT on a normally zero-rated customer, or a rate that isn't 0% or 5%.",
         bar="Sales VAT wrong",
     ),
 )
@@ -162,6 +162,7 @@ RULE_TITLES = {
     "supplier_trn_invalid": "Supplier's TRN missing or wrong",
     "rcm_candidate": "May need reverse charge",
     "foreign_vat_charged": "Foreign VAT recorded",
+    "vat_on_zero_rated_customer": "VAT to a zero-rated customer",
 }
 
 COPY: Dict[str, Any] = {
@@ -194,6 +195,7 @@ COPY: Dict[str, Any] = {
         "vat_rate_not_standard": "Sales invoice VAT is not 0% or 5%",
         "vat_wrong_sign": "Sales invoice VAT and amount have opposite signs",
         "vat_without_amount": "Sales invoice with VAT but no amount",
+        "vat_on_zero_rated_customer": "VAT charged to a normally zero-rated customer",
     },
     #: "Not a problem" under another name, per side and rule: a sales invoice with no VAT is usually zero-rated.
     "dismiss_labels": {"sales": {"vat_zero": "It's zero-rated"}},

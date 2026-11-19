@@ -45,6 +45,10 @@ _OWN_DATA = re.compile(
     r"|\b(any|are there)\b.{0,15}\b(bills?|purchases?)\b.{0,40}\b(with|without|dated|missing|that|need)\b"
     r"|\breview\b.{0,20}\b(bills?|purchases?|invoices?|sales)\b"
     r"|\b(bills?|purchases?)\b.{0,30}\bneed\s+reverse[- ]charge\b"
+    # "Are any (foreign) suppliers charging us VAT", "is any customer ... our": about the user's own records.
+    r"|\b(are|is)\s+(there\s+)?any\b.{0,40}\b(suppliers?|vendors?|customers?)\b.{0,60}\b(us|our|we)\b"
+    # "When is Al Noor's next VAT return due": a named organization's own return.
+    r"|\bwhen\s+is\s+(?!the\b|a\b|an\b)\w+.{0,30}\bnext\s+(vat\s+)?(\d{3}\s+)?return\b"
     # The user's own VAT return, deadline or amount owed (the vat_return tool), and a penalty on given figures (the
     # vat_penalty calculator): the law answer would explain the rule instead of working it out.
     r"|\b(our|my)\s+(next\s+)?(vat\s+)?(\d{3}\s+)?(return|deadline|due date|filing)\b|\bnext\s+(vat\s+)?(return\s+)?deadline\b"

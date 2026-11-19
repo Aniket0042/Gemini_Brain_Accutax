@@ -21,7 +21,9 @@ views:
           - status
           - customer_name
           - customer_trn
+          - customer_country_code
           - vat_category
+          - net_sales_coded_no_vat
           - project_name
           - cost_center_name
           - item_name

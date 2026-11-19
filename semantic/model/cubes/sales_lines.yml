@@ -22,6 +22,7 @@ cubes:
              inc.contact_id                                AS customer_id,
              COALESCE(NULLIF(c.name, ''), NULLIF(c.organization_name, ''), 'Unknown') AS customer_name,
              NULLIF(TRIM(c.trn_number), '')                AS customer_trn,
+             UPPER(NULLIF(TRIM(ctry.code), ''))            AS customer_country_code,
              COALESCE(p.project_name, 'No project')        AS project_name,
              COALESCE(cc.costcenter_name, 'Unallocated')   AS cost_center_name,
              COALESCE(NULLIF(it.name, ''), 'No item')      AS item_name,
@@ -36,6 +37,7 @@ cubes:
       JOIN   public.income_items ii ON ii.income_id = inc.id
       JOIN   public.status_type  st ON st.id = inc.status_type_id
       LEFT   JOIN public.contacts     c  ON c.id  = inc.contact_id    AND c.organization_id  = inc.organization_id
+      LEFT   JOIN public.country_type ctry ON ctry.id = c.country_id
       LEFT   JOIN public.projects     p  ON p.id  = inc.project_id    AND p.organization_id  = inc.organization_id
       LEFT   JOIN public.cost_centers cc ON cc.id = ii.cost_center_id AND cc.organization_id = inc.organization_id
       LEFT   JOIN public.items it ON it.id = ii.items_id AND it.organization_id = inc.organization_id
@@ -87,6 +89,12 @@ cubes:
           VAT-registered customer shows it; a number is not proof that the FTA registered it.
         sql: customer_trn
         type: string
+      - name: customer_country_code
+        description: >-
+          Two-letter country code of the customer as stored on the contact (AE is the UAE). Null when the contact has
+          no country. A sale to a customer outside the UAE is usually zero-rated.
+        sql: customer_country_code
+        type: string
       - name: vat_category
         description: >-
           VAT category of the line from its tax code: standard, zero_rated, exempt, no_vat, out_of_scope,
@@ -134,6 +142,14 @@ cubes:
         description: Gross sales minus credit notes, before VAT.
         type: number
         sql: "COALESCE({gross_sales}, 0) - COALESCE({credit_notes}, 0)"
+      - name: net_sales_coded_no_vat
+        description: >-
+          Net sales on lines whose tax code says no VAT is due (zero-rated, exempt, out of scope or no VAT), less
+          credit notes. A sales invoice with no VAT is expected when this covers its whole amount.
+        type: sum
+        sql: "{CUBE}.doc_sign * {CUBE}.line_amount"
+        filters:
+          - sql: "{CUBE}.vat_category IN ('zero_rated', 'exempt', 'out_of_scope', 'no_vat')"
       - name: output_vat
         description: VAT on sales minus VAT on credit notes.
         type: sum

@@ -58,6 +58,7 @@ def form201_blocks(data: Sequence[Dict[str, Any]], urls: Optional[Dict[str, str]
 
             enriched_orgs.append({
                 "organization_id": o.get("organization_id"),
+                "organization_name": o.get("organization_name"),
                 "emirate": o.get("emirate"),
                 "period": period,
                 "frequency": o.get("frequency"),

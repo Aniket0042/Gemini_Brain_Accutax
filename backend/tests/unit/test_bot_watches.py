@@ -55,7 +55,7 @@ def test_review_calls_standard_example():
 
     sales = next(c for c in calls if c["side"] == "sales")
     assert sales["mode"] == "all"
-    expected_sales = sorted(["vat_rate_not_standard", "vat_zero", "vat_wrong_sign"])
+    expected_sales = sorted(["vat_rate_not_standard", "vat_zero", "vat_wrong_sign", "vat_on_zero_rated_customer"])
     assert sales["rules"] == expected_sales
 
 

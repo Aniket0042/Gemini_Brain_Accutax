@@ -27,7 +27,7 @@ export const DEFAULT_AGENT = {
       label: 'A bill from outside the UAE may need reverse charge',
       desc: 'Supplier outside the UAE with no VAT, or foreign VAT recorded as input VAT.', bar: 'Reverse charge?' },
     { id: 'sales_vat_wrong', side: 'sales', kind: 'document', default_on: true, label: 'A sales invoice with wrong or no output VAT',
-      desc: "Zero VAT where 5% is expected, or a rate that isn't 0% or 5%.", bar: 'Sales VAT wrong' },
+      desc: "Zero VAT where 5% is expected, VAT on a normally zero-rated customer, or a rate that isn't 0% or 5%.", bar: 'Sales VAT wrong' },
   ],
   templates: [
     { id: 'vat_weekly_digest', tag: 'Most popular', runs: 'Mondays, 08:00' },
@@ -76,12 +76,14 @@ export const DEFAULT_AGENT = {
       supplier_trn_invalid: "Supplier's TRN missing or wrong",
       rcm_candidate: 'May need reverse charge',
       foreign_vat_charged: 'Foreign VAT recorded',
+      vat_on_zero_rated_customer: 'VAT to a zero-rated customer',
     },
     sales_rule_titles: {
       vat_zero: 'Sales invoice with no VAT',
       vat_rate_not_standard: 'Sales invoice VAT is not 0% or 5%',
       vat_wrong_sign: 'Sales invoice VAT and amount have opposite signs',
       vat_without_amount: 'Sales invoice with VAT but no amount',
+      vat_on_zero_rated_customer: 'VAT charged to a normally zero-rated customer',
     },
     dismiss_labels: { sales: { vat_zero: "It's zero-rated" } },
     side_titles: { purchases: 'Bills you received', sales: 'Invoices you sent' },

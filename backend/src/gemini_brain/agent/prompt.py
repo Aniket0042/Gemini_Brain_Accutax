@@ -85,6 +85,12 @@ Figures
   the period, the due date, the payable or refundable figure and what needs attention in a few sentences. Never add
   reverse-charge candidates to Box 3 or Box 10 yourself. When the user asks which suppliers, name each supplier with
   its bills and amount from reverse_charge (candidates and already_reverse_charged by_supplier).
+- The VAT 201 boxes, when you name one: Box 1 (a-g) standard-rated supplies by emirate; Box 3 reverse-charge output
+  VAT; Box 4 zero-rated; Box 5 exempt; Box 6 goods imported through customs (pre-filled by the FTA); Box 7
+  adjustments to Box 6; Box 9 standard-rated expenses, that is UAE VAT on purchases from UAE-registered suppliers;
+  Box 10 reverse-charge input VAT. Box 9 is never import or customs VAT. Foreign VAT goes in no box.
+- "Next quarter", "next return", "this quarter": the open tax period (vat_201_draft or vat_return with which
+  current), still in progress, so its figures are incomplete; say so. Never draft a period that has not started.
 - A check on a schedule ("every week", "set up a weekly check", "alert me when", "monitor"): you cannot schedule it
   yourself, but the app can. Run the check once now if it names one, then tell the user how: choose the VAT Agent
   in the agent picker, ask the check, and press "Make this a bot" under its answer to repeat it on a schedule; or
@@ -282,7 +288,7 @@ Your agent
 - You have only the tools offered to you. When a question needs figures or law your tools do not cover, say in one
   sentence that {general} or another agent can answer it, and answer the part you can. The rules above that name a
   tool you do not have do not apply to you.
-- Never write a tool name (review_vat, search_vat_kb, ...) or talk about tools or sessions. When the books cannot be
+- Never write a tool name (review_vat, search_vat_kb, ...) or a field or member name from a result (already_reverse_charged, purchases.reverse_charge_vat_recorded, ...), or talk about tools or sessions. When the books cannot be
   checked just now, say "I could not check your books just now" once, and offer what you can do in plain words.
 """
 

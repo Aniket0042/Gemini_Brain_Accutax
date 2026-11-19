@@ -26,6 +26,7 @@ TITLES = {
     "supplier_trn_invalid": "Supplier TRN missing or not 15 digits",
     "rcm_candidate": "Supplier outside the UAE, no VAT: reverse charge?",
     "foreign_vat_charged": "Foreign VAT recorded as input VAT",
+    "vat_on_zero_rated_customer": "VAT charged to a normally zero-rated customer",
     "vat_zero": "No VAT recorded",
     "round_amount": "Round amount",
     "large_one_off_supplier": "Large bill from a one-time supplier",
@@ -185,6 +186,7 @@ PLAIN = {
     "missing_supplier": "no supplier name", "missing_number": "no document number", "future_date": "dated in the future",
     "large_for_supplier": "far above the supplier's usual bill", "supplier_trn_invalid": "supplier TRN missing or not 15 digits",
     "rcm_candidate": "supplier outside the UAE, no VAT: reverse charge?", "foreign_vat_charged": "foreign VAT recorded as input VAT",
+    "vat_on_zero_rated_customer": "VAT charged to a normally zero-rated customer",
     "vat_zero": "no VAT recorded", "round_amount": "round amount",
     "large_one_off_supplier": "large bill from a one-time supplier",
 }

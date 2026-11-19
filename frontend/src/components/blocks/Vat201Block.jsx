@@ -210,6 +210,12 @@ export function Vat201Block({ block }) {
 
         return (
           <div key={org.organization_id} style={{ marginBottom: '14px' }}>
+            {(orgs.length > 1 || org.organization_name) && (
+              <h4 style={{ margin: '10px 0 4px 0', fontSize: 'var(--text-sm)', fontWeight: 700 }}>
+                {org.organization_name || `Organization ${org.organization_id}`}
+                {org.period?.start && org.period?.end ? ` · ${formatDay(org.period.start)} to ${formatDay(org.period.end)}` : ''}
+              </h4>
+            )}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'baseline', color: 'var(--ink-soft)', fontSize: 'var(--text-xs)', marginBottom: '6px' }}>
               {org.emirate && <span><strong>Emirate:</strong> {org.emirate}</span>}
               {org.frequency && <span><strong>Frequency:</strong> {org.frequency}</span>}

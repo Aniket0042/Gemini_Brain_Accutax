@@ -128,6 +128,9 @@ def generate_finding_sentence(
     if rule in ("sales_vat_wrong", "vat_zero"):
         return f"Sales invoice #{doc_num} has incorrect or zero output VAT ({amount_str})."
 
+    if rule == "vat_on_zero_rated_customer":
+        return f"Sales invoice #{doc_num} to {supplier} charges VAT, but the customer is normally zero-rated ({amount_str})."
+
     if rule == "rcm_candidate":
         return f"Bill #{doc_num} from {supplier} is from outside the UAE and may need reverse charge."
 

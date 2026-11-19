@@ -42,6 +42,7 @@ RULE_TEXT = {
     "large_one_off_supplier": "the supplier's only bill in the period, and a large one",
     "rcm_candidate": "supplier outside the UAE and no VAT: the bill may need reverse charge",
     "foreign_vat_charged": "supplier outside the UAE charged VAT, and has no UAE TRN",
+    "vat_on_zero_rated_customer": "VAT charged to a customer outside the UAE, or one whose other invoices carry no VAT",
 }
 
 
@@ -60,6 +61,7 @@ LAW_QUESTIONS = {
     "vat_without_amount": "How is a tax credit note recorded and what must it show in the UAE?",
     "future_date": "When is the date of supply and when must a tax invoice be issued in the UAE?",
     "rcm_candidate": "When must a UAE VAT registrant account for VAT under the reverse charge on imported services, and in which boxes of the VAT return is it reported?",
+    "vat_on_zero_rated_customer": "When is a supply zero-rated in the UAE, including exports of goods and services and supplies to designated zones?",
     "foreign_vat_charged": "Can a UAE VAT registrant recover VAT charged by a supplier outside the UAE as input tax, and how does the reverse charge apply to imported services?",
 }
 MAX_LAW_QUESTIONS = 3
@@ -86,21 +88,25 @@ def _has_trn(organization_ids: Sequence[int], subject: str, deadline: float, sid
         return False
 
 
-def _has_country(organization_ids: Sequence[int], subject: str, deadline: float) -> bool:
-    """Whether this Cube gives the supplier's country (purchases.vendor_country_code). A Cube started
-    before the field was added does not; the review then skips the country check, instead of failing."""
+def _has_country(organization_ids: Sequence[int], subject: str, deadline: float, side: str = "purchases") -> bool:
+    """Whether this Cube gives the other party's country (purchases.vendor_country_code, sales.customer_country_code).
+    A Cube started before the field was added does not; the review then skips the country check, instead of failing."""
     try:
         from gemini_brain.semantic.catalog import get_catalog
-        return scan_mod.member("purchases", "vendor_country_code") in get_catalog(list(organization_ids), subject, deadline).view("purchases").dimensions
+        view = scan_mod.SIDES[side]["view"]
+        return scan_mod.member(side, "vendor_country_code") in get_catalog(list(organization_ids), subject, deadline).view(view).dimensions
     except Exception:  # noqa: BLE001
         return False
 
 
-def _has_rc(organization_ids: Sequence[int], subject: str, deadline: float) -> bool:
-    """Whether this Cube gives the reverse-charge amounts of bills (purchases.reverse_charge_net)."""
+def _has_rc(organization_ids: Sequence[int], subject: str, deadline: float, side: str = "purchases") -> bool:
+    """Whether this Cube gives the tax-code amounts the rules use: on bills the reverse-charge amounts
+    (purchases.reverse_charge_net), on sales the lines coded with no VAT (sales.net_sales_coded_no_vat)."""
     try:
         from gemini_brain.semantic.catalog import get_catalog
-        return "purchases.reverse_charge_net" in get_catalog(list(organization_ids), subject, deadline).view("purchases").measures
+        member = "purchases.reverse_charge_net" if side == "purchases" else "sales.net_sales_coded_no_vat"
+        view = scan_mod.SIDES[side]["view"]
+        return member in get_catalog(list(organization_ids), subject, deadline).view(view).measures
     except Exception:  # noqa: BLE001
         return False
 
@@ -196,9 +202,10 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
         want_dup = want_dup and any(r in duplicates.RULES for r in only)
         want_odd = want_odd and any(r in anomalies.RULES for r in only)
     with_trn = want_odd and _has_trn(organization_ids, subject, deadline, side)
-    with_country = want_odd and side == "purchases" and _has_country(organization_ids, subject, deadline)
-    want_rc = with_country and (not only or "rcm_candidate" in only)
-    with_rc = want_rc and _has_rc(organization_ids, subject, deadline)
+    with_country = want_odd and _has_country(organization_ids, subject, deadline, side=side)
+    want_rc = side == "purchases" and with_country and (not only or "rcm_candidate" in only)
+    # with_rc: the tax-code amounts, reverse charge on bills or no-VAT codes on sales.
+    with_rc = (want_rc and _has_rc(organization_ids, subject, deadline)) if side == "purchases" else         (want_odd and _has_rc(organization_ids, subject, deadline, side="sales"))
     reverse_charge: List[Dict[str, Any]] = []
 
     groups: List[Dict[str, Any]] = []

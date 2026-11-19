@@ -79,7 +79,8 @@ def test_the_vat_engine_builds_the_same_review_calls():
         {"mode": "all", "side": "purchases",
          "rules": ["same_number", "same_total_near_date", "similar_vendor_same_day", "vat_rate_not_standard",
                    "vat_without_amount", "vat_wrong_sign"]},
-        {"mode": "all", "side": "sales", "rules": ["vat_rate_not_standard", "vat_wrong_sign", "vat_zero"]},
+        {"mode": "all", "side": "sales", "rules": ["vat_on_zero_rated_customer", "vat_rate_not_standard", "vat_wrong_sign",
+                                                   "vat_zero"]},
     ]
 
 
