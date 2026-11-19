@@ -13,7 +13,13 @@ cubes:
              vc.organization_id                         AS organization_id,
              LOWER(COALESCE(vc.filing_frequency, ''))    AS filing_frequency,
              COALESCE(vc.scheme_type, '')                AS scheme_type,
-             vc.effective_date                           AS effective_date
+             vc.effective_date                           AS effective_date,
+             CASE WHEN (vc.vat_returns_config ->> 'quarter_group') ~ '^[123]$'
+                    THEN CAST(vc.vat_returns_config ->> 'quarter_group' AS INTEGER)
+                  WHEN (vc.vat_returns_config ->> 'quarter_offset_months') ~ '^[0-9]+$'
+                    THEN CASE MOD(CAST(vc.vat_returns_config ->> 'quarter_offset_months' AS INTEGER), 3)
+                           WHEN 0 THEN 3 ELSE MOD(CAST(vc.vat_returns_config ->> 'quarter_offset_months' AS INTEGER), 3) END
+             END                                         AS quarter_group
       FROM   public.vat_configs vc
       WHERE  COALESCE(vc.is_active, true)
       ORDER  BY vc.organization_id, COALESCE(vc.is_main_vat_config, false) DESC, vc.updated_date DESC NULLS LAST
@@ -38,3 +44,10 @@ cubes:
       - name: effective_date
         sql: effective_date
         type: time
+      - name: quarter_group
+        description: >-
+          For quarterly filers, the month (1, 2 or 3) in which the first quarter of the year ends: 3 is calendar
+          quarters (Mar, Jun, Sep, Dec), 1 is Jan/Apr/Jul/Oct, 2 is Feb/May/Aug/Nov. From the VAT settings
+          (vat_returns_config quarter_group or quarter_offset_months); null when they don't say.
+        sql: quarter_group
+        type: number

@@ -51,6 +51,26 @@ def _settings(organization_ids: Sequence[int], subject: str, deadline: float) ->
     return out
 
 
+def quarter_groups(organization_ids: Sequence[int], subject: str, deadline: float) -> Dict[int, int]:
+    """{organization id: 1, 2 or 3} for organizations whose VAT settings say in which months their quarters end;
+    {} when none do or the Cube has no such field. 3 is calendar quarters."""
+    try:
+        result = cube_client.load({"dimensions": ["vat_settings.quarter_group"], "limit": 500},
+                                  organization_ids=list(organization_ids), subject=subject, deadline=deadline)
+    except Exception:  # noqa: BLE001 - an older Cube: quarters are assumed, and the answer says so
+        return {}
+    out = {}
+    for row in result.rows:
+        org, value = row.get("vat_settings.organization_id"), row.get("vat_settings.quarter_group")
+        try:
+            group = int(float(cell_text(value)))
+        except (TypeError, ValueError):
+            continue
+        if org is not None and group in tax_periods.QUARTER_GROUPS:
+            out[int(float(org))] = group
+    return out
+
+
 def filing_frequencies(organization_ids: Sequence[int], subject: str, deadline: float) -> Dict[int, str]:
     """Each organization's VAT filing frequency from its VAT settings; organizations with none are left out."""
     return _settings(organization_ids, subject, deadline)
@@ -115,13 +135,18 @@ def _date(value: Any, name: str) -> dt.date:
 
 
 def resolve_period(params: Dict[str, Any], org: int, today: dt.date, known: Dict[int, str],
-                   group: Optional[int]) -> Dict[str, Any]:
-    """{"frequency", "frequency_source", "start", "end", "is_tax_period", "due"} for one organization."""
+                   group: Optional[int], groups: Optional[Dict[int, int]] = None) -> Dict[str, Any]:
+    """{"frequency", "frequency_source", "quarter_source", "start", "end", "is_tax_period", "due"} for one
+    organization. `groups`: each organization's quarter group from its VAT settings (quarter_groups)."""
     forced = params.get("frequency")
     frequency = forced or known.get(org) or "quarterly"
     source = ("as asked" if forced else "from the organization's VAT settings" if org in known else
               "assumed: the books do not say; the FTA sets it on the registration certificate")
-    quarter_group = group or tax_periods.DEFAULT_QUARTER_GROUP
+    known_group = (groups or {}).get(org)
+    quarter_group = group or known_group or tax_periods.DEFAULT_QUARTER_GROUP
+    quarter_source = (None if frequency == "monthly" else "as asked" if group else
+                      "from the organization's VAT settings" if known_group else
+                      "assumed: calendar quarters, because the VAT settings don't say in which months the quarters end")
     which = params.get("which") or "last"
     if which == "period":
         period = params.get("period") or {}
@@ -141,7 +166,7 @@ def resolve_period(params: Dict[str, Any], org: int, today: dt.date, known: Dict
                        f"quarters ending in month {quarter_group} and every three months after"))
     return {
         "frequency": frequency, "frequency_source": source, "start": start, "end": end,
-        "is_tax_period": is_tax_period, "due": due, "quarter_group": quarter_group,
+        "is_tax_period": is_tax_period, "due": due, "quarter_group": quarter_group, "quarter_source": quarter_source,
         "quarter_months": quarter_months,
     }
 
@@ -160,11 +185,12 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
         raise ToolInputError(f"frequency must be one of {list(tax_periods.FREQUENCIES)}")
     today = semantic_periods.today_in(settings.report_timezone)
     known = _settings(organization_ids, subject, deadline) if forced is None else {}
+    groups = quarter_groups(organization_ids, subject, deadline) if group is None else {}
 
     out_orgs: List[Dict[str, Any]] = []
     notes: List[str] = [NOT_A_RETURN]
     for org in organization_ids:
-        pinfo = resolve_period(params, org, today, known, group)
+        pinfo = resolve_period(params, org, today, known, group, groups)
         frequency = pinfo["frequency"]
         source = pinfo["frequency_source"]
         quarter_group = pinfo["quarter_group"]
@@ -174,6 +200,7 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
         figures = _figures(org, start, end, subject, deadline)
         entry: Dict[str, Any] = {
             "organization_id": org, "frequency": frequency, "frequency_source": source,
+            "quarter_source": pinfo["quarter_source"],
             "quarter_months": pinfo["quarter_months"],
             "period": {"start": start.isoformat(), "end": end.isoformat()}, "is_tax_period": is_tax_period, **figures,
             "position": "payable" if figures["net_vat_payable"] > 0 else "refundable" if figures["net_vat_payable"] < 0 else "nil",
@@ -225,9 +252,11 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
     if any(not o["is_tax_period"] for o in out_orgs):
         notes.append("The dates asked are not a tax period, so they have no due date of their own. The due date to give "
                      "is next_return's.")
-    if any(o["frequency_source"].startswith("assumed") for o in out_orgs) and group is None:
-        notes.append("Quarterly periods were assumed to be calendar quarters. If the organization's quarters end in "
-                     "January or February, ask again with that quarter group.")
+    assumed_q = [o["organization_id"] for o in out_orgs if str(o.get("quarter_source") or "").startswith("assumed")]
+    if assumed_q:
+        notes.append(f"Organizations {assumed_q}: calendar quarters (March, June, September, December) were assumed, "
+                     "because the VAT settings don't say in which months the quarters end. Say so in the answer. If "
+                     "the organization's quarters end in January or February, ask again with that quarter group.")
     rows = [{"organization_id": o["organization_id"], "period_start": o["period"]["start"], "period_end": o["period"]["end"],
              "output_vat": o["output_vat"], "input_vat": o["input_vat"], "net_vat_payable": o["net_vat_payable"],
              "due_date": o["due_date"] or (o.get("next_return") or {}).get("due_date")} for o in out_orgs]

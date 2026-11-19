@@ -10,6 +10,7 @@ views:
           - filing_frequency
           - scheme_type
           - effective_date
+          - quarter_group
       - join_path: vat_config_rows.organizations
         includes:
           - name: id

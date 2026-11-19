@@ -116,6 +116,7 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
     deadline_val = deadline if deadline is not None else time.monotonic() + 30.0
     today = semantic_periods.today_in(settings.report_timezone)
     known = vat_return_tool.filing_frequencies(organization_ids, subject, deadline_val) if forced is None else {}
+    groups = vat_return_tool.quarter_groups(organization_ids, subject, deadline_val) if group is None else {}
     # Ask Cube only for the members it has: a Cube without the supplier's TRN or country still drafts the return
     # (without reverse-charge candidates), as the VAT review does.
     from gemini_brain.vat_review import tool as review_tool
@@ -127,13 +128,20 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
     all_rows: List[Dict[str, Any]] = []
 
     for org in organization_ids:
-        pinfo = vat_return_tool.resolve_period(params, org, today, known, group)
+        pinfo = vat_return_tool.resolve_period(params, org, today, known, group, groups)
         start, end = pinfo["start"], pinfo["end"]
         frequency = pinfo["frequency"]
         frequency_source = pinfo["frequency_source"]
         due = pinfo["due"]
 
         org_notes: List[str] = []
+        if str(pinfo.get("quarter_source") or "").startswith("assumed"):
+            org_notes.append(f"Organization {org}: calendar quarters (March, June, September, December) were assumed, "
+                             "because the VAT settings don't say in which months the quarters end. Say so; if the "
+                             "organization's quarters end in other months, ask again with that quarter group.")
+        if not pinfo["is_tax_period"]:
+            org_notes.append(f"Organization {org}: the dates asked are not one of its tax periods, so there is no due "
+                             "date for them.")
 
         # 1. Sales by VAT category. A failed query is shown as unavailable, never as zero sales.
         sales_ok = True
@@ -324,6 +332,7 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
             "period": {"start": start.isoformat(), "end": end.isoformat()},
             "frequency": frequency,
             "frequency_source": frequency_source,
+            "quarter_source": pinfo.get("quarter_source"),
             "due_date": due.isoformat() if due else None,
             "boxes": boxes,
             "reverse_charge": reverse_charge,

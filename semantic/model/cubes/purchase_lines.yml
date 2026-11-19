@@ -156,8 +156,20 @@ cubes:
         sql: "{CUBE}.doc_sign * {CUBE}.line_amount"
         filters:
           - sql: "{CUBE}.reverse_charge_coded = 1"
+      - name: reverse_charge_vat
+        description: >-
+          The reverse-charge VAT the business accounts for itself on these purchases: 5% of reverse_charge_net,
+          declared as output VAT in Box 3 and recovered as input VAT in Box 10 (Article 48). Use this for "how much
+          reverse-charge VAT did we self-assess". The supplier charges none, so it is not on the bill.
+        type: sum
+        sql: "{CUBE}.doc_sign * {CUBE}.line_amount * 0.05"
+        filters:
+          - sql: "{CUBE}.reverse_charge_coded = 1"
       - name: reverse_charge_vat_recorded
-        description: VAT recorded on the bill lines that carry a reverse-charge tax code (usually zero).
+        description: >-
+          VAT typed on the bill lines with a reverse-charge tax code. Normally 0, because a foreign supplier charges no
+          UAE VAT. It is NOT the self-assessed reverse-charge VAT (that is reverse_charge_vat): 0 here does not mean
+          the reverse charge is missing.
         type: sum
         sql: "{CUBE}.doc_sign * {CUBE}.tax_amount"
         filters:

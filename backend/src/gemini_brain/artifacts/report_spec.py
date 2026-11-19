@@ -1101,6 +1101,17 @@ def _table_from_data(
     }
 
 
+#: The columns of a VAT 201 draft export (vat_return/form201.py rows), in the order of the return.
+_FORM_COLUMNS = ("box", "label", "net", "vat", "status", "organization_id")
+
+
+def _is_form_rows(data: Any) -> bool:
+    """True for the rows of a VAT 201 draft: one row per box. A chart of them would add up boxes and totals, so the
+    export is the table alone, in box order."""
+    return (isinstance(data, list) and bool(data) and all(isinstance(r, dict) for r in data)
+            and all({"box", "label", "status"} <= set(r) for r in data))
+
+
 def build_report_spec(
     data: Any,
     query: str = "",
@@ -1121,6 +1132,9 @@ def build_report_spec(
     kpis: List[Dict[str, Any]] = []
     charts: List[Dict[str, Any]] = []
     tables: List[Dict[str, Any]] = []
+    form = _is_form_rows(data)
+    if form:
+        data = [{k: r.get(k) for k in _FORM_COLUMNS if k in r} for r in data]
     period = _period_from(data) if isinstance(data, dict) else None
     entity = None
     currency = "AED"
@@ -1174,7 +1188,10 @@ def build_report_spec(
                     f"Showing {len(table['rows'])} of {table['total_rows']} rows. "
                     "Download Excel for the full extract."
                 )
-            if not charts:
+            if form:  # the return's order: box, label, net, VAT, status
+                rank = {k: i for i, k in enumerate(_FORM_COLUMNS)}
+                table["columns"] = sorted(table["columns"], key=lambda c: rank.get(c.get("key"), len(rank)))
+            if not charts and not form:
                 chart = _chart_from_rows(table.get("raw_rows") or [], query, chart_hint)
                 if chart:
                     charts.append(chart)
@@ -1192,7 +1209,7 @@ def build_report_spec(
             "raw_rows": [{"value": v} for v in data[:XLSX_MAX_ROWS]],
         })
 
-    if not charts:
+    if not charts and not form:
         fallback = _chart_from_kpis(kpis, chart_hint=chart_hint)
         if fallback:
             charts.append(fallback)
@@ -1210,6 +1227,8 @@ def build_report_spec(
         "notes": notes,
         "insight": None,
     }
+    if form:
+        return spec  # the boxes of a return: no chart, whatever the hint
     merge_chart_blocks(spec, blocks)
     return apply_chart_hint(spec, chart_hint, query)
 
