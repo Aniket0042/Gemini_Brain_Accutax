@@ -190,6 +190,14 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
         ledger = _ledger(org, start, end, subject, deadline)
         if ledger is not None:
             entry["ledger_vat"] = ledger
+            if figures.get("reverse_charge_vat"):
+                # Like for like: the VAT posted by sales and bills carries no reverse charge (it has its own journal).
+                ledger["compare_with"] = {
+                    "output_vat_without_reverse_charge": round(figures["output_vat"] - figures["reverse_charge_vat"], 2),
+                    "input_vat_without_reverse_charge": round(figures["input_vat"] - figures["reverse_charge_vat"], 2),
+                    "note": "The VAT posted by sales and bills excludes reverse charge, which is posted by its own "
+                            "journal. Compare it with these figures, not with output_vat and input_vat; equal means "
+                            "the ledger agrees."}
             rc_vat = figures.get("reverse_charge_vat") or 0.0  # posted by its own journal, not by the sales or bills
             if (abs(ledger["output_vat_posted_by_sales"] - (figures["output_vat"] - rc_vat)) > 1
                     or abs(ledger["input_vat_posted_by_bills"] - (figures["input_vat"] - rc_vat)) > 1):
