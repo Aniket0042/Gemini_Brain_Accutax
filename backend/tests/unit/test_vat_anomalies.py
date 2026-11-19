@@ -196,9 +196,9 @@ def test_a_pattern_is_reported_with_its_organization(monkeypatch):
     assert not any("No odd bills" in n for n in out["notes"])
 
 
-def test_nothing_found_says_which_rules_are_not_applied(monkeypatch):
+def test_nothing_found_says_what_the_books_cannot_tell(monkeypatch):
     out = run_tool(monkeypatch, clean(), mode="anomalies")
-    assert out["findings_found"] == 0 and any("TRN" in n and "reverse-charge" in n for n in out["notes"])
+    assert out["findings_found"] == 0 and any("VAT category" in n and "does not prove" in n for n in out["notes"])
 
 
 def test_the_result_is_json(monkeypatch):
