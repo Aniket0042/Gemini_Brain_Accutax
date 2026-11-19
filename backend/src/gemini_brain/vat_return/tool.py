@@ -293,7 +293,7 @@ def tool_spec() -> Dict[str, Any]:
                 "frequency": {"type": "string", "enum": list(tax_periods.FREQUENCIES),
                               "description": "Only when the user says how often they file."},
                 "quarter_group": {"type": "integer", "enum": list(tax_periods.QUARTER_GROUPS),
-                                  "description": "The month (1, 2 or 3) in which the user's first quarter of the year ends."},
+                                  "description": "Only when the user says in which months their quarters end (1: Jan/Apr/Jul/Oct, 2: Feb/May/Aug/Nov, 3: Mar/Jun/Sep/Dec). Leave it out otherwise: each organization's VAT settings give its own quarters, and one value would force the same quarters on every organization."},
             },
             "required": [],
         }},
