@@ -55,10 +55,16 @@ def _finding(rule: str, bill: Dict[str, Any], why: str, **details: Any) -> Dict[
                                               "vendor_name", "net_purchases", "input_vat")}}
 
 
+def reverse_charged(bill: Dict[str, Any]) -> bool:
+    """True when the bill has lines with a reverse-charge tax code: the books already account for its VAT under the
+    reverse charge (Box 3 and Box 10), so it is not a candidate and its missing VAT is not a finding."""
+    return abs(_num(bill.get("reverse_charge_net")) or 0.0) >= 0.005
+
+
 def foreign_country(bill: Dict[str, Any], side: str = "purchases") -> str:
-    """The supplier's country code when the supplier is outside the UAE, else "". Only on purchases, and only when the
-    books give the country at all (the key is present)."""
-    if side != "purchases" or "vendor_country_code" not in bill:
+    """The supplier's country code when the supplier is outside the UAE and the bill is not already reverse-charged,
+    else "". Only on purchases, and only when the books give the country at all (the key is present)."""
+    if side != "purchases" or "vendor_country_code" not in bill or reverse_charged(bill):
         return ""
     code = str(bill.get("vendor_country_code") or "").strip().upper()
     return code if code and code != "AE" else ""
@@ -85,6 +91,25 @@ def rcm_candidates(bills: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if net and code and abs(vat) < 0.005:
             out.append(_rcm_finding(b, net, code))
     return out
+
+
+def rcm_totals(findings: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    """Totals of rcm_candidate findings: bills, net, self-assessed VAT, and the same per supplier (largest first)."""
+    by: Dict[str, Dict[str, Any]] = {}
+    for f in findings:
+        if f.get("rule") != "rcm_candidate":
+            continue
+        d, b = f.get("details") or {}, f.get("bill") or {}
+        name = str(b.get("vendor_name") or "Unknown")
+        e = by.setdefault(name, {"vendor_name": name, "country": d.get("country"), "bills": 0, "net": 0.0,
+                                 "self_assessed_vat": 0.0})
+        e["bills"] += 1
+        e["net"] += d.get("net") or 0.0
+        e["self_assessed_vat"] += d.get("self_assessed_vat") or 0.0
+    rows = sorted(({**e, "net": round(e["net"], 2), "self_assessed_vat": round(e["self_assessed_vat"], 2)}
+                   for e in by.values()), key=lambda e: -abs(e["net"]))
+    return {"bills": sum(e["bills"] for e in rows), "net": round(sum(e["net"] for e in rows), 2),
+            "self_assessed_vat": round(sum(e["self_assessed_vat"] for e in rows), 2), "by_supplier": rows}
 
 
 def find_future(bills: Sequence[Dict[str, Any]], today: dt.date) -> List[Dict[str, Any]]:
@@ -130,6 +155,8 @@ def find_anomalies(bills: Sequence[Dict[str, Any]], today: dt.date,
                                      "opposite signs.", vat=vat, net=net))
         elif abs(vat) < 0.005:
             code = foreign_country(b, side)
+            if side == "purchases" and reverse_charged(b):
+                continue  # already reverse-charged in the books: no VAT on the bill is right
             if code:
                 rcm.append(_rcm_finding(b, net, code))
             else:

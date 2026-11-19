@@ -18,6 +18,7 @@ def _cube_members(monkeypatch):
     from gemini_brain.vat_review import tool as review_tool
     monkeypatch.setattr(review_tool, "_has_trn", lambda *a, **k: True)
     monkeypatch.setattr(review_tool, "_has_country", lambda *a, **k: True)
+    monkeypatch.setattr(review_tool, "_has_rc", lambda *a, **k: False)
 
 
 def mock_env(monkeypatch, sales_rows=None, bills=None, scan_complete=True, why_incomplete=None):

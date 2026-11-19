@@ -96,6 +96,15 @@ def _has_country(organization_ids: Sequence[int], subject: str, deadline: float)
         return False
 
 
+def _has_rc(organization_ids: Sequence[int], subject: str, deadline: float) -> bool:
+    """Whether this Cube gives the reverse-charge amounts of bills (purchases.reverse_charge_net)."""
+    try:
+        from gemini_brain.semantic.catalog import get_catalog
+        return "purchases.reverse_charge_net" in get_catalog(list(organization_ids), subject, deadline).view("purchases").measures
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _future_dated(org: int, end: Any, today: Any, subject: str, deadline: float,
                   with_trn: bool = False, with_country: bool = False, side: str = "purchases") -> List[Dict[str, Any]]:
     """Bills dated after the period's end and after today, which a scan "up to today" never reaches."""
@@ -188,6 +197,9 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
         want_odd = want_odd and any(r in anomalies.RULES for r in only)
     with_trn = want_odd and _has_trn(organization_ids, subject, deadline, side)
     with_country = want_odd and side == "purchases" and _has_country(organization_ids, subject, deadline)
+    want_rc = with_country and (not only or "rcm_candidate" in only)
+    with_rc = want_rc and _has_rc(organization_ids, subject, deadline)
+    reverse_charge: List[Dict[str, Any]] = []
 
     groups: List[Dict[str, Any]] = []
     findings: List[Dict[str, Any]] = []
@@ -196,7 +208,7 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
     per_org: List[Dict[str, Any]] = []
     for org in organization_ids:
         scan = scan_bills(org, start, end, subject=subject, deadline=min(deadline, time.monotonic() + SCAN_SECONDS),
-                          with_trn=with_trn, with_country=with_country, side=side)
+                          with_trn=with_trn, with_country=with_country, side=side, with_rc=with_rc)
         bills, skipped = duplicates.usable(scan.bills)
         name = next((b.get("organization_name") for b in scan.bills if b.get("organization_name")), None) or f"Organization {org}"
         currency = next((b.get("currency") for b in scan.bills if b.get("currency")), None)
@@ -218,6 +230,19 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
             item["why"] = for_side(item["why"], side)
         for item in found_patterns:
             item["text"] = for_side(item["text"], side)
+        if want_rc:  # every candidate counted, even when the list shows a pattern or only the first rows
+            cands = anomalies.rcm_candidates(bills)
+            for c in cands:
+                c.update(tag)
+                c["key"] = item_key(c, side)
+            cands = [c for c in cands if not exclude or c["key"] not in exclude]
+            coded = [b for b in bills if anomalies.reverse_charged(b)]
+            reverse_charge.append({**tag, "candidates": anomalies.rcm_totals(cands),
+                                   "already_reverse_charged": {
+                                       "bills": len(coded),
+                                       "net": round(sum(b.get("reverse_charge_net") or 0.0 for b in coded), 2),
+                                       "self_assessed_vat": round(sum(b.get("reverse_charge_net") or 0.0 for b in coded)
+                                                                  * 0.05, 2)} if with_rc else None})
         checked += len(bills)
         left_out += skipped
         groups += found_groups
@@ -246,6 +271,13 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
 
     out: Dict[str, Any] = {"mode": mode, "side": side, "period": {"start": start.isoformat(), "end": end.isoformat()},
                            "bills_checked": checked, "organizations": per_org, "notes": notes, "dismissed": dismissed}
+    if reverse_charge:
+        out["reverse_charge"] = reverse_charge
+        notes.append("reverse_charge holds the totals of ALL bills that may need reverse charge (candidates, with "
+                      "each supplier), whatever the list shows; give totals from it. already_reverse_charged are bills "
+                      "with a reverse-charge tax code: the books already account for them, they are not candidates."
+                      + ("" if with_rc else " This book does not show reverse-charge tax codes, so none are counted "
+                         "as already reverse-charged."))
     rows: List[Dict[str, Any]] = []
     rules: Dict[str, str] = {}
     if want_dup:

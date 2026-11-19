@@ -118,13 +118,15 @@ def test_sales_side_with_foreign_customer_no_rcm_candidate():
 def test_tool_run_passes_with_country_to_scan_bills(monkeypatch):
     seen = {}
 
-    def fake_scan_bills(org, start, end, *, subject, deadline, with_trn=False, with_country=False, side="purchases"):
+    def fake_scan_bills(org, start, end, *, subject, deadline, with_trn=False, with_country=False, side="purchases",
+                        with_rc=False):
         seen["with_country"] = with_country
         seen["with_trn"] = with_trn
         return SimpleNamespace(bills=[], complete=True, queries=1, why_incomplete=None)
 
     monkeypatch.setattr(tool, "_has_trn", lambda *a, **k: False)
     monkeypatch.setattr(tool, "_has_country", lambda *a, **k: True)
+    monkeypatch.setattr(tool, "_has_rc", lambda *a, **k: False)
     monkeypatch.setattr(tool, "scan_bills", fake_scan_bills)
 
     tool.run({"period": {"start": "2026-01-01", "end": "2026-03-31"}, "side": "purchases"},

@@ -121,6 +121,7 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
     from gemini_brain.vat_review import tool as review_tool
     with_trn = review_tool._has_trn(organization_ids, subject, deadline_val, "purchases")
     with_country = review_tool._has_country(organization_ids, subject, deadline_val)
+    with_rc = review_tool._has_rc(organization_ids, subject, deadline_val)
 
     out_orgs: List[Dict[str, Any]] = []
     all_rows: List[Dict[str, Any]] = []
@@ -200,7 +201,7 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
         bills_ok = True
         try:
             scan = scan_bills(org, start, end, subject=subject, deadline=deadline_val, with_trn=with_trn,
-                              with_country=with_country, side="purchases")
+                              with_country=with_country, side="purchases", with_rc=with_rc)
         except Exception as e:  # noqa: BLE001 - shown as unavailable, never as zero input VAT
             bills_ok, scan = False, None
             org_notes.append(f"Organization {org}: the bills could not be read from the books ({type(e).__name__}), "
@@ -213,14 +214,25 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
         foreign_vat_ids = {(f["bill"].get("document_id"), f["bill"].get("document_number"))
                            for f in findings if f.get("rule") == "foreign_vat_charged"}
 
-        box9_net = box9_vat = 0.0
+        box9_net = box9_vat = rc_net = rc_bills = 0.0
         for b in bills:
-            b_vat = _num(b.get("input_vat")) or 0.0
-            b_net = _num(b.get("net_purchases")) or 0.0
+            b_rc_net = _num(b.get("reverse_charge_net")) or 0.0
+            b_rc_vat = _num(b.get("reverse_charge_vat_recorded")) or 0.0
+            # Lines with a reverse-charge tax code: already reverse-charged in the books, Box 3 and Box 10.
+            if abs(b_rc_net) >= 0.005:
+                rc_net += b_rc_net
+                rc_bills += 1
+            b_vat = (_num(b.get("input_vat")) or 0.0) - b_rc_vat
+            b_net = (_num(b.get("net_purchases")) or 0.0) - b_rc_net
             # Bills with VAT, and vendor credits that take VAT back (negative VAT), less foreign VAT.
             if abs(b_vat) >= 0.005 and (b.get("document_id"), b.get("document_number")) not in foreign_vat_ids:
                 box9_net += b_net
                 box9_vat += b_vat
+        rc_vat = round(rc_net * 0.05, 2)
+        if rc_bills:
+            org_notes.append(f"Organization {org}: {int(rc_bills)} bills carry a reverse-charge tax code (net "
+                             f"{rc_net:,.2f}): they are in Box 3 and Box 10 at 5%, assuming the VAT is fully recoverable. "
+                             "If any of it is blocked (Executive Regulation Article 53), Box 10 is lower.")
 
         if not bills_ok:
             box9_status = "unavailable"
@@ -274,7 +286,10 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
             "source": "Sales lines with a standard tax code",
         }
         box2 = {"box": "2", "label": BOX_LABELS["2"], "net": None, "vat": None, "status": "not_in_books"}
-        box3 = {"box": "3", "label": BOX_LABELS["3"], "net": 0.0, "vat": 0.0, "status": "candidates_only"}
+        rc_status = "unavailable" if not bills_ok else "from_books" if with_rc else "candidates_only"
+        box3 = {"box": "3", "label": BOX_LABELS["3"], "net": round(rc_net, 2) if bills_ok else None,
+                "vat": rc_vat if bills_ok else None, "status": rc_status,
+                "source": "Bill lines with a reverse-charge tax code; candidates are listed separately"}
         box4 = {"box": "4", "label": BOX_LABELS["4"], "net": round(zero_rated_net, 2) if sales_ok else None,
                 "vat": None, "status": sales_status}
         box5 = {"box": "5", "label": BOX_LABELS["5"], "net": round(exempt_net, 2) if sales_ok else None,
@@ -284,13 +299,16 @@ def run(params: Dict[str, Any], *, organization_ids: Sequence[int], subject: str
         box7 = {"box": "7", "label": BOX_LABELS["7"], "net": None, "vat": None, "status": "not_in_books",
                 "note": "Adjustments to Box 6 are not in the books. Enter them in EmaraTax if the customs figures "
                         "need correcting."}
-        box8_status = _weakest(box_1_status, "approximate" if candidate_count else "from_books")
+        box8_status = _weakest(box_1_status, "approximate" if candidate_count else "from_books",
+                               "unavailable" if not bills_ok else "from_books")
         box8 = {"box": "8", "label": BOX_LABELS["8"], "net": None,
-                "vat": round(standard_vat, 2) if sales_ok else None, "status": box8_status}
+                "vat": round(standard_vat + rc_vat, 2) if sales_ok else None, "status": box8_status}
         box9 = {"box": "9", "label": BOX_LABELS["9"], "net": round(box9_net, 2) if bills_ok else None,
                 "vat": round(box9_vat, 2) if bills_ok else None, "status": box9_status}
-        box10 = {"box": "10", "label": BOX_LABELS["10"], "net": 0.0, "vat": 0.0, "status": "candidates_only"}
-        box11 = {"box": "11", "label": BOX_LABELS["11"], "net": None, "vat": box9["vat"], "status": box9_status}
+        box10 = {"box": "10", "label": BOX_LABELS["10"], "net": round(rc_net, 2) if bills_ok else None,
+                 "vat": rc_vat if bills_ok else None, "status": rc_status if bills_ok else "unavailable"}
+        box11 = {"box": "11", "label": BOX_LABELS["11"], "net": None,
+                 "vat": None if box9["vat"] is None else round(box9["vat"] + rc_vat, 2), "status": box9_status}
         box12 = {"box": "12", "label": BOX_LABELS["12"], "net": None, "vat": _vat(box8["vat"]), "status": box8_status}
         box13 = {"box": "13", "label": BOX_LABELS["13"], "net": None, "vat": _vat(box11["vat"]),
                  "status": box11["status"]}

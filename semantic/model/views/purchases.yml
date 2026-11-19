@@ -32,6 +32,8 @@ views:
           - vendor_credits
           - net_purchases
           - input_vat
+          - reverse_charge_net
+          - reverse_charge_vat_recorded
           - bill_count
           - vendor_count
           - first_bill_date
