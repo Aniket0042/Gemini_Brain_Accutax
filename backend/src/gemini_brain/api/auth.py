@@ -124,50 +124,65 @@ def placeholder_tenants(org_ids: list[int]) -> list[dict[str, Any]]:
     ]
 
 
+_ORG_COLUMNS = "id, name, emirate, currency, company_type"
+
+
+def _tenant_entries(rows: list[tuple]) -> list[dict[str, Any]]:
+    tenants = []
+    for i, r in enumerate(rows):
+        oid = int(r[0])
+        name = r[1] or f"Organization {oid}"
+        emirate = r[2] or ""
+        currency = r[3] or "AED"
+        display_label = f"{name} ({emirate})" if emirate else name
+        tenants.append({
+            "id": oid,
+            "name": name,
+            "display_name": display_label,
+            "tag": emirate or "Tenant",
+            "badge_color": _BADGE_COLORS[i % len(_BADGE_COLORS)],
+            "industry": str(r[4] or ""),
+            "currency": currency,
+            "description": "",
+        })
+    return tenants
+
+
 def fetch_organizations_from_db(org_ids: list[int] | None = None, db_name: str = "") -> list[dict[str, Any]]:
-    """Fetch organizations directly from PostgreSQL public.organizations table."""
+    """Fetch organizations directly from PostgreSQL public.organizations table.
+
+    public.organizations has a row-level security policy (tenant_isolation_policy): a row is only visible once the
+    session declares its company in `app.current_org`. So when ids are given, each company is looked up on its own
+    with that variable set to that one id. The ids come from what the signed-in user is allowed to access, so a
+    caller still sees no company beyond its own. Without ids the table is read as before, which the policy limits
+    to nothing for a role that is not the table owner.
+    """
     try:
         conn = get_connection(db_name)
+        previous_autocommit = getattr(conn, "autocommit", False)
         cur = conn.cursor()
         try:
+            rows: list[tuple] = []
             if org_ids:
-                cur.execute(
-                    """
-                    SELECT id, name, emirate, currency, company_type
-                    FROM public.organizations
-                    WHERE id = ANY(%s)
-                    ORDER BY id ASC;
-                    """,
-                    (list(org_ids),),
-                )
+                conn.autocommit = False
+                for oid in sorted({int(x) for x in org_ids}):
+                    # SET LOCAL lasts until the end of this transaction only, so one company never leaks into the next.
+                    cur.execute("SET LOCAL app.current_org = %s;", (str(oid),))
+                    cur.execute(
+                        f"SELECT {_ORG_COLUMNS} FROM public.organizations WHERE id = %s;",
+                        (oid,),
+                    )
+                    rows.extend(cur.fetchall())
+                    conn.commit()
             else:
-                cur.execute(
-                    """
-                    SELECT id, name, emirate, currency, company_type
-                    FROM public.organizations
-                    ORDER BY id ASC;
-                    """
-                )
-            rows = cur.fetchall()
-            tenants = []
-            for i, r in enumerate(rows):
-                oid = int(r[0])
-                name = r[1] or f"Organization {oid}"
-                emirate = r[2] or ""
-                currency = r[3] or "AED"
-                display_label = f"{name} ({emirate})" if emirate else name
-                tenants.append({
-                    "id": oid,
-                    "name": name,
-                    "display_name": display_label,
-                    "tag": emirate or "Tenant",
-                    "badge_color": _BADGE_COLORS[i % len(_BADGE_COLORS)],
-                    "industry": str(r[4] or ""),
-                    "currency": currency,
-                    "description": "",
-                })
-            return tenants
+                cur.execute(f"SELECT {_ORG_COLUMNS} FROM public.organizations ORDER BY id ASC;")
+                rows = cur.fetchall()
+            return _tenant_entries(rows)
         finally:
+            try:
+                conn.autocommit = previous_autocommit
+            except Exception:
+                pass
             cur.close()
             conn.close()
     except Exception as e:
