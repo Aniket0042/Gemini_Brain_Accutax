@@ -3,8 +3,8 @@ import App from '../App';
 import { clearFinanceStorage,hubSignInUrl,sessionClient } from './session';
 import { watchBrowserSession } from './session-client.mjs';
 import { clearUploadBlobs } from '../services/uploadBlobs';
+import AuthScreen,{ AuthLoading,describeProblem } from './AuthScreen';
 
-const messages={identity_link_required:'Your verified identity needs an approved Accutax account link or onboarding. Contact your account administrator.',unavailable:'Sign-in is temporarily unavailable. Try again.',login_failed:'Sign-in could not be completed. Start again.'};
 export default function SessionRoot(){
   const [profile,setProfile]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(null);
   const [scope,setScope]=useState(null);
@@ -62,14 +62,8 @@ export default function SessionRoot(){
     return()=>{active=false;window.clearInterval(timer);window.removeEventListener('focus',verify);};
   },[userId]);
   const logout=async()=>{setError(null);try{await sessionClient.logout();}catch(reason){setError(reason);}};
-  if(loading)return <main style={{padding:40,textAlign:'center'}} role="status">Checking your session…</main>;
-  if(!profile||error||reason)return <main style={{minHeight:'100vh',display:'grid',placeItems:'center',background:'#f7faf9',color:'#102c28'}}><section style={{width:'min(420px,90vw)',padding:32,border:'1px solid #dde7e3',borderRadius:16,background:'white'}}>
-    <h1 style={{fontSize:24,color:'#102c28',margin:'0 0 12px'}}>Accutax AI</h1><p style={{lineHeight:1.6}}>Sign in with the same Accutax account you use for Bookkeeping.</p>
-    {(error||reason)&&<p role="alert" style={{color:'#805e1c'}}>{messages[reason]||error?.message||'We could not verify your session. Please try again.'}</p>}
-    {!profile&&<button style={{padding:'12px 18px',background:'#087c6c',color:'white',border:0,borderRadius:8}} onClick={goToSignIn}>Sign in with your Accutax account</button>}
-    {error&&<button style={{display:'block',marginTop:18}} onClick={()=>window.location.reload()}>Retry access check</button>}
-    {profile&&<button style={{display:'block',marginTop:18}} onClick={logout}>Sign out</button>}
-  </section></main>;
-  if(!scope||scope.userId!==userId)return <main style={{padding:40,textAlign:'center'}} role="status">Checking AI company access…</main>;
+  if(loading)return <AuthLoading label="Checking your session…"/>;
+  if(!profile||error||reason)return <AuthScreen kind={describeProblem({reason,error,profile})} profile={profile} onSignIn={goToSignIn} onRetry={()=>window.location.reload()} onSignOut={logout}/>;
+  if(!scope||scope.userId!==userId)return <AuthLoading label="Opening your companies…"/>;
   return <App key={`${userId}:${scope.key}`} sessionProfile={profile} onSessionLogout={logout}/>;
 }
