@@ -9,6 +9,7 @@ import { Header } from './components/Header';
 import { IntroSuggestions } from './components/IntroSuggestions';
 import { ModelHealthModal } from './components/ModelHealthModal';
 import { AnswerCanvas } from './components/canvas/AnswerCanvas';
+import { applySessionOrgNames } from './auth/org-names.mjs';
 import { fetchQueryResponse, streamQueryResponse, fetchTenants, fetchModelCatalog, fetchSessionMessages, createChatSession, deleteChatSession, fetchUploadConfig, fetchPrivacyAccess, fetchUsage, fetchAgents } from './services/api';
 import { parseMention } from './components/AgentsPanel';
 import { newAgentRun, applyAgentStep } from './components/AgentRun';
@@ -842,7 +843,9 @@ export default function App({sessionProfile,onSessionLogout,initialHandoff=null}
   // Load accessible tenants from API
   const loadUserTenants = async (token, user) => {
     try {
-      const data = await fetchTenants(token);
+      const raw = await fetchTenants(token);
+      // The AI service invents "Organization N" when it cannot read company names; the session has the real ones.
+      const data = raw && raw.tenants ? { ...raw, tenants: applySessionOrgNames(raw.tenants, sessionProfile?.organizations) } : raw;
       if (data && data.tenants && data.tenants.length > 0) {
         setAvailableTenants(data.tenants);
         const flags = multiOrgFlags(data);
