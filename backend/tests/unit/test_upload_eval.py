@@ -20,6 +20,7 @@ from gemini_brain.uploads.validate import UploadRejected, inspect  # noqa: E402
 
 @pytest.fixture(scope="module")
 def built(tmp_path_factory):
+    pytest.importorskip("pymupdf", reason="building the eval files needs PyMuPDF (eval-only, not a backend dependency)")
     out = tmp_path_factory.mktemp("evalset")
     cases = uc.build_files(out)
     return out, cases
@@ -243,6 +244,7 @@ def test_the_statement_from_the_books_has_exactly_two_differences():
 
 
 def test_the_books_files_build_and_read_back_as_the_books_say(tmp_path):
+    pytest.importorskip("pymupdf", reason="building the eval files needs PyMuPDF (eval-only, not a backend dependency)")
     cases = uc.build_files(tmp_path, books=BOOKS)
     ids = {c.id for c in cases}
     assert {"books_bill_recorded", "books_bill_not_recorded", "books_statement_two_differences"} <= ids
