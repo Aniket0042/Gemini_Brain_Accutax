@@ -101,7 +101,7 @@ docker compose -f docker-compose.prod.yml --env-file docker/prod.env pull
 docker compose -f docker-compose.prod.yml --env-file docker/prod.env up -d
 ```
 
-It needs, on the server: the app's `.env`, Cube's `cube.env` (see `semantic/cube.env.example`), the gateway key file and the VAT knowledge-base folder. The key file and the knowledge base must be owned by uid 10001, the user the API image runs as. The web UI listens on `127.0.0.1:8020` and the API on `127.0.0.1:8021`, for the server's own nginx; Cube is not published.
+It needs, on the server: the app's `.env`, Cube's `cube.env` (see `semantic/cube.env.example`), the gateway key file and a VAT knowledge-base folder. The folder can start empty: the API builds the knowledge base itself on first start (it needs outbound internet to the FTA site), then rebuilds it monthly at night (`VAT_KB_REFRESH_DAYS`, `VAT_KB_REFRESH_HOUR_UTC`). The key file and the knowledge-base folder must be owned by uid 10001, the user the API image runs as. The web UI listens on `127.0.0.1:8020` and the API on `127.0.0.1:8021`, for the server's own nginx; Cube is not published.
 
 To update, set a newer `AI_IMAGE_TAG`, then `pull` and `up -d`. To roll back, set the previous tag and `up -d`.
 
