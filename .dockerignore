@@ -31,6 +31,9 @@ frontend/dist
 docs
 manual_test_files
 semantic
+# ...except what docker/cube.Dockerfile bakes into the Cube image.
+!semantic/cube.js
+!semantic/model
 *.docx
 *.pdf
 *.md
