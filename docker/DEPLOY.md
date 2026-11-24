@@ -90,6 +90,21 @@ systemctl stop accutax-ai-api && systemctl disable accutax-ai-api
 
 Build with a new `AI_IMAGE_TAG`, copy and load it, change `AI_IMAGE_TAG` in the server's `docker/deploy.env`, then run `up -d` again. To roll back, set the previous tag and run `up -d`.
 
+## Own server (images from CI)
+
+A server that runs only the AI doesn't build anything. On every push to `main`, CI (`.github/workflows/ci.yml`) runs the tests, then pushes three images to GitHub's registry: `ghcr.io/aniket0042/accutax-ai-api`, `accutax-ai-web` (built for the zereco.ai shared sign-in) and `accutax-ai-cube` (Cube with `semantic/` baked in). Each gets a `main` tag and a fixed `sha-<commit>` tag.
+
+```bash
+docker login ghcr.io -u <github-user>          # token with read:packages
+cp docker/prod.env.example docker/prod.env     # set AI_IMAGE_TAG to a sha- tag, and the paths
+docker compose -f docker-compose.prod.yml --env-file docker/prod.env pull
+docker compose -f docker-compose.prod.yml --env-file docker/prod.env up -d
+```
+
+It needs, on the server: the app's `.env`, Cube's `cube.env` (see `semantic/cube.env.example`), the gateway key file and the VAT knowledge-base folder. The key file and the knowledge base must be owned by uid 10001, the user the API image runs as. The web UI listens on `127.0.0.1:8020` and the API on `127.0.0.1:8021`, for the server's own nginx; Cube is not published.
+
+To update, set a newer `AI_IMAGE_TAG`, then `pull` and `up -d`. To roll back, set the previous tag and `up -d`.
+
 ## Things to know
 
 - **AWS credentials:** the container can't see the server's `~/.aws` folder. On EC2 with the host compose file, the instance role works. Anywhere else, put `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` in the env file.

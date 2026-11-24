@@ -1,0 +1,118 @@
+# Accutax AI: tests on every pull request to main; on a push to main, also builds the
+# three images (API, web UI, Cube) and pushes them to GitHub's registry (GHCR).
+# Servers pull them with docker-compose.prod.yml; nothing deploys automatically.
+#
+# Web UI build values come from repository variables (Settings > Secrets and variables >
+# Actions > Variables) and default to the zereco.ai production values.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend unit tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Install
+        run: pip install -e ".[vat_kb,mcp,dev]"
+      - name: Test
+        env:
+          # A throwaway value: the auth module refuses to load without one. No real secret in CI.
+          JWT_SECRET: ci-only-test-secret-not-used-anywhere-else
+        run: python -m pytest tests/unit -q
+
+  frontend:
+    name: Frontend tests and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Test
+        run: node --test
+      - name: Build
+        env:
+          VITE_AUTH_MODE: bff
+          VITE_BFF_API_URL: ${{ vars.VITE_BFF_API_URL || 'https://api.zereco.ai' }}
+          VITE_HUB_URL: ${{ vars.VITE_HUB_URL || 'https://accounts.zereco.ai' }}
+          VITE_ACCUTAX_APP_URL: ${{ vars.VITE_ACCUTAX_APP_URL || 'https://bookkeeping.zereco.ai' }}
+        run: npm run build
+
+  images:
+    name: Build and push images
+    needs: [backend, frontend]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - name: accutax-ai-api
+            dockerfile: docker/api.Dockerfile
+          - name: accutax-ai-web
+            dockerfile: docker/web.Dockerfile
+          - name: accutax-ai-cube
+            dockerfile: docker/cube.Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - name: Registry path
+        run: echo "REGISTRY=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ matrix.name }}
+          tags: |
+            type=sha,prefix=sha-
+            type=ref,event=branch
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          # Only the web image uses these; the others ignore them.
+          build-args: |
+            VITE_AUTH_MODE=bff
+            VITE_BFF_API_URL=${{ vars.VITE_BFF_API_URL || 'https://api.zereco.ai' }}
+            VITE_HUB_URL=${{ vars.VITE_HUB_URL || 'https://accounts.zereco.ai' }}
+            VITE_ACCUTAX_APP_URL=${{ vars.VITE_ACCUTAX_APP_URL || 'https://bookkeeping.zereco.ai' }}

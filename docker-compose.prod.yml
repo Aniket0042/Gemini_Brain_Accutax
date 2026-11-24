@@ -1,0 +1,76 @@
+# Accutax AI on its own server, from the images CI pushes to GitHub's registry (GHCR).
+# Nothing is built on the server: it needs this file, docker/prod.env, the app's .env,
+# cube.env and the VAT knowledge-base folder. See docker/DEPLOY.md, "Own server".
+#
+#   docker compose -f docker-compose.prod.yml --env-file docker/prod.env pull
+#   docker compose -f docker-compose.prod.yml --env-file docker/prod.env up -d
+#
+# Only two ports are published, both on 127.0.0.1, for the server's own nginx:
+# the web UI (AI_WEB_PORT) and the API (AI_API_PORT, for ai-internal). Cube is internal.
+
+name: accutax-ai
+
+x-cube-env: &cube-env
+  CUBEJS_DEV_MODE: "false"
+  CUBEJS_CACHE_AND_QUEUE_DRIVER: cubestore
+  CUBEJS_CUBESTORE_HOST: cubestore
+  CUBEJS_DEFAULT_API_SCOPES: meta,data,sql
+  CUBEJS_TELEMETRY: "false"
+  CUBEJS_LOG_LEVEL: info
+  CUBEJS_DB_QUERY_TIMEOUT: 20s
+  CUBEJS_CONCURRENCY: "4"
+  CUBEJS_DB_MAX_POOL: "12"
+  CUBEJS_JWT_ALGS: HS256
+  CUBEJS_JWT_AUDIENCE: accutax-cube
+  CUBEJS_JWT_ISSUER: gemini-brain
+
+services:
+  api:
+    image: ${AI_REGISTRY:-ghcr.io/aniket0042}/accutax-ai-api:${AI_IMAGE_TAG:-main}
+    env_file:
+      - ${AI_ENV_FILE:-.env}
+    environment:
+      VAT_KB_DIR: /kb
+      CUBE_API_URL: http://cube_api:4000
+      AI_GATEWAY_CONFIG_FILE: /run/secrets/ai-gateway.json
+    ports:
+      - "127.0.0.1:${AI_API_PORT:-8021}:8000"
+    volumes:
+      - ai-data:/data
+      - ${AI_KB_DIR:-./vat_kb_data}:/kb
+      # Gateway key file from the Accutax team. On the server: owner 10001 (the image's
+      # user), mode 600, or the API refuses to start in gateway mode.
+      - ${AI_GATEWAY_KEY_FILE:-./ai-gateway.json}:/run/secrets/ai-gateway.json:ro
+    depends_on: [cube_api]
+    restart: unless-stopped
+
+  web:
+    image: ${AI_REGISTRY:-ghcr.io/aniket0042}/accutax-ai-web:${AI_IMAGE_TAG:-main}
+    ports:
+      - "127.0.0.1:${AI_WEB_PORT:-8020}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  cube_api:
+    image: ${AI_REGISTRY:-ghcr.io/aniket0042}/accutax-ai-cube:${AI_IMAGE_TAG:-main}
+    env_file:
+      - ${CUBE_ENV_FILE:-cube.env}
+    environment:
+      <<: *cube-env
+    depends_on: [cubestore]
+    restart: unless-stopped
+
+  cubestore:
+    image: cubejs/cubestore:v1.7.50
+    environment:
+      CUBESTORE_REMOTE_DIR: /cube/data
+      CUBESTORE_TELEMETRY: "false"
+    volumes:
+      - cubestore_data:/cube/data
+    restart: unless-stopped
+
+volumes:
+  ai-data:
+  cubestore_data:

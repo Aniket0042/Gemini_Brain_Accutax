@@ -90,6 +90,8 @@ def test_every_view_declares_how_time_applies(name):
 
 #: {member}, {CUBE}, {CUBE.member}, {cube.member} and {cube.sql()} are Cube references.
 _REFERENCE = re.compile(r"\{(CUBE|[a-z_]+)(\.[a-z_]+(\(\))?)?\}")
+# Jinja tags like {% if schema_v2() %} are rendered before Cube reads references.
+_JINJA_TAG = re.compile(r"\{%.*?%\}")
 
 
 @pytest.mark.parametrize("name", sorted(CUBES))
@@ -100,7 +102,7 @@ def test_no_stray_braces_in_cube_sql(name):
     texts += [f.get("sql", "") for m in cube.get("measures", []) for f in m.get("filters", [])]
     texts += [j.get("sql", "") for j in cube.get("joins", [])]
     for text in texts:
-        leftover = _REFERENCE.sub("", str(text))
+        leftover = _REFERENCE.sub("", _JINJA_TAG.sub("", str(text)))
         assert "{" not in leftover and "}" not in leftover, f"{name}: stray brace in {text!r}"
 
 
