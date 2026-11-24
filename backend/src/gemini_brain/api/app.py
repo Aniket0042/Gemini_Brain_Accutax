@@ -103,6 +103,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("VAT knowledge base warm-up skipped: %s", e)
 
+    # ...and build it when the folder has none (a new server), then keep it fresh monthly at night.
+    try:
+        from gemini_brain.vat_kb import refresh as vat_kb_refresh
+        vat_kb_refresh.start(settings.vat_kb_dir, settings.vat_kb_enabled or settings.vat_kb_shadow,
+                             settings.vat_kb_refresh_days, settings.vat_kb_refresh_hour_utc)
+    except Exception as e:
+        logger.warning("VAT knowledge base refresh failed to start: %s", e)
+
     # PII masking: the name-recognition model for questions, loaded in the background (privacy/ner.py).
     if (settings.pii_mode or "off").strip().lower() in ("shadow", "on"):
         try:
@@ -122,6 +130,11 @@ async def lifespan(app: FastAPI):
     yield
     if watchdog is not None:
         watchdog.stop()
+    try:
+        from gemini_brain.vat_kb import refresh as vat_kb_refresh
+        vat_kb_refresh.stop()
+    except Exception:
+        pass
     try:
         from gemini_brain.bots import scheduler as bot_scheduler
         bot_scheduler.stop()

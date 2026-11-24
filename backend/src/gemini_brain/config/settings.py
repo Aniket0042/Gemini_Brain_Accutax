@@ -351,6 +351,20 @@ class GeminiBrainSettings(BaseSettings):
         default="",
         description="Bedrock model for VAT law answers. Empty = BEDROCK_MODEL_ID (the primary Sonnet model).",
     )
+    vat_kb_refresh_days: int = Field(
+        default=30,
+        ge=0,
+        description=(
+            "Build the knowledge base when the folder has none, and rebuild it when the build is older "
+            "than this many days (vat_kb/refresh.py). 0 = only by hand with the CLI."
+        ),
+    )
+    vat_kb_refresh_hour_utc: int = Field(
+        default=21,
+        ge=0,
+        le=23,
+        description="UTC hour in which an old build may be rebuilt (21 = 01:00 UAE). A missing build is made at once.",
+    )
     vat_kb_timeout_seconds: float = Field(
         default=3.0,
         ge=0.1,

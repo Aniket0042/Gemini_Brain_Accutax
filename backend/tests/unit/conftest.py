@@ -47,3 +47,5 @@ def _vat_kb_off(monkeypatch):
 
     monkeypatch.setattr(settings, "vat_kb_enabled", False)
     monkeypatch.setattr(settings, "vat_kb_shadow", False)
+    # Never crawl the FTA site or embed from a test that starts the app.
+    monkeypatch.setattr(settings, "vat_kb_refresh_days", 0)

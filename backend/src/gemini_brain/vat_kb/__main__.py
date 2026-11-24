@@ -3,6 +3,7 @@
     python -m gemini_brain.vat_kb crawl  --dir D   collect the FTA document list, download core PDFs
     python -m gemini_brain.vat_kb build  --dir D   build a new search index and switch to it
     python -m gemini_brain.vat_kb search --dir D "question"
+    python -m gemini_brain.vat_kb refresh --dir D  crawl + build now (what the API does by itself, see refresh.py)
 """
 from __future__ import annotations
 
@@ -15,7 +16,7 @@ from pathlib import Path
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="python -m gemini_brain.vat_kb")
-    p.add_argument("command", choices=["crawl", "build", "search"])
+    p.add_argument("command", choices=["crawl", "build", "search", "refresh"])
     p.add_argument("--dir", required=True, type=Path, help="knowledge-base directory")
     p.add_argument("--rerank", action="store_true", help="search: use the cross-encoder reranker")
     p.add_argument("question", nargs="?")
@@ -33,6 +34,12 @@ def main(argv: list[str] | None = None) -> int:
         for doc, error in failures:
             print(f"FAILED {doc.title}: {error}")
         return 1 if failures else 0
+
+    if args.command == "refresh":
+        from gemini_brain.vat_kb.refresh import refresh
+        built = refresh(args.dir)
+        print("build:", built if built is not None else "skipped, another process is building")
+        return 0
 
     if args.command == "build":
         from gemini_brain.vat_kb.embedder import BgeSmallEmbedder
