@@ -1,3 +1,8 @@
+> **HISTORICAL: describes the removed router design.**
+> This document describes the Gemini 7-intent router, REST endpoint selection and NL-to-SQL fallback, which were removed. The current system is a tool-using agent on AWS Bedrock (Claude) that reads figures through the Cube semantic layer, answers UAE VAT law from a knowledge base of FTA documents and authenticates through the Accutax API gateway. It is described in `README.md` at the repository root; the code is in `backend/src/gemini_brain/agent/`, `semantic/` and `vat_kb/`. Nothing below should be used as a description of how the service works today.
+
+---
+
 # Gemini Brain — Complete Technical Documentation & Codebase Reference
 
 ---

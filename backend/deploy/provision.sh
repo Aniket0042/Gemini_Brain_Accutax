@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# LEGACY: old shared-VM deployment (port 8010). Not used for the current deployment.
+# See backend/deploy/README.md; docs/AI_SERVER_SETUP.md is authoritative (port 8000).
 # provision.sh — one-time setup for the Gemini Brain portal on this EC2 instance.
 # Both the API and the built React UI are served from this same instance via nginx.
 #
