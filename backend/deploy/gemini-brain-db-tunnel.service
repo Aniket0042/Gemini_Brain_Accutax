@@ -1,3 +1,6 @@
+# LEGACY: old shared-VM deployment (port 8010). Not used for the current deployment.
+# See backend/deploy/README.md; docs/AI_SERVER_SETUP.md is authoritative (port 8000).
+#
 # Persistent SSH tunnel: 127.0.0.1:5435 (this VM) -> localhost:5432 on the DB box,
 # mirroring the local `ssh -L 5435:localhost:5432 root@106.51.80.81 -p 7676` workflow.
 # The DB's Postgres port is never exposed publicly — only reachable through this tunnel.

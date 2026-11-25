@@ -89,7 +89,7 @@ npm run build
 ```
 
 Local preview: start `gemini-brain-demo-backend` and `gemini-brain-frontend` from `.claude/launch.json`. Open
-`http://127.0.0.1:5174/` and sign in with the first preconfigured account. The demo backend has no Cube data, so
+`http://127.0.0.1:5175/` and sign in with the first preconfigured account. The demo backend has no Cube data, so
 "Try it on last month" returns an empty result locally; test it on the VM.
 
 ---
