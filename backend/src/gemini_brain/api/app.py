@@ -35,15 +35,17 @@ logging.basicConfig(
 logger = logging.getLogger("gemini_brain.api.app")
 
 DESCRIPTION = """
-### 🧠 Gemini Brain — Hybrid AI Orchestration Engine API
+### Accutax AI API
 
-**Gemini Brain** routes financial questions between **Google Gemini 2.5 Flash** (routing, classification, endpoint selection, direct answers) and **Anthropic Claude on AWS Bedrock** (data-driven financial reasoning over live REST API data).
+A tool-using agent on **Anthropic Claude (AWS Bedrock)** that answers questions about an organization's books, UAE VAT law and the Accutax app.
 
 #### Key Features:
-- **7-Type Intent Router**: Direct Gemini Flash answers for FAQs, app guidance, accounting concepts, strategic advice.
-- **API-First Reasoning**: Automatic REST endpoint parameter building + Claude reasoning over live financial data.
-- **SQL Fallback Engine**: PostgreSQL NL-to-SQL execution engine when REST endpoints are missing.
-- **Session Memory**: Persistent chat history and hybrid state tracking.
+- **Tool-using agent**: Claude plans tool calls and writes the answer; figures come only from tool results, within a tool-call budget and a deadline.
+- **Cube semantic layer**: financial figures (sales, purchases, VAT, payables, receivables, ledger, bank, inventory) are read through Cube, scoped to the organizations the user selected.
+- **VAT knowledge base**: UAE VAT and e-invoicing law answered from Federal Tax Authority documents, with numbered, cited sources.
+- **Reports, uploads and bots**: report files, documents attached in chat, and scheduled specialist agents.
+- **Gateway authentication**: in production only the private Accutax API gateway may call this service.
+- **Session memory**: persistent chat threads and history.
 
 ---
 #### Interactive Swagger Documentation
@@ -221,9 +223,10 @@ def create_app() -> FastAPI:
     default_allowed = [
         "http://localhost:3000",
         "http://localhost:5173",
-        "http://localhost:5174",
+        "http://localhost:5175",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173",
+        "http://127.0.0.1:5175",
         "https://accutaxai.netlify.app",
         "https://accutax-bk-testing.netlify.app",
     ]
